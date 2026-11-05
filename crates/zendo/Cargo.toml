@@ -1,0 +1,18 @@
+[package]
+name = "zendo"
+version = "0.1.0"
+description = "A game launcher for Linux: every game in one library"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gilrs.workspace = true
+iced.workspace = true
+serde_json.workspace = true
+zendo-core.workspace = true
+
+[lints]
+workspace = true

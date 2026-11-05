@@ -1,0 +1,5 @@
+{"installed": [
+  {"platform": "linux", "executable": "", "install_path": "/games/UT2004", "is_dlc": false, "version": "1", "appName": "1207658924"},
+  {"platform": "windows", "executable": "", "install_path": "/games/Unknown", "is_dlc": false, "version": "1", "appName": "1500000000"},
+  {"platform": "windows", "install_path": "/games/UT2004", "is_dlc": true, "appName": "1300000000"}
+]}

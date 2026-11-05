@@ -1,0 +1,17 @@
+[package]
+name = "zendo-core"
+version = "0.1.0"
+description = "Zendo's library: finding games, launching them and keeping their state"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+keyvalues-parser.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

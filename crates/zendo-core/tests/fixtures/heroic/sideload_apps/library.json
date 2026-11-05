@@ -1,0 +1,4 @@
+{"games": [
+  {"app_name": "abc123", "title": "Hand-added Game", "runner": "sideload", "is_installed": true, "install": {"executable": "/games/hand/game.sh", "platform": "linux"}},
+  {"app_name": "gone456", "title": "Removed Game", "runner": "sideload", "is_installed": false, "install": {}}
+]}

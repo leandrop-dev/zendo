@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Xonotic
+Name[pt]=Xonotic PT
+Exec=xonotic-sdl -basedir "/opt/xonotic data" %f
+Path=/opt/xonotic
+Categories=Game;ActionGame;
+
+[Desktop Action Dedicated]
+Name=Server
+Exec=xonotic-dedicated

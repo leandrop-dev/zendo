@@ -1,0 +1,4 @@
+{
+  "Fortnite": {"app_name": "Fortnite", "title": "Fortnite", "install_path": "/games/Fortnite", "executable": "FortniteLauncher.exe", "platform": "Windows", "is_dlc": false, "version": "1"},
+  "SomeDlc": {"app_name": "SomeDlc", "title": "Some DLC", "is_dlc": true}
+}

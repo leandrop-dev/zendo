@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Editor
+Exec=editor %F
+Categories=Development;
