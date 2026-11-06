@@ -12,6 +12,7 @@ mod game;
 mod launch_options;
 mod library;
 mod protondb;
+mod protons;
 mod running;
 mod settings;
 mod sidebar;
@@ -39,6 +40,7 @@ use accounts::{AccountMessage, Accounts};
 use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
 use protondb::RatingState;
+use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
 use store::{StoreMessage, StoreState};
 use style::DIM;
@@ -157,6 +159,7 @@ enum Message {
     Download(DownloadMessage),
     Run(RunMessage),
     Sheet(SheetMessage),
+    Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
     Store(StoreMessage),
@@ -212,6 +215,8 @@ struct Zendo {
     running: Running,
     /// A game's launch options, open over its page.
     sheet: Option<Sheet>,
+    /// The Proton section of Settings.
+    protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
@@ -244,6 +249,7 @@ impl Zendo {
             downloads: DownloadsState::default(),
             running: Running::default(),
             sheet: None,
+            protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
             key: KeyForm::default(),
@@ -447,6 +453,7 @@ impl Zendo {
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
+            Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
                 Task::none()
@@ -571,7 +578,8 @@ impl Zendo {
                 let y = *self.cursor().1;
                 operation::scroll_to(grid_id(), AbsoluteOffset { x: 0.0, y })
             }
-            Page::Downloads | Page::Accounts | Page::Settings | Page::About => Task::none(),
+            Page::Settings => self.want_protons(),
+            Page::Downloads | Page::Accounts | Page::About => Task::none(),
         }
     }
 

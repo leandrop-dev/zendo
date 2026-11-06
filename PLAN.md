@@ -20,7 +20,8 @@ user checked 4d in the window; 4d and 4e (the sign-in window) were built
 the same day, and the user checked both. Phase 5 started the same day,
 split into 5a to 5e (below); 5a and 5b are built and the user checked
 them; 5c is built, and its options fixed both quirks the user found. 5d
-is built and checked by the user. The user asked to leave in-game quirks (controllers, full
+is built and checked by the user. 5e is built; a real download is still
+to be confirmed. The user asked to leave in-game quirks (controllers, full
 screen) for the settings sheet, and to get most features working first
 [firm].
 
@@ -605,6 +606,40 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      "Gunslugs : Rogue Tactics"). The user checked the pill on screen;
      they noticed Hexologic showing Platinum where ProtonDB says Native,
      which led to the Native check, which they then checked too.
+   - 5e GE-Proton downloads, built 2026-11-06: a Proton section on the
+     Settings page lists the Protons found (name and folder) and the five
+     latest GE-Proton releases from GitHub
+     (`api.github.com/repos/GloriousEggroll/proton-ge-custom/releases`,
+     asked once a session when Settings opens, or with "Check again";
+     prereleases left out), each with its date, size, and Download or
+     Installed. Since GE-Proton11 each release has a tarball per
+     architecture (`GE-Proton11-12-x86_64.tar.gz`, `…-aarch64…`); before,
+     one `GE-Proton10-4.tar.gz`; Zendo takes either for this machine,
+     with its `.sha512sum`. One download at a time, with a bar, the bytes
+     so far, and Stop: into `~/.cache/zendo/ge-proton/`, checked with
+     `sha512sum`, unpacked with `tar --no-same-owner` into a hidden
+     `.zendo-<name>.partial` folder in
+     `~/.local/share/Steam/compatibilitytools.d` [tentative: the native
+     Steam's folder, made when missing; a Flatpak Steam's is not used]
+     and moved into place only when complete; the tarball is deleted
+     after, and leftovers from a download Zendo was closed in the middle
+     of are cleared at the next one. A release without a checksum is
+     refused. Remove, for Protons in that folder only (never a
+     distribution's or one Steam installed), asks once ("Really
+     remove"), naming how many games' launch options chose it (they then
+     run with the default). New Protons appear in the launch options
+     sheet's list when it next opens.
+     Checked: clippy and tests (a tarball made on the spot unpacked into
+     place with nothing left beside it, and refused a second time; a
+     release known by either name; a system Proton refused for removal;
+     one download at a time, Stop and a checksum failure reported, Remove
+     asking first); GitHub's real list read (GE-Proton11-12 to 11-3, all
+     with checksums). The user said it works; but no download left a
+     trace on this PC (no `~/.cache/zendo/ge-proton/`, which every
+     download makes first and nothing deletes; the tools folder empty;
+     the logs only name proton-cachyos-slr), so a real download, its
+     checksum and unpacking, and a game run with it are still to be
+     confirmed.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -619,7 +654,9 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 5e: GE-Proton downloads.
+- Confirm 5e with a real download: GE-Proton into the tools folder,
+  chosen for a game, the game's log naming it, Remove.
+- Then phase 6, local games.
   An Epic install and launch is still untried.
 
 ## Conventions

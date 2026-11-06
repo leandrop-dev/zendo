@@ -1,5 +1,5 @@
-//! The Settings page: the `SteamGridDB` key, covers, the sources found and
-//! Zendo's own files.
+//! The Settings page: the `SteamGridDB` key, covers, Proton (in
+//! `protons.rs`), the sources found and Zendo's own files.
 
 use std::path::{Path, PathBuf};
 
@@ -168,7 +168,7 @@ impl Zendo {
     pub(super) fn settings_page(&self) -> Element<'_, Message> {
         let header = column![
             text("Settings").size(28).font(BOLD),
-            text("Covers, the sources Zendo reads and its own files")
+            text("Covers, Proton, the sources Zendo reads and its own files")
                 .size(13)
                 .color(DIM),
         ]
@@ -178,6 +178,7 @@ impl Zendo {
                 header,
                 self.key_section(),
                 self.covers_section(),
+                self.protons_section(),
                 self.sources_section(),
                 files_section(self.config.install_dir()),
             ]
@@ -385,7 +386,7 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
     )
 }
 
-fn section<'a>(
+pub(super) fn section<'a>(
     title: &'a str,
     about: &'a str,
     body: impl Into<Element<'a, Message>>,

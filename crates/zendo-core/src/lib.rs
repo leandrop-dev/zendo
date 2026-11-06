@@ -13,6 +13,7 @@ pub mod config;
 pub mod covers;
 mod desktop;
 pub mod downloads;
+pub mod ge_proton;
 mod heroic;
 pub mod info;
 pub mod launch;
