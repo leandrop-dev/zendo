@@ -1,0 +1,344 @@
+//! The Library page: a header with the search, the store and sort chips,
+//! and the grid of covers.
+
+use iced::widget::{
+    button, column, container, image, row, scrollable, space, stack, text, text_input,
+};
+use iced::{Alignment, Background, Border, ContentFit, Element, Length};
+use zendo_core::{Game, Sort, Source};
+
+use super::style::{self, ACCENT, BOLD, DIM, SURFACE, TEXT};
+use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
+
+pub const COVER_WIDTH: f32 = 180.0;
+pub const COVER_HEIGHT: f32 = 270.0;
+const CAPTION_HEIGHT: f32 = 42.0;
+const CARD_PADDING: f32 = 6.0;
+pub const CARD_WIDTH: f32 = COVER_WIDTH + 2.0 * CARD_PADDING;
+pub const CARD_HEIGHT: f32 = COVER_HEIGHT + CAPTION_HEIGHT + 4.0 + 2.0 * CARD_PADDING;
+pub const SPACING: f32 = 16.0;
+/// Around the grid, inside its scrollable.
+pub const GRID_PADDING: f32 = 24.0;
+/// Room kept for the scrollbar beside the grid.
+const SCROLLBAR: f32 = 12.0;
+
+const SOURCES: [Source; 6] = [
+    Source::Steam,
+    Source::Epic,
+    Source::Gog,
+    Source::Amazon,
+    Source::Heroic,
+    Source::Desktop,
+];
+
+/// How many cards fit across a window this wide, beside the sidebar.
+pub fn columns_for(window_width: f32) -> usize {
+    let room = window_width - sidebar::WIDTH - 2.0 * GRID_PADDING - SCROLLBAR + SPACING;
+    // Widths are positive and far below usize's range.
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let columns = (room / (CARD_WIDTH + SPACING)).floor().max(1.0) as usize;
+    columns
+}
+
+/// The narrowest window: the sidebar and two columns.
+pub fn min_width() -> f32 {
+    sidebar::WIDTH + 2.0 * GRID_PADDING + SCROLLBAR + 2.0 * CARD_WIDTH + SPACING
+}
+
+impl Zendo {
+    pub(super) fn library_page(&self) -> Element<'_, Message> {
+        let visible = self.visible();
+        let body: Element<'_, Message> = match &self.library {
+            None => centered(text("Looking for games…").color(DIM)),
+            Some(library) if library.games.is_empty() => centered(
+                column![
+                    text("No games found").size(20),
+                    text(
+                        "Zendo reads Steam's libraries, the games Heroic installed \
+                         and .desktop files in the Game category."
+                    )
+                    .color(DIM),
+                ]
+                .spacing(8)
+                .align_x(Alignment::Center),
+            ),
+            Some(_) if visible.is_empty() && !self.search.is_empty() => {
+                centered(text(format!("Nothing matches “{}”", self.search)).color(DIM))
+            }
+            Some(_) if visible.is_empty() && self.source.is_some() => {
+                centered(text("No games here · choose All to see every store").color(DIM))
+            }
+            Some(_) if visible.is_empty() => {
+                centered(text("Every game is hidden · Ctrl+H or Start shows them").color(DIM))
+            }
+            Some(_) => self.grid(&visible),
+        };
+        column![self.library_header(), self.toolbar(), body]
+            .spacing(4)
+            .into()
+    }
+
+    fn library_header(&self) -> Element<'_, Message> {
+        let games: Vec<&Game> = self
+            .library
+            .iter()
+            .flat_map(|library| &library.games)
+            .collect();
+        let shown = games.iter().filter(|game| !game.hidden).count();
+        let hidden = games.len() - shown;
+        let stores = SOURCES
+            .iter()
+            .filter(|source| games.iter().any(|game| game.source == **source))
+            .count();
+        let mut subtitle = format!(
+            "{} from {}",
+            format::count(shown, "game", "games"),
+            format::count(stores, "source", "sources")
+        );
+        if hidden > 0 {
+            subtitle = format!("{subtitle} · {hidden} hidden");
+        }
+
+        let refresh = button(
+            text(if self.scanning {
+                "Scanning…"
+            } else {
+                "Refresh"
+            })
+            .size(14),
+        )
+        .padding([8, 14])
+        .style(style::secondary)
+        .on_press_maybe((!self.scanning).then_some(Message::Refresh));
+        row![
+            column![
+                text("Library").size(28).font(BOLD),
+                text(subtitle).size(13).color(DIM),
+            ]
+            .spacing(2),
+            space::horizontal(),
+            text_input("Search your library", &self.search)
+                .id(search_id())
+                .on_input(Message::Search)
+                .on_submit(Message::Activate)
+                .padding([8, 12])
+                .size(14)
+                .width(280)
+                .style(style::input),
+            refresh,
+        ]
+        .spacing(12)
+        .align_y(Alignment::Center)
+        .padding(iced::Padding {
+            top: 20.0,
+            right: GRID_PADDING,
+            bottom: 8.0,
+            left: GRID_PADDING,
+        })
+        .into()
+    }
+
+    /// Store chips, then the sort and the hidden games.
+    fn toolbar(&self) -> Element<'_, Message> {
+        let games: Vec<&Game> = self
+            .library
+            .iter()
+            .flat_map(|library| &library.games)
+            .filter(|game| self.show_hidden || !game.hidden)
+            .collect();
+        let hidden = self
+            .library
+            .iter()
+            .flat_map(|library| &library.games)
+            .filter(|game| game.hidden)
+            .count();
+
+        let mut chips: Vec<Element<'_, Message>> = vec![chip(
+            "All",
+            Some(games.len()),
+            self.source.is_none(),
+            Message::SetSource(None),
+        )];
+        for source in SOURCES {
+            let count = games.iter().filter(|game| game.source == source).count();
+            if count > 0 {
+                chips.push(chip(
+                    source.label(),
+                    Some(count),
+                    self.source == Some(source),
+                    Message::SetSource(Some(source)),
+                ));
+            }
+        }
+        chips.push(space::horizontal().width(16).into());
+        chips.push(
+            container(text("Sort").size(13).color(DIM))
+                .padding([6, 0])
+                .into(),
+        );
+        for sort in [Sort::Recent, Sort::MostPlayed, Sort::Title] {
+            chips.push(chip(
+                sort.label(),
+                None,
+                self.sort == sort,
+                Message::SetSort(sort),
+            ));
+        }
+        if hidden > 0 || self.show_hidden {
+            chips.push(space::horizontal().width(16).into());
+            chips.push(chip(
+                "Show hidden",
+                Some(hidden),
+                self.show_hidden,
+                Message::ShowHidden,
+            ));
+        }
+        row(chips)
+            .spacing(8)
+            .padding([4.0, GRID_PADDING])
+            .wrap()
+            .vertical_spacing(8)
+            .into()
+    }
+
+    fn grid<'a>(&'a self, visible: &[&'a Game]) -> Element<'a, Message> {
+        let columns = self.columns.max(1);
+        let selected = self.selected.min(visible.len().saturating_sub(1));
+        let now = now();
+        let rows = visible
+            .chunks(columns)
+            .enumerate()
+            .map(|(row_index, games)| {
+                row(games.iter().enumerate().map(|(column_index, game)| {
+                    let index = row_index * columns + column_index;
+                    card(game, index, index == selected, now)
+                }))
+                .spacing(SPACING)
+                .into()
+            });
+        // A fixed width, centred, so a short last row stays in its columns.
+        #[expect(clippy::cast_precision_loss, reason = "column counts are small")]
+        let width = columns as f32 * (CARD_WIDTH + SPACING) - SPACING;
+        let grid = column(rows).spacing(SPACING).width(width);
+        scrollable(container(grid).center_x(Length::Fill).padding(GRID_PADDING))
+            .id(grid_id())
+            .on_scroll(Message::Scrolled)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+}
+
+fn chip(label: &str, count: Option<usize>, chosen: bool, message: Message) -> Element<'_, Message> {
+    let mut content = row![text(label).size(13)].spacing(6);
+    if let Some(count) = count {
+        content =
+            content.push(
+                text(count.to_string())
+                    .size(12)
+                    .color(if chosen { ACCENT } else { DIM }),
+            );
+    }
+    button(content.align_y(Alignment::Center))
+        .padding([5, 12])
+        .style(style::chip(chosen))
+        .on_press(message)
+        .into()
+}
+
+/// The line under a card's title: how much it was played.
+fn played_line(game: &Game, now: u64) -> String {
+    match (game.played.minutes, game.played.last) {
+        (0, None) => "Not played yet".to_owned(),
+        (0, Some(last)) => format!("Played {}", format::ago(last, now)),
+        (minutes, _) => format!("{} played", format::play_time(minutes)),
+    }
+}
+
+fn card<'a>(game: &'a Game, index: usize, selected: bool, now: u64) -> Element<'a, Message> {
+    let cover: Element<'a, Message> = match &game.cover {
+        Some(path) => image(image::Handle::from_path(path))
+            .width(COVER_WIDTH)
+            .height(COVER_HEIGHT)
+            .content_fit(ContentFit::Cover)
+            .border_radius(8.0)
+            .opacity(if game.hidden { 0.35_f32 } else { 1.0_f32 })
+            .into(),
+        None => container(text(&game.title).size(18).center())
+            .padding(12)
+            .center(Length::Fill)
+            .width(COVER_WIDTH)
+            .height(COVER_HEIGHT)
+            .style(|_| container::Style {
+                background: Some(Background::Color(SURFACE)),
+                border: Border {
+                    radius: 8.0.into(),
+                    ..Border::default()
+                },
+                ..container::Style::default()
+            })
+            .into(),
+    };
+    let mut badges = row![style::badge(
+        game.source.label(),
+        style::source_color(game.source)
+    )]
+    .width(COVER_WIDTH);
+    if game.pinned {
+        badges = badges
+            .push(space::horizontal())
+            .push(style::badge("PINNED", ACCENT));
+    }
+    let art = stack![cover, container(badges).padding(8).width(COVER_WIDTH)];
+
+    let caption = column![
+        text(&game.title).size(14).wrapping(text::Wrapping::None),
+        if game.hidden {
+            text("Hidden").size(12).color(ACCENT)
+        } else {
+            text(played_line(game, now)).size(12).color(DIM)
+        },
+    ]
+    .spacing(2)
+    .height(CAPTION_HEIGHT)
+    .clip(true);
+
+    button(column![art, caption].spacing(4))
+        .padding(CARD_PADDING)
+        .width(CARD_WIDTH)
+        .height(CARD_HEIGHT)
+        .on_press(Message::Clicked(index))
+        .style(move |_, status| button::Style {
+            background: Some(Background::Color(match status {
+                button::Status::Hovered | button::Status::Pressed => SURFACE,
+                _ => iced::Color::TRANSPARENT,
+            })),
+            text_color: TEXT,
+            border: Border {
+                color: if selected {
+                    ACCENT
+                } else {
+                    iced::Color::TRANSPARENT
+                },
+                width: 2.0,
+                radius: 12.0.into(),
+            },
+            ..button::Style::default()
+        })
+        .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fits_whole_cards_beside_the_sidebar() {
+        assert_eq!(columns_for(100.0), 1);
+        let five =
+            sidebar::WIDTH + 2.0 * GRID_PADDING + SCROLLBAR + 5.0 * CARD_WIDTH + 4.0 * SPACING;
+        assert_eq!(columns_for(five), 5);
+        assert_eq!(columns_for(five - 1.0), 4);
+        assert_eq!(columns_for(min_width()), 2);
+    }
+}

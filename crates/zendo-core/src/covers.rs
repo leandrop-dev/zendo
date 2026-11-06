@@ -1,10 +1,11 @@
-//! Covers Zendo downloads, kept in `$XDG_CACHE_HOME/zendo/covers` and named
-//! by game id. A game's store image comes first (Heroic records one for its
+//! Images Zendo downloads, kept in `$XDG_CACHE_HOME/zendo/covers` and named
+//! by game id: a portrait cover for the grid and a wide hero for the game's
+//! page. A game's store image comes first (Heroic records both for its
 //! games), `SteamGridDB` second when the user has set a key. A game with no
-//! cover anywhere is noted in `misses.json` and asked about again after a
+//! image anywhere is noted in `misses.json` and asked about again after a
 //! week, not on every start.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -21,15 +22,58 @@ const PORTRAIT: &str = "600x900,342x482,660x930";
 const EXTENSIONS: [&str; 3] = ["jpg", "png", "webp"];
 const RETRY_AFTER: u64 = 7 * 24 * 3600;
 
+/// Which image of a game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// Portrait, for the grid.
+    Cover,
+    /// Wide, for the top of the game's page.
+    Hero,
+}
+
+impl Kind {
+    /// What follows the game's id in the file name, before the extension.
+    fn suffix(self) -> &'static str {
+        match self {
+            Self::Cover => "",
+            Self::Hero => ".hero",
+        }
+    }
+
+    fn current(self, game: &Game) -> Option<&PathBuf> {
+        match self {
+            Self::Cover => game.cover.as_ref(),
+            Self::Hero => game.hero.as_ref(),
+        }
+    }
+
+    fn url(self, game: &Game) -> Option<&String> {
+        match self {
+            Self::Cover => game.cover_url.as_ref(),
+            Self::Hero => game.hero_url.as_ref(),
+        }
+    }
+
+    /// The key in `misses.json`; covers keep the bare id they had before
+    /// heroes were fetched.
+    fn miss_key(self, id: &str) -> String {
+        match self {
+            Self::Cover => id.to_owned(),
+            Self::Hero => format!("{id}#hero"),
+        }
+    }
+}
+
 #[must_use]
 pub fn dir() -> Option<PathBuf> {
     paths::cache_home().map(|dir| dir.join("zendo/covers"))
 }
 
-/// The file name for a game's cover, without the extension: the id with
-/// anything outside `[A-Za-z0-9._-]` as `_`.
-fn stem(id: &str) -> String {
-    id.chars()
+/// The file name for a game's image, without the extension: the id with
+/// anything outside `[A-Za-z0-9._-]` as `_`, then the kind's suffix.
+fn stem(id: &str, kind: Kind) -> String {
+    let mut stem: String = id
+        .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || "._-".contains(c) {
                 c
@@ -37,26 +81,70 @@ fn stem(id: &str) -> String {
                 '_'
             }
         })
-        .collect()
+        .collect();
+    stem.push_str(kind.suffix());
+    stem
 }
 
-/// The cover already downloaded for this game.
+/// The image already downloaded for this game.
 #[must_use]
-pub fn cached(id: &str) -> Option<PathBuf> {
+pub fn cached(id: &str, kind: Kind) -> Option<PathBuf> {
     let dir = dir()?;
-    let stem = stem(id);
+    let stem = stem(id, kind);
     EXTENSIONS
         .iter()
         .map(|ext| dir.join(format!("{stem}.{ext}")))
         .find(|path| path.is_file())
 }
 
-/// Downloads covers, one game at a time.
+fn agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .user_agent(concat!(
+            "zendo/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/leandrop-dev/zendo)"
+        ))
+        // A refused key is an answer here, not a failure.
+        .http_status_as_error(false)
+        .build()
+        .into()
+}
+
+/// What `SteamGridDB` says of a key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyCheck {
+    Accepted,
+    Rejected,
+}
+
+/// Asks `SteamGridDB` whether it takes this key, with one small search.
+///
+/// # Errors
+///
+/// When the site cannot be reached or answers with anything but yes or no.
+pub fn check_key(key: &str) -> anyhow::Result<KeyCheck> {
+    let response = agent()
+        .get(format!("{STEAMGRIDDB}/search/autocomplete/zendo"))
+        .header("Authorization", format!("Bearer {}", key.trim()))
+        .call()
+        .context("could not reach SteamGridDB")?;
+    match response.status().as_u16() {
+        200..=299 => Ok(KeyCheck::Accepted),
+        401 | 403 => Ok(KeyCheck::Rejected),
+        code => anyhow::bail!("SteamGridDB answered {code}"),
+    }
+}
+
+/// Downloads covers and heroes, one image at a time.
 pub struct Fetcher {
     agent: ureq::Agent,
     key: Option<String>,
     dir: PathBuf,
     misses: BTreeMap<String, u64>,
+    /// `SteamGridDB`'s game for each non-Steam game searched this run, so a
+    /// game's cover and hero take one search.
+    found: HashMap<String, Option<u64>>,
 }
 
 impl Fetcher {
@@ -71,60 +159,57 @@ impl Fetcher {
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
-        let agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(20)))
-            .user_agent(concat!(
-                "zendo/",
-                env!("CARGO_PKG_VERSION"),
-                " (+https://github.com/leandrop-dev/zendo)"
-            ))
-            .build()
-            .into();
         Some(Self {
-            agent,
+            agent: agent(),
             key: config.steamgriddb_key.clone(),
             dir,
             misses,
+            found: HashMap::new(),
         })
     }
 
-    /// Whether this game needs a cover and there is somewhere to look.
+    /// Whether this game needs this image and there is somewhere to look.
     #[must_use]
-    pub fn wants(&self, game: &Game) -> bool {
+    pub fn wants(&self, game: &Game, kind: Kind) -> bool {
         let recently_missed = self
             .misses
-            .get(&game.id)
+            .get(&kind.miss_key(&game.id))
             .is_some_and(|&when| time::now().saturating_sub(when) < RETRY_AFTER);
-        game.cover.is_none() && !recently_missed && (game.cover_url.is_some() || self.key.is_some())
+        kind.current(game).is_none()
+            && !recently_missed
+            && (kind.url(game).is_some() || self.key.is_some())
     }
 
-    /// Finds and saves a cover. `Ok(None)` when no source has one, which is
-    /// remembered; an error (offline, a server down) is not, so the next
+    /// Finds and saves an image. `Ok(None)` when no source has one, which
+    /// is remembered; an error (offline, a server down) is not, so the next
     /// start tries again.
     ///
     /// # Errors
     ///
     /// When a request fails for another reason than the game not being
-    /// known, or the cover cannot be saved.
-    pub fn fetch(&mut self, game: &Game) -> anyhow::Result<Option<PathBuf>> {
-        let mut url = game.cover_url.clone();
+    /// known, or the image cannot be saved.
+    pub fn fetch(&mut self, game: &Game, kind: Kind) -> anyhow::Result<Option<PathBuf>> {
+        let mut url = kind.url(game).cloned();
         if url.is_none() {
-            url = self.steamgriddb(game)?;
+            url = self.steamgriddb(game, kind)?;
         }
         let Some(url) = url else {
-            self.missed(&game.id);
+            self.missed(&kind.miss_key(&game.id));
             return Ok(None);
         };
-        let bytes = self
+        let response = self
             .agent
             .get(&url)
             .call()
-            .with_context(|| format!("could not download {url}"))?
+            .with_context(|| format!("could not download {url}"))?;
+        let status = response.status();
+        anyhow::ensure!(status.is_success(), "could not download {url}: {status}");
+        let bytes = response
             .into_body()
             .read_to_vec()
             .with_context(|| format!("could not download {url}"))?;
         let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
-        let stem = stem(&game.id);
+        let stem = stem(&game.id, kind);
         let path = self.dir.join(format!("{stem}.{ext}"));
         paths::write_atomic(&path, &bytes)
             .with_context(|| format!("could not save {}", path.display()))?;
@@ -134,63 +219,79 @@ impl Fetcher {
         Ok(Some(path))
     }
 
-    fn missed(&mut self, id: &str) {
-        self.misses.insert(id.to_owned(), time::now());
+    fn missed(&mut self, key: &str) {
+        self.misses.insert(key.to_owned(), time::now());
         if let Ok(json) = serde_json::to_vec_pretty(&self.misses) {
             let _ = paths::write_atomic(&self.dir.join("misses.json"), &json);
         }
     }
 
-    /// The URL of a portrait grid on `SteamGridDB`: by app id for Steam
-    /// games, by the first search result for the title otherwise.
-    fn steamgriddb(&self, game: &Game) -> anyhow::Result<Option<String>> {
+    /// The URL of an image on `SteamGridDB`: by app id for Steam games, by
+    /// the first search result for the title otherwise.
+    fn steamgriddb(&mut self, game: &Game, kind: Kind) -> anyhow::Result<Option<String>> {
         #[derive(Deserialize)]
-        struct Found {
-            id: u64,
-        }
-        #[derive(Deserialize)]
-        struct Grid {
+        struct Image {
             url: String,
             width: Option<u32>,
             height: Option<u32>,
         }
 
-        let Some(key) = &self.key else {
+        let Some(key) = self.key.clone() else {
             return Ok(None);
         };
-        let grids =
-            if let (Source::Steam, Some(app)) = (game.source, game.id.strip_prefix("steam:")) {
-                format!("grids/steam/{app}")
-            } else {
-                let search = format!(
-                    "search/autocomplete/{}",
-                    heroic::percent_encode(&game.title)
-                );
-                let Some(found) = self.api::<Vec<Found>>(key, &search, None)? else {
-                    return Ok(None);
-                };
-                let Some(first) = found.first() else {
-                    return Ok(None);
-                };
-                format!("grids/game/{}", first.id)
+        let endpoint = match kind {
+            Kind::Cover => "grids",
+            Kind::Hero => "heroes",
+        };
+        let path = if let (Source::Steam, Some(app)) = (game.source, game.id.strip_prefix("steam:"))
+        {
+            format!("{endpoint}/steam/{app}")
+        } else {
+            let Some(id) = self.search(&key, game)? else {
+                return Ok(None);
             };
+            format!("{endpoint}/game/{id}")
+        };
 
-        // Ask for Steam's portrait sizes. Which `dimensions` values the API
-        // takes is not in anything read so far, so if it turns the filter
-        // down, look through the unfiltered list for an image taller than
-        // wide, and take none rather than a banner.
-        let grids_found = match self.api::<Vec<Grid>>(key, &grids, Some(PORTRAIT)) {
+        if kind == Kind::Hero {
+            let heroes = self.api::<Vec<Image>>(&key, &path, None)?;
+            return Ok(heroes.and_then(|heroes| heroes.into_iter().next().map(|hero| hero.url)));
+        }
+        // Ask for Steam's portrait sizes; should the filter be turned down,
+        // look through the unfiltered list for an image taller than wide,
+        // and take none rather than a banner.
+        let grid = match self.api::<Vec<Image>>(&key, &path, Some(PORTRAIT)) {
             Ok(found) => found.and_then(|grids| grids.into_iter().next()),
-            Err(err) if is_status(&err, 400) => {
-                self.api::<Vec<Grid>>(key, &grids, None)?.and_then(|grids| {
+            Err(err) if is_status(&err, 400) => self
+                .api::<Vec<Image>>(&key, &path, None)?
+                .and_then(|grids| {
                     grids.into_iter().find(
                         |grid| matches!((grid.width, grid.height), (Some(w), Some(h)) if h > w),
                     )
-                })
-            }
+                }),
             Err(err) => return Err(err),
         };
-        Ok(grids_found.map(|grid| grid.url))
+        Ok(grid.map(|grid| grid.url))
+    }
+
+    /// `SteamGridDB`'s id for a game, from its title.
+    fn search(&mut self, key: &str, game: &Game) -> anyhow::Result<Option<u64>> {
+        #[derive(Deserialize)]
+        struct Found {
+            id: u64,
+        }
+        if let Some(&id) = self.found.get(&game.id) {
+            return Ok(id);
+        }
+        let search = format!(
+            "search/autocomplete/{}",
+            heroic::percent_encode(&game.title)
+        );
+        let id = self
+            .api::<Vec<Found>>(key, &search, None)?
+            .and_then(|found| found.first().map(|first| first.id));
+        self.found.insert(game.id.clone(), id);
+        Ok(id)
     }
 
     /// One `SteamGridDB` call: its `data`, or `None` when the game is unknown.
@@ -213,13 +314,17 @@ impl Fetcher {
         if let Some(dimensions) = dimensions {
             request = request.query("dimensions", dimensions);
         }
-        let response = match request.call() {
-            Ok(response) => response,
-            Err(ureq::Error::StatusCode(404)) => return Ok(None),
-            Err(err) => {
-                return Err(anyhow::Error::new(err).context(format!("SteamGridDB {path}")));
+        let response = request
+            .call()
+            .with_context(|| format!("SteamGridDB {path}"))?;
+        match response.status().as_u16() {
+            200..=299 => {}
+            404 => return Ok(None),
+            code => {
+                return Err(anyhow::Error::new(ureq::Error::StatusCode(code))
+                    .context(format!("SteamGridDB {path}")));
             }
-        };
+        }
         let text = response
             .into_body()
             .read_to_string()
@@ -265,9 +370,11 @@ mod tests {
     #[test]
     fn names_files_safely() {
         assert_eq!(
-            stem("amazon:amzn1.adg.product.x/y"),
+            stem("amazon:amzn1.adg.product.x/y", Kind::Cover),
             "amazon_amzn1.adg.product.x_y"
         );
+        assert_eq!(stem("steam:620", Kind::Hero), "steam_620.hero");
+        assert_eq!(Kind::Hero.miss_key("steam:620"), "steam:620#hero");
     }
 
     #[test]

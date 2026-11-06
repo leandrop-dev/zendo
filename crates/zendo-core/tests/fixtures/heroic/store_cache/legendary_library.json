@@ -1,3 +1,3 @@
 {"__timestamp": {}, "library": [
-  {"app_name": "Fortnite", "title": "Fortnite", "art_square": "https://cdn.example/fortnite-portrait.jpg", "art_cover": "https://cdn.example/fortnite-wide.jpg", "runner": "legendary"}
+  {"app_name": "Fortnite", "title": "Fortnite", "developer": "Epic Games", "art_square": "https://cdn.example/fortnite-portrait.jpg", "art_cover": "https://cdn.example/fortnite-wide.jpg", "runner": "legendary"}
 ]}

@@ -95,6 +95,51 @@ impl Played {
     }
 }
 
+/// How much room a game takes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Size {
+    Bytes(u64),
+    /// The store's own wording, when it keeps no number (Heroic's GOG
+    /// records say "75.85 GiB").
+    Label(String),
+}
+
+impl std::fmt::Display for Size {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+        match self {
+            Self::Label(label) => f.write_str(label),
+            Self::Bytes(bytes) => {
+                // Shown to two decimals; the precision lost is far below that.
+                #[expect(clippy::cast_precision_loss)]
+                let mut value = *bytes as f64;
+                let mut unit = 0;
+                while value >= 1024.0 && unit < UNITS.len() - 1 {
+                    value /= 1024.0;
+                    unit += 1;
+                }
+                if unit == 0 {
+                    write!(f, "{bytes} B")
+                } else {
+                    write!(f, "{value:.2} {}", UNITS[unit])
+                }
+            }
+        }
+    }
+}
+
+/// What the game's source records about the install, each when known.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Details {
+    pub developer: Option<String>,
+    /// As the store writes it: `Windows`, `linux`, …
+    pub platform: Option<String>,
+    pub version: Option<String>,
+    pub install_path: Option<PathBuf>,
+    pub size: Option<Size>,
+}
+
 /// One game in the library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Game {
@@ -108,9 +153,15 @@ pub struct Game {
     /// A portrait image the store publishes, downloaded into Zendo's cache
     /// when there is no cover on disk.
     pub cover_url: Option<String>,
+    /// A wide image for the game's page, the same way.
+    pub hero: Option<PathBuf>,
+    pub hero_url: Option<String>,
+    pub details: Details,
     pub played: Played,
     /// Hidden from the window by the user.
     pub hidden: bool,
+    /// Pinned by the user: pinned games lead the grid in every order.
+    pub pinned: bool,
 }
 
 impl Game {
@@ -124,8 +175,44 @@ impl Game {
             launch,
             cover: None,
             cover_url: None,
+            hero: None,
+            hero_url: None,
+            details: Details::default(),
             played: Played::default(),
             hidden: false,
+            pinned: false,
+        }
+    }
+
+    /// The program that starts it, as people would say it.
+    #[must_use]
+    pub fn launcher(&self) -> String {
+        match (&self.launch, self.source) {
+            (Launch::Uri { .. }, Source::Steam) => "Steam".to_owned(),
+            (Launch::Uri { uri }, _) => {
+                let runner = uri.rsplit_once("runner=").map_or("", |(_, runner)| runner);
+                format!("Heroic ({runner})")
+            }
+            (Launch::Command { program, .. }, _) => program.clone(),
+        }
+    }
+
+    /// The launch as one line, for the details card and logs.
+    #[must_use]
+    pub fn command_line(&self) -> String {
+        match &self.launch {
+            Launch::Uri { uri } => format!("xdg-open {uri}"),
+            Launch::Command { program, args, .. } => std::iter::once(program.as_str())
+                .chain(args.iter().map(String::as_str))
+                .map(|word| {
+                    if word.contains(char::is_whitespace) {
+                        format!("\"{word}\"")
+                    } else {
+                        word.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
         }
     }
 }
@@ -168,8 +255,13 @@ impl Library {
         };
         let mut library = Self::from_scan(scan);
         library.apply(&state);
-        for game in library.games.iter_mut().filter(|game| game.cover.is_none()) {
-            game.cover = covers::cached(&game.id);
+        for game in &mut library.games {
+            if game.cover.is_none() {
+                game.cover = covers::cached(&game.id, covers::Kind::Cover);
+            }
+            if game.hero.is_none() {
+                game.hero = covers::cached(&game.id, covers::Kind::Hero);
+            }
         }
         library
     }
@@ -188,11 +280,13 @@ impl Library {
         }
     }
 
-    /// Zendo's records of each game: its launches and whether it is hidden.
+    /// Zendo's records of each game: its launches, and whether it is hidden
+    /// or pinned.
     pub fn apply(&mut self, state: &State) {
         for game in &mut self.games {
             game.played = game.played.merge(state.played(&game.id));
             game.hidden = state.is_hidden(&game.id);
+            game.pinned = state.is_pinned(&game.id);
         }
     }
 
@@ -200,5 +294,41 @@ impl Library {
     #[must_use]
     pub fn find(&self, id: &str) -> Option<&Game> {
         self.games.iter().find(|game| game.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_sizes_for_people() {
+        assert_eq!(Size::Bytes(512).to_string(), "512 B");
+        assert_eq!(Size::Bytes(374_178_085).to_string(), "356.84 MiB");
+        assert_eq!(Size::Label("75.85 GiB".into()).to_string(), "75.85 GiB");
+    }
+
+    #[test]
+    fn says_what_starts_a_game() {
+        let heroic = Game::new(
+            "gog:1".into(),
+            "A".into(),
+            Source::Gog,
+            Launch::Uri {
+                uri: "heroic://launch?appName=1&runner=gog".into(),
+            },
+        );
+        assert_eq!(heroic.launcher(), "Heroic (gog)");
+        let desktop = Game::new(
+            "desktop:x".into(),
+            "X".into(),
+            Source::Desktop,
+            Launch::Command {
+                program: "xonotic".into(),
+                args: vec!["-basedir".into(), "/opt/x data".into()],
+                dir: None,
+            },
+        );
+        assert_eq!(desktop.command_line(), "xonotic -basedir \"/opt/x data\"");
     }
 }

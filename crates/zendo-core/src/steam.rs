@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use keyvalues_parser::{Obj, Vdf};
 
-use crate::{Game, Launch, Played, Scan, Source, paths};
+use crate::{Details, Game, Launch, Played, Scan, Size, Source, paths};
 
 /// `StateFlags` bit for an app whose files are all on disk.
 const FULLY_INSTALLED: u32 = 4;
@@ -159,7 +159,7 @@ fn scan_folder(root: &Path, steamapps: &Path, played: &HashMap<String, Played>, 
         match read_manifest(&manifest) {
             Ok(Some(app)) => {
                 let record = played.get(&app.id).copied().unwrap_or_default();
-                scan.games.push(app.into_game(root, record));
+                scan.games.push(app.into_game(root, steamapps, record));
             }
             Ok(None) => {}
             Err(err) => scan.problems.push(format!("{}: {err}", manifest.display())),
@@ -171,10 +171,13 @@ struct App {
     id: String,
     name: String,
     last_played: Option<u64>,
+    install_dir: Option<String>,
+    size: Option<u64>,
+    build: Option<String>,
 }
 
 impl App {
-    fn into_game(self, root: &Path, played: Played) -> Game {
+    fn into_game(self, root: &Path, steamapps: &Path, played: Played) -> Game {
         let mut game = Game::new(
             format!("steam:{}", self.id),
             self.name,
@@ -183,11 +186,20 @@ impl App {
                 uri: format!("steam://rungameid/{}", self.id),
             },
         );
-        game.cover = cover(root, &self.id);
+        game.cover = library_image(root, &self.id, "library_600x900.jpg");
+        game.hero = library_image(root, &self.id, "library_hero.jpg");
         game.played = played.merge(Played {
             last: self.last_played,
             ..Played::default()
         });
+        game.details = Details {
+            install_path: self
+                .install_dir
+                .map(|dir| steamapps.join("common").join(dir)),
+            size: self.size.filter(|&size| size > 0).map(Size::Bytes),
+            version: self.build.map(|build| format!("build {build}")),
+            ..Details::default()
+        };
         game
     }
 }
@@ -220,16 +232,21 @@ fn parse_manifest(text: &str) -> anyhow::Result<Option<App>> {
         id: id.to_owned(),
         name: name.to_owned(),
         last_played: get_u64(state, "LastPlayed").filter(|&when| when > 0),
+        install_dir: get_str(state, "installdir").map(str::to_owned),
+        size: get_u64(state, "SizeOnDisk"),
+        build: get_str(state, "buildid").map(str::to_owned),
     }))
 }
 
-/// Steam's portrait cover for the app: `librarycache/<id>/` in current
-/// clients, `librarycache/<id>_library_600x900.jpg` in older ones.
-fn cover(root: &Path, id: &str) -> Option<PathBuf> {
+/// One of Steam's cached images for the app (`library_600x900.jpg`, the
+/// portrait cover; `library_hero.jpg`, the wide one): in
+/// `librarycache/<id>/` in current clients, `librarycache/<id>_<name>` in
+/// older ones.
+fn library_image(root: &Path, id: &str, name: &str) -> Option<PathBuf> {
     let cache = root.join("appcache/librarycache");
     [
-        cache.join(id).join("library_600x900.jpg"),
-        cache.join(format!("{id}_library_600x900.jpg")),
+        cache.join(id).join(name),
+        cache.join(format!("{id}_{name}")),
     ]
     .into_iter()
     .find(|path| path.is_file())
@@ -282,6 +299,15 @@ mod tests {
                 .as_ref()
                 .is_some_and(|cover| cover.ends_with("620/library_600x900.jpg"))
         );
+        assert_eq!(game.hero, None);
+        assert!(
+            game.details
+                .install_path
+                .as_ref()
+                .is_some_and(|path| path.ends_with("steamapps/common/Portal 2"))
+        );
+        assert_eq!(game.details.size, Some(Size::Bytes(12_884_901_888)));
+        assert_eq!(game.details.version.as_deref(), Some("build 4567"));
     }
 
     #[test]

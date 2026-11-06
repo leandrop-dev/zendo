@@ -53,8 +53,36 @@ pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()>
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut temporary = path.as_os_str().to_owned();
-    temporary.push(format!(".{}.tmp", std::process::id()));
+    let temporary = temporary(path);
     std::fs::write(&temporary, bytes)?;
     std::fs::rename(&temporary, path)
+}
+
+/// [`write_atomic`] for a file only its owner may read, such as one holding
+/// a key.
+pub fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let temporary = temporary(path);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&temporary)?;
+    // The mode above applies only to a new file; a leftover keeps its own.
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    file.write_all(bytes)?;
+    drop(file);
+    std::fs::rename(&temporary, path)
+}
+
+fn temporary(path: &std::path::Path) -> PathBuf {
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(format!(".{}.tmp", std::process::id()));
+    PathBuf::from(temporary)
 }

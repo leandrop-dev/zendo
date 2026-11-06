@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use crate::{Game, Launch, Played, Scan, Source, paths, time};
+use crate::{Details, Game, Launch, Played, Scan, Size, Source, paths, time};
 
 /// Where Heroic keeps its config: native and Flatpak.
 pub fn roots() -> Vec<PathBuf> {
@@ -54,8 +54,40 @@ pub fn scan(roots: &[PathBuf]) -> Scan {
 struct LibraryGame {
     app_name: String,
     title: Option<String>,
+    developer: Option<String>,
+    /// Portrait.
     art_square: Option<String>,
+    /// Landscape.
+    art_cover: Option<String>,
     is_installed: Option<bool>,
+    /// Only in the sideloaded library.
+    install: Option<SideloadInstall>,
+}
+
+#[derive(Deserialize)]
+struct SideloadInstall {
+    executable: Option<PathBuf>,
+    platform: Option<String>,
+}
+
+/// What an installed-games file says about one install. The stores name
+/// the fields differently; each reader fills this in.
+#[derive(Default)]
+struct Install {
+    path: Option<PathBuf>,
+    size: Option<Size>,
+    platform: Option<String>,
+    version: Option<String>,
+}
+
+/// legendary and nile write sizes in bytes; Heroic's GOG records hold a
+/// label such as "75.85 GiB".
+fn size(value: Option<serde_json::Value>) -> Option<Size> {
+    match value? {
+        serde_json::Value::Number(bytes) => bytes.as_u64().filter(|&b| b > 0).map(Size::Bytes),
+        serde_json::Value::String(label) if !label.trim().is_empty() => Some(Size::Label(label)),
+        _ => None,
+    }
 }
 
 #[derive(Deserialize)]
@@ -84,6 +116,10 @@ fn epic(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
         title: Option<String>,
         #[serde(default)]
         is_dlc: bool,
+        install_path: Option<PathBuf>,
+        install_size: Option<serde_json::Value>,
+        platform: Option<String>,
+        version: Option<String>,
     }
 
     let file = root.join("legendaryConfig/legendary/installed.json");
@@ -93,12 +129,19 @@ fn epic(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
     let library = library(&root.join("store_cache/legendary_library.json"), scan);
     for (app_name, game) in installed.into_iter().filter(|(_, game)| !game.is_dlc) {
         let known = library.get(&app_name);
+        let install = Install {
+            path: game.install_path,
+            size: size(game.install_size),
+            platform: game.platform,
+            version: game.version,
+        };
         found.push(heroic_game(
             Source::Epic,
             "legendary",
             &app_name,
             game.title,
             known,
+            install,
         ));
     }
 }
@@ -117,6 +160,10 @@ fn gog(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
         app_name: String,
         #[serde(default)]
         is_dlc: bool,
+        install_path: Option<PathBuf>,
+        install_size: Option<serde_json::Value>,
+        platform: Option<String>,
+        version: Option<String>,
     }
 
     let file = root.join("gog_store/installed.json");
@@ -126,7 +173,20 @@ fn gog(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
     let library = library(&root.join("store_cache/gog_library.json"), scan);
     for game in installed.installed.into_iter().filter(|game| !game.is_dlc) {
         let known = library.get(&game.app_name);
-        found.push(heroic_game(Source::Gog, "gog", &game.app_name, None, known));
+        let install = Install {
+            path: game.install_path,
+            size: size(game.install_size),
+            platform: game.platform,
+            version: game.version,
+        };
+        found.push(heroic_game(
+            Source::Gog,
+            "gog",
+            &game.app_name,
+            None,
+            known,
+            install,
+        ));
     }
 }
 
@@ -137,6 +197,9 @@ fn amazon(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
     #[derive(Deserialize)]
     struct Installed {
         id: String,
+        path: Option<PathBuf>,
+        size: Option<serde_json::Value>,
+        version: Option<String>,
     }
     #[derive(Deserialize)]
     struct Entry {
@@ -161,7 +224,21 @@ fn amazon(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
     for game in installed {
         let title = titles.get(&game.id).cloned();
         let known = library.get(&game.id);
-        found.push(heroic_game(Source::Amazon, "nile", &game.id, title, known));
+        let install = Install {
+            path: game.path,
+            size: size(game.size),
+            // Amazon Games has Windows games only.
+            platform: Some("Windows".to_owned()),
+            version: game.version,
+        };
+        found.push(heroic_game(
+            Source::Amazon,
+            "nile",
+            &game.id,
+            title,
+            known,
+            install,
+        ));
     }
 }
 
@@ -170,12 +247,25 @@ fn sideloaded(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
     let library = library(&root.join("sideload_apps/library.json"), scan);
     for (app_name, game) in &library {
         if game.is_installed != Some(false) {
+            let install = game
+                .install
+                .as_ref()
+                .map_or_else(Install::default, |install| Install {
+                    path: install
+                        .executable
+                        .as_deref()
+                        .and_then(Path::parent)
+                        .map(Path::to_path_buf),
+                    platform: install.platform.clone(),
+                    ..Install::default()
+                });
             found.push(heroic_game(
                 Source::Heroic,
                 "sideload",
                 app_name,
                 None,
                 Some(game),
+                install,
             ));
         }
     }
@@ -232,6 +322,7 @@ fn heroic_game(
     app_name: &str,
     title: Option<String>,
     known: Option<&LibraryGame>,
+    install: Install,
 ) -> Game {
     let title = title
         .or_else(|| known.and_then(|game| game.title.clone()))
@@ -260,6 +351,19 @@ fn heroic_game(
         }
         None => {}
     }
+    game.hero_url = known
+        .and_then(|game| game.art_cover.as_deref())
+        .filter(|art| art.starts_with("https://") || art.starts_with("http://"))
+        .map(str::to_owned);
+    game.details = Details {
+        developer: known
+            .and_then(|game| game.developer.clone())
+            .filter(|developer| !developer.trim().is_empty()),
+        platform: install.platform,
+        version: install.version.filter(|version| !version.is_empty()),
+        install_path: install.path,
+        size: install.size,
+    };
     game
 }
 
@@ -372,8 +476,42 @@ mod tests {
     }
 
     #[test]
+    fn reads_install_details_and_wide_art() {
+        let scan = scan(&[fixture()]);
+        let epic = by_id(&scan, "epic:Fortnite");
+        assert_eq!(epic.details.developer.as_deref(), Some("Epic Games"));
+        assert_eq!(epic.details.size, Some(Size::Bytes(374_178_085)));
+        assert_eq!(
+            epic.details.install_path,
+            Some(PathBuf::from("/games/Fortnite"))
+        );
+        assert_eq!(epic.details.platform.as_deref(), Some("Windows"));
+        assert_eq!(
+            epic.hero_url.as_deref(),
+            Some("https://cdn.example/fortnite-wide.jpg")
+        );
+        let gog = by_id(&scan, "gog:1207658924");
+        assert_eq!(gog.details.size, Some(Size::Label("75.85 GiB".into())));
+        assert_eq!(gog.details.platform.as_deref(), Some("linux"));
+        let amazon = by_id(&scan, "amazon:amzn1.adg.product.0001");
+        assert_eq!(amazon.details.size, Some(Size::Bytes(100)));
+        let sideloaded = by_id(&scan, "heroic:abc123");
+        assert_eq!(
+            sideloaded.details.install_path,
+            Some(PathBuf::from("/games/hand"))
+        );
+    }
+
+    #[test]
     fn launches_through_heroic() {
-        let game = heroic_game(Source::Amazon, "nile", "amzn1.adg product/1", None, None);
+        let game = heroic_game(
+            Source::Amazon,
+            "nile",
+            "amzn1.adg product/1",
+            None,
+            None,
+            Install::default(),
+        );
         assert_eq!(
             game.launch,
             Launch::Uri {

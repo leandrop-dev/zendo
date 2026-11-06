@@ -45,13 +45,14 @@ impl Sort {
         }
     }
 
-    /// The order of two games; ties go by title.
+    /// The order of two games: pinned ones first, then this order, then by
+    /// title.
     #[must_use]
     pub fn compare(self, a: &Game, b: &Game) -> Ordering {
         // `None` sorts before `Some`, so reversed it puts the never played
         // last.
         let recent = || b.played.last.cmp(&a.played.last);
-        let order = match self {
+        let order = b.pinned.cmp(&a.pinned).then_with(|| match self {
             Self::Recent => recent(),
             Self::MostPlayed => b
                 .played
@@ -60,7 +61,7 @@ impl Sort {
                 .then(b.played.launches.cmp(&a.played.launches))
                 .then_with(recent),
             Self::Title => Ordering::Equal,
-        };
+        });
         order.then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
     }
 }
@@ -84,11 +85,15 @@ pub struct State {
     #[serde(default)]
     hidden: BTreeSet<String>,
     #[serde(default)]
+    pinned: BTreeSet<String>,
+    #[serde(default)]
     pub sort: Sort,
 }
 
 impl State {
-    fn path() -> Option<PathBuf> {
+    /// Where the state is kept.
+    #[must_use]
+    pub fn path() -> Option<PathBuf> {
         paths::state_home().map(|dir| dir.join("zendo/state.json"))
     }
 
@@ -147,6 +152,19 @@ impl State {
     #[must_use]
     pub fn is_hidden(&self, id: &str) -> bool {
         self.hidden.contains(id)
+    }
+
+    pub fn set_pinned(&mut self, id: &str, pinned: bool) {
+        if pinned {
+            self.pinned.insert(id.to_owned());
+        } else {
+            self.pinned.remove(id);
+        }
+    }
+
+    #[must_use]
+    pub fn is_pinned(&self, id: &str) -> bool {
+        self.pinned.contains(id)
     }
 
     #[must_use]
@@ -225,6 +243,13 @@ mod tests {
             order(Sort::Title),
             ["a never", "b never", "new short", "old long"]
         );
+
+        let mut pinned = game("b never", None, 0);
+        pinned.pinned = true;
+        let games = [games[2].clone(), pinned];
+        let mut sorted: Vec<&Game> = games.iter().collect();
+        sorted.sort_by(|a, b| Sort::MostPlayed.compare(a, b));
+        assert_eq!(sorted[0].title, "b never", "a pinned game leads");
     }
 
     #[test]

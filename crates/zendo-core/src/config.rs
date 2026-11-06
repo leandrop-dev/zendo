@@ -1,4 +1,5 @@
-//! What the user sets, in `$XDG_CONFIG_HOME/zendo/config.toml`:
+//! What the user sets, in `$XDG_CONFIG_HOME/zendo/config.toml`, by hand or
+//! from Zendo's Settings page:
 //!
 //! ```toml
 //! # A key from https://www.steamgriddb.com/profile/preferences, for covers
@@ -7,19 +8,28 @@
 //! # Set to false to never download covers.
 //! download_covers = true
 //! ```
+//!
+//! The file can hold a key, so Zendo writes it readable by its owner only.
 
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::paths;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+const HEADER: &str = "\
+# Zendo's settings. The Settings page rewrites this file; see
+# https://github.com/leandrop-dev/zendo#settings-and-files
+
+";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub steamgriddb_key: Option<String>,
     pub download_covers: bool,
 }
@@ -55,14 +65,31 @@ impl Config {
         }
     }
 
+    /// Writes the settings back, readable by the user only. Comments added
+    /// by hand are not kept.
+    ///
+    /// # Errors
+    ///
+    /// When there is no config folder or the file cannot be written.
+    pub fn save(&self) -> anyhow::Result<()> {
+        let path = Self::path().context("no home folder to keep Zendo's settings in")?;
+        let mut config = self.clone();
+        config.steamgriddb_key = normalise_key(config.steamgriddb_key);
+        let text = format!("{HEADER}{}", toml::to_string(&config)?);
+        paths::write_private(&path, text.as_bytes())
+            .with_context(|| format!("could not write {}", path.display()))
+    }
+
     fn parse(text: &str) -> anyhow::Result<Self> {
         let mut config: Self = toml::from_str(text)?;
-        config.steamgriddb_key = config
-            .steamgriddb_key
-            .map(|key| key.trim().to_owned())
-            .filter(|key| !key.is_empty());
+        config.steamgriddb_key = normalise_key(config.steamgriddb_key);
         Ok(config)
     }
+}
+
+fn normalise_key(key: Option<String>) -> Option<String> {
+    key.map(|key| key.trim().to_owned())
+        .filter(|key| !key.is_empty())
 }
 
 #[cfg(test)]
@@ -76,5 +103,17 @@ mod tests {
         assert!(config.download_covers);
         assert_eq!(Config::parse("").unwrap(), Config::default());
         assert!(Config::parse("steamgrid_key = \"typo\"").is_err());
+    }
+
+    #[test]
+    fn writes_what_it_reads() {
+        let config = Config {
+            steamgriddb_key: Some("abc".into()),
+            download_covers: false,
+        };
+        let text = format!("{HEADER}{}", toml::to_string(&config).unwrap());
+        assert_eq!(Config::parse(&text).unwrap(), config);
+        let text = toml::to_string(&Config::default()).unwrap();
+        assert!(!text.contains("steamgriddb_key"), "{text}");
     }
 }

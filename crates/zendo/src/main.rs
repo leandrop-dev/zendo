@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use zendo_core::config::Config;
-use zendo_core::covers::Fetcher;
+use zendo_core::covers::{Fetcher, Kind};
 use zendo_core::{Game, Library, State};
 
 const HELP: &str = "\
@@ -22,7 +22,9 @@ Usage:
   zendo launch <id>            start a game by the id `list` prints
   zendo hide <id>              leave a game out of the window
   zendo unhide <id>            bring it back
-  zendo covers                 download the covers that are missing
+  zendo pin <id>               put a game first in every order
+  zendo unpin <id>             stop
+  zendo covers                 download the covers and wide images missing
 ";
 
 fn main() -> ExitCode {
@@ -37,6 +39,8 @@ fn main() -> ExitCode {
         ["launch", id] => find(id).and_then(|game| zendo_core::launch(&game)),
         ["hide", id] => set_hidden(id, true),
         ["unhide", id] => set_hidden(id, false),
+        ["pin", id] => set_pinned(id, true),
+        ["unpin", id] => set_pinned(id, false),
         ["covers"] => covers(),
         ["-h" | "--help"] => {
             print!("{HELP}");
@@ -96,21 +100,29 @@ fn set_hidden(id: &str, hidden: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn set_pinned(id: &str, pinned: bool) -> anyhow::Result<()> {
+    let game = find(id)?;
+    State::update(|state| state.set_pinned(&game.id, pinned))?;
+    Ok(())
+}
+
 fn covers() -> anyhow::Result<()> {
     let config = Config::load()?;
     let mut fetcher = Fetcher::new(&config)
         .context("covers are turned off (download_covers = false) or there is no cache folder")?;
     let library = Library::scan();
-    let wanted: Vec<&Game> = library
+    let wanted: Vec<(&Game, Kind)> = library
         .games
         .iter()
-        .filter(|game| fetcher.wants(game))
+        .flat_map(|game| [(game, Kind::Cover), (game, Kind::Hero)])
+        .filter(|(game, kind)| fetcher.wants(game, *kind))
         .collect();
     if wanted.is_empty() {
-        println!("No covers to download.");
+        println!("No images to download.");
         if config.steamgriddb_key.is_none() {
             println!(
-                "Games whose store has no cover need a SteamGridDB key in {}.",
+                "Games whose store has no image need a SteamGridDB key, set in Zendo's \
+                 Settings or in {}.",
                 Config::path()
                     .map_or_else(|| "config.toml".into(), |path| path.display().to_string())
             );
@@ -118,18 +130,22 @@ fn covers() -> anyhow::Result<()> {
         return Ok(());
     }
     let mut failed = 0;
-    for game in wanted {
-        match fetcher.fetch(game) {
-            Ok(Some(path)) => println!("{}\t{}", game.title, path.display()),
-            Ok(None) => println!("{}\tno cover found", game.title),
+    for (game, kind) in wanted {
+        let what = match kind {
+            Kind::Cover => "cover",
+            Kind::Hero => "hero",
+        };
+        match fetcher.fetch(game, kind) {
+            Ok(Some(path)) => println!("{}\t{what}\t{}", game.title, path.display()),
+            Ok(None) => println!("{}\t{what}\tnone found", game.title),
             Err(err) => {
                 failed += 1;
-                eprintln!("zendo: {}: {err:#}", game.title);
+                eprintln!("zendo: {} ({what}): {err:#}", game.title);
             }
         }
     }
     if failed > 0 {
-        anyhow::bail!("{failed} cover(s) could not be downloaded");
+        anyhow::bail!("{failed} image(s) could not be downloaded");
     }
     Ok(())
 }

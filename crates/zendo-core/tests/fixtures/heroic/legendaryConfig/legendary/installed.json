@@ -1,4 +1,4 @@
 {
-  "Fortnite": {"app_name": "Fortnite", "title": "Fortnite", "install_path": "/games/Fortnite", "executable": "FortniteLauncher.exe", "platform": "Windows", "is_dlc": false, "version": "1"},
+  "Fortnite": {"app_name": "Fortnite", "title": "Fortnite", "install_path": "/games/Fortnite", "executable": "FortniteLauncher.exe", "platform": "Windows", "is_dlc": false, "version": "1", "install_size": 374178085},
   "SomeDlc": {"app_name": "SomeDlc", "title": "Some DLC", "is_dlc": true}
 }

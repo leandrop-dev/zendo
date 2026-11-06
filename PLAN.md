@@ -8,7 +8,30 @@ Status: planned on 2026-11-04 from a hyprmonk session.
 2026-11-05: window default, Rust + Iced and optional tools decided; first
 session: the repo, the package checks and phase 1 built (see Phases).
 2026-11-06: phase 1 checked against a real game from each store; phase 2
-built.
+built. Then the direction changed: Zendo follows Hikari's functionality
+and UI/UX [firm]; omarchy-games-menu was only ever a source of ideas for a
+Rust launcher. The phases below are reordered for that. Phase 3, the
+Hikari-layout shell, built the same day.
+
+## Direction [firm]
+
+Chosen on 2026-11-06:
+
+- Hikari's functionality: Zendo signs in to Epic, GOG and Amazon itself and
+  installs, updates and uninstalls through legendary, gogdl and nile (the
+  copies Heroic bundles when they are not installed alone), with a Store
+  page of owned games and a Downloads page. Steam's and Heroic's installed
+  games keep being imported read-only.
+- Hikari's layout, hyprmonk's colours: a sidebar (Library, Store,
+  Downloads; Accounts, Settings, About), a top bar with search, store chips
+  and sort chips, a game page with a wide hero image, an action bar and a
+  details card, and a Settings page (keys, engines, Wine/Proton,
+  diagnostics). The palette is Zendo's own until hyprmonk writes
+  `tone.json`.
+- The controller and F11 full-screen stay, as extras Hikari does not have.
+- Order: the new shell first, with the SteamGridDB key entered in Settings;
+  then accounts, Store and Downloads; then launch options; then local games
+  and mods.
 
 ## What it should do
 
@@ -93,13 +116,22 @@ current Steam client with one game from each store installed:
   300x450, Amazon 1080x1440). Heroic's own `images-cache` names files by the
   SHA-256 of the URL, but holds only what Heroic has shown, so Zendo
   downloads into a cache of its own instead.
-- SteamGridDB: base URL, `Authorization: Bearer <key>`,
+- SteamGridDB (`https://www.steamgriddb.com/api/v2`, `Authorization:
+  Bearer <key>`), tried with a real key on 2026-11-06:
   `search/autocomplete/{name}`, `grids/game/{id}` and `grids/steam/{app}`
-  are confirmed from the official Node client's source; the docs page is
-  rendered in the browser and could not be read. Which `dimensions` values
-  it accepts is not confirmed: Zendo asks for `600x900,342x482,660x930` and,
-  on a 400, falls back to the first image taller than wide. Not yet tried
-  with a real key.
+  with `dimensions=600x900,342x482,660x930` (a size it does not know gets a
+  400, "Invalid asset dimensions specified"; Zendo then falls back to the
+  first image taller than wide), and `heroes/game/{id}` and
+  `heroes/steam/{app}` for the wide images (1920x620). A bad key gets a
+  401, "Invalid key format"; no key a 401, "Authentication Required".
+  Settings checks a key with one `search/autocomplete` call.
+- Wide images (phase 3). Steam's `library_hero.jpg` beside the cover;
+  Heroic's store caches give `art_cover`, a landscape image, and
+  `developer`. Install details: legendary's `installed.json` has
+  `install_path`, `install_size` (bytes), `platform` and `version`; Heroic's
+  GOG `installed.json` the same with `install_size` as a label
+  ("75.85 GiB"); nile's `path`, `size` (bytes) and `version`; Steam's
+  manifest `installdir`, `SizeOnDisk` and `buildid`.
 - Play records. Steam: `LastPlayed` in each `appmanifest_*.acf`, and
   `LastPlayed` and `Playtime` (minutes) under
   `UserLocalConfigStore/Software/Valve/Steam/apps/<app>` in
@@ -109,11 +141,15 @@ current Steam client with one game from each store installed:
   Amazon ids (`amzn1.adg.product.…`) are nested objects to join back.
 
 Zendo's own files [tentative]: `~/.config/zendo/config.toml` for what the
-user sets (`steamgriddb_key`, `download_covers`), `~/.local/state/zendo/state.json`
-for what Zendo remembers (launches, hidden games, the sort), written by the
-window and the command alike, and `~/.cache/zendo/covers/` with a
-`misses.json` so a game without a cover is asked about again only after a
-week. One state file, not omarchy-games-menu's split by owner, since both
+user sets (`steamgriddb_key`, `download_covers`), written by the Settings
+page with mode 0600 because it holds the key (comments added by hand are not
+kept; Hikari uses the system keyring first, which Zendo could add later
+[tentative]); `~/.local/state/zendo/state.json`
+for what Zendo remembers (launches, hidden and pinned games, the sort),
+written by the window and the command alike; and `~/.cache/zendo/covers/`
+with `<id>.<ext>` covers, `<id>.hero.<ext>` wide images and a
+`misses.json` (keys `<id>` and `<id>#hero`) so a game without one is asked
+about again only after a week. One state file, not omarchy-games-menu's split by owner, since both
 sides write the same few things; each write reads, changes and renames the
 file into place.
 
@@ -137,7 +173,20 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 ## Ideas from (ideas only, no code copied)
 
 - [Hikari](https://github.com/dodo986/hikari) (GPL-3.0, Go daemon + React
-  window): drives legendary/gogdl/nile with credentials of its own; imports
+  window in Wails/WebKitGTK), the model for Zendo's functionality and UI/UX.
+  Pages (from its README, CHANGELOG and `frontend/web/src/pages`, read
+  2026-11-06): Library and Store (installed vs owned, a cover grid, search,
+  store chips with counts, "A-Z" and "Playing first" sort chips, pins that
+  lead the library, "+ Add game", "Refresh"); a game page ("← Library" and a
+  breadcrumb, a landscape hero with store/installed badges, title,
+  developer and facts, an action bar "Play now / Launch command / Settings
+  / Log / Pin", a status line, a "Game details" card, an OptiScaler card,
+  and sheets for game settings, the launch command and the launch log);
+  Downloads; Accounts (Epic, GOG and Amazon sign-in in a private browser
+  window, falling back to pasting a code); Settings (the daemon, a
+  Wine/Proton manager with GE-Proton and Proton-CachyOS downloads, engine
+  readiness, API keys kept in the system keyring with a 0600 file as
+  fallback, Diagnostics with "Copy report"); About; Mods. It drives legendary/gogdl/nile with credentials of its own; imports
   Heroic's installed games and reads Steam libraries (native, Flatpak, Snap)
   without writing to them; umu/Proton or Wine with a prefix per game;
   DXVK/VKD3D, EAC/BattlEye runtimes; MangoHud, GameMode, gamescope and custom
@@ -145,7 +194,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   `nxm://`); OptiScaler; `logs` and `report` commands and a diagnostics page.
   GPL: read for ideas, never copy.
 - [omarchy-games-menu](https://github.com/akitaonrails/omarchy-games-menu)
-  (MIT, Rust `ogm` + Quickshell): full-screen grid of covers in sections;
+  (MIT, Rust `ogm` + Quickshell), ideas for a Rust launcher only, not the
+  model: full-screen grid of covers in sections;
   SteamGridDB covers cached under `~/.cache/ogm/covers` with themed
   placeholders when there is no API key; frecency sort; type anywhere to
   filter; controller support; games found from `.desktop` files with
@@ -168,13 +218,41 @@ Nothing is required. Zendo detects each tool and shows what is missing.
    without one, sorting by recent, most played or title (Tab, Y), hiding
    entries (Delete, X; Ctrl+H or Start shows them). Built 2026-11-06; the
    window downloaded the three Heroic covers by itself and sorted the four
-   games by last played. Not yet tried: SteamGridDB with a key, and the keys
-   in the live window (no key-sending tool here; unit tests cover them).
-3. Launch options per game: Proton through umu, prefixes, MangoHud, GameMode,
-   gamescope.
-4. Stores: sign in, install, update and uninstall through legendary, gogdl and
-   nile.
-5. Mods.
+   games by last played. Checked later that day: SteamGridDB with a real key
+   (`dimensions=600x900,342x482,660x930` accepted, a bad size gets a 400 with
+   "Invalid asset dimensions specified"; search and grids by Steam app or
+   game id work), and every key in the live window through `wtype`, F11
+   full-screen included.
+3. The shell, Hikari's layout: a sidebar (Library, Settings, About for now;
+   Store, Downloads and Accounts join with phase 4), the Library page (title
+   and counts, search box, Refresh, store chips with counts, sort chips,
+   showing hidden games, pins that lead the grid, cards with a store badge),
+   the game page (back and breadcrumb, a hero from Steam's
+   `library_hero.jpg`, Heroic's `art_cover` or SteamGridDB's heroes, badges,
+   developer, an action bar with Play, Pin and Hide, a status line, a
+   details card with store, launcher, install path, size, version and play
+   time), Settings (the SteamGridDB key typed in and checked, covers on or
+   off, the sources found, Zendo's files) and About. A click or Enter opens
+   a game; Play starts it. Built 2026-11-06 (`crates/zendo/src/app/`, one
+   module per page). Checked live through `wtype` on the four test games:
+   every page, pinning (the pinned game leads), the search, the Heroic wide
+   images downloaded by themselves, Steam's from its cache; and on scratch
+   folders, a wrong key turned down and not saved, the real one accepted
+   and written with mode 0600. Save keeps a key only once SteamGridDB takes
+   it, or when the site cannot be reached. Keys added: F1 About, Ctrl+,
+   Settings, Ctrl+F search, Ctrl+P pin, F5 or Ctrl+R refresh; on a game's
+   page Y pins and X hides. Not yet tried: Play from the game page on a
+   real game, a real controller.
+4. Accounts, Store and Downloads: sign in to Epic, GOG and Amazon through
+   legendary, gogdl and nile; the games owned but not installed; install,
+   update, repair and uninstall with a queue. To decide then: whether
+   downloads need a background process of their own that outlives the
+   window, as Hikari's daemon does.
+5. Launch options per game (a game settings sheet): Proton through umu with
+   a prefix per game, a Wine/Proton manager (GE-Proton downloads), MangoHud,
+   GameMode, gamescope, arguments and environment, a log of each launch.
+6. Local games: "Add game", with a cover search on SteamGridDB.
+7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
 ## On hyprmonk's side
 
@@ -187,13 +265,11 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Start each test game from Zendo, and check it shows up first under
+- Start each test game from its page, and check it shows up first under
   Recent afterwards.
-- Try a controller, the full-screen toggle (F11, Select), and the keys
-  phase 2 added.
-- With a SteamGridDB key in `config.toml`, run `zendo covers` on a
-  `.desktop` game to check the `dimensions` filter.
-- Start phase 3.
+- Try a controller on the new pages.
+- Start phase 4: read how legendary, gogdl and nile sign in and list owned
+  games, and decide whether downloads need a background process.
 
 ## Conventions
 
