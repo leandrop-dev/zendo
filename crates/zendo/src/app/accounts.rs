@@ -1,5 +1,8 @@
-//! The Accounts page: Zendo's own sign-ins to Epic, GOG and Amazon, made in
-//! the user's browser and finished by pasting the code the store gives.
+//! The Accounts page: Zendo's own sign-ins to Epic, GOG and Amazon. Sign in
+//! opens the store's page in a window of Zendo's own, which hands back the
+//! code when the store's sign-in ends; nothing to copy. When that window
+//! cannot open, or the user prefers, the page opens in their browser and
+//! they paste back the code or address it ends on.
 
 use iced::widget::{
     button, column, container, operation, row, scrollable, space, text, text_input,
@@ -9,6 +12,7 @@ use zendo_core::stores::{self, AmazonLogin, Store};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking, code_id, open};
+use crate::sign_in_window::{self, Handle};
 
 /// What Zendo knows of one store's sign-in.
 #[derive(Debug, Clone, Default)]
@@ -30,6 +34,10 @@ pub struct SignIn {
     amazon: Option<AmazonLogin>,
     busy: bool,
     note: Option<String>,
+    /// The sign-in window, while it is open.
+    window: Option<Handle>,
+    /// In the user's browser, finished by pasting.
+    browser: bool,
 }
 
 #[derive(Debug, Default)]
@@ -70,6 +78,10 @@ pub enum AccountMessage {
     Checked(Store, Result<Option<String>, String>),
     Start(Store),
     AmazonReady(Result<AmazonLogin, String>),
+    /// The sign-in window ended: the code, or `None` when it was closed.
+    WindowEnded(Store, Result<Option<String>, String>),
+    /// Signs in in the browser instead, closing the window.
+    UseBrowser,
     OpenPage,
     Paste(String),
     Finish,
@@ -110,19 +122,9 @@ impl Zendo {
                 }
             }
             AccountMessage::Start(store) => self.start_sign_in(store),
-            AccountMessage::AmazonReady(result) => {
-                if let Some(sign_in) = self.signing_in_to(Store::Amazon) {
-                    sign_in.busy = false;
-                    match result {
-                        Ok(login) => {
-                            open(&login.url);
-                            sign_in.amazon = Some(login);
-                        }
-                        Err(err) => sign_in.note = Some(err),
-                    }
-                }
-                Task::none()
-            }
+            AccountMessage::AmazonReady(result) => self.amazon_ready(result),
+            AccountMessage::WindowEnded(store, result) => self.window_ended(store, result),
+            AccountMessage::UseBrowser => self.use_browser(),
             AccountMessage::OpenPage => {
                 if let Some(sign_in) = &self.accounts.signing_in {
                     let page = sign_in
@@ -165,7 +167,14 @@ impl Zendo {
                 }
             }
             AccountMessage::Cancel => {
-                self.accounts.signing_in = None;
+                if let Some(window) = self
+                    .accounts
+                    .signing_in
+                    .take()
+                    .and_then(|sign_in| sign_in.window)
+                {
+                    window.close();
+                }
                 Task::none()
             }
             AccountMessage::SignOut(store) => {
@@ -181,6 +190,40 @@ impl Zendo {
             }
             AccountMessage::SignedOut(store, result) => self.signed_out(store, result),
         }
+    }
+
+    fn amazon_ready(&mut self, result: Result<AmazonLogin, String>) -> Task<Message> {
+        let Some(sign_in) = self.signing_in_to(Store::Amazon) else {
+            return Task::none();
+        };
+        sign_in.busy = false;
+        match result {
+            Ok(login) => {
+                let url = login.url.clone();
+                sign_in.amazon = Some(login);
+                if sign_in.browser {
+                    open(&url);
+                    Task::none()
+                } else {
+                    self.open_window(Store::Amazon, url)
+                }
+            }
+            Err(err) => {
+                sign_in.note = Some(err);
+                Task::none()
+            }
+        }
+    }
+
+    fn use_browser(&mut self) -> Task<Message> {
+        if let Some(sign_in) = &mut self.accounts.signing_in {
+            sign_in.browser = true;
+            sign_in.note = None;
+            if let Some(window) = sign_in.window.take() {
+                window.close();
+            }
+        }
+        self.update_account(AccountMessage::OpenPage)
     }
 
     fn signed_out(&mut self, store: Store, result: Result<(), String>) -> Task<Message> {
@@ -205,19 +248,62 @@ impl Zendo {
             amazon: None,
             busy: store == Store::Amazon,
             note: None,
+            window: None,
+            browser: false,
         });
         if !self.persist {
             return Task::none();
         }
         match store.login_page() {
-            Some(page) => {
-                open(page);
-                Task::none()
-            }
+            Some(page) => self.open_window(store, page.to_owned()),
             None => Task::perform(
                 blocking(|| Store::start_amazon().map_err(|err| format!("{err:#}"))),
                 |result| Message::Account(AccountMessage::AmazonReady(result)),
             ),
+        }
+    }
+
+    /// Opens the store's page in the sign-in window, and waits on a thread
+    /// for the code.
+    fn open_window(&mut self, store: Store, url: String) -> Task<Message> {
+        let Some(sign_in) = self.signing_in_to(store) else {
+            return Task::none();
+        };
+        let handle = Handle::default();
+        sign_in.window = Some(handle.clone());
+        Task::perform(
+            blocking(move || {
+                sign_in_window::open(store, &url, &handle).map_err(|err| format!("{err:#}"))
+            }),
+            move |result| Message::Account(AccountMessage::WindowEnded(store, result)),
+        )
+    }
+
+    fn window_ended(
+        &mut self,
+        store: Store,
+        result: Result<Option<String>, String>,
+    ) -> Task<Message> {
+        let Some(sign_in) = self.signing_in_to(store) else {
+            return Task::none();
+        };
+        // Gone to the browser meanwhile: the window was closed for it.
+        if sign_in.window.take().is_none() || sign_in.browser {
+            return Task::none();
+        }
+        match result {
+            Ok(Some(code)) => self.sign_in_with(code),
+            Ok(None) => {
+                self.accounts.signing_in = None;
+                self.status = Some(format!("Closed the {} sign-in", store.label()));
+                Task::none()
+            }
+            // Without a web view, the browser still works.
+            Err(err) => {
+                sign_in.note = Some(format!("{err}. Sign in in your browser instead."));
+                sign_in.browser = true;
+                self.update_account(AccountMessage::OpenPage)
+            }
         }
     }
 
@@ -236,10 +322,9 @@ impl Zendo {
         if sign_in.busy {
             return Task::none();
         }
-        let store = sign_in.store;
-        let Some(code) = stores::code_from(store, &sign_in.pasted) else {
+        let Some(code) = stores::code_from(sign_in.store, &sign_in.pasted) else {
             sign_in.note = Some(
-                match store {
+                match sign_in.store {
                     Store::Epic => "No code there: paste the whole page Epic showed",
                     Store::Gog | Store::Amazon => {
                         "No code there: paste the address the page ended on"
@@ -249,11 +334,22 @@ impl Zendo {
             );
             return Task::none();
         };
-        sign_in.busy = true;
-        let amazon = sign_in.amazon.clone();
         if !persist {
+            sign_in.busy = true;
             return Task::none();
         }
+        self.sign_in_with(code)
+    }
+
+    /// Hands the store's code to its engine, on a thread.
+    fn sign_in_with(&mut self, code: String) -> Task<Message> {
+        let Some(sign_in) = &mut self.accounts.signing_in else {
+            return Task::none();
+        };
+        sign_in.busy = true;
+        sign_in.note = None;
+        let store = sign_in.store;
+        let amazon = sign_in.amazon.clone();
         Task::perform(
             blocking(move || {
                 store
@@ -355,7 +451,11 @@ impl Zendo {
 
         let mut body = column![title, text(status).size(14).color(color), engine_line].spacing(8);
         if let Some(sign_in) = signing_in {
-            body = body.push(sign_in_steps(sign_in));
+            body = body.push(if sign_in.browser {
+                sign_in_steps(sign_in)
+            } else {
+                window_steps(sign_in)
+            });
         }
         container(body)
             .padding(20)
@@ -365,6 +465,60 @@ impl Zendo {
     }
 }
 
+/// The sign-in in Zendo's window: what it waits on, and a way out to the
+/// browser.
+fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
+    let store = sign_in.store;
+    let (line, retry) = match (&sign_in.window, sign_in.busy, &sign_in.note) {
+        (_, true, _) if sign_in.amazon.is_none() && store == Store::Amazon => {
+            ("Preparing Amazon's page…".to_owned(), false)
+        }
+        (_, true, _) => ("Signing in…".to_owned(), false),
+        (Some(_), false, _) => (
+            format!(
+                "Sign in to {} in the window that opened; Zendo finishes by itself.",
+                store.label()
+            ),
+            false,
+        ),
+        (None, false, Some(_)) => (String::new(), true),
+        (None, false, None) => ("Opening the sign-in window…".to_owned(), false),
+    };
+    let mut buttons = row![].spacing(8).align_y(Alignment::Center);
+    if retry {
+        buttons = buttons.push(
+            button(text("Try again").size(14).font(BOLD))
+                .padding([8, 18])
+                .style(style::primary)
+                .on_press(Message::Account(AccountMessage::Start(store))),
+        );
+    }
+    buttons = buttons
+        .push(
+            button(text("Use my browser instead").size(14))
+                .padding([8, 14])
+                .style(style::secondary)
+                .on_press_maybe(
+                    (!sign_in.busy).then_some(Message::Account(AccountMessage::UseBrowser)),
+                ),
+        )
+        .push(
+            button(text("Cancel").size(14))
+                .padding([8, 14])
+                .style(style::secondary)
+                .on_press(Message::Account(AccountMessage::Cancel)),
+        );
+    let mut steps = column![].spacing(10);
+    if !line.is_empty() {
+        steps = steps.push(text(line).size(14));
+    }
+    if let Some(note) = &sign_in.note {
+        steps = steps.push(text(note).size(13).color(BAD));
+    }
+    container(steps.push(buttons)).padding([12, 0]).into()
+}
+
+/// The sign-in in the user's browser, finished by pasting.
 fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
     let store = sign_in.store;
     let ready = store != Store::Amazon || sign_in.amazon.is_some();
@@ -446,5 +600,61 @@ mod tests {
         accounts.set(Store::Gog, Account::SignedIn("me".into()));
         accounts.set(Store::Epic, Account::SignedOut);
         assert_eq!(accounts.signed_in(), 1);
+    }
+
+    /// A GOG sign-in with its window open, as `open_window` leaves it.
+    fn with_window() -> Zendo {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let _ = zendo.update(Message::Account(AccountMessage::Start(Store::Gog)));
+        if let Some(sign_in) = &mut zendo.accounts.signing_in {
+            sign_in.window = Some(Handle::default());
+        }
+        zendo
+    }
+
+    fn ended(zendo: &mut Zendo, result: Result<Option<String>, String>) {
+        let _ = zendo.update(Message::Account(AccountMessage::WindowEnded(
+            Store::Gog,
+            result,
+        )));
+    }
+
+    #[test]
+    fn closing_the_window_ends_the_sign_in() {
+        let mut zendo = with_window();
+        ended(&mut zendo, Ok(None));
+        assert!(zendo.accounts.signing_in.is_none());
+    }
+
+    #[test]
+    fn the_windows_code_signs_in_without_pasting() {
+        let mut zendo = with_window();
+        ended(&mut zendo, Ok(Some("code".into())));
+        let sign_in = zendo.accounts.signing_in.as_ref().unwrap();
+        assert!(sign_in.busy, "the code went to gogdl");
+        assert!(sign_in.window.is_none() && !sign_in.browser);
+    }
+
+    #[test]
+    fn without_a_window_the_browser_takes_over() {
+        let mut zendo = with_window();
+        ended(
+            &mut zendo,
+            Err("the sign-in window failed: no WebKitGTK".into()),
+        );
+        let sign_in = zendo.accounts.signing_in.as_ref().unwrap();
+        assert!(sign_in.browser);
+        assert!(sign_in.note.as_deref().unwrap().contains("browser"));
+    }
+
+    #[test]
+    fn going_to_the_browser_closes_the_window() {
+        let mut zendo = with_window();
+        let _ = zendo.update(Message::Account(AccountMessage::UseBrowser));
+        // The window, closed for it, ends; the sign-in carries on by paste.
+        ended(&mut zendo, Ok(None));
+        let sign_in = zendo.accounts.signing_in.as_ref().unwrap();
+        assert!(sign_in.browser && sign_in.window.is_none());
     }
 }

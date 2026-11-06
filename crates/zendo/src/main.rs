@@ -3,6 +3,7 @@
 
 mod app;
 mod gamepad;
+mod sign_in_window;
 
 use std::process::ExitCode;
 
@@ -30,6 +31,10 @@ Usage:
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    // Started by the window for a store's sign-in; not for people.
+    if let ["sign-in-window", store, url] = args.as_slice() {
+        return sign_in_window::main(store, url);
+    }
     let result = match args.as_slice() {
         [] => app::run(false),
         ["--fullscreen"] => app::run(true),

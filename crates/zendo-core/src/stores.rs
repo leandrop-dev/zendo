@@ -4,10 +4,10 @@
 //! of Zendo's under `$XDG_DATA_HOME/zendo/stores/`, apart from Heroic's
 //! sign-ins and readable by the user only.
 //!
-//! Signing in happens in the user's browser: Zendo opens the store's page,
-//! the store ends on a page or an address holding a one-time code, and the
-//! user pastes that back. [`code_from`] finds the code in whatever was
-//! pasted.
+//! Signing in happens on the store's own page, which ends on a page or an
+//! address holding a one-time code: in Zendo's sign-in window, which reads
+//! it with [`code_at`], or in the user's browser, from which they paste it
+//! back and [`code_from`] finds it in whatever was pasted.
 
 use std::fs;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -393,6 +393,31 @@ pub fn code_from(store: Store, pasted: &str) -> Option<String> {
     (!code.is_empty() && !code.contains(char::is_whitespace)).then(|| code.to_owned())
 }
 
+/// The code on the page a store's sign-in ends on, seen from a sign-in
+/// window: GOG's `embed.gog.com/on_login_success?code=…`, Amazon's
+/// address with `openid.oa2.authorization_code`, and the JSON page at
+/// Epic's `/id/api/redirect`, whose text is `text`. Any other page gives
+/// `None`, however much it looks like a code.
+#[must_use]
+pub fn code_at(store: Store, address: &str, text: Option<&str>) -> Option<String> {
+    match store {
+        Store::Gog if address.starts_with("https://embed.gog.com/on_login_success") => {
+            query_param(address, "code")
+        }
+        Store::Amazon if address.starts_with("https://www.amazon.") => {
+            query_param(address, "openid.oa2.authorization_code")
+        }
+        Store::Epic if address.starts_with("https://www.epicgames.com/id/api/redirect") => {
+            let json: serde_json::Value = serde_json::from_str(text?.trim()).ok()?;
+            json.get("authorizationCode")?
+                .as_str()
+                .filter(|code| !code.is_empty())
+                .map(str::to_owned)
+        }
+        _ => None,
+    }
+}
+
 /// A parameter of a URL's query, decoded.
 fn query_param(url: &str, name: &str) -> Option<String> {
     let (_, query) = url.split_once('?')?;
@@ -471,6 +496,44 @@ fn failure(engine: &str, output: &Output) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn takes_the_code_only_from_the_page_a_sign_in_ends_on() {
+        let gog = "https://embed.gog.com/on_login_success?origin=client&code=g%2B1";
+        assert_eq!(code_at(Store::Gog, gog, None).as_deref(), Some("g+1"));
+        assert_eq!(
+            code_at(Store::Gog, "https://login.gog.com/?code=nope", None),
+            None
+        );
+        let amazon = "https://www.amazon.com/?openid.assoc_handle=amzn_sonic_games_launcher&openid.oa2.authorization_code=ANabc";
+        assert_eq!(
+            code_at(Store::Amazon, amazon, None).as_deref(),
+            Some("ANabc")
+        );
+        assert_eq!(
+            code_at(
+                Store::Amazon,
+                "https://evil.example/?openid.oa2.authorization_code=x",
+                None
+            ),
+            None
+        );
+        let epic = "https://www.epicgames.com/id/api/redirect?clientId=34a0&responseType=code";
+        let page = r#"{"warning":"Do not share this code","redirectUrl":"https://localhost/launcher/authorized?code=zzz","authorizationCode":"abc123","sid":null}"#;
+        assert_eq!(
+            code_at(Store::Epic, epic, Some(page)).as_deref(),
+            Some("abc123")
+        );
+        assert_eq!(code_at(Store::Epic, epic, None), None);
+        assert_eq!(
+            code_at(
+                Store::Epic,
+                "https://www.epicgames.com/id/login",
+                Some(page)
+            ),
+            None
+        );
+    }
 
     #[test]
     fn finds_the_code_in_what_was_pasted() {

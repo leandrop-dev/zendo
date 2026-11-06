@@ -11,12 +11,20 @@ repository = "https://github.com/leandrop-dev/zendo"
 [workspace.dependencies]
 anyhow = "1"
 gilrs = "0.11.2"
+# GTK 3, the version wry builds its Linux web view on.
+gtk = "0.18"
 iced = { version = "0.14.0", features = ["image"] }
 keyvalues-parser = "0.2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.2.0"
 ureq = "3.5.1"
+# The WebKit view under wry's, for the sign-in window's pop-ups; the
+# version wry pins.
+webkit2gtk = "=2.0.2"
+# The sign-in window's web view, WebKitGTK; X11 support left out, as GTK
+# needs none to embed it.
+wry = { version = "0.57.1", default-features = false, features = ["os-webview"] }
 zendo-core = { path = "crates/zendo-core" }
 
 [workspace.lints.rust]

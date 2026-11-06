@@ -15,7 +15,9 @@ Hikari-layout shell, built the same day, then all of phase 4 (Accounts,
 Store, Downloads); real sign-ins and installs wait for the user.
 Later on 2026-11-06 the user tested phase 4 and listed what to change; the
 order agreed [firm]: 4d (fixes to downloads, update status, sizes), then a
-sign-in window, then phase 5 with Running/Stop and the ProtonDB rating.
+sign-in window, then phase 5 with Running/Stop and the ProtonDB rating. The
+user checked 4d in the window; 4d and 4e (the sign-in window) were built
+the same day.
 
 ## Direction [firm]
 
@@ -400,12 +402,44 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Bō: Path of the Teal Lotus into a scratch folder with a stale
      manifest planted: the manifest cleared, the install paused at 5%,
      `.gogdl-resume` kept, resumed from 4.5%, cancelled leaving nothing.
-     Not checked: legendary and nile (not signed in), and the window.
-   - 4e Sign-in window [firm, next]: Zendo opens the store's login page in
-     a small window of its own and takes the code from the address the
-     store ends on, as Heroic does, with nothing to copy; for children and
-     people who find codes confusing. Needs a web view: `wry` on
-     `webkit2gtk-4.1` (installed here, 2.54.2), which becomes a dependency.
+     Not checked: legendary and nile (not signed in). The user tried the
+     window and it worked.
+   - 4e Sign-in window [firm], built 2026-11-06: Sign in opens the store's
+     login page in a small window of Zendo's own and takes the code from
+     the page the store's sign-in ends on, as Heroic does, with nothing to
+     copy; for children and people who find codes confusing. The window is
+     a second process, `zendo sign-in-window <store> <url>` (hidden from
+     the help), since the web view needs GTK's own loop apart from Iced's:
+     `wry` 0.57.1 on `webkit2gtk-4.1`, built with `build_gtk` (no X11
+     needed, so it runs on Wayland), incognito so no cookies or caches
+     are written (without it WebKit wrote `storage`, `localstorage`,
+     `mediakeys` and `hsts-storage.sqlite` into `~/.local/share/zendo` and
+     two caches into `~/.cache/zendo`). It watches each navigation and
+     page load, and a script on the last page posts its address (and on
+     Epic's, its JSON text); `stores::code_at` takes the code only from
+     `embed.gog.com/on_login_success`, a `www.amazon.*` address with
+     `openid.oa2.authorization_code`, or Epic's `/id/api/redirect`. The
+     code goes to stdout, closing gives exit code 3, and the window ends
+     when Zendo closes its stdin (Cancel, Zendo exiting). Zendo sets
+     `WEBKIT_DISABLE_DMABUF_RENDERER=1` for it unless already set, as
+     WebKitGTK's DMA-BUF renderer draws blank on NVIDIA's driver on
+     Wayland [re-evaluate when WebKitGTK fixes it]. When the window cannot
+     open, or with "Use my browser instead", the old paste steps remain.
+     Checked: a local page redirecting to a made-up GOG success address
+     gave its code without loading it; closing stdin gave exit 3; GOG's and
+     Epic's real login pages rendered on this PC (GTX 1070 Ti, Hyprland);
+     nothing written to disk in incognito.
+     Pop-ups, for "Sign in with Google" and the like, which the user and
+     others use on Epic and GOG: each opens in a window of its own, a web
+     view related to its opener (so `window.opener` works and it shares
+     the opener's in-memory session), with the same watch for the code,
+     closed when its page calls `window.close()`. Pages may open them
+     outside a click (`javascript-can-open-windows-automatically`). wry's
+     own default for pop-ups needs a `gtk::ApplicationWindow`, and without
+     a handler WebKit opens none. Checked with a local opener and pop-up:
+     two windows, the pop-up's message reaching its opener, the pop-up
+     closing itself, the code coming back. The user then signed in
+     through the window and it worked.
 5. Launch options per game (a game settings sheet): Proton through umu with
    a prefix per game, a Wine/Proton manager (GE-Proton downloads), MangoHud,
    GameMode, gamescope, arguments and environment, a log of each launch.
@@ -432,10 +466,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- The user tests 4d: a GOG reinstall, Pause and Resume, Cancel leaving
-  nothing in `~/Games`, closing mid-download, update status and sizes on
-  the game pages; Epic and Amazon once signed in.
-- Then 4e, the sign-in window.
+- Epic and Amazon installs, now that signing in there is easy.
 - Then phase 5: launch options, Running/Stop and ProtonDB.
 
 ## Conventions

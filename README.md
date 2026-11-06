@@ -70,9 +70,11 @@ install it and give it its colours, but it runs on any Linux desktop.
 - Takes the SteamGridDB key in Settings, checks it with SteamGridDB, and
   keeps it in a settings file only you can read.
 - Signs in to Epic, GOG and Amazon on the Accounts page, with accounts of
-  its own (not Heroic's): it opens the store's login page in your browser,
-  you paste back what the page ends on, and Zendo signs in through
-  legendary, gogdl or nile. The engines are used from your `PATH`, or from
+  its own (not Heroic's): it opens the store's login page in a window of
+  its own and, once you have signed in there, takes it from there through
+  legendary, gogdl or nile, with nothing to copy. The window keeps no
+  cookies. If it cannot open, the page opens in your browser instead and
+  you paste back what it ends on. The engines are used from your `PATH`, or from
   Heroic's own copies.
 - Shows every game those stores say you own on the Store page, with the
   installed ones marked, a search, store chips and "Not installed only",
@@ -97,13 +99,15 @@ launcher is needed only for its own games:
 | Steam | Steam games; they start through the Steam client |
 | Heroic | The Epic, GOG and Amazon games it installed, and games added to it |
 | legendary, gogdl, nile | Signing in to Epic, GOG and Amazon, listing your games there and installing them; Heroic's own copies are used when these are not installed alone |
+| WebKitGTK 4.1 (`webkit2gtk-4.1`) | The sign-in window; Zendo is built against it, so it is needed to build and run |
 
 Launch options of Zendo's own (Proton through umu-launcher, MangoHud,
 GameMode, gamescope; phase 5) come later, and will be optional too.
 
 ## Build
 
-Rust 1.88 or newer:
+Rust 1.88 or newer, and WebKitGTK 4.1 with GTK 3 (on Arch, `webkit2gtk-4.1`;
+on Debian and Ubuntu, `libwebkit2gtk-4.1-dev`):
 
 ```bash
 git clone https://github.com/leandrop-dev/zendo.git
@@ -221,8 +225,8 @@ window stays open; Steam and Heroic count their own.
 4. **Accounts, Store and Downloads** (built, waiting on a try with real
    accounts): sign in to Epic, GOG and Amazon, the games owned but not
    installed, and install, update, repair and uninstall through legendary,
-   gogdl and nile, with pause and resume, update status and sizes. Next, a
-   sign-in window, so there is no code to copy.
+   gogdl and nile, with pause and resume, update status and sizes, and a
+   sign-in window of Zendo's own, so there is no code to copy.
 5. Launch options per game: Proton through umu-launcher with a prefix per
    game, a Wine/Proton manager, MangoHud, GameMode, gamescope, a launch log;
    Running and Stop while a game runs; the ProtonDB rating on its page.
