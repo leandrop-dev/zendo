@@ -69,6 +69,14 @@ install it and give it its colours, but it runs on any Linux desktop.
   version, install path and the exact launch command.
 - Takes the SteamGridDB key in Settings, checks it with SteamGridDB, and
   keeps it in a settings file only you can read.
+- Signs in to Epic, GOG and Amazon on the Accounts page, with accounts of
+  its own (not Heroic's): it opens the store's login page in your browser,
+  you paste back what the page ends on, and Zendo signs in through
+  legendary, gogdl or nile. The engines are used from your `PATH`, or from
+  Heroic's own copies.
+- Shows every game those stores say you own on the Store page, with the
+  installed ones marked, a search, store chips and "Not installed only",
+  and a page for each. Installing from there comes next.
 
 ## What you need
 
@@ -78,11 +86,12 @@ launcher is needed only for its own games:
 | Tool | For |
 |------|-----|
 | Steam | Steam games; they start through the Steam client |
-| Heroic | Epic, GOG and Amazon games, and games added to Heroic |
+| Heroic | The Epic, GOG and Amazon games it installed, and games added to it |
+| legendary, gogdl, nile | Signing in to Epic, GOG and Amazon and listing your games there; Heroic's own copies are used when these are not installed alone |
 
-Signing in to the stores yourself (phase 4) and launch options of Zendo's
-own (Proton through umu-launcher, MangoHud, GameMode, gamescope; phase 5)
-come later, and each will be optional too.
+Installing from the stores (the rest of phase 4) and launch options of
+Zendo's own (Proton through umu-launcher, MangoHud, GameMode, gamescope;
+phase 5) come later, and each will be optional too.
 
 ## Build
 
@@ -114,6 +123,9 @@ In the library:
 | Ctrl+H | Start | Show or leave out the hidden games |
 | F5, Ctrl+R | | Look for games again |
 
+The Store page moves, opens, searches and clears the same way; Esc on a
+store game's page goes back to the Store.
+
 On a game's page:
 
 | Key | Controller | Does |
@@ -123,9 +135,11 @@ On a game's page:
 | Ctrl+P | Y | Pin or unpin |
 | Delete | X | Hide or bring back |
 
-Anywhere: Ctrl+, opens Settings, F1 About, and F11 or Select switches
+Anywhere: Ctrl+1 opens the Library, Ctrl+2 the Store, Ctrl+3 Accounts,
+Ctrl+4 or Ctrl+, Settings, Ctrl+5 or F1 About, and F11 or Select switches
 between full-screen and windowed. On Settings, typing starts the
-SteamGridDB key.
+SteamGridDB key; on Accounts, while signing in, typing or Ctrl+V fills in
+the code.
 
 The controller is read only while Zendo's window is in front, so it does not
 move through the library while you play.
@@ -167,6 +181,8 @@ What Zendo keeps itself:
 |------|------|
 | `~/.local/state/zendo/state.json` | The games it started and when, the hidden and pinned games, the sort |
 | `~/.cache/zendo/covers/` | Downloaded covers (`<id>.jpg`) and wide images (`<id>.hero.jpg`); `misses.json` lists games with none, asked about again after a week |
+| `~/.local/share/zendo/stores/` | Zendo's sign-ins, one folder per store engine (`epic`, `gog`, `amazon`), readable by you only |
+| `~/.cache/zendo/store/` | Each store's list of your games (`<store>.json`), shown at once on the next start; `gogdb/` keeps GOG's answers about each game |
 
 Play time of games Zendo runs itself (`.desktop` ones) is counted while its
 window stays open; Steam and Heroic count their own.
@@ -175,9 +191,9 @@ window stays open; Steam and Heroic count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines and `owned.rs` lists the games they own |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `settings.rs`, `about.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `accounts.rs`, `settings.rs`, `about.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -189,9 +205,9 @@ window stays open; Steam and Heroic count their own.
 3. **The shell** (done): Hikari's layout in hyprmonk's colours: the
    sidebar, the Library with store and sort chips and pins, a page per
    game, Settings with the SteamGridDB key, About.
-4. Accounts, Store and Downloads: sign in to Epic, GOG and Amazon, the games
-   owned but not installed, and install, update and uninstall through
-   legendary, gogdl and nile.
+4. Accounts, Store and Downloads (Accounts and Store built): sign in to
+   Epic, GOG and Amazon, the games owned but not installed, and install,
+   update and uninstall through legendary, gogdl and nile.
 5. Launch options per game: Proton through umu-launcher with a prefix per
    game, a Wine/Proton manager, MangoHud, GameMode, gamescope, a launch log.
 6. Local games: add a game by hand, with a cover from SteamGridDB.

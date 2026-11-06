@@ -7,6 +7,7 @@ use iced::{Element, Length};
 
 use super::style::{self, ACCENT, BOLD, DIM};
 use super::{Message, Page, Zendo, format};
+use zendo_core::Game;
 
 pub const WIDTH: f32 = 224.0;
 
@@ -38,31 +39,7 @@ impl Zendo {
             container(text(label).size(11).font(BOLD).color(DIM)).padding([12, 12])
         };
 
-        let minutes: u64 = games.iter().map(|game| game.played.minutes).sum();
-        let stores = games
-            .iter()
-            .map(|game| game.source)
-            .collect::<HashSet<_>>()
-            .len();
-        let summary = container(
-            column![
-                text("YOUR LIBRARY").size(11).font(BOLD).color(DIM),
-                text(format::count(games.len(), "game", "games"))
-                    .size(20)
-                    .font(BOLD),
-                text(format!(
-                    "{} · {}",
-                    format::count(stores, "source", "sources"),
-                    format::play_time(minutes)
-                ))
-                .size(12)
-                .color(DIM),
-            ]
-            .spacing(4),
-        )
-        .padding(14)
-        .width(Length::Fill)
-        .style(style::card);
+        let summary = summary(&games);
 
         let brand = row![
             text("Zendo").size(22).font(BOLD),
@@ -80,7 +57,25 @@ impl Zendo {
                     Page::Library,
                     in_library
                 ),
+                entry(
+                    "Store",
+                    match self.owned_count() {
+                        0 => String::new(),
+                        n => n.to_string(),
+                    },
+                    Page::Store,
+                    matches!(self.page, Page::Store | Page::Owned(_))
+                ),
                 heading("SYSTEM"),
+                entry(
+                    "Accounts",
+                    match self.accounts.signed_in() {
+                        0 => String::new(),
+                        n => format!("{n} of 3"),
+                    },
+                    Page::Accounts,
+                    self.page == Page::Accounts
+                ),
                 entry(
                     "Settings",
                     String::new(),
@@ -104,4 +99,34 @@ impl Zendo {
         .style(style::sidebar)
         .into()
     }
+}
+
+/// Games, sources and play time, at the foot of the sidebar.
+fn summary<'a>(games: &[&Game]) -> Element<'a, Message> {
+    let minutes: u64 = games.iter().map(|game| game.played.minutes).sum();
+    let stores = games
+        .iter()
+        .map(|game| game.source)
+        .collect::<HashSet<_>>()
+        .len();
+    container(
+        column![
+            text("YOUR LIBRARY").size(11).font(BOLD).color(DIM),
+            text(format::count(games.len(), "game", "games"))
+                .size(20)
+                .font(BOLD),
+            text(format!(
+                "{} · {}",
+                format::count(stores, "source", "sources"),
+                format::play_time(minutes)
+            ))
+            .size(12)
+            .color(DIM),
+        ]
+        .spacing(4),
+    )
+    .padding(14)
+    .width(Length::Fill)
+    .style(style::card)
+    .into()
 }

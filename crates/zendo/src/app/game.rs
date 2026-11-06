@@ -2,11 +2,12 @@
 //! what its store records about the install.
 
 use std::f32::consts::{FRAC_PI_2, PI};
+use std::path::Path;
 
 use iced::gradient::Linear;
 use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
 use iced::{Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians};
-use zendo_core::Game;
+use zendo_core::{Game, Source};
 
 use super::style::{self, ACCENT, BACKGROUND, BOLD, DIM, LINE, SURFACE};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
@@ -53,7 +54,7 @@ impl Zendo {
         .align_y(Alignment::Center);
 
         scrollable(
-            column![trail, hero(game), actions, details(game)]
+            column![trail, game_hero(game), actions, details(game)]
                 .spacing(20)
                 .padding(24),
         )
@@ -63,8 +64,41 @@ impl Zendo {
     }
 }
 
-fn hero(game: &Game) -> Element<'_, Message> {
-    let art: Element<'_, Message> = if let Some(path) = &game.hero {
+/// What the wide art at the top of a game's page shows.
+pub struct Hero<'a> {
+    pub title: &'a str,
+    pub source: Source,
+    pub art: Option<&'a Path>,
+    pub cover: Option<&'a Path>,
+    pub badges: Vec<(String, Color)>,
+    pub developer: Option<&'a str>,
+    pub facts: Vec<String>,
+}
+
+fn game_hero(game: &Game) -> Element<'_, Message> {
+    let mut badges = Vec::new();
+    if let Some(platform) = &game.details.platform {
+        badges.push((platform_label(platform), DIM));
+    }
+    if game.pinned {
+        badges.push(("PINNED".to_owned(), ACCENT));
+    }
+    if game.hidden {
+        badges.push(("HIDDEN".to_owned(), DIM));
+    }
+    hero(Hero {
+        title: &game.title,
+        source: game.source,
+        art: game.hero.as_deref(),
+        cover: game.cover.as_deref(),
+        badges,
+        developer: game.details.developer.as_deref(),
+        facts: facts(game),
+    })
+}
+
+pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
+    let art: Element<'_, Message> = if let Some(path) = hero.art {
         image(image::Handle::from_path(path))
             .width(Length::Fill)
             .height(HERO_HEIGHT)
@@ -72,7 +106,7 @@ fn hero(game: &Game) -> Element<'_, Message> {
             .border_radius(RADIUS)
             .into()
     } else {
-        let tint = style::source_color(game.source);
+        let tint = style::source_color(hero.source);
         shade(
             Linear::new(Radians(FRAC_PI_2))
                 .add_stop(0.0, SURFACE)
@@ -111,25 +145,18 @@ fn hero(game: &Game) -> Element<'_, Message> {
     );
 
     let mut badges = row![style::badge(
-        game.source.label(),
-        style::source_color(game.source)
+        hero.source.label(),
+        style::source_color(hero.source)
     )]
     .spacing(6);
-    if let Some(platform) = &game.details.platform {
-        badges = badges.push(style::badge(platform_label(platform), DIM));
+    for (label, color) in hero.badges {
+        badges = badges.push(style::badge(label, color));
     }
-    if game.pinned {
-        badges = badges.push(style::badge("PINNED", ACCENT));
-    }
-    if game.hidden {
-        badges = badges.push(style::badge("HIDDEN", DIM));
-    }
-
-    let mut info = column![badges, text(&game.title).size(38).font(BOLD)].spacing(8);
-    if let Some(developer) = &game.details.developer {
+    let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
+    if let Some(developer) = hero.developer {
         info = info.push(text(developer).size(15).color(DIM));
     }
-    let facts: Vec<Element<'_, Message>> = facts(game).into_iter().map(fact_chip).collect();
+    let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
     if !facts.is_empty() {
         info = info.push(row(facts).spacing(8));
     }
@@ -137,7 +164,7 @@ fn hero(game: &Game) -> Element<'_, Message> {
     let mut content = row![info.width(Length::Fill)]
         .spacing(24)
         .align_y(Alignment::End);
-    if let Some(cover) = &game.cover {
+    if let Some(cover) = hero.cover {
         content = content.push(
             image(image::Handle::from_path(cover))
                 .width(COVER_WIDTH)

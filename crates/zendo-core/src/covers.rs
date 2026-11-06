@@ -40,20 +40,6 @@ impl Kind {
         }
     }
 
-    fn current(self, game: &Game) -> Option<&PathBuf> {
-        match self {
-            Self::Cover => game.cover.as_ref(),
-            Self::Hero => game.hero.as_ref(),
-        }
-    }
-
-    fn url(self, game: &Game) -> Option<&String> {
-        match self {
-            Self::Cover => game.cover_url.as_ref(),
-            Self::Hero => game.hero_url.as_ref(),
-        }
-    }
-
     /// The key in `misses.json`; covers keep the bare id they had before
     /// heroes were fetched.
     fn miss_key(self, id: &str) -> String {
@@ -64,6 +50,41 @@ impl Kind {
     }
 }
 
+/// Something with a cover and a wide image: an installed game, or one the
+/// user owns in a store.
+pub trait Artwork {
+    fn id(&self) -> &str;
+    fn title(&self) -> &str;
+    fn source(&self) -> Source;
+    /// The image the store publishes.
+    fn url(&self, kind: Kind) -> Option<&str>;
+    /// The image already on disk.
+    fn current(&self, kind: Kind) -> Option<&std::path::Path>;
+}
+
+impl Artwork for Game {
+    fn id(&self) -> &str {
+        &self.id
+    }
+    fn title(&self) -> &str {
+        &self.title
+    }
+    fn source(&self) -> Source {
+        self.source
+    }
+    fn url(&self, kind: Kind) -> Option<&str> {
+        match kind {
+            Kind::Cover => self.cover_url.as_deref(),
+            Kind::Hero => self.hero_url.as_deref(),
+        }
+    }
+    fn current(&self, kind: Kind) -> Option<&std::path::Path> {
+        match kind {
+            Kind::Cover => self.cover.as_deref(),
+            Kind::Hero => self.hero.as_deref(),
+        }
+    }
+}
 #[must_use]
 pub fn dir() -> Option<PathBuf> {
     paths::cache_home().map(|dir| dir.join("zendo/covers"))
@@ -170,14 +191,14 @@ impl Fetcher {
 
     /// Whether this game needs this image and there is somewhere to look.
     #[must_use]
-    pub fn wants(&self, game: &Game, kind: Kind) -> bool {
+    pub fn wants(&self, game: &dyn Artwork, kind: Kind) -> bool {
         let recently_missed = self
             .misses
-            .get(&kind.miss_key(&game.id))
+            .get(&kind.miss_key(game.id()))
             .is_some_and(|&when| time::now().saturating_sub(when) < RETRY_AFTER);
-        kind.current(game).is_none()
+        game.current(kind).is_none()
             && !recently_missed
-            && (kind.url(game).is_some() || self.key.is_some())
+            && (game.url(kind).is_some() || self.key.is_some())
     }
 
     /// Finds and saves an image. `Ok(None)` when no source has one, which
@@ -188,15 +209,17 @@ impl Fetcher {
     ///
     /// When a request fails for another reason than the game not being
     /// known, or the image cannot be saved.
-    pub fn fetch(&mut self, game: &Game, kind: Kind) -> anyhow::Result<Option<PathBuf>> {
-        let mut url = kind.url(game).cloned();
+    pub fn fetch(&mut self, game: &dyn Artwork, kind: Kind) -> anyhow::Result<Option<PathBuf>> {
+        let mut url = game.url(kind).map(str::to_owned);
         if url.is_none() {
             url = self.steamgriddb(game, kind)?;
         }
         let Some(url) = url else {
-            self.missed(&kind.miss_key(&game.id));
+            self.missed(&kind.miss_key(game.id()));
             return Ok(None);
         };
+        // Epic hands out some image addresses with bare spaces in them.
+        let url = url.replace(' ', "%20");
         let response = self
             .agent
             .get(&url)
@@ -209,7 +232,7 @@ impl Fetcher {
             .read_to_vec()
             .with_context(|| format!("could not download {url}"))?;
         let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
-        let stem = stem(&game.id, kind);
+        let stem = stem(game.id(), kind);
         let path = self.dir.join(format!("{stem}.{ext}"));
         paths::write_atomic(&path, &bytes)
             .with_context(|| format!("could not save {}", path.display()))?;
@@ -228,7 +251,7 @@ impl Fetcher {
 
     /// The URL of an image on `SteamGridDB`: by app id for Steam games, by
     /// the first search result for the title otherwise.
-    fn steamgriddb(&mut self, game: &Game, kind: Kind) -> anyhow::Result<Option<String>> {
+    fn steamgriddb(&mut self, game: &dyn Artwork, kind: Kind) -> anyhow::Result<Option<String>> {
         #[derive(Deserialize)]
         struct Image {
             url: String,
@@ -243,15 +266,15 @@ impl Fetcher {
             Kind::Cover => "grids",
             Kind::Hero => "heroes",
         };
-        let path = if let (Source::Steam, Some(app)) = (game.source, game.id.strip_prefix("steam:"))
-        {
-            format!("{endpoint}/steam/{app}")
-        } else {
-            let Some(id) = self.search(&key, game)? else {
-                return Ok(None);
+        let path =
+            if let (Source::Steam, Some(app)) = (game.source(), game.id().strip_prefix("steam:")) {
+                format!("{endpoint}/steam/{app}")
+            } else {
+                let Some(id) = self.search(&key, game)? else {
+                    return Ok(None);
+                };
+                format!("{endpoint}/game/{id}")
             };
-            format!("{endpoint}/game/{id}")
-        };
 
         if kind == Kind::Hero {
             let heroes = self.api::<Vec<Image>>(&key, &path, None)?;
@@ -275,22 +298,22 @@ impl Fetcher {
     }
 
     /// `SteamGridDB`'s id for a game, from its title.
-    fn search(&mut self, key: &str, game: &Game) -> anyhow::Result<Option<u64>> {
+    fn search(&mut self, key: &str, game: &dyn Artwork) -> anyhow::Result<Option<u64>> {
         #[derive(Deserialize)]
         struct Found {
             id: u64,
         }
-        if let Some(&id) = self.found.get(&game.id) {
+        if let Some(&id) = self.found.get(game.id()) {
             return Ok(id);
         }
         let search = format!(
             "search/autocomplete/{}",
-            heroic::percent_encode(&game.title)
+            heroic::percent_encode(game.title())
         );
         let id = self
             .api::<Vec<Found>>(key, &search, None)?
             .and_then(|found| found.first().map(|first| first.id));
-        self.found.insert(game.id.clone(), id);
+        self.found.insert(game.id().to_owned(), id);
         Ok(id)
     }
 

@@ -1,16 +1,20 @@
-//! The window: a sidebar of pages (Library, Settings, About), the library as
-//! a grid of covers with store and sort chips, and a page for each game with
-//! its art, actions and details. Keyboard and controller drive all of it;
-//! missing covers and wide images download in the background.
+//! The window: a sidebar of pages (Library, Store, Accounts, Settings,
+//! About), the library and the store as grids of covers with chips, and a
+//! page for each game with its art, actions and details. Keyboard and
+//! controller drive all of it; missing covers and wide images download in
+//! the background.
 
 mod about;
+mod accounts;
 mod format;
 mod game;
 mod library;
 mod settings;
 mod sidebar;
+mod store;
 mod style;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -22,10 +26,13 @@ use iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use iced::widget::{Id, column, container, operation, row, space, text};
 use iced::{Element, Event, Length, Size, Subscription, Task, event, window};
 use zendo_core::config::Config;
-use zendo_core::covers::{Fetcher, KeyCheck, Kind};
+use zendo_core::covers::{Artwork, Fetcher, KeyCheck, Kind};
+use zendo_core::owned::Owned;
 use zendo_core::{Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
+use accounts::{AccountMessage, Accounts};
+use store::{StoreMessage, StoreState};
 use style::DIM;
 
 const START_SIZE: Size = Size::new(1360.0, 860.0);
@@ -40,6 +47,14 @@ fn game_scroll_id() -> Id {
 
 fn search_id() -> Id {
     Id::new("search")
+}
+
+fn store_search_id() -> Id {
+    Id::new("store-search")
+}
+
+fn code_id() -> Id {
+    Id::new("sign-in-code")
 }
 
 fn key_id() -> Id {
@@ -66,7 +81,11 @@ enum Page {
     Library,
     /// The game with this id.
     Game(String),
+    Store,
+    /// The owned game with this id.
+    Owned(String),
     Settings,
+    Accounts,
     About,
 }
 
@@ -123,6 +142,12 @@ enum Message {
     KeyChecked(Result<KeyCheck, String>),
     SetDownloadCovers(bool),
     DownloadNow,
+    Account(AccountMessage),
+    Store(StoreMessage),
+    /// Ctrl+V with no field focused: the clipboard goes to the field the
+    /// page is for.
+    PasteClipboard,
+    Pasted(Option<String>),
     Pad(Pad),
 }
 
@@ -142,6 +167,8 @@ struct KeyForm {
 struct Downloads {
     left: usize,
     failed: usize,
+    /// More games came in while these downloaded; look again after.
+    again: bool,
 }
 
 #[expect(clippy::struct_excessive_bools, reason = "independent window flags")]
@@ -167,6 +194,8 @@ struct Zendo {
     downloads: Downloads,
     config: Config,
     key: KeyForm,
+    accounts: Accounts,
+    store: StoreState,
     /// Off in tests, so they never touch the user's files or the network.
     persist: bool,
 }
@@ -192,11 +221,32 @@ impl Zendo {
             downloads: Downloads::default(),
             config: Config::default(),
             key: KeyForm::default(),
+            accounts: Accounts::default(),
+            store: StoreState::default(),
             persist: true,
         };
         // The window's id, so F11 works before the first resize event.
         let window = window::latest().and_then(|id| Task::done(Message::Focused(id, true)));
-        (zendo, Task::batch([scan(), window]))
+        let tasks = [scan(), window, accounts::check_all(), store::load_cached()];
+        (zendo, Task::batch(tasks))
+    }
+
+    /// How many cards the page's grid has.
+    fn grid_len(&self) -> usize {
+        match self.page {
+            Page::Library => self.visible().len(),
+            Page::Store => self.store_visible().len(),
+            _ => 0,
+        }
+    }
+
+    /// The page's cursor and how far its grid is scrolled.
+    fn cursor(&mut self) -> (&mut usize, &mut f32) {
+        if self.page == Page::Store {
+            (&mut self.store.selected, &mut self.store.scroll_top)
+        } else {
+            (&mut self.selected, &mut self.scroll_top)
+        }
     }
 
     /// The games the grid shows, in its order.
@@ -234,7 +284,7 @@ impl Zendo {
         match &self.page {
             Page::Game(id) => Some(id.clone()),
             Page::Library => self.selected_id(),
-            Page::Settings | Page::About => None,
+            Page::Store | Page::Owned(_) | Page::Accounts | Page::Settings | Page::About => None,
         }
     }
 
@@ -283,10 +333,7 @@ impl Zendo {
                 self.image_arrived(&id, kind, result);
                 Task::none()
             }
-            Message::ImagesDone => {
-                self.images_done();
-                Task::none()
-            }
+            Message::ImagesDone => self.images_done(),
             Message::Resized(id, size) => {
                 self.window = Some(id);
                 self.columns = library::columns_for(size.width);
@@ -298,31 +345,27 @@ impl Zendo {
                 Task::none()
             }
             Message::Scrolled(viewport) => {
-                self.scroll_top = viewport.absolute_offset().y;
+                *self.cursor().1 = viewport.absolute_offset().y;
                 self.viewport_height = viewport.bounds().height;
                 Task::none()
             }
             Message::Navigate(page) => self.navigate(page),
-            Message::Move(step) if self.page == Page::Library => self.step(step),
+            Message::Move(step) if matches!(self.page, Page::Library | Page::Store) => {
+                self.step(step)
+            }
             Message::Search(search) => {
                 self.search = search;
                 self.filter_changed()
             }
             Message::Type(typed) if self.page == Page::Settings => self.type_key(&typed),
-            Message::Type(typed) if self.page == Page::Library => {
-                self.search.push_str(&typed);
-                self.filter_changed()
-            }
-            Message::Backspace if self.page == Page::Library => {
-                self.search.pop();
-                self.filter_changed()
-            }
+            Message::Type(typed) if self.page == Page::Accounts => self.type_code(&typed),
+            Message::Type(typed) => self.edit_search(|search| search.push_str(&typed)),
+            Message::Backspace => self.edit_search(|search| {
+                search.pop();
+            }),
             Message::Back => self.back(),
-            Message::Activate => match &self.page {
-                Page::Library => self.open_selected(),
-                Page::Game(_) => self.play(),
-                Page::Settings | Page::About => Task::none(),
-            },
+            Message::Activate => self.activate(),
+            Message::Store(message) => self.update_store(message),
             Message::Clicked(index) => {
                 self.selected = index;
                 self.open_selected()
@@ -360,11 +403,12 @@ impl Zendo {
             | Message::KeyChecked(_)
             | Message::SetDownloadCovers(_)
             | Message::DownloadNow => self.update_settings(message),
+            Message::Account(message) => self.update_account(message),
+            Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
+            Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
             Message::Pad(pad) => self.pad(pad),
-            Message::Move(_) | Message::Type(_) | Message::Backspace | Message::CycleSort => {
-                Task::none()
-            }
+            Message::Move(_) | Message::CycleSort | Message::Pasted(None) => Task::none(),
         }
     }
 
@@ -399,6 +443,47 @@ impl Zendo {
         Task::batch([select, self.download_images()])
     }
 
+    /// The clipboard, pasted with no field focused: into the page's field.
+    fn pasted(&mut self, pasted: &str) -> Task<Message> {
+        let pasted = pasted.trim();
+        match self.page {
+            Page::Library | Page::Store => self.edit_search(|search| search.push_str(pasted)),
+            Page::Settings => {
+                pasted.clone_into(&mut self.key.value);
+                self.key.note = None;
+                Task::none()
+            }
+            Page::Accounts => self.update_account(AccountMessage::Paste(pasted.to_owned())),
+            Page::Game(_) | Page::Owned(_) | Page::About => Task::none(),
+        }
+    }
+
+    /// Enter: what it means depends on the page.
+    fn activate(&mut self) -> Task<Message> {
+        match &self.page {
+            Page::Library => self.open_selected(),
+            Page::Game(_) => self.play(),
+            Page::Store => self.open_owned(),
+            Page::Owned(id) if self.is_installed(id) => self.navigate(Page::Game(id.clone())),
+            Page::Owned(_) | Page::Accounts | Page::Settings | Page::About => Task::none(),
+        }
+    }
+
+    /// Changes the search of the page's grid; other pages have none.
+    fn edit_search(&mut self, edit: impl FnOnce(&mut String)) -> Task<Message> {
+        match self.page {
+            Page::Library => {
+                edit(&mut self.search);
+                self.filter_changed()
+            }
+            Page::Store => {
+                edit(&mut self.store.search);
+                self.store_filter_changed()
+            }
+            _ => Task::none(),
+        }
+    }
+
     fn navigate(&mut self, page: Page) -> Task<Message> {
         if self.page == page {
             return Task::none();
@@ -406,18 +491,15 @@ impl Zendo {
         self.page = page;
         self.status = None;
         match &self.page {
-            Page::Game(_) => {
+            Page::Game(_) | Page::Owned(_) => {
                 operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 })
             }
             // The grid is built anew; put it back where the cursor is.
-            Page::Library => operation::scroll_to(
-                grid_id(),
-                AbsoluteOffset {
-                    x: 0.0,
-                    y: self.scroll_top,
-                },
-            ),
-            Page::Settings | Page::About => Task::none(),
+            Page::Library | Page::Store => {
+                let y = *self.cursor().1;
+                operation::scroll_to(grid_id(), AbsoluteOffset { x: 0.0, y })
+            }
+            Page::Accounts | Page::Settings | Page::About => Task::none(),
         }
     }
 
@@ -428,6 +510,12 @@ impl Zendo {
                 self.search.clear();
                 self.filter_changed()
             }
+            Page::Store if self.store.search.is_empty() => Task::none(),
+            Page::Store => {
+                self.store.search.clear();
+                self.store_filter_changed()
+            }
+            Page::Owned(_) => self.navigate(Page::Store),
             _ => self.navigate(Page::Library),
         }
     }
@@ -481,10 +569,17 @@ impl Zendo {
         self.downloads.left = self.downloads.left.saturating_sub(1);
         match result {
             Ok(Some(path)) => {
+                // The library and the store can both hold a game.
                 if let Some(game) = self.game_mut(id) {
                     match kind {
-                        Kind::Cover => game.cover = Some(path),
-                        Kind::Hero => game.hero = Some(path),
+                        Kind::Cover => game.cover = Some(path.clone()),
+                        Kind::Hero => game.hero = Some(path.clone()),
+                    }
+                }
+                for owned in self.store.each_mut(id) {
+                    match kind {
+                        Kind::Cover => owned.cover = Some(path.clone()),
+                        Kind::Hero => owned.hero = Some(path.clone()),
                     }
                 }
             }
@@ -493,13 +588,18 @@ impl Zendo {
         }
     }
 
-    fn images_done(&mut self) {
+    fn images_done(&mut self) -> Task<Message> {
         self.downloads.left = 0;
         if self.downloads.failed > 0 {
             self.status = Some(format!(
                 "{} could not be downloaded; `zendo covers` says why",
                 format::count(self.downloads.failed, "image", "images")
             ));
+        }
+        if std::mem::take(&mut self.downloads.again) {
+            self.download_images()
+        } else {
+            Task::none()
         }
     }
 
@@ -551,21 +651,23 @@ impl Zendo {
     }
 
     fn step(&mut self, step: Move) -> Task<Message> {
-        let count = self.visible().len();
+        let count = self.grid_len();
         if count == 0 {
             return Task::none();
         }
         let last = count - 1;
         let page = self.columns * self.rows_on_screen();
-        let current = self.selected.min(last);
-        self.selected = match step {
+        let columns = self.columns;
+        let selected = self.cursor().0;
+        let current = (*selected).min(last);
+        *selected = match step {
             Move::Left => current.saturating_sub(1),
             Move::Right => (current + 1).min(last),
-            Move::Up => current.checked_sub(self.columns).unwrap_or(current),
+            Move::Up => current.checked_sub(columns).unwrap_or(current),
             Move::Down => {
-                let below = current + self.columns;
+                let below = current + columns;
                 // From the row above the last, a short last row still counts.
-                if below <= last || current / self.columns < last / self.columns {
+                if below <= last || current / columns < last / columns {
                     below.min(last)
                 } else {
                     current
@@ -588,18 +690,21 @@ impl Zendo {
     }
 
     /// Scrolls just enough to show the selected card.
-    fn reveal(&self) -> Task<Message> {
-        if self.page != Page::Library {
+    fn reveal(&mut self) -> Task<Message> {
+        if !matches!(self.page, Page::Library | Page::Store) {
             return Task::none();
         }
+        let columns = self.columns.max(1);
+        let viewport_height = self.viewport_height;
+        let (selected, scroll_top) = self.cursor();
         #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
-        let row = (self.selected / self.columns.max(1)) as f32;
+        let row = (*selected / columns) as f32;
         let top = row * (library::CARD_HEIGHT + library::SPACING);
         let bottom = top + library::CARD_HEIGHT + 2.0 * library::GRID_PADDING;
-        let y = if top < self.scroll_top {
+        let y = if top < *scroll_top {
             top
-        } else if bottom > self.scroll_top + self.viewport_height {
-            bottom - self.viewport_height
+        } else if bottom > *scroll_top + viewport_height {
+            bottom - viewport_height
         } else {
             return Task::none();
         };
@@ -637,26 +742,46 @@ impl Zendo {
     /// Starts downloading the covers and wide images that are missing, one
     /// at a time, in a thread of their own.
     fn download_images(&mut self) -> Task<Message> {
-        if !self.persist || self.downloads.left > 0 {
+        if !self.persist {
+            return Task::none();
+        }
+        if self.downloads.left > 0 {
+            self.downloads.again = true;
             return Task::none();
         }
         let Some(fetcher) = Fetcher::new(&self.config) else {
             return Task::none();
         };
-        let wanted: Vec<(Game, Kind)> = self
-            .library
-            .iter()
-            .flat_map(|library| &library.games)
-            .flat_map(|game| [(game, Kind::Cover), (game, Kind::Hero)])
-            .filter(|(game, kind)| fetcher.wants(game, *kind))
-            .map(|(game, kind)| (game.clone(), kind))
+        let games = self.library.iter().flat_map(|library| &library.games);
+        let in_library: HashSet<&str> = games.clone().map(|game| game.id.as_str()).collect();
+        // A store game that is installed already comes with the library's.
+        let owned: Vec<&Owned> = self
+            .store
+            .all()
+            .filter(|owned| !in_library.contains(owned.id.as_str()))
             .collect();
+        // Every cover first: the grids show them.
+        let mut wanted: Vec<(Job, Kind)> = Vec::new();
+        for kind in [Kind::Cover, Kind::Hero] {
+            wanted.extend(
+                games
+                    .clone()
+                    .filter(|game| fetcher.wants(*game, kind))
+                    .map(|game| (Box::new(game.clone()) as Job, kind)),
+            );
+            wanted.extend(
+                owned
+                    .iter()
+                    .filter(|owned| fetcher.wants(**owned, kind))
+                    .map(|owned| (Box::new((*owned).clone()) as Job, kind)),
+            );
+        }
         if wanted.is_empty() {
             return Task::none();
         }
         self.downloads = Downloads {
             left: wanted.len(),
-            failed: 0,
+            ..Downloads::default()
         };
         Task::run(fetch_images(fetcher, wanted), |message| message)
     }
@@ -677,6 +802,12 @@ impl Zendo {
             },
             Page::Settings => self.settings_page(),
             Page::About => about::page(),
+            Page::Accounts => self.accounts_page(),
+            Page::Store => self.store_page(),
+            Page::Owned(id) => match self.store.owned(id) {
+                Some(game) => self.owned_page(game),
+                None => centered(text("This game is no longer in your stores' lists").color(DIM)),
+            },
         };
         let main = column![page, self.footer()].width(Length::Fill);
         row![self.sidebar(), main].into()
@@ -688,7 +819,7 @@ impl Zendo {
             .as_ref()
             .map_or(0, |library| library.problems.len());
         // A game's page shows the status beside its actions.
-        let status = if matches!(self.page, Page::Game(_)) {
+        let status = if matches!(self.page, Page::Game(_) | Page::Owned(_)) {
             &None
         } else {
             &self.status
@@ -709,7 +840,10 @@ impl Zendo {
                 "Enter open · Tab sort · Ctrl+P pin · Del hide · Ctrl+H hidden · F11 full-screen"
             }
             Page::Game(_) => "Enter play · Esc back · Ctrl+P pin · Del hide · F11 full-screen",
-            Page::Settings | Page::About => "Esc back · F11 full-screen",
+            Page::Store => "Enter open · type to search · Esc clear · F11 full-screen",
+            Page::Accounts | Page::Owned(_) | Page::Settings | Page::About => {
+                "Esc back · F11 full-screen"
+            }
         };
         row![
             left.size(13).color(DIM),
@@ -747,14 +881,19 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) 
 
 /// Fetches each image on a thread (the requests block) and reports each one
 /// as it lands, then `ImagesDone`.
-fn fetch_images(mut fetcher: Fetcher, wanted: Vec<(Game, Kind)>) -> impl Stream<Item = Message> {
+/// A game from the library or a store, whose images are wanted.
+type Job = Box<dyn Artwork + Send>;
+
+fn fetch_images(mut fetcher: Fetcher, wanted: Vec<(Job, Kind)>) -> impl Stream<Item = Message> {
     iced::stream::channel(8, async move |mut output| {
         let (sender, mut receiver) = mpsc::unbounded();
         thread::spawn(move || {
             for (game, kind) in wanted {
-                let result = fetcher.fetch(&game, kind).map_err(|err| format!("{err:#}"));
+                let result = fetcher
+                    .fetch(game.as_ref(), kind)
+                    .map_err(|err| format!("{err:#}"));
                 if sender
-                    .unbounded_send(Message::Image(game.id, kind, result))
+                    .unbounded_send(Message::Image(game.id().to_owned(), kind, result))
                     .is_err()
                 {
                     return;
@@ -842,7 +981,12 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             "p" => Some(Message::TogglePinned),
             "f" => Some(Message::FocusSearch),
             "r" => Some(Message::Refresh),
-            "," => Some(Message::Navigate(Page::Settings)),
+            "v" => Some(Message::PasteClipboard),
+            "1" => Some(Message::Navigate(Page::Library)),
+            "2" => Some(Message::Navigate(Page::Store)),
+            "3" => Some(Message::Navigate(Page::Accounts)),
+            "4" | "," => Some(Message::Navigate(Page::Settings)),
+            "5" => Some(Message::Navigate(Page::About)),
             _ => None,
         };
     }
@@ -1025,6 +1169,27 @@ mod tests {
         let _ = zendo.update(Message::KeyInput(String::new()));
         let _ = zendo.update(Message::SaveKey);
         assert_eq!(zendo.config.steamgriddb_key, None);
+    }
+
+    #[test]
+    fn a_sign_in_takes_the_code_from_what_is_pasted() {
+        let mut zendo = zendo_with(1, 3);
+        let _ = zendo.update(Message::Navigate(Page::Accounts));
+        let _ = zendo.update(Message::Account(AccountMessage::Start(
+            zendo_core::stores::Store::Gog,
+        )));
+        // Typing with no field focused starts the code; pasting replaces it.
+        let _ = zendo.update(Message::Type("x".into()));
+        let _ = zendo.update(Message::Pasted(Some(
+            " https://embed.gog.com/on_login_success?origin=client&code=abc ".into(),
+        )));
+        let _ = zendo.update(Message::Account(AccountMessage::Finish));
+        let _ = zendo.update(Message::Account(AccountMessage::Finished(
+            zendo_core::stores::Store::Gog,
+            Ok("me".into()),
+        )));
+        assert_eq!(zendo.accounts.signed_in(), 1);
+        assert_eq!(zendo.status.as_deref(), Some("Signed in to GOG as me"));
     }
     #[test]
     fn keys_a_field_used_are_left_to_it() {

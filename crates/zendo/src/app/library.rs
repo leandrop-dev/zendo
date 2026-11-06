@@ -4,7 +4,9 @@
 use iced::widget::{
     button, column, container, image, row, scrollable, space, stack, text, text_input,
 };
-use iced::{Alignment, Background, Border, ContentFit, Element, Length};
+use std::path::Path;
+
+use iced::{Alignment, Background, Border, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
 use super::style::{self, ACCENT, BOLD, DIM, SURFACE, TEXT};
@@ -202,31 +204,57 @@ impl Zendo {
     }
 
     fn grid<'a>(&'a self, visible: &[&'a Game]) -> Element<'a, Message> {
-        let columns = self.columns.max(1);
         let selected = self.selected.min(visible.len().saturating_sub(1));
         let now = now();
-        let rows = visible
-            .chunks(columns)
-            .enumerate()
-            .map(|(row_index, games)| {
-                row(games.iter().enumerate().map(|(column_index, game)| {
-                    let index = row_index * columns + column_index;
-                    card(game, index, index == selected, now)
-                }))
-                .spacing(SPACING)
-                .into()
-            });
-        // A fixed width, centred, so a short last row stays in its columns.
-        #[expect(clippy::cast_precision_loss, reason = "column counts are small")]
-        let width = columns as f32 * (CARD_WIDTH + SPACING) - SPACING;
-        let grid = column(rows).spacing(SPACING).width(width);
-        scrollable(container(grid).center_x(Length::Fill).padding(GRID_PADDING))
-            .id(grid_id())
-            .on_scroll(Message::Scrolled)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        let cards = visible.iter().enumerate().map(|(index, game)| {
+            let (line, line_color) = if game.hidden {
+                ("Hidden".to_owned(), ACCENT)
+            } else {
+                (played_line(game, now), DIM)
+            };
+            card(Card {
+                title: &game.title,
+                source: game.source,
+                cover: game.cover.as_deref(),
+                faded: game.hidden,
+                badge: game.pinned.then_some(("PINNED", ACCENT)),
+                line,
+                line_color,
+                selected: index == selected,
+                on_press: Message::Clicked(index),
+            })
+        });
+        cards_grid(cards, self.columns)
     }
+}
+
+/// Cards in rows of `columns`, in the page's scrollable.
+pub fn cards_grid<'a>(
+    cards: impl Iterator<Item = Element<'a, Message>>,
+    columns: usize,
+) -> Element<'a, Message> {
+    let columns = columns.max(1);
+    let mut rows = Vec::new();
+    let mut current = Vec::with_capacity(columns);
+    for card in cards {
+        current.push(card);
+        if current.len() == columns {
+            rows.push(row(std::mem::take(&mut current)).spacing(SPACING).into());
+        }
+    }
+    if !current.is_empty() {
+        rows.push(row(current).spacing(SPACING).into());
+    }
+    // A fixed width, centred, so a short last row stays in its columns.
+    #[expect(clippy::cast_precision_loss, reason = "column counts are small")]
+    let width = columns as f32 * (CARD_WIDTH + SPACING) - SPACING;
+    let grid = column(rows).spacing(SPACING).width(width);
+    scrollable(container(grid).center_x(Length::Fill).padding(GRID_PADDING))
+        .id(grid_id())
+        .on_scroll(Message::Scrolled)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
 
 fn chip(label: &str, count: Option<usize>, chosen: bool, message: Message) -> Element<'_, Message> {
@@ -255,16 +283,41 @@ fn played_line(game: &Game, now: u64) -> String {
     }
 }
 
-fn card<'a>(game: &'a Game, index: usize, selected: bool, now: u64) -> Element<'a, Message> {
-    let cover: Element<'a, Message> = match &game.cover {
+/// What a card shows.
+pub struct Card<'a> {
+    pub title: &'a str,
+    pub source: Source,
+    pub cover: Option<&'a Path>,
+    pub faded: bool,
+    /// A label in the cover's top right corner.
+    pub badge: Option<(&'static str, Color)>,
+    pub line: String,
+    pub line_color: Color,
+    pub selected: bool,
+    pub on_press: Message,
+}
+
+pub fn card(card: Card<'_>) -> Element<'_, Message> {
+    let Card {
+        title,
+        source,
+        cover,
+        faded,
+        badge,
+        line,
+        line_color,
+        selected,
+        on_press,
+    } = card;
+    let cover: Element<'_, Message> = match cover {
         Some(path) => image(image::Handle::from_path(path))
             .width(COVER_WIDTH)
             .height(COVER_HEIGHT)
             .content_fit(ContentFit::Cover)
             .border_radius(8.0)
-            .opacity(if game.hidden { 0.35_f32 } else { 1.0_f32 })
+            .opacity(if faded { 0.35_f32 } else { 1.0_f32 })
             .into(),
-        None => container(text(&game.title).size(18).center())
+        None => container(text(title).size(18).center())
             .padding(12)
             .center(Length::Fill)
             .width(COVER_WIDTH)
@@ -279,25 +332,18 @@ fn card<'a>(game: &'a Game, index: usize, selected: bool, now: u64) -> Element<'
             })
             .into(),
     };
-    let mut badges = row![style::badge(
-        game.source.label(),
-        style::source_color(game.source)
-    )]
-    .width(COVER_WIDTH);
-    if game.pinned {
+    let mut badges =
+        row![style::badge(source.label(), style::source_color(source))].width(COVER_WIDTH);
+    if let Some((label, color)) = badge {
         badges = badges
             .push(space::horizontal())
-            .push(style::badge("PINNED", ACCENT));
+            .push(style::badge(label, color));
     }
     let art = stack![cover, container(badges).padding(8).width(COVER_WIDTH)];
 
     let caption = column![
-        text(&game.title).size(14).wrapping(text::Wrapping::None),
-        if game.hidden {
-            text("Hidden").size(12).color(ACCENT)
-        } else {
-            text(played_line(game, now)).size(12).color(DIM)
-        },
+        text(title).size(14).wrapping(text::Wrapping::None),
+        text(line).size(12).color(line_color),
     ]
     .spacing(2)
     .height(CAPTION_HEIGHT)
@@ -307,19 +353,15 @@ fn card<'a>(game: &'a Game, index: usize, selected: bool, now: u64) -> Element<'
         .padding(CARD_PADDING)
         .width(CARD_WIDTH)
         .height(CARD_HEIGHT)
-        .on_press(Message::Clicked(index))
+        .on_press(on_press)
         .style(move |_, status| button::Style {
             background: Some(Background::Color(match status {
                 button::Status::Hovered | button::Status::Pressed => SURFACE,
-                _ => iced::Color::TRANSPARENT,
+                _ => Color::TRANSPARENT,
             })),
             text_color: TEXT,
             border: Border {
-                color: if selected {
-                    ACCENT
-                } else {
-                    iced::Color::TRANSPARENT
-                },
+                color: if selected { ACCENT } else { Color::TRANSPARENT },
                 width: 2.0,
                 radius: 12.0.into(),
             },

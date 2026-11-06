@@ -115,7 +115,7 @@ fn covers() -> anyhow::Result<()> {
         .games
         .iter()
         .flat_map(|game| [(game, Kind::Cover), (game, Kind::Hero)])
-        .filter(|(game, kind)| fetcher.wants(game, *kind))
+        .filter(|(game, kind)| fetcher.wants(*game, *kind))
         .collect();
     if wanted.is_empty() {
         println!("No images to download.");

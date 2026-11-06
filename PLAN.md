@@ -11,7 +11,8 @@ session: the repo, the package checks and phase 1 built (see Phases).
 built. Then the direction changed: Zendo follows Hikari's functionality
 and UI/UX [firm]; omarchy-games-menu was only ever a source of ideas for a
 Rust launcher. The phases below are reordered for that. Phase 3, the
-Hikari-layout shell, built the same day.
+Hikari-layout shell, built the same day, then phase 4's Accounts and Store
+pages (4a, 4b); real sign-ins wait for the user.
 
 ## Direction [firm]
 
@@ -153,6 +154,46 @@ about again only after a week. One state file, not omarchy-games-menu's split by
 sides write the same few things; each write reads, changes and renames the
 file into place.
 
+Stores (phase 4), read from legendary, gogdl and nile's source and Heroic
+2.22.4's on 2026-11-06:
+
+- Engines [tentative]: each is looked for on `PATH` first, then in Heroic's
+  bundled copies (`/usr/lib/heroic-games-launcher/...` or `/opt/Heroic/...`).
+  Zendo signs in with accounts of its own, in
+  `~/.local/share/zendo/stores/{epic,gog,amazon}` (mode 0700), never in
+  Heroic's: `LEGENDARY_CONFIG_PATH=<dir>`; `GOGDL_CONFIG_PATH=<dir>` (gogdl
+  adds `heroic_gogdl`) with `--auth-config-path <dir>/auth.json`;
+  `NILE_CONFIG_PATH=<dir>` (nile adds `nile/`).
+- Sign-in [tentative]: paste the code, Hikari's fallback, rather than a
+  browser window of Zendo's own. Zendo opens the store's login page in the
+  user's browser; the user pastes back what the page shows (Epic's JSON,
+  GOG's final address, Amazon's final address) and Zendo finds the code in
+  it. Epic: `legendary.gl/epiclogin`, then `legendary auth --code`; the name
+  is `displayName` in `user.json`. GOG: `auth.gog.com/auth` with Galaxy's
+  client id, ending on `embed.gog.com/on_login_success?code=`, then
+  `gogdl auth --code`; the name from `users.gog.com/users/{id}`. Amazon:
+  `nile auth --login --non-interactive` gives the URL and the PKCE data
+  (kept in memory only), the final address holds
+  `openid.oa2.authorization_code`, then `nile register`; `nile auth
+  --status` gives the name. Tokens and codes are never logged or shown.
+- Owned games: `legendary list --json` (DLC have `metadata.mainGameItem`;
+  covers from `keyImages` `DieselGameBoxTall` and `DieselGameBox`); `nile
+  library sync`, then `nile/library.json`; GOG has no list command, so
+  Zendo asks `galaxy-library.gog.com/users/{id}/releases` (paged), keeps
+  `platform_id == "gog"`, and asks `gamesdb.gog.com` for each game with
+  the release's certificate, caching each answer under
+  `~/.cache/zendo/store/gogdb/` with its `ETag`. Games that are not
+  `game` or `mod`, or not `visible_in_library`, are left out. Against the
+  user's real Heroic caches: 156 Epic games (16 DLC left out), 135 Amazon,
+  113 GOG (86 hidden entries and 3 DLC left out), every one with a cover
+  and a developer.
+- Each store's list is kept in `~/.cache/zendo/store/<store>.json` and
+  shown at once on the next start; it is asked for again only on Refresh,
+  at sign-in, or when none is kept. Signing out forgets it. A store game
+  counts as installed when the library has a game with the same id
+  (`epic:<app name>`, `gog:<product id>`, `amazon:<product id>`, as
+  Heroic's import names them).
+
 Covers are kept at the size the store serves them. Iced decodes each to
 full-size RGBA (the Amazon one is about 6 MB in memory), which is fine for a
 few dozen games; for large libraries, scale them down when saving [re-evaluate
@@ -165,8 +206,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 | Tool | Needed for |
 |---|---|
 | Steam | Steam games. The library is read from files, but launching goes through the client. |
-| Heroic | Only phase 1's import of the games it installed. Optional from phase 4. |
-| legendary, gogdl, nile | Phase 4: Epic, GOG and Amazon games. |
+| Heroic | Its installed games are imported. From phase 4 also a source of the store engines when they are not installed alone. |
+| legendary, gogdl, nile | Phase 4: Epic, GOG and Amazon accounts, owned games and installs. |
 | umu-launcher | Windows games installed by hand. Check whether it fetches Proton itself. |
 | MangoHud, GameMode, gamescope | Only games where they are switched on. |
 
@@ -243,11 +284,33 @@ Nothing is required. Zendo detects each tool and shows what is missing.
    Settings, Ctrl+F search, Ctrl+P pin, F5 or Ctrl+R refresh; on a game's
    page Y pins and X hides. Not yet tried: Play from the game page on a
    real game, a real controller.
-4. Accounts, Store and Downloads: sign in to Epic, GOG and Amazon through
-   legendary, gogdl and nile; the games owned but not installed; install,
-   update, repair and uninstall with a queue. To decide then: whether
-   downloads need a background process of their own that outlives the
-   window, as Hikari's daemon does.
+4. Accounts, Store and Downloads, in three steps.
+   - 4a Accounts, built 2026-11-06: a page with a card per store (who is
+     signed in, the engine found and where), sign in by pasting the code
+     (Ctrl+V pastes from anywhere on the page), sign out. Checked on
+     scratch folders: the three cards, the engines found in Heroic's copies,
+     nile's folder made with mode 0700. Not yet tried: a real sign-in to
+     each store.
+   - 4b Store, built 2026-11-06: every game the signed-in stores say the
+     user owns, by title, with the installed ones marked; search, store
+     chips, "Not installed only", Refresh, and a page per game (hero,
+     details, "Open in library" when installed; Install waits for 4c). Its
+     own cursor and scroll, kept when going back. Checked on scratch
+     folders with a stand-in `legendary` that printed Heroic's legendary
+     metadata: 156 games, all 312 images downloaded, Absolute Drift marked
+     installed and opening its library page. Two fixes from that: image
+     URLs with bare spaces (Epic's GTA V) are encoded, and a list that
+     arrives while images download is fetched for afterwards. Not yet
+     tried: the real engines' lists through Zendo's own sign-ins, GOG's
+     and Amazon's pages.
+   - 4c Downloads: install, update, repair and uninstall with a queue.
+     No background process [firm, chosen 2026-11-06]: unlike Hikari's
+     daemon, the window runs legendary, gogdl and nile as its own child
+     processes and reads their progress; the queue is kept in a file and
+     picks up on the next start, and closing the window while something
+     downloads asks first. A detached worker can come later if it is
+     missed. gogdl keeps no list of what it installed, so Zendo records its
+     installs itself.
 5. Launch options per game (a game settings sheet): Proton through umu with
    a prefix per game, a Wine/Proton manager (GE-Proton downloads), MangoHud,
    GameMode, gamescope, arguments and environment, a log of each launch.
@@ -268,8 +331,9 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 - Start each test game from its page, and check it shows up first under
   Recent afterwards.
 - Try a controller on the new pages.
-- Start phase 4: read how legendary, gogdl and nile sign in and list owned
-  games, and decide whether downloads need a background process.
+- Sign in to each store from Accounts and check its Store list and covers.
+- Build 4c, downloads run by the window: read how Heroic passes install
+  arguments to each engine and reads its progress.
 
 ## Conventions
 

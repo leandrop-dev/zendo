@@ -14,9 +14,11 @@ pub mod covers;
 mod desktop;
 mod heroic;
 mod launch;
+pub mod owned;
 mod paths;
 pub mod state;
 mod steam;
+pub mod stores;
 mod time;
 
 use std::collections::HashSet;
