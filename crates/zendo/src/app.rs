@@ -1,6 +1,12 @@
 //! The library window: a grid of covers, filtered by typing, moved through
 //! with the arrows or a controller, and a game started with Enter or A.
+//! Missing covers are downloaded in the background once the library is in.
 
+use std::path::PathBuf;
+use std::thread;
+
+use iced::futures::channel::mpsc;
+use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::keyboard::{self, Key, key::Named};
 use iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use iced::widget::{Id, button, column, container, image, operation, row, scrollable, space, text};
@@ -8,7 +14,9 @@ use iced::{
     Background, Border, Color, ContentFit, Element, Event, Length, Size, Subscription, Task, Theme,
     event, window,
 };
-use zendo_core::{Game, Library};
+use zendo_core::config::Config;
+use zendo_core::covers::Fetcher;
+use zendo_core::{Game, Library, Sort, State};
 
 use crate::gamepad::{self, Pad};
 
@@ -77,7 +85,10 @@ enum Move {
 
 #[derive(Debug, Clone)]
 enum Message {
-    Loaded(Library),
+    Loaded(Library, Sort),
+    /// A cover download finished: the file, none found, or what went wrong.
+    Cover(String, Result<Option<PathBuf>, String>),
+    CoversDone,
     Resized(window::Id, Size),
     Focused(window::Id, bool),
     Scrolled(Viewport),
@@ -87,10 +98,15 @@ enum Message {
     Back,
     Activate,
     Clicked(usize),
+    CycleSort,
+    /// Hides the selected game, or brings it back when it is hidden.
+    ToggleHidden,
+    ShowHidden,
     ToggleFullscreen,
     Pad(Pad),
 }
 
+#[expect(clippy::struct_excessive_bools, reason = "independent window flags")]
 struct Zendo {
     /// `None` while the first scan runs.
     library: Option<Library>,
@@ -104,6 +120,12 @@ struct Zendo {
     scroll_top: f32,
     viewport_height: f32,
     status: Option<String>,
+    sort: Sort,
+    show_hidden: bool,
+    covers_left: usize,
+    covers_failed: usize,
+    /// Off in tests, so they never write the user's state file.
+    persist: bool,
 }
 
 impl Zendo {
@@ -119,13 +141,25 @@ impl Zendo {
             scroll_top: 0.0,
             viewport_height: START_SIZE.height,
             status: None,
+            sort: Sort::default(),
+            show_hidden: false,
+            covers_left: 0,
+            covers_failed: 0,
+            persist: true,
         };
-        let scan = Task::perform(async { Library::scan() }, Message::Loaded);
+        let scan = Task::perform(
+            async {
+                let sort = State::load().map(|state| state.sort).unwrap_or_default();
+                (Library::scan(), sort)
+            },
+            |(library, sort)| Message::Loaded(library, sort),
+        );
         // The window's id, so F11 works before the first resize event.
         let window = window::latest().and_then(|id| Task::done(Message::Focused(id, true)));
         (zendo, Task::batch([scan, window]))
     }
 
+    /// The games the grid shows, in its order.
     fn visible(&self) -> Vec<&Game> {
         let Some(library) = &self.library else {
             return Vec::new();
@@ -135,22 +169,79 @@ impl Zendo {
             .split_whitespace()
             .map(str::to_lowercase)
             .collect();
-        library
+        let mut games: Vec<&Game> = library
             .games
             .iter()
+            .filter(|game| self.show_hidden || !game.hidden)
             .filter(|game| {
                 let title = game.title.to_lowercase();
                 words.iter().all(|word| title.contains(word.as_str()))
             })
-            .collect()
+            .collect();
+        games.sort_by(|a, b| self.sort.compare(a, b));
+        games
+    }
+
+    fn selected_id(&self) -> Option<String> {
+        self.visible()
+            .get(self.selected)
+            .map(|game| game.id.clone())
+    }
+
+    /// Keeps the cursor on the same game after the order changes.
+    fn select(&mut self, id: Option<&str>) -> Task<Message> {
+        let visible = self.visible();
+        let index = id.and_then(|id| visible.iter().position(|game| game.id == id));
+        self.selected = index.unwrap_or_else(|| self.selected.min(visible.len().saturating_sub(1)));
+        self.reveal()
+    }
+
+    fn game_mut(&mut self, id: &str) -> Option<&mut Game> {
+        self.library
+            .as_mut()?
+            .games
+            .iter_mut()
+            .find(|game| game.id == id)
+    }
+
+    /// Writes a change to the state file, saying so when it fails.
+    fn save(&mut self, change: impl FnOnce(&mut State)) {
+        if !self.persist {
+            return;
+        }
+        if let Err(err) = State::update(change) {
+            self.status = Some(format!("{err:#}"));
+        }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Loaded(library) => {
+            Message::Loaded(library, sort) => {
                 self.library = Some(library);
+                self.sort = sort;
                 self.selected = 0;
+                self.download_covers()
+            }
+            Message::Cover(id, result) => {
+                self.cover_arrived(&id, result);
                 Task::none()
+            }
+            Message::CoversDone => {
+                self.covers_done();
+                Task::none()
+            }
+            Message::CycleSort => {
+                let id = self.selected_id();
+                self.sort = self.sort.next();
+                let sort = self.sort;
+                self.save(|state| state.sort = sort);
+                self.select(id.as_deref())
+            }
+            Message::ToggleHidden => self.toggle_hidden(),
+            Message::ShowHidden => {
+                let id = self.selected_id();
+                self.show_hidden = !self.show_hidden;
+                self.select(id.as_deref())
             }
             Message::Resized(id, size) => {
                 self.window = Some(id);
@@ -211,9 +302,55 @@ impl Zendo {
                 Pad::Down => Message::Move(Move::Down),
                 Pad::Activate => Message::Activate,
                 Pad::Back => Message::Back,
+                Pad::Sort => Message::CycleSort,
+                Pad::Hide => Message::ToggleHidden,
+                Pad::ShowHidden => Message::ShowHidden,
                 Pad::ToggleFullscreen => Message::ToggleFullscreen,
             }),
         }
+    }
+
+    fn cover_arrived(&mut self, id: &str, result: Result<Option<PathBuf>, String>) {
+        self.covers_left = self.covers_left.saturating_sub(1);
+        match result {
+            Ok(Some(path)) => {
+                if let Some(game) = self.game_mut(id) {
+                    game.cover = Some(path);
+                }
+            }
+            Ok(None) => {}
+            Err(_) => self.covers_failed += 1,
+        }
+    }
+
+    fn covers_done(&mut self) {
+        self.covers_left = 0;
+        if self.covers_failed > 0 {
+            self.status = Some(format!(
+                "{} cover{} could not be downloaded; `zendo covers` says why",
+                self.covers_failed,
+                if self.covers_failed == 1 { "" } else { "s" }
+            ));
+        }
+    }
+
+    fn toggle_hidden(&mut self) -> Task<Message> {
+        let Some(id) = self.selected_id() else {
+            return Task::none();
+        };
+        let Some(game) = self.game_mut(&id) else {
+            return Task::none();
+        };
+        game.hidden = !game.hidden;
+        let (hidden, title) = (game.hidden, game.title.clone());
+        self.save(|state| state.set_hidden(&id, hidden));
+        self.status = Some(if hidden {
+            format!("Hid {title} · Ctrl+H shows hidden games")
+        } else {
+            format!("{title} is back in the library")
+        });
+        // A hidden game leaves the grid; the cursor stays in place.
+        self.select(Some(&id))
     }
 
     fn filter_changed(&mut self) -> Task<Message> {
@@ -275,15 +412,60 @@ impl Zendo {
     }
 
     fn launch_selected(&mut self) -> Task<Message> {
-        let visible = self.visible();
-        let Some(game) = visible.get(self.selected) else {
+        let Some(game) = self
+            .visible()
+            .get(self.selected)
+            .map(|game| (*game).clone())
+        else {
             return Task::none();
         };
-        self.status = Some(match zendo_core::launch(game) {
-            Ok(()) => format!("Starting {}", game.title),
-            Err(err) => format!("{err:#}"),
-        });
-        Task::none()
+        match zendo_core::launch(&game) {
+            Ok(()) => {
+                self.status = Some(format!("Starting {}", game.title));
+                // Zendo's state now has the launch; show it in the order
+                // without scanning again.
+                if let Some(played) = self.game_mut(&game.id).map(|game| &mut game.played) {
+                    played.launches += 1;
+                    played.last = Some(now());
+                }
+                self.select(Some(&game.id))
+            }
+            Err(err) => {
+                self.status = Some(format!("{err:#}"));
+                Task::none()
+            }
+        }
+    }
+
+    /// Starts downloading the covers that are missing, one at a time, in a
+    /// thread of their own.
+    fn download_covers(&mut self) -> Task<Message> {
+        if !self.persist {
+            return Task::none();
+        }
+        let config = match Config::load() {
+            Ok(config) => config,
+            Err(err) => {
+                self.status = Some(format!("{err:#}"));
+                return Task::none();
+            }
+        };
+        let Some(fetcher) = Fetcher::new(&config) else {
+            return Task::none();
+        };
+        let wanted: Vec<Game> = self
+            .library
+            .iter()
+            .flat_map(|library| &library.games)
+            .filter(|game| fetcher.wants(game))
+            .cloned()
+            .collect();
+        if wanted.is_empty() {
+            return Task::none();
+        }
+        self.covers_left = wanted.len();
+        self.covers_failed = 0;
+        Task::run(fetch_covers(fetcher, wanted), |message| message)
     }
 
     fn subscription(_: &Self) -> Subscription<Message> {
@@ -299,7 +481,13 @@ impl Zendo {
             text("Zendo").size(24),
             space::horizontal(),
             self.filter_line(),
-            text(count_label(visible.len())).color(DIM),
+            text(self.sort.label()).color(DIM),
+            text(if self.show_hidden {
+                format!("{} · hidden shown", count_label(visible.len()))
+            } else {
+                count_label(visible.len())
+            })
+            .color(DIM),
         ]
         .spacing(24)
         .align_y(iced::Alignment::Center)
@@ -319,6 +507,9 @@ impl Zendo {
                 .spacing(8)
                 .align_x(iced::Alignment::Center),
             ),
+            Some(_) if visible.is_empty() && self.filter.is_empty() => {
+                centered(text("Every game is hidden · Ctrl+H or Start shows them").color(DIM))
+            }
             Some(_) if visible.is_empty() => {
                 centered(text(format!("Nothing matches “{}”", self.filter)).color(DIM))
             }
@@ -370,6 +561,9 @@ impl Zendo {
             .as_ref()
             .map_or(0, |library| library.problems.len());
         let left = match (&self.status, problems) {
+            _ if self.covers_left > 0 => {
+                text(format!("Downloading covers, {} left", self.covers_left))
+            }
             (Some(status), _) => text(status.clone()),
             (None, 0) => text(""),
             (None, n) => text(format!(
@@ -380,8 +574,9 @@ impl Zendo {
         row![
             left.color(DIM),
             space::horizontal(),
-            text("Enter or A to play · Esc or B to clear · F11 full-screen").color(DIM),
+            text("Enter play · Tab sort · Del hide · Ctrl+H hidden · F11 full-screen").color(DIM),
         ]
+        .spacing(16)
         .padding([10.0, PADDING])
         .into()
     }
@@ -393,6 +588,7 @@ fn card<'a>(game: &'a Game, index: usize, selected: bool) -> Element<'a, Message
             .width(COVER_WIDTH)
             .height(COVER_HEIGHT)
             .content_fit(ContentFit::Cover)
+            .opacity(if game.hidden { 0.35_f32 } else { 1.0_f32 })
             .into(),
         None => container(text(&game.title).size(18).center())
             .padding(12)
@@ -411,7 +607,13 @@ fn card<'a>(game: &'a Game, index: usize, selected: bool) -> Element<'a, Message
     };
     let caption = column![
         text(&game.title).size(14),
-        text(game.source.label()).size(12).color(DIM),
+        if game.hidden {
+            text(format!("{} · hidden", game.source.label()))
+                .size(12)
+                .color(ACCENT)
+        } else {
+            text(game.source.label()).size(12).color(DIM)
+        },
     ]
     .spacing(2)
     .height(TITLE_HEIGHT)
@@ -436,6 +638,37 @@ fn card<'a>(game: &'a Game, index: usize, selected: bool) -> Element<'a, Message
             ..button::Style::default()
         })
         .into()
+}
+
+/// Fetches each game's cover on a thread (the requests block) and reports
+/// each one as it lands, then `CoversDone`.
+fn fetch_covers(mut fetcher: Fetcher, games: Vec<Game>) -> impl Stream<Item = Message> {
+    iced::stream::channel(8, async move |mut output| {
+        let (sender, mut receiver) = mpsc::unbounded();
+        thread::spawn(move || {
+            for game in games {
+                let result = fetcher.fetch(&game).map_err(|err| format!("{err:#}"));
+                if sender
+                    .unbounded_send(Message::Cover(game.id, result))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+        while let Some(message) = receiver.next().await {
+            if output.send(message).await.is_err() {
+                return;
+            }
+        }
+        let _ = output.send(Message::CoversDone).await;
+    })
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
 }
 
 fn centered<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
@@ -488,10 +721,15 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             Named::Escape => Message::Back,
             Named::Backspace => Message::Backspace,
             Named::F11 => Message::ToggleFullscreen,
+            Named::Tab => Message::CycleSort,
+            Named::Delete => Message::ToggleHidden,
             Named::Space => Message::Type(" ".to_owned()),
             _ => return None,
         };
         return Some(message);
+    }
+    if modifiers.control() && matches!(key, Key::Character(c) if c.eq_ignore_ascii_case("h")) {
+        return Some(Message::ShowHidden);
     }
     if modifiers.control() || modifiers.alt() || modifiers.logo() {
         return None;
@@ -506,21 +744,65 @@ mod tests {
 
     fn zendo_with(count: usize, columns: usize) -> Zendo {
         let games = (0..count)
-            .map(|n| Game {
-                id: format!("desktop:{n}"),
-                title: format!("Game {n:02}"),
-                source: zendo_core::Source::Desktop,
-                launch: zendo_core::Launch::Uri { uri: String::new() },
-                cover: None,
+            .map(|n| {
+                Game::new(
+                    format!("desktop:{n}"),
+                    format!("Game {n:02}"),
+                    zendo_core::Source::Desktop,
+                    zendo_core::Launch::Uri { uri: String::new() },
+                )
             })
             .collect();
         let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.sort = Sort::Title;
         zendo.library = Some(Library {
             games,
             problems: Vec::new(),
         });
         zendo.columns = columns;
         zendo
+    }
+
+    fn titles(zendo: &Zendo) -> Vec<&str> {
+        zendo
+            .visible()
+            .iter()
+            .map(|game| game.title.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn hiding_leaves_a_game_out_until_hidden_games_are_shown() {
+        let mut zendo = zendo_with(3, 3);
+        zendo.selected = 1;
+        let _ = zendo.update(Message::ToggleHidden);
+        assert_eq!(titles(&zendo), ["Game 00", "Game 02"]);
+        assert_eq!(zendo.selected, 1, "the cursor stays in place");
+        // The cursor is on Game 02 now, and follows it when the hidden
+        // game comes back between them.
+        let _ = zendo.update(Message::ShowHidden);
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
+        assert_eq!(zendo.selected, 2);
+        // Bringing Game 01 back keeps it once hidden games are left out.
+        zendo.selected = 1;
+        let _ = zendo.update(Message::ToggleHidden);
+        let _ = zendo.update(Message::ShowHidden);
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
+    }
+
+    #[test]
+    fn the_cursor_follows_its_game_when_the_sort_changes() {
+        let mut zendo = zendo_with(3, 3);
+        if let Some(library) = zendo.library.as_mut() {
+            library.games[2].played.last = Some(100);
+        }
+        zendo.selected = 2;
+        // A–Z, then Recent: Game 02 was played, so it comes first.
+        let _ = zendo.update(Message::CycleSort);
+        assert_eq!(zendo.sort, Sort::Recent);
+        assert_eq!(titles(&zendo)[0], "Game 02");
+        assert_eq!(zendo.selected, 0);
     }
 
     fn after(zendo: &mut Zendo, from: usize, step: Move) -> usize {

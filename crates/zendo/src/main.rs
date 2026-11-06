@@ -6,16 +6,23 @@ mod gamepad;
 
 use std::process::ExitCode;
 
-use zendo_core::Library;
+use anyhow::Context;
+use zendo_core::config::Config;
+use zendo_core::covers::Fetcher;
+use zendo_core::{Game, Library, State};
 
 const HELP: &str = "\
 zendo: every game in one library
 
 Usage:
-  zendo                  open the library
-  zendo --fullscreen     open it full-screen (F11 toggles)
-  zendo list [--json]    print the games found
-  zendo launch <id>      start a game by the id `list` prints
+  zendo                        open the library
+  zendo --fullscreen           open it full-screen (F11 toggles)
+  zendo list [--all] [--json]  print the games, in the window's order;
+                               --all adds the hidden ones
+  zendo launch <id>            start a game by the id `list` prints
+  zendo hide <id>              leave a game out of the window
+  zendo unhide <id>            bring it back
+  zendo covers                 download the covers that are missing
 ";
 
 fn main() -> ExitCode {
@@ -24,9 +31,13 @@ fn main() -> ExitCode {
     let result = match args.as_slice() {
         [] => app::run(false),
         ["--fullscreen"] => app::run(true),
-        ["list"] => list(false),
-        ["list", "--json"] => list(true),
-        ["launch", id] => launch(id),
+        ["list", flags @ ..] if flags.iter().all(|flag| ["--all", "--json"].contains(flag)) => {
+            list(flags.contains(&"--all"), flags.contains(&"--json"))
+        }
+        ["launch", id] => find(id).and_then(|game| zendo_core::launch(&game)),
+        ["hide", id] => set_hidden(id, true),
+        ["unhide", id] => set_hidden(id, false),
+        ["covers"] => covers(),
         ["-h" | "--help"] => {
             print!("{HELP}");
             Ok(())
@@ -49,13 +60,21 @@ fn main() -> ExitCode {
     }
 }
 
-fn list(json: bool) -> anyhow::Result<()> {
+fn list(all: bool, json: bool) -> anyhow::Result<()> {
     let library = Library::scan();
+    let sort = State::load().map(|state| state.sort).unwrap_or_default();
+    let mut games: Vec<&Game> = library
+        .games
+        .iter()
+        .filter(|game| all || !game.hidden)
+        .collect();
+    games.sort_by(|a, b| sort.compare(a, b));
     if json {
-        println!("{}", serde_json::to_string_pretty(&library)?);
+        let json = serde_json::json!({ "games": games, "problems": library.problems });
+        println!("{}", serde_json::to_string_pretty(&json)?);
         return Ok(());
     }
-    for game in &library.games {
+    for game in games {
         println!("{}\t{}\t{}", game.id, game.source.label(), game.title);
     }
     for problem in &library.problems {
@@ -64,10 +83,53 @@ fn list(json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn launch(id: &str) -> anyhow::Result<()> {
-    let library = Library::scan();
-    let game = library
+fn find(id: &str) -> anyhow::Result<Game> {
+    Library::scan()
         .find(id)
-        .ok_or_else(|| anyhow::anyhow!("no game with the id {id:?}; `zendo list` shows them"))?;
-    zendo_core::launch(game)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("no game with the id {id:?}; `zendo list --all` shows them"))
+}
+
+fn set_hidden(id: &str, hidden: bool) -> anyhow::Result<()> {
+    let game = find(id)?;
+    State::update(|state| state.set_hidden(&game.id, hidden))?;
+    Ok(())
+}
+
+fn covers() -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let mut fetcher = Fetcher::new(&config)
+        .context("covers are turned off (download_covers = false) or there is no cache folder")?;
+    let library = Library::scan();
+    let wanted: Vec<&Game> = library
+        .games
+        .iter()
+        .filter(|game| fetcher.wants(game))
+        .collect();
+    if wanted.is_empty() {
+        println!("No covers to download.");
+        if config.steamgriddb_key.is_none() {
+            println!(
+                "Games whose store has no cover need a SteamGridDB key in {}.",
+                Config::path()
+                    .map_or_else(|| "config.toml".into(), |path| path.display().to_string())
+            );
+        }
+        return Ok(());
+    }
+    let mut failed = 0;
+    for game in wanted {
+        match fetcher.fetch(game) {
+            Ok(Some(path)) => println!("{}\t{}", game.title, path.display()),
+            Ok(None) => println!("{}\tno cover found", game.title),
+            Err(err) => {
+                failed += 1;
+                eprintln!("zendo: {}: {err:#}", game.title);
+            }
+        }
+    }
+    if failed > 0 {
+        anyhow::bail!("{failed} cover(s) could not be downloaded");
+    }
+    Ok(())
 }

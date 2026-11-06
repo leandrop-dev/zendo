@@ -2,23 +2,27 @@
 
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Instant;
 
 use anyhow::Context;
 
-use crate::{Game, Launch};
+use crate::{Game, Launch, State};
 
-/// Starts the game without waiting for it. Its output goes nowhere; errors
-/// starting it (a missing program) are returned.
+/// Starts the game without waiting for it, and notes the launch in Zendo's
+/// state. A game Zendo runs itself (a `.desktop` one) is also timed until it
+/// exits, as long as this process lives; for the others `xdg-open` hands
+/// the game to its launcher at once, and the launcher keeps the time.
 ///
 /// # Errors
 ///
-/// When the program, or `xdg-open` for a link, cannot be started.
+/// When the program, or `xdg-open` for a link, cannot be started. Failing
+/// to note the launch is not an error: the game is already running.
 pub fn launch(game: &Game) -> anyhow::Result<()> {
-    let mut command = match &game.launch {
+    let (mut command, timed) = match &game.launch {
         Launch::Uri { uri } => {
             let mut command = Command::new("xdg-open");
             command.arg(uri);
-            command
+            (command, false)
         }
         Launch::Command { program, args, dir } => {
             let mut command = Command::new(program);
@@ -26,7 +30,7 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
             if let Some(dir) = dir.as_ref().filter(|dir| dir.is_dir()) {
                 command.current_dir(dir);
             }
-            command
+            (command, true)
         }
     };
     let mut child = command
@@ -35,7 +39,16 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
         .stderr(Stdio::null())
         .spawn()
         .with_context(|| format!("could not start {}", game.title))?;
+    let _ = State::update(|state| state.launched(&game.id));
+    let id = game.id.clone();
+    let started = Instant::now();
     // Reap it when it ends, so it does not linger as a zombie.
-    thread::spawn(move || child.wait());
+    thread::spawn(move || {
+        let _ = child.wait();
+        let minutes = started.elapsed().as_secs() / 60;
+        if timed && minutes > 0 {
+            let _ = State::update(|state| state.add_minutes(&id, minutes));
+        }
+    });
     Ok(())
 }

@@ -2,13 +2,13 @@
 //! apps in each folder's `appmanifest_*.acf`. Covers come from Steam's own
 //! cache in `appcache/librarycache`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use keyvalues_parser::{Obj, Vdf};
 
-use crate::{Game, Launch, Scan, Source, paths};
+use crate::{Game, Launch, Played, Scan, Source, paths};
 
 /// `StateFlags` bit for an app whose files are all on disk.
 const FULLY_INSTALLED: u32 = 4;
@@ -45,10 +45,11 @@ pub fn scan(roots: &[PathBuf]) -> Scan {
         if !root.join("steamapps").is_dir() || !seen_roots.insert(root.clone()) {
             continue;
         }
+        let played = play_records(&root, &mut scan.problems);
         for folder in library_folders(&root, &mut scan.problems) {
             let folder = folder.canonicalize().unwrap_or(folder);
             if seen_folders.insert(folder.clone()) {
-                scan_folder(&root, &folder.join("steamapps"), &mut scan);
+                scan_folder(&root, &folder.join("steamapps"), &played, &mut scan);
             }
         }
     }
@@ -87,7 +88,58 @@ fn parse_library_folders(text: &str) -> anyhow::Result<Vec<PathBuf>> {
         .collect())
 }
 
-fn scan_folder(root: &Path, steamapps: &Path, scan: &mut Scan) {
+/// Each account's `LastPlayed` and `Playtime` (minutes) per app, from
+/// `userdata/<account>/config/localconfig.vdf`, the latest and longest
+/// across accounts.
+fn play_records(root: &Path, problems: &mut Vec<String>) -> HashMap<String, Played> {
+    let mut played: HashMap<String, Played> = HashMap::new();
+    let Ok(accounts) = fs::read_dir(root.join("userdata")) else {
+        return played;
+    };
+    for account in accounts.filter_map(Result::ok) {
+        let file = account.path().join("config/localconfig.vdf");
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        match parse_play_records(&text) {
+            Ok(records) => {
+                for (app, record) in records {
+                    let entry = played.entry(app).or_default();
+                    *entry = entry.merge(record);
+                }
+            }
+            Err(err) => problems.push(format!("{}: {err}", file.display())),
+        }
+    }
+    played
+}
+
+fn parse_play_records(text: &str) -> anyhow::Result<Vec<(String, Played)>> {
+    let vdf = Vdf::from(keyvalues_parser::parse(text)?);
+    let apps = ["Software", "Valve", "Steam", "apps"]
+        .iter()
+        .try_fold(vdf.value.get_obj(), |obj, key| {
+            obj.map(|obj| get_obj(obj, key))
+        })
+        .flatten();
+    let Some(apps) = apps else {
+        return Ok(Vec::new());
+    };
+    Ok(apps
+        .iter()
+        .filter_map(|(app, values)| {
+            let record = values.first()?.get_obj()?;
+            let played = Played {
+                last: get_u64(record, "LastPlayed").filter(|&when| when > 0),
+                minutes: get_u64(record, "Playtime").unwrap_or(0),
+                launches: 0,
+            };
+            Some((app.to_string(), played))
+        })
+        .collect())
+}
+
+fn scan_folder(root: &Path, steamapps: &Path, played: &HashMap<String, Played>, scan: &mut Scan) {
     let Ok(entries) = fs::read_dir(steamapps) else {
         return;
     };
@@ -105,7 +157,10 @@ fn scan_folder(root: &Path, steamapps: &Path, scan: &mut Scan) {
     manifests.sort();
     for manifest in manifests {
         match read_manifest(&manifest) {
-            Ok(Some(app)) => scan.games.push(app.into_game(root)),
+            Ok(Some(app)) => {
+                let record = played.get(&app.id).copied().unwrap_or_default();
+                scan.games.push(app.into_game(root, record));
+            }
             Ok(None) => {}
             Err(err) => scan.problems.push(format!("{}: {err}", manifest.display())),
         }
@@ -115,19 +170,25 @@ fn scan_folder(root: &Path, steamapps: &Path, scan: &mut Scan) {
 struct App {
     id: String,
     name: String,
+    last_played: Option<u64>,
 }
 
 impl App {
-    fn into_game(self, root: &Path) -> Game {
-        Game {
-            cover: cover(root, &self.id),
-            launch: Launch::Uri {
+    fn into_game(self, root: &Path, played: Played) -> Game {
+        let mut game = Game::new(
+            format!("steam:{}", self.id),
+            self.name,
+            Source::Steam,
+            Launch::Uri {
                 uri: format!("steam://rungameid/{}", self.id),
             },
-            id: format!("steam:{}", self.id),
-            title: self.name,
-            source: Source::Steam,
-        }
+        );
+        game.cover = cover(root, &self.id);
+        game.played = played.merge(Played {
+            last: self.last_played,
+            ..Played::default()
+        });
+        game
     }
 }
 
@@ -158,6 +219,7 @@ fn parse_manifest(text: &str) -> anyhow::Result<Option<App>> {
     Ok(Some(App {
         id: id.to_owned(),
         name: name.to_owned(),
+        last_played: get_u64(state, "LastPlayed").filter(|&when| when > 0),
     }))
 }
 
@@ -176,10 +238,21 @@ fn cover(root: &Path, id: &str) -> Option<PathBuf> {
 /// A string value, matching the key without regard to case: Steam writes
 /// `appid` in some manifests and `AppID` in others.
 fn get_str<'a>(obj: &'a Obj<'_>, key: &str) -> Option<&'a str> {
+    get(obj, key).and_then(|value| value.get_str())
+}
+
+fn get_u64(obj: &Obj<'_>, key: &str) -> Option<u64> {
+    get_str(obj, key).and_then(|value| value.parse().ok())
+}
+
+fn get_obj<'a>(obj: &'a Obj<'_>, key: &str) -> Option<&'a Obj<'a>> {
+    get(obj, key).and_then(|value| value.get_obj())
+}
+
+fn get<'a>(obj: &'a Obj<'_>, key: &str) -> Option<&'a keyvalues_parser::Value<'a>> {
     obj.iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(key))
         .and_then(|(_, values)| values.first())
-        .and_then(|value| value.get_str())
 }
 
 #[cfg(test)]
@@ -229,6 +302,24 @@ mod tests {
                 PathBuf::from("/mnt/games/SteamLibrary")
             ]
         );
+    }
+
+    #[test]
+    fn reads_when_and_how_long_each_app_was_played() {
+        let records = parse_play_records(
+            r#""UserLocalConfigStore"
+            {
+                "Software" { "valve" { "Steam" { "apps" {
+                    "620" { "LastPlayed" "1700000000" "Playtime" "491" }
+                    "70" { "LastPlayed" "0" }
+                } } } }
+            }"#,
+        )
+        .unwrap();
+        let get = |app: &str| records.iter().find(|(id, _)| id == app).unwrap().1;
+        assert_eq!(get("620").last, Some(1_700_000_000));
+        assert_eq!(get("620").minutes, 491);
+        assert_eq!(get("70").last, None);
     }
 
     #[test]

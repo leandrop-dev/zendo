@@ -18,6 +18,9 @@ pub enum Pad {
     Down,
     Activate,
     Back,
+    Sort,
+    Hide,
+    ShowHidden,
     ToggleFullscreen,
 }
 
@@ -69,6 +72,9 @@ fn button_pad(button: Button) -> Option<Pad> {
         Button::DPadDown => Pad::Down,
         Button::South => Pad::Activate,
         Button::East => Pad::Back,
+        Button::North => Pad::Sort,
+        Button::West => Pad::Hide,
+        Button::Start => Pad::ShowHidden,
         Button::Select => Pad::ToggleFullscreen,
         _ => return None,
     })

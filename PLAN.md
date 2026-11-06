@@ -7,6 +7,8 @@ later. A sister project of [hyprmonk](../hyprmonk), MIT like it.
 Status: planned on 2026-11-04 from a hyprmonk session.
 2026-11-05: window default, Rust + Iced and optional tools decided; first
 session: the repo, the package checks and phase 1 built (see Phases).
+2026-11-06: phase 1 checked against a real game from each store; phase 2
+built.
 
 ## What it should do
 
@@ -38,8 +40,8 @@ Controller input through the `gilrs` crate; hyprmonk's `tone.json` becomes an
 Iced theme.
 
 Layout [tentative], built this way: `crates/zendo-core` (library scan,
-launching, later state and covers) and `crates/zendo` (the Iced app, plus
-`list` and `launch` commands for keybinds and scripts).
+launching, state, config and covers) and `crates/zendo` (the Iced app, plus
+`list`, `launch`, `hide`, `unhide` and `covers` commands for keybinds and scripts).
 
 Iced has not reached 1.0 and its API changes between releases. Pinned at
 0.14.0 and gilrs at 0.11.2 (the current releases on 2026-11-05). Iced 0.14
@@ -78,8 +80,48 @@ start with `heroic://launch?appName=<id>&runner=legendary|gog|nile|sideload`.
 
 `.desktop` files: launchers and tools also file themselves under `Game`
 alone (Faugus, Goverlay, Heroic, Lutris, Steam), so no category tells them
-apart. `desktop.rs` keeps a list of the known ones; phase 2 adds a way to
-hide any entry from the window [tentative].
+apart. `desktop.rs` keeps a list of the known ones, and any entry can be
+hidden from the window (phase 2).
+
+What phase 2 reads, checked on 2026-11-06 against Heroic 2.22.4 and a
+current Steam client with one game from each store installed:
+
+- Covers. Steam's `appcache/librarycache/<app>/library_600x900.jpg`.
+  Heroic's `store_cache/legendary_library.json`, `gog_library.json` and
+  `nile_library.json` (top key `library` or `games`) give each game's
+  `art_square`, a portrait image on the store's CDN (Epic 1200x1600, GOG
+  300x450, Amazon 1080x1440). Heroic's own `images-cache` names files by the
+  SHA-256 of the URL, but holds only what Heroic has shown, so Zendo
+  downloads into a cache of its own instead.
+- SteamGridDB: base URL, `Authorization: Bearer <key>`,
+  `search/autocomplete/{name}`, `grids/game/{id}` and `grids/steam/{app}`
+  are confirmed from the official Node client's source; the docs page is
+  rendered in the browser and could not be read. Which `dimensions` values
+  it accepts is not confirmed: Zendo asks for `600x900,342x482,660x930` and,
+  on a 400, falls back to the first image taller than wide. Not yet tried
+  with a real key.
+- Play records. Steam: `LastPlayed` in each `appmanifest_*.acf`, and
+  `LastPlayed` and `Playtime` (minutes) under
+  `UserLocalConfigStore/Software/Valve/Steam/apps/<app>` in
+  `userdata/<account>/config/localconfig.vdf`. Heroic:
+  `store/timestamp.json`, `lastPlayed` (ISO-8601, may be empty) and
+  `totalPlayed` (minutes) by app name; its store splits keys on dots, so
+  Amazon ids (`amzn1.adg.product.…`) are nested objects to join back.
+
+Zendo's own files [tentative]: `~/.config/zendo/config.toml` for what the
+user sets (`steamgriddb_key`, `download_covers`), `~/.local/state/zendo/state.json`
+for what Zendo remembers (launches, hidden games, the sort), written by the
+window and the command alike, and `~/.cache/zendo/covers/` with a
+`misses.json` so a game without a cover is asked about again only after a
+week. One state file, not omarchy-games-menu's split by owner, since both
+sides write the same few things; each write reads, changes and renames the
+file into place.
+
+Covers are kept at the size the store serves them. Iced decodes each to
+full-size RGBA (the Amazon one is about 6 MB in memory), which is fine for a
+few dozen games; for large libraries, scale them down when saving [re-evaluate
+once someone has a few hundred games].
+
 ## What the user needs installed [tentative]
 
 Nothing is required. Zendo detects each tool and shows what is missing.
@@ -118,11 +160,16 @@ Nothing is required. Zendo detects each tool and shows what is missing.
    `appmanifest_*.acf`), Heroic's installed games, `.desktop` games. The cover
    grid and launching. Built 2026-11-05, with type-to-filter, keyboard and
    controller moves and F11 full-screen; Steam covers come from Steam's own
-   `appcache/librarycache`. Not yet tried against real installed games (the
-   machine it was built on had none), with a real controller, or with the
-   full-screen toggle live.
-2. Covers (SteamGridDB, and the art URLs Heroic keeps) for the games without
-   one, sorting by most and lately played, hiding entries that are not games.
+   `appcache/librarycache`. On 2026-11-06 `zendo list` found the four test
+   games (Hexologic on Steam, Absolute Drift on Epic, Cyberpunk 2077 on GOG,
+   Metal Slug X on Amazon) with the right titles. Not yet tried: starting a
+   game from Zendo, a real controller, the full-screen toggle live.
+2. Covers (the stores' portrait art, SteamGridDB with a key) for the games
+   without one, sorting by recent, most played or title (Tab, Y), hiding
+   entries (Delete, X; Ctrl+H or Start shows them). Built 2026-11-06; the
+   window downloaded the three Heroic covers by itself and sorted the four
+   games by last played. Not yet tried: SteamGridDB with a key, and the keys
+   in the live window (no key-sending tool here; unit tests cover them).
 3. Launch options per game: Proton through umu, prefixes, MangoHud, GameMode,
    gamescope.
 4. Stores: sign in, install, update and uninstall through legendary, gogdl and
@@ -140,10 +187,13 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Try phase 1 with real games: install a Steam game and a Heroic one, and
-  check `zendo list`, the covers and launching.
-- Try a controller and the full-screen toggle (F11, Select).
-- Start phase 2.
+- Start each test game from Zendo, and check it shows up first under
+  Recent afterwards.
+- Try a controller, the full-screen toggle (F11, Select), and the keys
+  phase 2 added.
+- With a SteamGridDB key in `config.toml`, run `zendo covers` on a
+  `.desktop` game to check the `dimensions` filter.
+- Start phase 3.
 
 ## Conventions
 

@@ -102,11 +102,11 @@ fn parse(id: &str, text: &str) -> Option<Game> {
     }
     let mut words = split_exec(&unescape(exec))?.into_iter();
     let program = words.next()?;
-    Some(Game {
-        id: format!("desktop:{id}"),
-        title: entry.get("Name").map_or_else(|| id.to_owned(), unescape),
-        source: Source::Desktop,
-        launch: Launch::Command {
+    Some(Game::new(
+        format!("desktop:{id}"),
+        entry.get("Name").map_or_else(|| id.to_owned(), unescape),
+        Source::Desktop,
+        Launch::Command {
             program,
             args: words.collect(),
             dir: entry
@@ -114,8 +114,7 @@ fn parse(id: &str, text: &str) -> Option<Game> {
                 .filter(|dir| !dir.is_empty())
                 .map(PathBuf::from),
         },
-        cover: None,
-    })
+    ))
 }
 
 /// The keys of the `[Desktop Entry]` group, without the translated ones.
