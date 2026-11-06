@@ -604,7 +604,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Platinum, 9), Gunslugs 3 Rogue Tactics (none: Steam calls it
      "Gunslugs : Rogue Tactics"). The user checked the pill on screen;
      they noticed Hexologic showing Platinum where ProtonDB says Native,
-     which led to the Native check.
+     which led to the Native check, which they then checked too.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
