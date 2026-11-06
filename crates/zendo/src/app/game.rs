@@ -38,10 +38,7 @@ impl Zendo {
             .clone()
             .unwrap_or_else(|| "Ready when you are".to_owned());
         let actions = row![
-            button(text("Play").size(16).font(BOLD))
-                .padding([10, 32])
-                .style(style::primary)
-                .on_press(Message::Play),
+            self.play_buttons(game),
             button(text(if game.pinned { "Unpin" } else { "Pin" }).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
@@ -66,6 +63,7 @@ impl Zendo {
             .padding(24);
         if game.installed_by_zendo() {
             page = page.push(self.store_actions(game));
+            page = page.push(self.launch_card(game));
         }
         let facts = store_facts(
             owned,

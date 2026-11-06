@@ -17,7 +17,8 @@ Later on 2026-11-06 the user tested phase 4 and listed what to change; the
 order agreed [firm]: 4d (fixes to downloads, update status, sizes), then a
 sign-in window, then phase 5 with Running/Stop and the ProtonDB rating. The
 user checked 4d in the window; 4d and 4e (the sign-in window) were built
-the same day.
+the same day, and the user checked both. Phase 5 started the same day,
+split into 5a to 5e (below); 5a is built and the user checked it.
 
 ## Direction [firm]
 
@@ -449,9 +450,53 @@ Nothing is required. Zendo detects each tool and shows what is missing.
    rating pill on the game's page (Borked to Platinum, by Steam app id,
    found by title for the other stores), which opens the game's ProtonDB
    page in the browser when clicked. Games are started from the home
-   folder [tentative, offered, not yet agreed], so a relative path in a launcher's settings (Heroic once had
-   `winePrefix: "undefined/<title>"`) does not depend on where Zendo was
-   started.
+   folder [tentative, offered, not yet agreed; built in 5a], so a relative
+   path in a launcher's settings (Heroic once had `winePrefix:
+   "undefined/<title>"`) does not depend on where Zendo was started.
+   Steps [tentative]: 5a starting the games Zendo installed, with Running
+   and Stop for them; 5b Running and Stop for Steam and Heroic games, by
+   their install folder; 5c the settings sheet; 5d the ProtonDB pill; 5e
+   GE-Proton downloads.
+   - 5a Starting the games Zendo installed, built 2026-11-06: through the
+     engine's own `launch` (it knows the store's arguments, such as Epic's
+     sign-in token): legendary and nile `launch <app>`, gogdl `launch
+     <path> <id> --platform <p>`. A Windows build gets `--no-wine
+     --wrapper <umu-run>` (all three split the wrapper as a shell would)
+     with `WINEPREFIX`, `GAMEID`, `STORE` (`egs`, `gog`, `amazon`) and
+     `PROTONPATH` set. The prefix [tentative] is
+     `<install_dir>/Prefixes/<game's folder name>`, made on the first
+     launch. The Proton [tentative, until the settings sheet] is the first
+     found in Steam's compatibility tools folders (the user's, `~/.steam`,
+     `/usr/share/steam`, `/usr/local/share/steam`) and Steam's own
+     Protons: GE-Proton or UMU-Proton (which carry the fixes umu applies)
+     before a distribution's (cachyos, tkg), then Valve's, Experimental
+     last, newest first; with none, umu downloads UMU-Proton itself.
+     `GAMEID` comes from umu's database (`umu_api.php?store=gog&codename=
+     <id>`, a 5 s timeout), kept in `~/.cache/zendo/umu.json`; a game it
+     does not know runs as `umu-default` and is asked about again after a
+     week. Each launch's output goes to
+     `~/.local/state/zendo/logs/<id>.log`, headed with the command and its
+     environment.
+     Running and Stop: every game Zendo starts (engine games and
+     `.desktop` ones) runs in a process group of its own, and counts as
+     running while any process of the group is alive (polled every 2 s),
+     since legendary starts the game and exits. Play turns into Running
+     with Stop beside it, the card shows RUNNING; Stop sends SIGTERM to
+     the group, and turns into Force stop, which sends SIGKILL. Signals
+     never go to group 0, 1 or Zendo's own. When the game ends, its play
+     time is added. A game handed to Steam or Heroic is not followed yet
+     (5b). The page of a Zendo-installed game has a Launch card with the
+     prefix and the last log, each with Open.
+     Checked: clippy and tests (a group seen running, then gone after a
+     kill; Running and closed in the window's state; a failed start
+     leaving Play). The user then installed and played two games through
+     Zendo, and it worked: 10 Second Ninja X from Amazon (nile, umu's
+     database knew it as `umu-435790`) and Gunslugs 3 Rogue Tactics from
+     GOG (gogdl, `umu-default`), both on proton-cachyos-slr, the only
+     Proton here. That was also the first real Amazon install. Not
+     checked: an Epic game through legendary, and how long umu's first
+     run takes to fetch the Steam Linux Runtime on a fresh PC, with
+     nothing shown meanwhile.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -466,8 +511,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Epic and Amazon installs, now that signing in there is easy.
-- Then phase 5: launch options, Running/Stop and ProtonDB.
+- 5b: Running and Stop for Steam and Heroic games, by install folder.
+- Then 5c to 5e. An Epic install and launch is still untried.
 
 ## Conventions
 

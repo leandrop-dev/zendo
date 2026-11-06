@@ -87,7 +87,12 @@ install it and give it its colours, but it runs on any Linux desktop.
   the window while something downloads asks first, then pauses the queue
   for next time. A game's page shows its download size, size on disk and
   latest version, and for the games Zendo installed whether an update is
-  waiting. Starting the games Zendo installed comes with launch options.
+  waiting.
+- Starts the games it installed through their engine, Windows games with
+  Proton through umu-launcher, each in a Wine prefix of its own
+  (`<install_dir>/Prefixes/<title>`), with each launch's output kept in a
+  log. While a game Zendo started runs, Play turns into Running with a
+  Stop beside it; pressed again, Stop ends the game at once.
 
 ## What you need
 
@@ -100,9 +105,10 @@ launcher is needed only for its own games:
 | Heroic | The Epic, GOG and Amazon games it installed, and games added to it |
 | legendary, gogdl, nile | Signing in to Epic, GOG and Amazon, listing your games there and installing them; Heroic's own copies are used when these are not installed alone |
 | WebKitGTK 4.1 (`webkit2gtk-4.1`) | The sign-in window; Zendo is built against it, so it is needed to build and run |
+| umu-launcher | Starting the Windows games Zendo installed; it uses the newest GE-Proton or other Proton in Steam's compatibility tools folders, or downloads UMU-Proton |
 
-Launch options of Zendo's own (Proton through umu-launcher, MangoHud,
-GameMode, gamescope; phase 5) come later, and will be optional too.
+MangoHud, GameMode and gamescope per game come later, and will be
+optional too.
 
 ## Build
 
@@ -201,16 +207,20 @@ What Zendo keeps itself:
 | `~/.local/state/zendo/downloads.json` | What is left in the download queue, there only while something is |
 | `~/.cache/zendo/store/` | Each store's list of your games (`<store>.json`), shown at once on the next start; `gogdb/` keeps GOG's answers about each game |
 
-Play time of games Zendo runs itself (`.desktop` ones) is counted while its
-window stays open; Steam and Heroic count their own.
+| `~/.local/state/zendo/logs/` | The output of each game's last launch (`<id>.log`) |
+| `~/.cache/zendo/umu.json` | umu-launcher's id for each game, which picks the fixes it applies |
+
+Play time of games Zendo starts itself (the ones it installed, `.desktop`
+ones) is counted until the game's last process ends; Steam and Heroic
+count their own.
 
 ## Layout
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them (with `proton.rs` and `umu.rs` for Windows games) and stops them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -227,9 +237,11 @@ window stays open; Steam and Heroic count their own.
    installed, and install, update, repair and uninstall through legendary,
    gogdl and nile, with pause and resume, update status and sizes, and a
    sign-in window of Zendo's own, so there is no code to copy.
-5. Launch options per game: Proton through umu-launcher with a prefix per
-   game, a Wine/Proton manager, MangoHud, GameMode, gamescope, a launch log;
-   Running and Stop while a game runs; the ProtonDB rating on its page.
+5. Launch options per game (in progress): Proton through umu-launcher with
+   a prefix per game, a launch log, Running and Stop (built for the games
+   Zendo installed); Running and Stop for Steam and Heroic games, a
+   settings sheet with MangoHud, GameMode and gamescope, a GE-Proton
+   manager, and the ProtonDB rating on the game's page (to come).
 6. Local games: add a game by hand, with a cover from SteamGridDB.
 7. Mods: Nexus links, profiles, back to vanilla.
 

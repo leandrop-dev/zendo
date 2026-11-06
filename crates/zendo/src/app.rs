@@ -10,6 +10,7 @@ mod downloads;
 mod format;
 mod game;
 mod library;
+mod running;
 mod settings;
 mod sidebar;
 mod store;
@@ -34,6 +35,7 @@ use zendo_core::{Game, Library, Sort, Source, State};
 use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
 use downloads::{DownloadMessage, DownloadsState};
+use running::{RunMessage, Running};
 use store::{StoreMessage, StoreState};
 use style::DIM;
 
@@ -149,6 +151,7 @@ enum Message {
     DownloadNow,
     Account(AccountMessage),
     Download(DownloadMessage),
+    Run(RunMessage),
     Store(StoreMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
     /// page is for.
@@ -199,6 +202,7 @@ struct Zendo {
     show_hidden: bool,
     images: ImageDownloads,
     downloads: DownloadsState,
+    running: Running,
     config: Config,
     key: KeyForm,
     accounts: Accounts,
@@ -227,6 +231,7 @@ impl Zendo {
             show_hidden: false,
             images: ImageDownloads::default(),
             downloads: DownloadsState::default(),
+            running: Running::default(),
             config: Config::default(),
             key: KeyForm::default(),
             accounts: Accounts::default(),
@@ -424,6 +429,7 @@ impl Zendo {
             | Message::DownloadNow => self.update_settings(message),
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
+            Message::Run(message) => self.update_running(message),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -757,29 +763,9 @@ impl Zendo {
 
     /// Starts the game on the page, or the selected one in the library.
     fn play(&mut self) -> Task<Message> {
-        let Some(game) = self.current_id().and_then(|id| self.game(&id)).cloned() else {
-            return Task::none();
-        };
-        let result = if self.persist {
-            zendo_core::launch(&game)
-        } else {
-            Ok(())
-        };
-        match result {
-            Ok(()) => {
-                self.status = Some(format!("Starting {}…", game.title));
-                // Zendo's state now has the launch; show it in the order
-                // without scanning again.
-                if let Some(played) = self.game_mut(&game.id).map(|game| &mut game.played) {
-                    played.launches += 1;
-                    played.last = Some(now());
-                }
-                self.select(Some(&game.id))
-            }
-            Err(err) => {
-                self.status = Some(format!("{err:#}"));
-                Task::none()
-            }
+        match self.current_id().and_then(|id| self.game(&id)).cloned() {
+            Some(game) => self.start_game(game),
+            None => Task::none(),
         }
     }
 

@@ -544,7 +544,7 @@ impl Zendo {
         let mut card = column![
             text("Installed by Zendo").size(18).font(BOLD),
             text(format!(
-                "Through {}. Starting it from Zendo comes with launch options, the next step.",
+                "Through {}, which Zendo starts it with too.",
                 game.launcher()
             ))
             .size(13)

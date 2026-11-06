@@ -168,7 +168,8 @@ impl Job {
 
 /// A folder name from a title, with what Windows and Wine cannot take left
 /// out.
-fn folder_name(title: &str) -> String {
+#[must_use]
+pub fn folder_name(title: &str) -> String {
     let name: String = title
         .chars()
         .filter(|c| {

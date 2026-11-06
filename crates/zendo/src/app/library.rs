@@ -9,7 +9,7 @@ use std::path::Path;
 use iced::{Alignment, Background, Border, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
-use super::style::{self, ACCENT, BOLD, DIM, SURFACE, TEXT};
+use super::style::{self, ACCENT, BOLD, DIM, GOOD, SURFACE, TEXT};
 use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
 
 pub const COVER_WIDTH: f32 = 180.0;
@@ -217,7 +217,11 @@ impl Zendo {
                 source: game.source,
                 cover: game.cover.as_deref(),
                 faded: game.hidden,
-                badge: game.pinned.then_some(("PINNED", ACCENT)),
+                badge: if self.running.is_running(&game.id) {
+                    Some(("RUNNING", GOOD))
+                } else {
+                    game.pinned.then_some(("PINNED", ACCENT))
+                },
                 line,
                 line_color,
                 selected: index == selected,

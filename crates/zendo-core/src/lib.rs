@@ -15,13 +15,15 @@ mod desktop;
 pub mod downloads;
 mod heroic;
 pub mod info;
-mod launch;
+pub mod launch;
 pub mod owned;
 mod paths;
+pub mod proton;
 pub mod state;
 mod steam;
 pub mod stores;
 mod time;
+mod umu;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -74,7 +76,7 @@ pub enum Launch {
         dir: Option<PathBuf>,
     },
     /// Installed by Zendo through a store engine (`legendary`, `gogdl`,
-    /// `nile`). Starting these comes with launch options (phase 5).
+    /// `nile`), and started through its `launch`.
     Engine { runner: String, app: String },
 }
 
@@ -216,7 +218,10 @@ impl Game {
     pub fn command_line(&self) -> String {
         match &self.launch {
             Launch::Uri { uri } => format!("xdg-open {uri}"),
-            Launch::Engine { .. } => "None yet: launch options come next".to_owned(),
+            Launch::Engine { runner, app } if launch::needs_proton(self) => {
+                format!("{runner} launch {app} --no-wine --wrapper umu-run")
+            }
+            Launch::Engine { runner, app } => format!("{runner} launch {app}"),
             Launch::Command { program, args, .. } => std::iter::once(program.as_str())
                 .chain(args.iter().map(String::as_str))
                 .map(|word| {
