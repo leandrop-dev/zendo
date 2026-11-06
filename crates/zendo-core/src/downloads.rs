@@ -9,6 +9,12 @@
 //! Zendo's folder for it: legendary's `installed.json`, nile's
 //! `nile/installed.json`. gogdl keeps none, so Zendo writes an
 //! `installed.json` for it in the shape Heroic uses.
+//!
+//! Each game goes in a folder of its own, picked when its install starts
+//! and kept with the job, so a paused install carries on in the same place
+//! and a cancelled one can be cleared away. An interrupted engine keeps
+//! what it wrote: legendary a resume file in its `tmp` folder, gogdl a
+//! `.gogdl-resume` in the game's folder, nile the files it finished.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
@@ -26,12 +32,13 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::heroic::{self, Installed};
+use crate::info;
 use crate::owned::{self, Owned, StoreKey};
 use crate::stores::Store;
 use crate::{Details, Game, Launch, Scan, Source, paths};
 
 /// The language gogdl downloads; Heroic asks the user, Zendo does not yet.
-const GOG_LANGUAGE: &str = "en-US";
+pub(crate) const GOG_LANGUAGE: &str = "en-US";
 
 /// How long an engine has to stop after being interrupted before it is
 /// killed.
@@ -82,6 +89,23 @@ pub struct Job {
     /// For an install, the folder the game's own folder is made in;
     /// otherwise the game's folder.
     pub path: PathBuf,
+    /// For an install, the game's own folder, once the job has started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<PathBuf>,
+    /// Held in the queue until resumed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub paused: bool,
+}
+
+/// The build Zendo installs from a store: GOG's Linux build when there is
+/// one, otherwise the Windows build.
+#[must_use]
+pub fn install_platform(game: &Owned) -> &'static str {
+    match game.store() {
+        Store::Gog if game.platforms.iter().any(|p| p == "Linux") => "linux",
+        Store::Gog => "windows",
+        Store::Epic | Store::Amazon => "Windows",
+    }
 }
 
 impl Job {
@@ -96,24 +120,20 @@ impl Job {
         self.store.into()
     }
 
-    /// Installing a store game into `dir`: GOG's Linux build when there is
-    /// one, otherwise the Windows build.
+    /// Installing a store game into a folder of its own in `dir`, for the
+    /// platform [`install_platform`] picks.
     #[must_use]
     pub fn install(game: &Owned, dir: PathBuf) -> Option<Self> {
-        let store = game.store();
         let (_, app) = game.id.split_once(':')?;
-        let platform = match store {
-            Store::Gog if game.platforms.iter().any(|p| p == "Linux") => "linux",
-            Store::Gog => "windows",
-            Store::Epic | Store::Amazon => "Windows",
-        };
         Some(Self {
-            store: store.into(),
+            store: game.store().into(),
             app: app.to_owned(),
             title: game.title.clone(),
             action: Action::Install,
-            platform: platform.to_owned(),
+            platform: install_platform(game).to_owned(),
             path: dir,
+            folder: None,
+            paused: false,
         })
     }
 
@@ -140,14 +160,47 @@ impl Job {
                 .clone()
                 .unwrap_or_else(|| "Windows".to_owned()),
             path: game.details.install_path.clone()?,
+            folder: None,
+            paused: false,
         })
     }
 }
 
+/// A folder name from a title, with what Windows and Wine cannot take left
+/// out.
+fn folder_name(title: &str) -> String {
+    let name: String = title
+        .chars()
+        .filter(|c| {
+            !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        })
+        .collect();
+    let name = name.trim().trim_start_matches('.').trim();
+    if name.is_empty() {
+        "Game".to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+/// A folder for the game in `dir` that does not exist yet: its title, or
+/// its title and a number.
+fn new_folder(dir: &Path, title: &str) -> PathBuf {
+    let name = folder_name(title);
+    let mut folder = dir.join(&name);
+    let mut number = 2;
+    while folder.exists() || folder.is_symlink() {
+        folder = dir.join(format!("{name} ({number})"));
+        number += 1;
+    }
+    folder
+}
+
 /// How far a download is, from the lines the engine logs. legendary and
 /// nile write `= Progress: 12.34% (5/40), Running for 00:00:10, ETA:
-/// 00:01:10`, gogdl the same without the `%`; all three follow it with
-/// `= Downloaded: 12.00 MiB, Written: …` and ` + Download\t- 3.20 MiB/s`.
+/// 00:01:10`, gogdl `= Progress: 12.34 5000/40000, …` in bytes written of
+/// what is left; all three follow it with `= Downloaded: 12.00 MiB,
+/// Written: …` and ` + Download\t- 3.20 MiB/s`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Progress {
     pub percent: Option<f32>,
@@ -155,14 +208,25 @@ pub struct Progress {
     pub speed_mib: Option<f32>,
     /// `hh:mm:ss`.
     pub eta: Option<String>,
+    /// gogdl's bytes written so far and to write in all, this run.
+    pub written: Option<(u64, u64)>,
 }
 
 impl Progress {
     /// Takes in one line of the engine's log; true when something changed.
     pub fn read(&mut self, line: &str) -> bool {
         let before = self.clone();
-        if let Some(percent) = after(line, "Progress: ").and_then(leading_number) {
-            self.percent = Some(percent.clamp(0.0, 100.0));
+        if let Some(rest) = after(line, "Progress: ") {
+            if let Some(percent) = leading_number(rest) {
+                self.percent = Some(percent.clamp(0.0, 100.0));
+            }
+            let counts = rest.split_whitespace().nth(1).and_then(|counts| {
+                let (done, total) = counts.trim_end_matches(',').split_once('/')?;
+                Some((done.parse().ok()?, total.parse().ok()?))
+            });
+            if counts.is_some() {
+                self.written = counts;
+            }
         }
         if let Some(eta) = after(line, "ETA: ") {
             let eta: String = eta.chars().take(8).collect();
@@ -197,6 +261,9 @@ pub enum Event {
     Progress(Progress),
     /// A step without a percentage, such as asking GOG about the game.
     Step(String),
+    /// The game's own folder, picked as the install starts; the job keeps
+    /// it from then on.
+    Folder(PathBuf),
 }
 
 /// How a job ended, when it did not fail.
@@ -239,12 +306,20 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
             gog_uninstall(job)?;
             Ended::Done
         }
+        (Store::Epic | Store::Amazon, Action::Install) => {
+            fs::create_dir_all(&job.path)
+                .with_context(|| format!("could not make {}", job.path.display()))?;
+            let folder = if let Some(folder) = &job.folder {
+                folder.clone()
+            } else {
+                let folder = new_folder(&job.path, &job.title);
+                report(Event::Folder(folder.clone()));
+                folder
+            };
+            engine(store, &engine_args(job, &folder), stop, report)?
+        }
         (Store::Epic | Store::Amazon, _) => {
-            if job.action == Action::Install {
-                fs::create_dir_all(&job.path)
-                    .with_context(|| format!("could not make {}", job.path.display()))?;
-            }
-            engine(store, &engine_args(job), stop, report)?
+            engine(store, &engine_args(job, &job.path), stop, report)?
         }
     };
     if ended == Ended::Done {
@@ -262,16 +337,28 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
     Ok(ended)
 }
 
-/// legendary's and nile's arguments for a job.
-fn engine_args(job: &Job) -> Vec<String> {
+/// legendary's and nile's arguments for a job; `folder` is the game's own
+/// folder for an install.
+fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
     let app = job.app.clone();
-    let path = job.path.to_string_lossy().into_owned();
+    let base = folder
+        .parent()
+        .unwrap_or(&job.path)
+        .to_string_lossy()
+        .into_owned();
+    let name = folder
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let folder = folder.to_string_lossy().into_owned();
     let words: Vec<&str> = match (job.store(), job.action) {
         (Store::Epic, Action::Install) => vec![
             "install",
             &app,
             "--base-path",
-            &path,
+            &base,
+            "--game-folder",
+            &name,
             "--platform",
             &job.platform,
             "--skip-sdl",
@@ -281,7 +368,7 @@ fn engine_args(job: &Job) -> Vec<String> {
         (Store::Epic, Action::Update) => vec!["install", &app, "--update-only", "--skip-sdl", "-y"],
         (Store::Epic, Action::Repair) => vec!["repair", &app, "-y"],
         (Store::Epic, Action::Uninstall) => vec!["uninstall", &app, "-y"],
-        (Store::Amazon, Action::Install) => vec!["install", "--base-path", &path, &app],
+        (Store::Amazon, Action::Install) => vec!["install", "--path", &folder, &app],
         (Store::Amazon, Action::Update) => vec!["update", &app],
         (Store::Amazon, Action::Repair) => vec!["verify", &app],
         (Store::Amazon, Action::Uninstall) => vec!["uninstall", &app],
@@ -355,10 +442,12 @@ fn engine(
         if stop.asked() {
             match interrupted {
                 None => {
-                    interrupt(child.id());
+                    signal_group(child.id(), "-INT");
                     interrupted = Some(Instant::now());
                 }
+                // gogdl can hang on a download thread after Ctrl+C.
                 Some(at) if at.elapsed() > STOP_GRACE => {
+                    signal_group(child.id(), "-KILL");
                     let _ = child.kill();
                 }
                 Some(_) => {}
@@ -388,11 +477,11 @@ fn engine(
     Ok(Ended::Done)
 }
 
-/// Sends SIGINT to the engine's process group, as Ctrl+C in a terminal
-/// would.
-fn interrupt(pid: u32) {
+/// Sends a signal to the engine's process group: `-INT` as Ctrl+C in a
+/// terminal would, `-KILL` when that went unheard.
+fn signal_group(pid: u32, signal: &str) {
     let _ = Command::new("kill")
-        .args(["-INT", "--", &format!("-{pid}")])
+        .args([signal, "--", &format!("-{pid}")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -422,54 +511,6 @@ fn reason(tail: &VecDeque<String>, status: &str) -> String {
     line.chars().take(240).collect()
 }
 
-/// What `gogdl info` says about a game before downloading it.
-#[derive(Debug, Default, Deserialize)]
-struct GogInfo {
-    folder_name: Option<String>,
-    #[serde(rename = "versionName")]
-    version_name: Option<String>,
-    #[serde(rename = "buildId")]
-    build_id: Option<String>,
-    #[serde(default)]
-    size: HashMap<String, GogSize>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct GogSize {
-    #[serde(default)]
-    disk_size: u64,
-}
-
-impl GogInfo {
-    /// The files every language shares plus the ones for Zendo's.
-    fn disk_size(&self) -> u64 {
-        ["*", GOG_LANGUAGE]
-            .iter()
-            .filter_map(|key| self.size.get(*key))
-            .map(|size| size.disk_size)
-            .sum()
-    }
-}
-
-fn gog_info(job: &Job, report: &mut dyn FnMut(Event)) -> anyhow::Result<GogInfo> {
-    report(Event::Step("Asking GOG about the game…".to_owned()));
-    let output = Store::Gog.run_checked(&[
-        "info",
-        &job.app,
-        "--platform",
-        &job.platform,
-        "--lang",
-        GOG_LANGUAGE,
-    ])?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json = stdout
-        .lines()
-        .rev()
-        .find(|line| line.trim_start().starts_with('{'))
-        .context("gogdl said nothing about the game")?;
-    serde_json::from_str(json).context("could not read what gogdl said about the game")
-}
-
 fn gog_args(job: &Job, verb: &str, path: &Path) -> anyhow::Result<Vec<String>> {
     let support = Store::Gog
         .dir()
@@ -495,25 +536,48 @@ fn gog_args(job: &Job, verb: &str, path: &Path) -> anyhow::Result<Vec<String>> {
 }
 
 fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
-    let info = gog_info(job, report)?;
+    report(Event::Step("Asking GOG about the game…".to_owned()));
+    let info = info::gog(&job.app, &job.platform)?;
     fs::create_dir_all(&job.path)
         .with_context(|| format!("could not make {}", job.path.display()))?;
+    // gogdl compares with the manifest of the last install it finished; one
+    // left from before an uninstall makes it find nothing to download.
+    if !read_gog_records()?
+        .1
+        .iter()
+        .any(|record| is_record_of(record, &job.app))
+    {
+        forget_gog_manifest(&job.app);
+    }
+    let expected = info.folder_name.as_ref().map(|name| job.path.join(name));
+    if job.folder.is_none()
+        && let Some(expected) = &expected
+    {
+        // Only a download gogdl left half done is carried on.
+        if expected.exists() && !expected.join(".gogdl-resume").is_file() {
+            bail!(
+                "{} is there already; move or delete it, then install again",
+                expected.display()
+            );
+        }
+        report(Event::Folder(expected.clone()));
+    }
     let before = subfolders(&job.path);
+    // A resumed download counts only what is left; shown against the
+    // whole game, it carries on from where the bar was.
+    let whole = info.disk_size();
     let ended = engine(
         Store::Gog,
         &gog_args(job, "download", &job.path)?,
         stop,
-        report,
+        &mut |event| report(overall(event, whole)),
     )?;
     if ended == Ended::Stopped {
         return Ok(ended);
     }
     // gogdl puts the game in a folder named after GOG's install directory;
     // its Linux installers may not say which, so look for the new one.
-    let folder = info
-        .folder_name
-        .clone()
-        .map(|name| job.path.join(name))
+    let folder = expected
         .filter(|path| path.is_dir())
         .or_else(|| {
             subfolders(&job.path)
@@ -526,7 +590,8 @@ fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
 }
 
 fn gog_refresh(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
-    let info = gog_info(job, report)?;
+    report(Event::Step("Asking GOG about the game…".to_owned()));
+    let info = info::gog(&job.app, &job.platform)?;
     let verb = if job.action == Action::Repair {
         "repair"
     } else {
@@ -537,6 +602,44 @@ fn gog_refresh(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
         record_gog(job, &job.path, &info)?;
     }
     Ok(ended)
+}
+
+/// gogdl's progress as a share of the whole game, `whole` bytes on disk.
+fn overall(event: Event, whole: u64) -> Event {
+    let Event::Progress(mut progress) = event else {
+        return event;
+    };
+    if let Some((done, left)) = progress.written
+        && whole > 0
+        && left <= whole
+    {
+        // Two decimals of a percentage; the precision lost is far below.
+        #[expect(clippy::cast_precision_loss)]
+        let share = (whole - left + done.min(left)) as f64 / whole as f64;
+        #[expect(clippy::cast_possible_truncation)]
+        let percent = (share * 100.0) as f32;
+        progress.percent = Some(percent.clamp(0.0, 100.0));
+    }
+    Event::Progress(progress)
+}
+
+/// Removes gogdl's manifest of a game, kept from its last finished install.
+fn forget_gog_manifest(app: &str) {
+    if let Some(dir) = Store::Gog.dir() {
+        let _ = fs::remove_file(dir.join("heroic_gogdl/manifests").join(app));
+    }
+}
+
+/// The GOG build Zendo installed, from its record.
+pub(crate) fn gog_build(app: &str) -> Option<String> {
+    read_gog_records()
+        .ok()?
+        .1
+        .iter()
+        .find(|record| is_record_of(record, app))?
+        .get("buildId")?
+        .as_str()
+        .map(str::to_owned)
 }
 
 fn subfolders(dir: &Path) -> HashSet<PathBuf> {
@@ -587,7 +690,7 @@ fn is_record_of(record: &serde_json::Value, app: &str) -> bool {
     record.get("appName").and_then(serde_json::Value::as_str) == Some(app)
 }
 
-fn record_gog(job: &Job, folder: &Path, info: &GogInfo) -> anyhow::Result<()> {
+fn record_gog(job: &Job, folder: &Path, info: &info::GogInfo) -> anyhow::Result<()> {
     let (file, mut records) = read_gog_records()?;
     records.retain(|record| !is_record_of(record, &job.app));
     let size = info.disk_size();
@@ -641,6 +744,7 @@ fn gog_uninstall(job: &Job) -> anyhow::Result<()> {
     if let Some(dir) = Store::Gog.dir() {
         let _ = fs::remove_dir_all(dir.join("support").join(&job.app));
     }
+    forget_gog_manifest(&job.app);
     records.retain(|record| !is_record_of(record, &job.app));
     write_gog_records(&file, &records)
 }
@@ -655,6 +759,60 @@ fn safe_to_delete(path: &Path) -> bool {
         .as_deref()
         .is_some_and(|home| home.starts_with(path) || path.parent() == Some(home));
     deep_enough && !near_home && !path.is_symlink()
+}
+
+/// Clears away what a cancelled install left: the game's folder and what
+/// the engine kept to carry on. Nothing is removed for a game the engine
+/// records as installed, nor a folder outside the one the job installs
+/// into or holding a game that is.
+///
+/// # Errors
+///
+/// When the folder cannot be deleted, or does not look like the game's.
+pub fn discard(job: &Job) -> anyhow::Result<()> {
+    if job.action != Action::Install {
+        return Ok(());
+    }
+    let store = job.store();
+    if installs(store).iter().any(|game| game.app == job.app) {
+        return Ok(());
+    }
+    if let Some(dir) = store.dir() {
+        match store {
+            // legendary names it after the app, as its `clean_filename`
+            // leaves ordinary ids.
+            Store::Epic => {
+                let _ = fs::remove_file(dir.join("tmp").join(format!("{}.resume", job.app)));
+            }
+            Store::Gog => {
+                let _ = fs::remove_dir_all(dir.join("support").join(&job.app));
+                forget_gog_manifest(&job.app);
+            }
+            Store::Amazon => {}
+        }
+    }
+    let Some(folder) = &job.folder else {
+        return Ok(());
+    };
+    if !folder.exists() {
+        return Ok(());
+    }
+    let recorded: Vec<PathBuf> = Store::ALL
+        .into_iter()
+        .flat_map(installs)
+        .filter_map(|game| game.install.path)
+        .collect();
+    let inside = folder.parent() == Some(job.path.as_path());
+    let holds_a_game = recorded
+        .iter()
+        .any(|path| path.starts_with(folder) || folder.starts_with(path));
+    if !inside || holds_a_game || !safe_to_delete(folder) {
+        bail!(
+            "left {} alone: it does not look like this game's folder",
+            folder.display()
+        );
+    }
+    fs::remove_dir_all(folder).with_context(|| format!("could not delete {}", folder.display()))
 }
 
 /// What Zendo installed from this store, from the engine's own record.
@@ -791,6 +949,7 @@ mod tests {
                 downloaded_mib: Some(120.5),
                 speed_mib: Some(3.2),
                 eta: Some("00:01:10".into()),
+                written: None,
             }
         );
         // gogdl writes the percentage without a sign.
@@ -799,6 +958,25 @@ mod tests {
         ));
         assert_eq!(progress.percent, Some(50.0));
         assert_eq!(progress.eta.as_deref(), Some("00:00:20"));
+        assert_eq!(progress.written, Some((100, 200)));
+        // legendary's counts are files, in brackets, and are left alone.
+        let mut legendary = Progress::default();
+        legendary.read("= Progress: 12.34% (5/40), Running for 00:00:10, ETA: 00:01:10");
+        assert_eq!(legendary.written, None);
+    }
+
+    #[test]
+    fn a_resumed_gog_download_carries_on_where_it_was() {
+        // 300 of 1000 bytes were written last time; 70 of the 700 left now.
+        let progress = Progress {
+            percent: Some(10.0),
+            written: Some((70, 700)),
+            ..Progress::default()
+        };
+        let Event::Progress(progress) = overall(Event::Progress(progress), 1000) else {
+            unreachable!()
+        };
+        assert_eq!(progress.percent, Some(37.0));
     }
 
     #[test]
@@ -830,17 +1008,27 @@ mod tests {
             action: Action::Install,
             platform: "Windows".into(),
             path: "/home/me/Games".into(),
+            folder: None,
+            paused: false,
         };
+        let folder = Path::new("/home/me/Games/Sugar Rush");
         assert_eq!(
-            engine_args(&job).join(" "),
-            "install Sugar --base-path /home/me/Games --platform Windows --skip-sdl --skip-dlcs -y"
+            engine_args(&job, folder).join(" "),
+            "install Sugar --base-path /home/me/Games --game-folder Sugar Rush --platform Windows --skip-sdl --skip-dlcs -y"
         );
         let job = Job {
             store: StoreKey::Amazon,
+            ..job
+        };
+        assert_eq!(
+            engine_args(&job, folder),
+            ["install", "--path", "/home/me/Games/Sugar Rush", "Sugar"]
+        );
+        let job = Job {
             action: Action::Repair,
             ..job
         };
-        assert_eq!(engine_args(&job), ["verify", "Sugar"]);
+        assert_eq!(engine_args(&job, &job.path), ["verify", "Sugar"]);
         assert_eq!(job.id(), "amazon:Sugar");
     }
 
@@ -861,14 +1049,35 @@ mod tests {
     }
 
     #[test]
-    fn reads_gogdls_info() {
-        let info: GogInfo = serde_json::from_str(
-            r#"{"size": {"*": {"download_size": 10, "disk_size": 100}, "en-US": {"download_size": 1, "disk_size": 20}, "de-DE": {"disk_size": 7}}, "dlcs": [], "buildId": "5", "languages": ["en-US"], "folder_name": "Game Folder", "versionName": "1.2"}"#,
-        )
-        .unwrap();
-        assert_eq!(info.disk_size(), 120);
-        assert_eq!(info.folder_name.as_deref(), Some("Game Folder"));
-        assert_eq!(info.version_name.as_deref(), Some("1.2"));
+    fn gives_each_game_a_folder_of_its_own() {
+        assert_eq!(
+            folder_name("Bō: Path of the Teal Lotus"),
+            "Bō Path of the Teal Lotus"
+        );
+        assert_eq!(folder_name("../.."), "Game");
+        assert_eq!(folder_name(" A/B? "), "AB");
+        let dir = std::env::temp_dir().join(format!("zendo-folders-{}", std::process::id()));
+        fs::create_dir_all(dir.join("Sugar")).unwrap();
+        fs::create_dir_all(dir.join("Sugar (2)")).unwrap();
+        assert_eq!(new_folder(&dir, "Sugar"), dir.join("Sugar (3)"));
+        assert_eq!(new_folder(&dir, "Salt"), dir.join("Salt"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn keeps_where_a_paused_install_goes() {
+        let mut game = Owned::new(Store::Epic, "Sugar", "Sugar".into());
+        game.platforms = vec!["Windows".into()];
+        let mut job = Job::install(&game, "/home/me/Games".into()).unwrap();
+        let json = serde_json::to_string(&job).unwrap();
+        assert!(
+            !json.contains("paused") && !json.contains("folder"),
+            "{json}"
+        );
+        job.paused = true;
+        job.folder = Some("/home/me/Games/Sugar".into());
+        let back: Job = serde_json::from_str(&serde_json::to_string(&job).unwrap()).unwrap();
+        assert_eq!(back, job);
     }
 
     #[test]

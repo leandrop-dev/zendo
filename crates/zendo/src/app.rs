@@ -460,7 +460,16 @@ impl Zendo {
             self.page = Page::Library;
         }
         let select = self.select(id.as_deref());
-        Task::batch([select, self.download_images()])
+        let info = match &self.page {
+            Page::Game(id) => self.want_info(&id.clone()),
+            _ => Task::none(),
+        };
+        Task::batch([
+            select,
+            self.download_images(),
+            self.check_new_updates(),
+            info,
+        ])
     }
 
     /// The clipboard, pasted with no field focused: into the page's field.
@@ -519,8 +528,12 @@ impl Zendo {
         self.status = None;
         self.downloads.confirm_uninstall = None;
         match &self.page {
-            Page::Game(_) | Page::Owned(_) => {
-                operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 })
+            Page::Game(id) | Page::Owned(id) => {
+                let id = id.clone();
+                Task::batch([
+                    operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 }),
+                    self.want_info(&id),
+                ])
             }
             // The grid is built anew; put it back where the cursor is.
             Page::Library | Page::Store => {
@@ -862,7 +875,7 @@ impl Zendo {
                 text(format!("Downloading images, {} left", self.images.left))
             }
             (Some(status), _) => text(status.clone()),
-            (None, _) if self.downloads.is_running() => {
+            (None, _) if self.downloads.summary().is_some() => {
                 text(self.downloads.summary().unwrap_or_default())
             }
             (None, 0) => text(""),

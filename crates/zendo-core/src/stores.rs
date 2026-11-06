@@ -146,7 +146,7 @@ impl Store {
         Ok(command)
     }
 
-    fn run(self, args: &[&str]) -> anyhow::Result<Output> {
+    pub(crate) fn run(self, args: &[&str]) -> anyhow::Result<Output> {
         let mut command = self.command()?;
         command.args(args);
         command

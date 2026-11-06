@@ -5,13 +5,14 @@ use std::collections::{HashMap, HashSet};
 
 use iced::widget::{button, column, container, row, scrollable, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
-use zendo_core::downloads::Job;
+use zendo_core::downloads::{self, Job};
+use zendo_core::info::{self, GameInfo};
 use zendo_core::owned::{self, Owned};
 use zendo_core::stores::Store;
 
 use super::accounts::Account;
 use super::downloads::DownloadMessage;
-use super::game::{Hero, hero};
+use super::game::{Hero, about_card, hero, store_facts};
 use super::library::{Card, GRID_PADDING, card, cards_grid};
 use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
 use super::{Message, Page, Zendo, blocking, centered, format, game_scroll_id, store_search_id};
@@ -26,6 +27,15 @@ pub struct StoreState {
     hide_installed: bool,
     pub selected: usize,
     pub scroll_top: f32,
+    /// Sizes and versions asked of the stores, by game id; once a session.
+    pub info: HashMap<String, InfoState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InfoState {
+    Asking,
+    Got(GameInfo),
+    Failed(String),
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +47,7 @@ pub enum StoreMessage {
     Source(Option<Store>),
     ToggleInstalled,
     Clicked(usize),
+    Info(String, Result<GameInfo, String>),
 }
 
 /// The lists kept from last time, read on a thread.
@@ -129,7 +140,49 @@ impl Zendo {
                 self.store.selected = index;
                 self.open_owned()
             }
+            StoreMessage::Info(id, result) => {
+                let state = match result {
+                    Ok(info) => InfoState::Got(info),
+                    Err(err) => InfoState::Failed(err),
+                };
+                self.store.info.insert(id, state);
+                Task::none()
+            }
         }
+    }
+
+    /// Asks the game's store, on a thread, how big it is and its latest
+    /// version, unless that was asked already or Zendo is not signed in to
+    /// the store.
+    pub(super) fn want_info(&mut self, id: &str) -> Task<Message> {
+        if !self.persist || self.store.info.contains_key(id) {
+            return Task::none();
+        }
+        let Some((store, app)) = store_of(id) else {
+            return Task::none();
+        };
+        if !matches!(self.accounts.get(store), Account::SignedIn(_)) {
+            return Task::none();
+        }
+        let platform = match (self.game(id), self.store.owned(id)) {
+            (Some(game), owned) => game
+                .details
+                .platform
+                .clone()
+                .or_else(|| owned.map(|owned| downloads::install_platform(owned).to_owned())),
+            (None, Some(owned)) => Some(downloads::install_platform(owned).to_owned()),
+            (None, None) => None,
+        };
+        let Some(platform) = platform else {
+            return Task::none();
+        };
+        self.store.info.insert(id.to_owned(), InfoState::Asking);
+        let id = id.to_owned();
+        let app = app.to_owned();
+        Task::perform(
+            blocking(move || info::fetch(store, &app, &platform).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Store(StoreMessage::Info(id.clone(), result)),
+        )
     }
 
     /// Asks a store for its games, unless it is being asked already.
@@ -379,14 +432,19 @@ impl Zendo {
                 text("Installed").size(14).color(DIM),
             ]
         } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
+            let (label, press) = match (running, job.paused) {
+                (true, _) => ("Installing…", None),
+                (false, true) => (
+                    "Resume",
+                    Some(Message::Download(DownloadMessage::Resume(game.id.clone()))),
+                ),
+                (false, false) => ("Queued", None),
+            };
             row![
-                button(
-                    text(if running { "Installing…" } else { "Queued" })
-                        .size(16)
-                        .font(BOLD)
-                )
-                .padding([10, 32])
-                .style(style::primary),
+                button(text(label).size(16).font(BOLD))
+                    .padding([10, 32])
+                    .style(style::primary)
+                    .on_press_maybe(press),
                 button(text("See downloads").size(14))
                     .padding([10, 18])
                     .style(style::secondary)
@@ -398,8 +456,15 @@ impl Zendo {
             ]
         } else {
             let job = self.install_job(&game.id);
+            let needs = match self.store.info.get(&game.id) {
+                Some(InfoState::Got(info)) => info
+                    .install_size
+                    .map(|bytes| format!(" · needs {}", zendo_core::Size::Bytes(bytes)))
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
             let note = match &job {
-                Some(job) => format!("Installs into {}", job.path.display()),
+                Some(job) => format!("Installs into {}{needs}", job.path.display()),
                 None => "No home folder to install into".to_owned(),
             };
             row![
@@ -470,25 +535,42 @@ impl Zendo {
         if let Some(developer) = &game.developer {
             details = details.push(detail("Developer", developer.clone(), false));
         }
+        for (label, value) in store_facts(Some(game), self.store.info.get(&game.id), false) {
+            details = details.push(detail(label, value, false));
+        }
         details = details.push(detail("Zendo id", game.id.clone(), true));
 
-        scrollable(
-            column![
-                trail,
-                art,
-                actions,
-                container(details)
-                    .padding(20)
-                    .width(Length::Fill)
-                    .style(style::card),
-            ]
-            .spacing(20)
-            .padding(24),
-        )
-        .id(game_scroll_id())
-        .height(Length::Fill)
-        .into()
+        let mut page = column![
+            trail,
+            art,
+            actions,
+            container(details)
+                .padding(20)
+                .width(Length::Fill)
+                .style(style::card),
+        ]
+        .spacing(20)
+        .padding(24);
+        if let Some(summary) = &game.summary {
+            page = page.push(about_card(summary));
+        }
+        scrollable(page)
+            .id(game_scroll_id())
+            .height(Length::Fill)
+            .into()
     }
+}
+
+/// The store a game id belongs to, and the store's own id for the game.
+pub fn store_of(id: &str) -> Option<(Store, &str)> {
+    let (key, app) = id.split_once(':')?;
+    let store = match key {
+        "epic" => Store::Epic,
+        "gog" => Store::Gog,
+        "amazon" => Store::Amazon,
+        _ => return None,
+    };
+    Some((store, app))
 }
 
 fn chip<'a>(label: String, count: usize, chosen: bool, message: Message) -> Element<'a, Message> {

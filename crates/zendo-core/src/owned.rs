@@ -29,6 +29,16 @@ pub struct Owned {
     pub store: StoreKey,
     pub title: String,
     pub developer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
+    /// The first release, `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub released: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub genres: Vec<String>,
+    /// What the store says the game is about, as plain text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     /// `Windows`, `Mac`, `Linux`, as far as the store says.
     pub platforms: Vec<String>,
     pub cover_url: Option<String>,
@@ -83,6 +93,10 @@ impl Owned {
             store: store.into(),
             title,
             developer: None,
+            publisher: None,
+            released: None,
+            genres: Vec::new(),
+            summary: None,
             platforms: Vec::new(),
             cover_url: None,
             hero_url: None,
@@ -196,6 +210,7 @@ fn parse_legendary(json: &[u8]) -> anyhow::Result<Vec<Owned>> {
     #[serde(rename_all = "camelCase")]
     struct Metadata {
         developer: Option<String>,
+        description: Option<String>,
         #[serde(default)]
         key_images: Vec<Image>,
         main_game_item: Option<Value>,
@@ -229,6 +244,7 @@ fn parse_legendary(json: &[u8]) -> anyhow::Result<Vec<Owned>> {
             owned.cover_url = image("DieselGameBoxTall");
             owned.hero_url = image("DieselGameBox");
             owned.developer.clone_from(&game.metadata.developer);
+            owned.summary = game.metadata.description.as_deref().and_then(plain_text);
             let mut platforms: Vec<String> = game.asset_infos.keys().cloned().collect();
             platforms.sort();
             owned.platforms = platforms;
@@ -261,6 +277,11 @@ fn parse_nile(json: &[u8]) -> anyhow::Result<Vec<Owned>> {
     #[serde(rename_all = "camelCase")]
     struct Details {
         developer: Option<String>,
+        publisher: Option<String>,
+        release_date: Option<String>,
+        #[serde(default)]
+        genres: Vec<String>,
+        short_description: Option<String>,
         background_url1: Option<String>,
         background_url2: Option<String>,
     }
@@ -280,6 +301,10 @@ fn parse_nile(json: &[u8]) -> anyhow::Result<Vec<Owned>> {
                 owned.cover_url = detail.icon_url;
                 if let Some(details) = detail.details {
                     owned.developer = details.developer;
+                    owned.publisher = details.publisher;
+                    owned.released = details.release_date.as_deref().and_then(day);
+                    owned.genres = details.genres;
+                    owned.summary = details.short_description.as_deref().and_then(plain_text);
                     owned.hero_url = details.background_url1.or(details.background_url2);
                 }
             }
@@ -461,6 +486,27 @@ fn from_gamesdb(record: &Value) -> Option<Owned> {
                 .join(", ")
         })
         .filter(|developers| !developers.is_empty());
+    owned.publisher = names(game.get("publishers"), |publisher| {
+        publisher.get("name")?.as_str()
+    });
+    owned.released = game
+        .get("first_release_date")
+        .and_then(Value::as_str)
+        .and_then(day);
+    owned.genres = game
+        .get("genres")
+        .and_then(Value::as_array)
+        .map(|genres| {
+            genres
+                .iter()
+                .filter_map(|genre| genre.get("name")?.get("*")?.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    owned.summary = localized(record.get("summary"))
+        .or_else(|| localized(game.get("summary")))
+        .as_deref()
+        .and_then(plain_text);
     owned.platforms = record
         .get("supported_operating_systems")
         .and_then(Value::as_array)
@@ -479,9 +525,88 @@ fn from_gamesdb(record: &Value) -> Option<Owned> {
     Some(owned)
 }
 
+/// The names in a list of records, joined; `None` when there are none.
+fn names(list: Option<&Value>, name: impl Fn(&Value) -> Option<&str>) -> Option<String> {
+    let names: Vec<&str> = list?.as_array()?.iter().filter_map(name).collect();
+    (!names.is_empty()).then(|| names.join(", "))
+}
+
+/// The day of a date the stores write as `2021-06-15T00:00:00+0000` or
+/// `2021-06-15`.
+fn day(date: &str) -> Option<String> {
+    let day = date.get(..10)?;
+    let ok = day.bytes().enumerate().all(|(index, byte)| {
+        if index == 4 || index == 7 {
+            byte == b'-'
+        } else {
+            byte.is_ascii_digit()
+        }
+    });
+    ok.then(|| day.to_owned())
+}
+
+/// A store's description as plain text: tags dropped, the common entities
+/// written out, blank runs of lines closed up.
+fn plain_text(html: &str) -> Option<String> {
+    let mut text = String::with_capacity(html.len());
+    let mut in_tag = false;
+    let mut tag = String::new();
+    for c in html.chars() {
+        match c {
+            '<' => {
+                in_tag = true;
+                tag.clear();
+            }
+            '>' if in_tag => {
+                in_tag = false;
+                let name = tag.trim_start_matches('/').to_lowercase();
+                if name.starts_with("br") || name.starts_with('p') || name.starts_with("li") {
+                    text.push('\n');
+                }
+            }
+            _ if in_tag => tag.push(c),
+            _ => text.push(c),
+        }
+    }
+    let text = text
+        .replace("&nbsp;", " ")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    let mut lines: Vec<&str> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if !line.is_empty() || lines.last().is_some_and(|last| !last.is_empty()) {
+            lines.push(line);
+        }
+    }
+    while lines.last().is_some_and(|last| last.is_empty()) {
+        lines.pop();
+    }
+    let text = lines.join("\n");
+    (!text.is_empty()).then_some(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_store_descriptions_as_plain_text() {
+        let html = "<b>Ever wanted a shop?</b>\n<br>\n\n<br>\nPlan it &amp; run it.<br><br><br>";
+        assert_eq!(
+            plain_text(html).as_deref(),
+            Some("Ever wanted a shop?\n\nPlan it & run it.")
+        );
+        assert_eq!(plain_text("<br>"), None);
+        assert_eq!(
+            day("2021-06-15T00:00:00+0000").as_deref(),
+            Some("2021-06-15")
+        );
+        assert_eq!(day("June 2021"), None);
+    }
 
     #[test]
     fn reads_legendarys_list() {

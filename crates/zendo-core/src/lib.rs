@@ -14,6 +14,7 @@ pub mod covers;
 mod desktop;
 pub mod downloads;
 mod heroic;
+pub mod info;
 mod launch;
 pub mod owned;
 mod paths;

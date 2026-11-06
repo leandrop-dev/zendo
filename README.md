@@ -79,10 +79,13 @@ install it and give it its colours, but it runs on any Linux desktop.
   and a page for each.
 - Installs, updates, repairs and uninstalls those games on the Downloads
   page, one at a time, with the engine's progress, speed and time left.
-  Games go into `~/Games` (or `install_dir`), and join the library when
-  done. Closing the window while something downloads asks first; the queue
-  picks up where it left off on the next start. Starting the games Zendo
-  installed comes with launch options, the next step.
+  Pause keeps what was downloaded and Resume carries on; Cancel stops and
+  deletes a half-done install. Games go into a folder of their own in
+  `~/Games` (or `install_dir`), and join the library when done. Closing
+  the window while something downloads asks first, then pauses the queue
+  for next time. A game's page shows its download size, size on disk and
+  latest version, and for the games Zendo installed whether an update is
+  waiting. Starting the games Zendo installed comes with launch options.
 
 ## What you need
 
@@ -201,7 +204,7 @@ window stays open; Steam and Heroic count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
 | `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
@@ -218,9 +221,11 @@ window stays open; Steam and Heroic count their own.
 4. **Accounts, Store and Downloads** (built, waiting on a try with real
    accounts): sign in to Epic, GOG and Amazon, the games owned but not
    installed, and install, update, repair and uninstall through legendary,
-   gogdl and nile.
+   gogdl and nile, with pause and resume, update status and sizes. Next, a
+   sign-in window, so there is no code to copy.
 5. Launch options per game: Proton through umu-launcher with a prefix per
-   game, a Wine/Proton manager, MangoHud, GameMode, gamescope, a launch log.
+   game, a Wine/Proton manager, MangoHud, GameMode, gamescope, a launch log;
+   Running and Stop while a game runs; the ProtonDB rating on its page.
 6. Local games: add a game by hand, with a cover from SteamGridDB.
 7. Mods: Nexus links, profiles, back to vanilla.
 

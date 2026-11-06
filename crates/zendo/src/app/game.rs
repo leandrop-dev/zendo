@@ -7,8 +7,11 @@ use std::path::Path;
 use iced::gradient::Linear;
 use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
 use iced::{Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians};
-use zendo_core::{Game, Source};
+use zendo_core::owned::Owned;
+use zendo_core::{Game, Size, Source};
 
+use super::downloads::UpdateState;
+use super::store::InfoState;
 use super::style::{self, ACCENT, BACKGROUND, BOLD, DIM, LINE, SURFACE};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
 
@@ -53,13 +56,27 @@ impl Zendo {
         .spacing(10)
         .align_y(Alignment::Center);
 
-        let mut page = column![trail, game_hero(game), actions]
+        let owned = self.store.owned(&game.id);
+        let update = matches!(
+            self.downloads.updates.get(&game.id),
+            Some(UpdateState::Available(_))
+        );
+        let mut page = column![trail, game_hero(game, update), actions]
             .spacing(20)
             .padding(24);
         if game.installed_by_zendo() {
             page = page.push(self.store_actions(game));
         }
-        scrollable(page.push(details(game)))
+        let facts = store_facts(
+            owned,
+            self.store.info.get(&game.id),
+            game.details.size.is_some(),
+        );
+        page = page.push(details(game, facts));
+        if let Some(summary) = owned.and_then(|owned| owned.summary.as_deref()) {
+            page = page.push(about_card(summary));
+        }
+        scrollable(page)
             .id(game_scroll_id())
             .height(Length::Fill)
             .into()
@@ -77,8 +94,11 @@ pub struct Hero<'a> {
     pub facts: Vec<String>,
 }
 
-fn game_hero(game: &Game) -> Element<'_, Message> {
+fn game_hero(game: &Game, update: bool) -> Element<'_, Message> {
     let mut badges = Vec::new();
+    if update {
+        badges.push(("UPDATE AVAILABLE".to_owned(), ACCENT));
+    }
     if let Some(platform) = &game.details.platform {
         badges.push((platform_label(platform), DIM));
     }
@@ -240,7 +260,66 @@ fn platform_label(platform: &str) -> String {
     }
 }
 
-fn details(game: &Game) -> Element<'_, Message> {
+/// What the store says about a game: sizes and the latest version asked of
+/// its engine, then what its list records. `installed` leaves out the size
+/// on disk, which the install's own record gives.
+pub fn store_facts(
+    owned: Option<&Owned>,
+    info: Option<&InfoState>,
+    installed: bool,
+) -> Vec<(&'static str, String)> {
+    let mut facts = Vec::new();
+    match info {
+        Some(InfoState::Asking) => facts.push(("Download size", "Asking the store…".to_owned())),
+        Some(InfoState::Got(info)) => {
+            if let Some(bytes) = info.download_size {
+                facts.push(("Download size", Size::Bytes(bytes).to_string()));
+            }
+            if let Some(bytes) = info.install_size.filter(|_| !installed) {
+                facts.push(("Size on disk", Size::Bytes(bytes).to_string()));
+            }
+            if let Some(version) = &info.version {
+                facts.push(("Latest version", version.clone()));
+            }
+            if let Some(day) = &info.updated {
+                facts.push(("Latest build", day.clone()));
+            }
+        }
+        Some(InfoState::Failed(err)) => {
+            facts.push(("Store details", format!("The store could not say: {err}")));
+        }
+        None => {}
+    }
+    if let Some(owned) = owned {
+        if let Some(publisher) = &owned.publisher {
+            facts.push(("Publisher", publisher.clone()));
+        }
+        if let Some(day) = &owned.released {
+            facts.push(("Released", day.clone()));
+        }
+        if !owned.genres.is_empty() {
+            facts.push(("Genres", owned.genres.join(", ")));
+        }
+    }
+    facts
+}
+
+/// What the store says the game is about.
+pub fn about_card(summary: &str) -> Element<'_, Message> {
+    container(
+        column![
+            text("About").size(18).font(BOLD),
+            text(summary).size(14).line_height(1.5),
+        ]
+        .spacing(12),
+    )
+    .padding(20)
+    .width(Length::Fill)
+    .style(style::card)
+    .into()
+}
+
+fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a, Message> {
     let mut rows: Vec<Element<'_, Message>> = Vec::new();
     let mut add = |label: &'static str, value: Element<'static, Message>| {
         rows.push(
@@ -267,6 +346,9 @@ fn details(game: &Game) -> Element<'_, Message> {
     }
     if let Some(size) = &game.details.size {
         add("Install size", plain(size.to_string()));
+    }
+    for (label, value) in facts {
+        add(label, plain(value));
     }
     if let Some(path) = &game.details.install_path {
         let shown = path.display().to_string();

@@ -13,6 +13,9 @@ and UI/UX [firm]; omarchy-games-menu was only ever a source of ideas for a
 Rust launcher. The phases below are reordered for that. Phase 3, the
 Hikari-layout shell, built the same day, then all of phase 4 (Accounts,
 Store, Downloads); real sign-ins and installs wait for the user.
+Later on 2026-11-06 the user tested phase 4 and listed what to change; the
+order agreed [firm]: 4d (fixes to downloads, update status, sizes), then a
+sign-in window, then phase 5 with Running/Stop and the ProtonDB rating.
 
 ## Direction [firm]
 
@@ -352,9 +355,69 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      died at its next log line (the pipe closed); whether the real engines
      do the same is not checked. Not yet tried: any real engine install,
      update, repair or uninstall.
+   - 4d Fixes from the user's tests, built 2026-11-06:
+     - GOG reinstall: gogdl compares against the manifest of the last
+       install it finished (`stores/gog/heroic_gogdl/manifests/<id>`), and
+       uninstalling left it, so reinstalling found "Nothing to do" and
+       failed with "the game's folder is not there". Reproduced with the
+       real gogdl; the manifest now goes on uninstall, on cancel, and
+       before an install Zendo has no record of.
+     - Pause, Resume and Cancel replace Stop [firm, the user's choice].
+       Pause stops the engine and keeps what it wrote; Resume carries on;
+       Cancel stops and, for an install, deletes the game's folder and what
+       the engine kept to resume. Each install gets a folder of its own,
+       picked when it starts and kept with the job (legendary
+       `--base-path <dir> --game-folder <name>`, nile `--path <folder>`,
+       gogdl's own `folder_name`), so Cancel knows what to delete. A job
+       that fails stays queued, paused with the reason, to try again;
+       closing the window mid-download pauses the whole queue, and nothing
+       starts by itself next time. A stuck engine's whole process group is
+       killed after the 15 s grace (gogdl was seen to hang on a thread
+       after Ctrl+C).
+     - Resuming, gogdl counts only the bytes left (`= Progress: 5.49
+       n/total`, total = what is left to write), so a resumed GOG install
+       is shown against the game's whole size and carries on from where
+       the bar was. legendary and nile resume too (legendary from
+       `tmp/<app>.resume`, nile file by file, re-checking what is there);
+       how their percentages behave on a resume is not checked.
+     - Update status: the page of a game Zendo installed says "Up to
+       date" or "Update available: <version>", with an UPDATE AVAILABLE
+       badge and Update highlighted; asked once a session and after each
+       job, or with "Check for updates". legendary `info <app> --json`
+       (`game.version` against `install.version`), gogdl `info` (`buildId`
+       against the one Zendo recorded), nile `list-updates --json` (a list
+       of ids).
+     - Sizes and store facts on both game pages: download size, size on
+       disk, latest version and GOG's latest build date, asked of the
+       engine when the page opens (legendary `info --json`'s
+       `manifest.download_size`/`disk_size`, gogdl `info`, nile `install
+       --info --json`'s `download_size`, the files' total); publisher,
+       release date, genres and the store's description from the lists
+       (GOG's games database; nile's `productDetail.details` and Epic's
+       `metadata.description` field names are unverified, so they may
+       stay empty). The install note says how much room it needs.
+     Checked with the real gogdl and the user's GOG sign-in, installing
+     Bō: Path of the Teal Lotus into a scratch folder with a stale
+     manifest planted: the manifest cleared, the install paused at 5%,
+     `.gogdl-resume` kept, resumed from 4.5%, cancelled leaving nothing.
+     Not checked: legendary and nile (not signed in), and the window.
+   - 4e Sign-in window [firm, next]: Zendo opens the store's login page in
+     a small window of its own and takes the code from the address the
+     store ends on, as Heroic does, with nothing to copy; for children and
+     people who find codes confusing. Needs a web view: `wry` on
+     `webkit2gtk-4.1` (installed here, 2.54.2), which becomes a dependency.
 5. Launch options per game (a game settings sheet): Proton through umu with
    a prefix per game, a Wine/Proton manager (GE-Proton downloads), MangoHud,
    GameMode, gamescope, arguments and environment, a log of each launch.
+   With it [firm]: Play turns into Running while the game runs, with a Stop
+   that kills the game when it freezes (exact for games Zendo starts; for
+   Steam and Heroic games, found by their install folder); and a ProtonDB
+   rating pill on the game's page (Borked to Platinum, by Steam app id,
+   found by title for the other stores), which opens the game's ProtonDB
+   page in the browser when clicked. Games are started from the home
+   folder [tentative, offered, not yet agreed], so a relative path in a launcher's settings (Heroic once had
+   `winePrefix: "undefined/<title>"`) does not depend on where Zendo was
+   started.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -369,14 +432,11 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Start each test game from its page, and check it shows up first under
-  Recent afterwards.
-- Try a controller on the new pages.
-- Sign in to each store from Accounts and check its Store list and covers.
-- Install a small game from each store, then update, repair and
-  uninstall it; check the progress line against each real engine's log.
-- Then phase 5: launch options, which also lets Zendo start the games it
-  installed.
+- The user tests 4d: a GOG reinstall, Pause and Resume, Cancel leaving
+  nothing in `~/Games`, closing mid-download, update status and sizes on
+  the game pages; Epic and Amazon once signed in.
+- Then 4e, the sign-in window.
+- Then phase 5: launch options, Running/Stop and ProtonDB.
 
 ## Conventions
 
