@@ -30,6 +30,7 @@ use std::thread;
 use anyhow::{Context, bail};
 
 use crate::config::Config;
+use crate::launch_options::LaunchOptions;
 use crate::stores::Store;
 use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
 
@@ -69,8 +70,13 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             (command, None, Some(folder))
         }
         Launch::Command { program, args, dir } => {
-            let mut command = Command::new(program);
-            command.args(args);
+            let options = options_for(game)?;
+            let mut words = options.wrappers();
+            words.push(program.clone());
+            words.extend(args.iter().cloned());
+            words.extend(options.arguments()?);
+            let mut command = Command::new(&words[0]);
+            command.args(&words[1..]).envs(options.environment()?);
             if let Some(dir) = dir.as_ref().filter(|dir| dir.is_dir()) {
                 command.current_dir(dir);
             }
@@ -311,8 +317,22 @@ pub fn needs_proton(game: &Game) -> bool {
         .is_some_and(|platform| platform.eq_ignore_ascii_case("linux"))
 }
 
+/// The game's launch options, with every tool they turn on installed.
+fn options_for(game: &Game) -> anyhow::Result<LaunchOptions> {
+    let options = LaunchOptions::load(&game.id)?;
+    for (program, name) in options.tools() {
+        if which(program).is_none() {
+            bail!(
+                "{name} is on in {}'s launch options, but {program} is not installed",
+                game.title
+            );
+        }
+    }
+    Ok(options)
+}
+
 /// The engine's own launch, with umu-run as the wrapper for a Windows
-/// game.
+/// game, inside the wrappers the game's launch options turn on.
 fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
     let store = match game.source {
         Source::Epic => Store::Epic,
@@ -320,8 +340,21 @@ fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
         Source::Amazon => Store::Amazon,
         _ => bail!("{} has no store engine to start it", game.title),
     };
-    let mut command = store.command()?;
-    let wrapper = if needs_proton(game) {
+    let options = options_for(game)?;
+    engine_command_with(game, app, store, &options, store.command()?)
+}
+
+/// [`engine_command`] from the engine's bare command.
+fn engine_command_with(
+    game: &Game,
+    app: &str,
+    store: Store,
+    options: &LaunchOptions,
+    mut command: Command,
+) -> anyhow::Result<Command> {
+    let mut wrapper = options.wrappers();
+    let windows = needs_proton(game);
+    if windows {
         let umu = which("umu-run")
             .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
         let prefix = prefix(game).context("no folder for the game's Wine prefix")?;
@@ -330,14 +363,18 @@ fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
             .env("WINEPREFIX", &prefix)
             .env("GAMEID", umu::game_id(store_key, app))
             .env("STORE", store_key);
-        // Without one, umu downloads UMU-Proton on the first launch.
-        if let Some(proton) = proton::default() {
+        // The one chosen, or the default when it is gone; without any, umu
+        // downloads UMU-Proton on the first launch.
+        let chosen = options.proton.as_deref().and_then(proton::named);
+        if let Some(proton) = chosen.or_else(proton::default) {
             command.env("PROTONPATH", &proton.path);
         }
-        Some(quote(&umu.to_string_lossy()))
-    } else {
-        None
-    };
+        if options.xbox_controllers {
+            command.env("PROTON_PREFER_SDL", "1");
+        }
+        wrapper.push(umu.to_string_lossy().into_owned());
+    }
+    command.envs(options.environment()?);
     match store {
         Store::Epic | Store::Amazon => {
             command.args(["launch", app]);
@@ -360,9 +397,15 @@ fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
                 .args([app, "--platform", &platform]);
         }
     }
-    if let Some(wrapper) = wrapper {
-        command.args(["--no-wine", "--wrapper", &wrapper]);
+    if windows {
+        command.arg("--no-wine");
     }
+    if !wrapper.is_empty() {
+        let line: Vec<String> = wrapper.iter().map(|word| quote(word)).collect();
+        command.args(["--wrapper", &line.join(" ")]);
+    }
+    // The engines pass on what they do not know to the game.
+    command.args(options.arguments()?);
     Ok(command)
 }
 
@@ -457,6 +500,36 @@ mod tests {
         assert_eq!(quote("/usr/bin/umu-run"), "/usr/bin/umu-run");
         assert_eq!(quote("/home/me/My Games"), "'/home/me/My Games'");
         assert_eq!(quote("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn a_native_game_gets_its_wrappers_arguments_and_environment() {
+        let mut game = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        game.details.platform = Some("linux".into());
+        game.details.install_path = Some("/games/Sugar".into());
+        let options = LaunchOptions {
+            mangohud: true,
+            gamemode: true,
+            xbox_controllers: true,
+            arguments: "-windowed --name 'Lea P'".into(),
+            environment: "DXVK_HUD=fps".into(),
+            ..LaunchOptions::default()
+        };
+        let command =
+            engine_command_with(&game, "1", Store::Gog, &options, Command::new("gogdl")).unwrap();
+        assert_eq!(
+            describe(&command),
+            "DXVK_HUD=fps gogdl launch /games/Sugar 1 --platform linux \
+             --wrapper 'gamemoderun mangohud' -windowed --name 'Lea P'"
+        );
     }
 
     #[test]

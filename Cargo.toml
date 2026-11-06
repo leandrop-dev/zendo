@@ -18,6 +18,7 @@ keyvalues-parser = "0.2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.2.0"
+shlex = "2.0.1"
 ureq = "3.5.1"
 # The WebKit view under wry's, for the sign-in window's pop-ups; the
 # version wry pins.

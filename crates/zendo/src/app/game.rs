@@ -39,6 +39,7 @@ impl Zendo {
             .unwrap_or_else(|| "Ready when you are".to_owned());
         let actions = row![
             self.play_buttons(game),
+            launch_options_button(game),
             button(text(if game.pinned { "Unpin" } else { "Pin" }).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
@@ -398,4 +399,16 @@ fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a
     .width(Length::Fill)
     .style(style::card)
     .into()
+}
+
+/// Opens the launch options sheet, for the games Zendo starts itself.
+fn launch_options_button(game: &Game) -> Element<'_, Message> {
+    if !super::launch_options::applies(game) {
+        return space::horizontal().width(0).into();
+    }
+    button(text("Launch options").size(14))
+        .padding([10, 18])
+        .style(style::secondary)
+        .on_press(Message::Sheet(super::launch_options::SheetMessage::Open))
+        .into()
 }

@@ -18,8 +18,8 @@ order agreed [firm]: 4d (fixes to downloads, update status, sizes), then a
 sign-in window, then phase 5 with Running/Stop and the ProtonDB rating. The
 user checked 4d in the window; 4d and 4e (the sign-in window) were built
 the same day, and the user checked both. Phase 5 started the same day,
-split into 5a to 5e (below); 5a is built and the user checked it, and 5b
-is built and checked by the user. The user asked to leave in-game quirks (controllers, full
+split into 5a to 5e (below); 5a and 5b are built and the user checked
+them; 5c is built, and its options fixed both quirks the user found. The user asked to leave in-game quirks (controllers, full
 screen) for the settings sheet, and to get most features working first
 [firm].
 
@@ -509,7 +509,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      a DualSense to the game as a raw HID device, and Steam Input's
      virtual Xbox pad is not there outside Steam). Proton's
      `PROTON_PREFER_SDL=1` (it sets `PROTON_DISABLE_HIDRAW=1` and
-     `PROTON_NO_STEAMINPUT=1`) is the likely switch, untried; the user
+     `PROTON_NO_STEAMINPUT=1`) is the likely switch (confirmed in 5c); the user
      wants it a per-game choice in the settings sheet, not a default, so
      games that use a DualSense or an Xbox pad natively keep it, and will
      test it with both (a PS5 DualSense and an Xbox Series S pad).
@@ -536,6 +536,45 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      counts too (an editor open on a file in it, Heroic's engine updating
      the game); a game started outside Zendo shows Play until it is
      started from Zendo.
+   - 5c Launch options sheet, built 2026-11-06: "Launch options" beside
+     Play on the page of a game Zendo starts itself (installed by Zendo,
+     or a `.desktop` game) opens a sheet over the page; Steam and Heroic
+     games keep their launcher's own settings. Kept per game in
+     `~/.config/zendo/games.toml` [tentative] (a table per id, games left
+     as they come not written, readable by the user only since an
+     environment can hold a token):
+     - Proton [Windows games Zendo installed]: "Default (<first found>)"
+       or any one installed; one chosen and then removed shows as "not
+       installed" and the default runs.
+     - MangoHud, GameMode, gamescope with full screen and a size (`-f`,
+       `-W`/`-H`, both or neither). Wrappers outermost first:
+       `gamemoderun`, `gamescope … --` (with `--mangoapp` when MangoHud
+       is on, as MangoHud does not draw inside gamescope), `mangohud`,
+       then umu-run for a Windows game; passed to the engine as one
+       `--wrapper`, or put before a `.desktop` game's program. A switch
+       whose program is missing is greyed out with "Not installed"
+       (GameMode is not installed here); a game whose options turn on a
+       missing program does not start, and says which.
+     - Controllers as Xbox pads [Windows games]: `PROTON_PREFER_SDL=1`,
+       off by default [firm, the user's choice], for 10 Second Ninja X's
+       kind of game.
+     - Arguments and environment, split as a shell would (`shlex`):
+       environment words must be `NAME=value`. All three engines pass the
+       arguments they do not know on to the game (legendary says so;
+       gogdl's and nile's source pass their unknown arguments on), so
+       they go after Zendo's own; an argument an engine knows itself is
+       taken by it (argparse also takes abbreviations, as `--win` for
+       legendary's `--wine`).
+     While the sheet is open, Enter saves, Escape closes, and the page's
+     keys and the controller do nothing. Checked: clippy and tests (the
+     options file leaving defaults out, shell splitting and bad
+     environment words, wrapper order, the command a native GOG game gets
+     with options on, the sheet opening, refusing a bad environment or a
+     width without a height, saving, Escape, no sheet for Steam games).
+     The user then tried the sheet, and both quirks from 5a were gone:
+     Gunslugs 3 went full screen with gamescope and full screen on, and
+     the controller worked in 10 Second Ninja X with controllers as Xbox
+     pads on (`PROTON_PREFER_SDL=1`, confirming the cause above).
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -550,7 +589,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 5c (with the controller and full-screen options above), 5d, 5e.
+- 5d (ProtonDB pill), then 5e (GE-Proton downloads).
   An Epic install and launch is still untried.
 
 ## Conventions

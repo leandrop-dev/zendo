@@ -9,6 +9,7 @@ mod accounts;
 mod downloads;
 mod format;
 mod game;
+mod launch_options;
 mod library;
 mod running;
 mod settings;
@@ -35,6 +36,7 @@ use zendo_core::{Game, Library, Sort, Source, State};
 use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
 use downloads::{DownloadMessage, DownloadsState};
+use launch_options::{Sheet, SheetMessage};
 use running::{RunMessage, Running};
 use store::{StoreMessage, StoreState};
 use style::DIM;
@@ -152,6 +154,7 @@ enum Message {
     Account(AccountMessage),
     Download(DownloadMessage),
     Run(RunMessage),
+    Sheet(SheetMessage),
     Store(StoreMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
     /// page is for.
@@ -203,6 +206,8 @@ struct Zendo {
     images: ImageDownloads,
     downloads: DownloadsState,
     running: Running,
+    /// A game's launch options, open over its page.
+    sheet: Option<Sheet>,
     config: Config,
     key: KeyForm,
     accounts: Accounts,
@@ -232,6 +237,7 @@ impl Zendo {
             images: ImageDownloads::default(),
             downloads: DownloadsState::default(),
             running: Running::default(),
+            sheet: None,
             config: Config::default(),
             key: KeyForm::default(),
             accounts: Accounts::default(),
@@ -343,6 +349,9 @@ impl Zendo {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        if let Some(task) = self.sheet_takes(&message) {
+            return task;
+        }
         match message {
             Message::Loaded(library, sort, config) => self.loaded(library, sort, config),
             Message::Refresh => {
@@ -430,6 +439,7 @@ impl Zendo {
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
+            Message::Sheet(message) => self.update_sheet(message),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -842,7 +852,7 @@ impl Zendo {
             },
         };
         let main = column![page, self.footer()].width(Length::Fill);
-        row![self.sidebar(), main].into()
+        self.with_sheet(row![self.sidebar(), main].into())
     }
 
     fn footer(&self) -> Element<'_, Message> {
@@ -874,6 +884,7 @@ impl Zendo {
             Page::Library => {
                 "Enter open · Tab sort · Ctrl+P pin · Del hide · Ctrl+H hidden · F11 full-screen"
             }
+            Page::Game(_) if self.sheet.is_some() => "Enter save · Esc cancel",
             Page::Game(_) => "Enter play · Esc back · Ctrl+P pin · Del hide · F11 full-screen",
             Page::Store => "Enter open · type to search · Esc clear · F11 full-screen",
             Page::Owned(_) => "Enter install or open · Esc back · F11 full-screen",
