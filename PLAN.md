@@ -684,6 +684,18 @@ Nothing is required. Zendo detects each tool and shows what is missing.
        Checked on gamescope's headless X server (nothing on screen): of
        two windows, only the one with the game's pid got the request.
        The user then tried Stop on their games and said it seems right.
+     - Window classes, asked for by hyprmonk's session for its window
+       rules: Zendo's window had an empty class; it is now `zendo`
+       (Iced's `platform_specific.application_id`), and so is the
+       sign-in window (GTK takes it from the program name, set with
+       `glib::set_prgname`). Zendo ships no `.desktop` file yet; when it
+       does, it needs `StartupWMClass=zendo`. Games' classes, read with
+       `hyprctl clients` while each ran from Zendo: a game umu knows,
+       `steam_app_<number>` (10 Second Ninja X, `umu-435790`:
+       `steam_app_435790`, XWayland); one it does not,
+       `steam_app_default` (Costume Quest); one in gamescope, gamescope's
+       window, class `gamescope` with the game's title (Cat Quest, now
+       `umu-593280` through the title fallback).
      - Cat Quest stayed cropped in gamescope full screen: Unity had saved
        the tile Hyprland first gave it, windowed at 235x465, and draws at
        that size; gamescope's `-W`/`-H` size its own screen, not the

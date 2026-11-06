@@ -71,6 +71,9 @@ fn key_id() -> Id {
     Id::new("steamgriddb-key")
 }
 
+/// Zendo's windows' application id (Wayland) or class (X11): `zendo`.
+pub const APP_ID: &str = "zendo";
+
 pub fn run(fullscreen: bool) -> anyhow::Result<()> {
     iced::application(Zendo::boot, Zendo::update, Zendo::view)
         .title("Zendo")
@@ -82,6 +85,11 @@ pub fn run(fullscreen: bool) -> anyhow::Result<()> {
             fullscreen,
             // A running download asks before the window goes.
             exit_on_close_request: false,
+            // The class Hyprland and other compositors match the window by.
+            platform_specific: window::settings::PlatformSpecific {
+                application_id: APP_ID.to_owned(),
+                ..window::settings::PlatformSpecific::default()
+            },
             ..window::Settings::default()
         })
         .run()?;

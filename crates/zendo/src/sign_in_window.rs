@@ -95,6 +95,10 @@ pub fn main(store: &str, url: &str) -> ExitCode {
 }
 
 fn show(store: Store, url: &str) -> anyhow::Result<Option<String>> {
+    // GTK takes the window's application id (Wayland) or class (X11) from
+    // the program's name: Zendo's, as its main window has.
+    gtk::glib::set_prgname(Some(crate::app::APP_ID));
+    gtk::glib::set_application_name("Zendo");
     gtk::init().context("could not start GTK")?;
     let window = gtk::Window::new(gtk::WindowType::Toplevel);
     window.set_title(&format!("Sign in to {} · Zendo", store.label()));
