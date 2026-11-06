@@ -657,6 +657,43 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Checked: clippy and tests (pages joined in order, the next page
      asked only past what was read; the default set and Automatic
      first). The user then tried both in the window, and they worked.
+   - After phase 5, from the user's tests with Epic games (Cat Quest,
+     Costume Quest, Home) and 10 Second Ninja X:
+     - In-game settings seemed to revert. The prefixes keep them (each
+       game wrote its options file or registry there), but those sessions
+       ended with the game killed, not quit: Cat Quest's log ends with
+       gamescope's "Parent of gamescopereaper was killed. Killing
+       children." (Super+Q closed gamescope's window, and gamescope kills
+       the game), and 10 Second Ninja X's save was last written the
+       minute it started. Games that save on quit lose the change.
+       Zendo's Stop does the same (SIGTERM to every process; a Windows
+       game under Proton just dies). Idea [tentative, not built]: Stop
+       first asks the game's windows to close, as their X would, and
+       signals only when that fails.
+     - Cat Quest stayed cropped in gamescope full screen: Unity had saved
+       the tile Hyprland first gave it, windowed at 235x465, and draws at
+       that size; gamescope's `-W`/`-H` size its own screen, not the
+       game. Unity's own `-screen-fullscreen 1 -screen-width 1920
+       -screen-height 1080` in Arguments overrides it. The tiling itself
+       is hyprmonk's to fix: a window rule for games, asked for there in
+       `docs/zendo-games.md` and its roadmap.
+     - umu by title, built: umu's database had none of the Epic games by
+       their app names (its Epic entries are keyed by them, as `Catnip`
+       for Borderlands 3), so they ran as `umu-default`. When the store's
+       id finds nothing, Zendo searches umu by title; that search matches
+       part of a title ("Cat" gives four games), so each id it gives (five
+       at most) is looked up with `umu_api.php?umu_id=` and taken only
+       when one of its titles is the game's, compared as ProtonDB's are.
+       Cache entries from before are asked again. The ProtonDB cache is
+       asked again too, as its ids for store games come through umu.
+       Checked against the real database: Cat Quest finds `umu-593280`,
+       10 Second Ninja X `umu-435790`; "Cat", "Home" and Costume Quest
+       find none.
+     - The fixes umu applies: protonfixes, as for Steam's Proton, Heroic
+       and Lutris. An unknown game gets only umu's general defaults (the
+       logs show `OPENSSL_ia32cap`, which avoids a crash on newer Intel
+       CPUs); game-specific fixes need umu to know the game.
+       `PROTONFIXES_DISABLE=1` in a game's environment turns them off.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -671,7 +708,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Then phase 6, local games.
+- Phase 6, local games: "Add game", with a cover search on SteamGridDB.
   An Epic install and launch is still untried.
 
 ## Conventions

@@ -29,7 +29,7 @@ const SUMMARY: &str = "https://www.protondb.com/api/v1/reports/summaries";
 const SEARCH: &str = "https://store.steampowered.com/api/storesearch/";
 const DETAILS: &str = "https://store.steampowered.com/api/appdetails";
 /// What the cache's entries hold; older entries are asked again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const WEEK: u64 = 7 * 24 * 60 * 60;
 
 /// A game's standing on `ProtonDB`.
@@ -121,7 +121,7 @@ fn steam_app(agent: &ureq::Agent, id: &str, title: &str) -> anyhow::Result<Optio
         return Ok(app.parse().ok());
     }
     if matches!(store, "epic" | "gog" | "amazon")
-        && let Some(app) = umu::game_id(umu::store_name(store), app)
+        && let Some(app) = umu::game_id(umu::store_name(store), app, title)
             .strip_prefix("umu-")
             .and_then(|number| number.parse().ok())
     {
@@ -166,7 +166,7 @@ fn search(agent: &ureq::Agent, title: &str) -> anyhow::Result<Option<u32>> {
 
 /// A title's letters and digits, lowercase, so `Bō: Path of the Teal
 /// Lotus™` is the same as `BŌ PATH OF THE TEAL LOTUS`.
-fn plain(title: &str) -> String {
+pub(crate) fn plain(title: &str) -> String {
     title
         .chars()
         .filter(|c| c.is_alphanumeric())

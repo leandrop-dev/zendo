@@ -361,7 +361,7 @@ fn engine_command_with(
         let store_key = umu::store_name(store_key(store));
         command
             .env("WINEPREFIX", &prefix)
-            .env("GAMEID", umu::game_id(store_key, app))
+            .env("GAMEID", umu::game_id(store_key, app, &game.title))
             .env("STORE", store_key);
         // The one chosen, or the default when it is gone; without any, umu
         // downloads UMU-Proton on the first launch.
