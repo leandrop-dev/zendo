@@ -1,15 +1,16 @@
-//! The Mods card on a game's page: the mods Zendo keeps for the game, in
-//! order, each on or off, Add mod, the folder they go in, Apply and Back to
-//! vanilla, with downloads and updates from Nexus (`nexus.rs`). The work is
+//! The Mods card on a game's page: the profile in use, the mods Zendo
+//! keeps for the game, in order, each on or off, Add mod, the folder they
+//! go in, Apply and Back to vanilla, with downloads and updates from Nexus
+//! (`nexus.rs`). The work is
 //! `zendo_core::mods`'; this shows it and runs it on a thread.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use iced::widget::{button, checkbox, column, container, row, space, text, text_input};
+use iced::widget::{button, checkbox, column, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Game;
-use zendo_core::mods::{self, Applied, ModInfo, Overview};
+use zendo_core::mods::{self, Applied, ModInfo, Overview, ProfileChange};
 use zendo_core::nexus;
 
 use super::nexus::{NexusMessage, download_row};
@@ -26,6 +27,16 @@ pub struct ModsState {
     confirm: Option<(String, Confirm)>,
     /// The mod folder as typed, before Save.
     folder: Option<(String, String)>,
+    /// A profile's name being typed: the game, and the edit.
+    naming: Option<(String, Naming)>,
+}
+
+/// A new profile's name, or a new name for one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Naming {
+    /// The profile being renamed; `None` for a new one.
+    renaming: Option<String>,
+    name: String,
 }
 
 #[derive(Debug)]
@@ -41,6 +52,7 @@ enum Shown {
 enum Confirm {
     Remove(String),
     ClearOverwrite,
+    DeleteProfile(String),
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +69,31 @@ pub enum ModsMessage {
     ClearOverwrite(String),
     Apply(String),
     Restore(String),
+    /// Switch to the profile with this name.
+    Profile(String, String),
+    NewProfile(String),
+    RenameProfile(String),
+    ProfileName(String, String),
+    SaveProfile(String),
+    CancelProfile,
+    DeleteProfile(String),
     Done(String, Result<(Overview, String), String>),
+}
+
+/// What a change to the profiles says.
+fn profile_note(change: &ProfileChange, overview: &Overview) -> String {
+    let now = &overview.profile;
+    let state = match overview.applied {
+        Applied::Current(_) => format!("; {now} is applied"),
+        Applied::Changed => "; Apply puts it in the game".to_owned(),
+        Applied::No => String::new(),
+    };
+    match change {
+        ProfileChange::New(_) => format!("Made {now}, a copy of the profile before"),
+        ProfileChange::Switch(_) => format!("Switched to {now}{state}"),
+        ProfileChange::Rename { new, .. } => format!("Renamed the profile {}", new.trim()),
+        ProfileChange::Delete(name) => format!("Deleted {name}; now in {now}{state}"),
+    }
 }
 
 /// What a finished change says.
@@ -164,6 +200,13 @@ impl Zendo {
                         .map(|overview| (overview, "Deleted what the game wrote".to_owned()))
                 })
             }
+            ModsMessage::Profile(..)
+            | ModsMessage::NewProfile(_)
+            | ModsMessage::RenameProfile(_)
+            | ModsMessage::ProfileName(..)
+            | ModsMessage::SaveProfile(_)
+            | ModsMessage::CancelProfile
+            | ModsMessage::DeleteProfile(_) => self.update_profiles(message),
             ModsMessage::Apply(id) => self.change_game_files(id, "Applying…", true),
             ModsMessage::Restore(id) => self.change_game_files(id, "Going back to vanilla…", false),
             ModsMessage::Done(id, result) => {
@@ -219,6 +262,93 @@ impl Zendo {
                 Task::none()
             }
         }
+    }
+
+    fn update_profiles(&mut self, message: ModsMessage) -> Task<Message> {
+        match message {
+            ModsMessage::Profile(id, name) => {
+                self.change_profile(id, ProfileChange::Switch(name), "Switching…")
+            }
+            ModsMessage::NewProfile(id) => self.start_naming(id, false),
+            ModsMessage::RenameProfile(id) => self.start_naming(id, true),
+            ModsMessage::ProfileName(id, name) => {
+                if let Some((game, naming)) = &mut self.mods.naming
+                    && *game == id
+                {
+                    naming.name = name;
+                }
+                Task::none()
+            }
+            ModsMessage::SaveProfile(id) => match self.mods.naming.take() {
+                Some((game, naming)) if game == id => {
+                    let change = match naming.renaming {
+                        Some(old) => ProfileChange::Rename {
+                            old,
+                            new: naming.name,
+                        },
+                        None => ProfileChange::New(naming.name),
+                    };
+                    self.change_profile(id, change, "Saving…")
+                }
+                other => {
+                    self.mods.naming = other;
+                    Task::none()
+                }
+            },
+            ModsMessage::CancelProfile => {
+                self.mods.naming = None;
+                Task::none()
+            }
+            ModsMessage::DeleteProfile(id) => {
+                let Some(name) = self
+                    .mods_overview(&id)
+                    .map(|overview| overview.profile.clone())
+                else {
+                    return Task::none();
+                };
+                let ask = Confirm::DeleteProfile(name.clone());
+                if self.mods.confirm.as_ref() != Some(&(id.clone(), ask.clone())) {
+                    self.mods.confirm = Some((id, ask));
+                    return Task::none();
+                }
+                self.change_profile(id, ProfileChange::Delete(name), "Deleting…")
+            }
+            _ => Task::none(),
+        }
+    }
+
+    /// Opens the name field for a new profile, or to rename the one in use.
+    fn start_naming(&mut self, id: String, renaming: bool) -> Task<Message> {
+        let current = self
+            .mods_overview(&id)
+            .map(|overview| overview.profile.clone())
+            .unwrap_or_default();
+        let naming = Naming {
+            name: if renaming {
+                current.clone()
+            } else {
+                String::new()
+            },
+            renaming: renaming.then_some(current),
+        };
+        self.mods.naming = Some((id, naming));
+        Task::none()
+    }
+
+    /// A change to the game's profiles; a switch while mods are applied
+    /// applies the new profile, unless the game runs.
+    fn change_profile(
+        &mut self,
+        id: String,
+        change: ProfileChange,
+        busy: &'static str,
+    ) -> Task<Message> {
+        let apply = !self.running.is_running(&id);
+        self.change_mods(id, busy, move |game| {
+            let overview = mods::change_profiles(game, &change, apply)?;
+            let note = profile_note(&change, &overview);
+            Ok((overview, note))
+        })
     }
 
     /// Apply or Back to vanilla, never while the game runs.
@@ -334,6 +464,7 @@ impl Zendo {
                 .to_owned(),
         };
         let mut body = column![
+            self.profile_row(id, overview, free),
             text(place).size(13).color(DIM),
             text(overview.target.display().to_string())
                 .size(13)
@@ -480,6 +611,85 @@ impl Zendo {
         .into()
     }
 
+    /// The profile in use, to switch, and New, Rename and Delete; or the
+    /// name being typed for New or Rename.
+    fn profile_row<'a>(
+        &'a self,
+        id: &'a str,
+        overview: &'a Overview,
+        free: bool,
+    ) -> Element<'a, Message> {
+        let label = text("Profile").size(14).color(DIM).width(110);
+        let small = |label: &'a str| {
+            button(text(label).size(13))
+                .padding([6, 12])
+                .style(style::secondary)
+        };
+        if let Some((_, naming)) = self.mods.naming.as_ref().filter(|(game, _)| game == id) {
+            return row![
+                label,
+                text_input(
+                    if naming.renaming.is_some() {
+                        "A new name for this profile"
+                    } else {
+                        "A name for the new profile, a copy of this one"
+                    },
+                    &naming.name,
+                )
+                .on_input(|name| Message::Mods(ModsMessage::ProfileName(id.to_owned(), name)))
+                .on_submit(Message::Mods(ModsMessage::SaveProfile(id.to_owned())))
+                .size(13)
+                .padding([6, 10])
+                .style(style::input),
+                small("Save").on_press_maybe(
+                    (free && !naming.name.trim().is_empty())
+                        .then(|| Message::Mods(ModsMessage::SaveProfile(id.to_owned()))),
+                ),
+                small("Cancel").on_press(Message::Mods(ModsMessage::CancelProfile)),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .into();
+        }
+        let asking = self.mods.confirm.as_ref()
+            == Some(&(
+                id.to_owned(),
+                Confirm::DeleteProfile(overview.profile.clone()),
+            ));
+        let choose = pick_list(
+            overview.profiles.as_slice(),
+            Some(&overview.profile),
+            move |name| Message::Mods(ModsMessage::Profile(id.to_owned(), name)),
+        )
+        .text_size(13)
+        .padding([6, 10])
+        .width(Length::Fill);
+        row![
+            label,
+            choose,
+            small("New…").on_press_maybe(
+                free.then(|| Message::Mods(ModsMessage::NewProfile(id.to_owned())))
+            ),
+            small("Rename…").on_press_maybe(
+                free.then(|| Message::Mods(ModsMessage::RenameProfile(id.to_owned())))
+            ),
+            button(text(if asking { "Really delete" } else { "Delete" }).size(13))
+                .padding([6, 12])
+                .style(if asking {
+                    style::danger
+                } else {
+                    style::secondary
+                })
+                .on_press_maybe(
+                    (free && overview.profiles.len() > 1)
+                        .then(|| Message::Mods(ModsMessage::DeleteProfile(id.to_owned()))),
+                ),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .into()
+    }
+
     fn folder_row<'a>(
         &'a self,
         id: &'a str,
@@ -594,6 +804,8 @@ mod tests {
             custom_folder: false,
             known: None,
             nexus: None,
+            profile: mods::DEFAULT_PROFILE.into(),
+            profiles: vec![mods::DEFAULT_PROFILE.into()],
             mods: vec![ModInfo {
                 id: "bepinex".into(),
                 name: "BepInEx".into(),
@@ -606,6 +818,49 @@ mod tests {
             overwrite: 0,
             applied,
         }
+    }
+
+    #[test]
+    fn a_profile_is_named_in_place_and_deleting_it_asks_first() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let id = "epic:cat".to_owned();
+        let mut two = overview(Applied::No);
+        two.profiles.push("Light".into());
+        let _ = zendo.update(Message::Mods(ModsMessage::Read(id.clone(), Ok(Some(two)))));
+
+        let mods = |message| Message::Mods(message);
+        let _ = zendo.update(mods(ModsMessage::RenameProfile(id.clone())));
+        let (_, naming) = zendo.mods.naming.clone().unwrap();
+        assert_eq!(naming.renaming.as_deref(), Some("Default"));
+        assert_eq!(naming.name, "Default");
+        let _ = zendo.update(mods(ModsMessage::CancelProfile));
+        assert_eq!(zendo.mods.naming, None);
+
+        let _ = zendo.update(mods(ModsMessage::NewProfile(id.clone())));
+        let _ = zendo.update(mods(ModsMessage::ProfileName(id.clone(), "Run 2".into())));
+        let (_, naming) = zendo.mods.naming.clone().unwrap();
+        assert_eq!((naming.renaming, naming.name.as_str()), (None, "Run 2"));
+        let _ = zendo.update(mods(ModsMessage::SaveProfile(id.clone())));
+        assert_eq!(zendo.mods.naming, None);
+
+        let _ = zendo.update(mods(ModsMessage::DeleteProfile(id.clone())));
+        assert_eq!(
+            zendo.mods.confirm,
+            Some((id.clone(), Confirm::DeleteProfile("Default".into())))
+        );
+
+        let mut light = overview(Applied::Current(1));
+        light.profile = "Light".into();
+        assert_eq!(
+            profile_note(&ProfileChange::Switch("Light".into()), &light),
+            "Switched to Light; Light is applied"
+        );
+        light.applied = Applied::Changed;
+        assert_eq!(
+            profile_note(&ProfileChange::Delete("Default".into()), &light),
+            "Deleted Default; now in Light; Apply puts it in the game"
+        );
     }
 
     #[test]

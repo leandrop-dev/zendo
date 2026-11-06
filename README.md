@@ -120,7 +120,8 @@ install it and give it its colours, but it runs on any Linux desktop.
   what the game wrote meanwhile is kept for next time. Zendo knows where
   mods go for Stardew Valley, Skyrim, Fallout 4 and New Vegas, Starfield
   and Cyberpunk 2077; for any other game they go in its folder, or one
-  you set.
+  you set. Profiles keep different sets of mods on and in order for the
+  same game; switching while mods are applied puts the other set in.
 - Mods from [Nexus Mods](https://www.nexusmods.com), with your personal
   API key in Settings: once Zendo opens `nxm://` links (one button in
   Settings), a Mod manager download on Nexus goes straight into the
@@ -284,7 +285,7 @@ What Zendo keeps itself:
 | `~/.cache/zendo/umu.json` | umu-launcher's id for each game, which picks the fixes it applies |
 | `~/.local/share/Steam/compatibilitytools.d/` | GE-Proton builds downloaded from Settings (Zendo does not own the folder; Steam reads it) |
 | `~/.cache/zendo/protondb.json` | Each game's Steam app id and ProtonDB rating, asked again after a week |
-| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, the Nexus file each came from, mod folder, the game's name on Nexus when you chose it), `files/` (each mod unpacked), `downloads/` (files from Nexus while they download), `applied.json` (what Apply placed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
+| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, the Nexus file each came from, mod folder, the game's name on Nexus when you chose it, the profile in use and the others' order and mods on), `files/` (each mod unpacked), `downloads/` (files from Nexus while they download), `applied.json` (what Apply placed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
 | `~/.cache/zendo/nexus-games.json` | The games Nexus Mods has, to match yours by title, asked again after a week |
 | `~/.local/share/applications/zendo-nxm.desktop` | Written by Settings' "Open them with Zendo", so `nxm://` links open in Zendo; hidden from menus |
 | `$XDG_RUNTIME_DIR/zendo/links.sock` | Where `zendo nxm://…` hands a link to the open window |
@@ -322,9 +323,9 @@ count their own.
    page, and GE-Proton downloads.
 6. **Local games** (built): add a game by hand, and pick any game's
    cover or wide image from SteamGridDB.
-7. **Mods** (7a and 7b done): mods from archives with Apply and Back
-   to vanilla, and from Nexus Mods links with updates; next profiles and
-   installers.
+7. **Mods** (7a, 7b and 7c done): mods from archives with Apply
+   and Back to vanilla, from Nexus Mods links with updates, and profiles;
+   next installers.
 
 See [PLAN.md](PLAN.md) for the details.
 

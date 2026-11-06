@@ -6,7 +6,8 @@
 //! - `mods.toml`: the mods in order (a later one wins a file both have),
 //!   whether each is on and the Nexus file it came from, the game's mod
 //!   folder when the user set one, and its name on Nexus when the user
-//!   chose it;
+//!   chose it; with the profile that order is, and the other profiles'
+//!   orders and the mods on in each;
 //! - `downloads/`: files from Nexus while they download, deleted once
 //!   unpacked;
 //! - `files/<mod>/`: each mod as its archive held it;
@@ -157,8 +158,168 @@ struct List {
     /// The game's name on Nexus, as the user chose it for a link.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     nexus: Option<String>,
+    /// The profile `mods` is in; empty for the first, [`DEFAULT_PROFILE`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    active_profile: String,
     #[serde(default, rename = "mod")]
     mods: Vec<Entry>,
+    /// The other profiles.
+    #[serde(default, rename = "profile", skip_serializing_if = "Vec::is_empty")]
+    profiles: Vec<Profile>,
+}
+
+/// The name of the profile a game's mods start in.
+pub const DEFAULT_PROFILE: &str = "Default";
+
+/// A profile not in use: its order of the mods and the ones on in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Profile {
+    name: String,
+    #[serde(default)]
+    order: Vec<String>,
+    #[serde(default)]
+    enabled: Vec<String>,
+}
+
+impl List {
+    fn active(&self) -> &str {
+        if self.active_profile.is_empty() {
+            DEFAULT_PROFILE
+        } else {
+            &self.active_profile
+        }
+    }
+
+    /// Every profile's name, the one in use among them, sorted.
+    fn profile_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .profiles
+            .iter()
+            .map(|profile| profile.name.clone())
+            .chain([self.active().to_owned()])
+            .collect();
+        names.sort_by_key(|name| name.to_lowercase());
+        names
+    }
+
+    /// The list as it stands, as a profile under the name in use.
+    fn current(&self) -> Profile {
+        Profile {
+            name: self.active().to_owned(),
+            order: self.mods.iter().map(|entry| entry.id.clone()).collect(),
+            enabled: self
+                .mods
+                .iter()
+                .filter(|entry| entry.enabled)
+                .map(|entry| entry.id.clone())
+                .collect(),
+        }
+    }
+
+    /// A name for a new profile or a rename: trimmed, short, and not
+    /// another profile's (whatever the case); `keep` is the name being
+    /// renamed.
+    fn check_name(&self, name: &str, keep: Option<&str>) -> anyhow::Result<String> {
+        let name = name.trim();
+        if name.is_empty() {
+            bail!("Give the profile a name");
+        }
+        if name.chars().count() > 40 {
+            bail!("Profile names are 40 characters at most");
+        }
+        if name.chars().any(char::is_control) {
+            bail!("Profile names are one line of text");
+        }
+        let taken = self.profile_names().iter().any(|other| {
+            other.to_lowercase() == name.to_lowercase()
+                && keep.is_none_or(|keep| other.to_lowercase() != keep.to_lowercase())
+        });
+        if taken {
+            bail!("There is a profile named {name} already");
+        }
+        Ok(name.to_owned())
+    }
+
+    /// Starts a profile as a copy of the one in use and switches to it.
+    fn new_profile(&mut self, name: &str) -> anyhow::Result<()> {
+        let name = self.check_name(name, None)?;
+        let current = self.current();
+        self.profiles.push(current);
+        self.active_profile = name;
+        Ok(())
+    }
+
+    /// Puts another profile's order and mods on in the list; the one in
+    /// use is kept as it stands. Mods added since that profile was left
+    /// come last, off.
+    fn switch_profile(&mut self, name: &str) -> anyhow::Result<()> {
+        if name == self.active() {
+            return Ok(());
+        }
+        let at = self
+            .profiles
+            .iter()
+            .position(|profile| profile.name == name)
+            .with_context(|| format!("there is no profile named {name}"))?;
+        let target = self.profiles.remove(at);
+        let current = self.current();
+        self.profiles.insert(at, current);
+        let mut left: Vec<Entry> = std::mem::take(&mut self.mods);
+        for id in &target.order {
+            if let Some(found) = left.iter().position(|entry| &entry.id == id) {
+                let mut entry = left.remove(found);
+                entry.enabled = target.enabled.contains(id);
+                self.mods.push(entry);
+            }
+        }
+        for mut entry in left {
+            entry.enabled = false;
+            self.mods.push(entry);
+        }
+        self.active_profile = target.name;
+        Ok(())
+    }
+
+    fn rename_profile(&mut self, old: &str, new: &str) -> anyhow::Result<()> {
+        let new = self.check_name(new, Some(old))?;
+        if old == self.active() {
+            self.active_profile = new;
+            return Ok(());
+        }
+        let profile = self
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.name == old)
+            .with_context(|| format!("there is no profile named {old}"))?;
+        profile.name = new;
+        Ok(())
+    }
+
+    /// Deletes a profile; the one in use after switching to the next.
+    fn delete_profile(&mut self, name: &str) -> anyhow::Result<()> {
+        if name == self.active() {
+            let names = self.profile_names();
+            let at = names.iter().position(|other| other == name).unwrap_or(0);
+            let Some(next) = names
+                .iter()
+                .cycle()
+                .skip(at + 1)
+                .take(names.len())
+                .find(|other| *other != name)
+                .cloned()
+            else {
+                bail!("A game keeps at least one profile");
+            };
+            self.switch_profile(&next)?;
+        }
+        let before = self.profiles.len();
+        self.profiles.retain(|profile| profile.name != name);
+        if self.profiles.len() == before {
+            bail!("there is no profile named {name}");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,6 +396,9 @@ pub struct Overview {
     pub known: Option<&'static Known>,
     /// The game's name on Nexus, when known.
     pub nexus: Option<String>,
+    /// The profile in use, and every profile's name, sorted.
+    pub profile: String,
+    pub profiles: Vec<String>,
     pub mods: Vec<ModInfo>,
     /// Files in `overwrite/`.
     pub overwrite: usize,
@@ -438,6 +602,10 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
     let place = place(game)?;
     place.change(|list| {
         list.mods.retain(|entry| entry.id != id);
+        for profile in &mut list.profiles {
+            profile.order.retain(|other| other != id);
+            profile.enabled.retain(|other| other != id);
+        }
         Ok(())
     })?;
     let files = place.files().join(id);
@@ -445,6 +613,38 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
         fs::remove_dir_all(&files)
             .with_context(|| format!("could not delete {}", files.display()))?;
     }
+    place.overview()
+}
+
+/// What to do with a game's profiles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProfileChange {
+    /// A copy of the profile in use, switched to.
+    New(String),
+    Switch(String),
+    Rename {
+        old: String,
+        new: String,
+    },
+    Delete(String),
+}
+
+/// Changes a game's profiles. Deleting the profile in use switches to the
+/// next first. A switch while mods are applied applies the new profile
+/// when `apply` is set (the game is not running).
+///
+/// # Errors
+///
+/// When the name is taken or empty, the profile is missing or the last
+/// one (for Delete), or the list cannot be written or applied.
+pub fn change_profiles(
+    game: &Game,
+    change: &ProfileChange,
+    apply: bool,
+) -> anyhow::Result<Overview> {
+    let _lock = lock();
+    let place = place(game)?;
+    place.change_profiles(change, apply)?;
     place.overview()
 }
 
@@ -632,6 +832,8 @@ impl Place {
                 .nexus
                 .clone()
                 .or_else(|| self.known.map(|known| known.nexus.to_owned())),
+            profile: list.active().to_owned(),
+            profiles: list.profile_names(),
             mods,
             overwrite: walk(&self.overwrite()).map_or(0, |files| files.len()),
             applied,
@@ -737,6 +939,24 @@ impl Place {
         };
         let _ = fs::remove_file(&fetched.archive);
         result.map(|()| updates.is_some())
+    }
+
+    fn change_profiles(&self, change: &ProfileChange, apply: bool) -> anyhow::Result<()> {
+        let before = self.list()?.active().to_owned();
+        self.change(|list| match change {
+            ProfileChange::New(name) => list.new_profile(name),
+            ProfileChange::Switch(name) => list.switch_profile(name),
+            ProfileChange::Rename { old, new } => list.rename_profile(old, new),
+            ProfileChange::Delete(name) => list.delete_profile(name),
+        })?;
+        let switched = match change {
+            ProfileChange::Switch(_) | ProfileChange::Delete(_) => self.list()?.active() != before,
+            ProfileChange::New(_) | ProfileChange::Rename { .. } => false,
+        };
+        if switched && apply && self.manifest()?.is_some() {
+            self.apply()?;
+        }
+        Ok(())
     }
 
     /// Puts a newer archive's files in place of a mod's.
@@ -1384,6 +1604,138 @@ mod tests {
         assert!(format!("{err:#}").contains("links"), "{err:#}");
         assert_eq!(place.overview().unwrap().mods.len(), 1);
         assert_eq!(entries(&place.files()).0, vec![id]);
+    }
+
+    fn on(overview: &Overview) -> Vec<&str> {
+        overview
+            .mods
+            .iter()
+            .map(|info| if info.enabled { info.id.as_str() } else { "-" })
+            .collect()
+    }
+
+    #[test]
+    fn profiles_keep_their_own_order_and_mods_on() {
+        let scratch = Scratch::new("profiles");
+        let place = scratch.place(None, false);
+        add_unpacked(&place, "a", &[("a.txt", "a")]);
+        add_unpacked(&place, "b", &[("b.txt", "b")]);
+        let overview = place.overview().unwrap();
+        assert_eq!(overview.profile, DEFAULT_PROFILE);
+        assert_eq!(overview.profiles, [DEFAULT_PROFILE]);
+
+        let change = |change: ProfileChange| place.change_profiles(&change, true);
+        change(ProfileChange::New("Light".into())).unwrap();
+        let overview = place.overview().unwrap();
+        assert_eq!(overview.profile, "Light");
+        assert_eq!(overview.profiles, ["Default", "Light"]);
+        assert_eq!(on(&overview), ["a", "b"], "a copy of the one in use");
+
+        // In Light: b first, a off.
+        place
+            .change(|list| {
+                list.mods.reverse();
+                list.mods[1].enabled = false;
+                Ok(())
+            })
+            .unwrap();
+        add_unpacked(&place, "c", &[("c.txt", "c")]);
+        assert_eq!(on(&place.overview().unwrap()), ["b", "-", "c"]);
+
+        change(ProfileChange::Switch("Default".into())).unwrap();
+        let overview = place.overview().unwrap();
+        let ids: Vec<&str> = overview.mods.iter().map(|info| info.id.as_str()).collect();
+        assert_eq!(ids, ["a", "b", "c"]);
+        assert_eq!(on(&overview), ["a", "b", "-"], "c came after: last and off");
+
+        change(ProfileChange::Switch("Light".into())).unwrap();
+        assert_eq!(on(&place.overview().unwrap()), ["b", "-", "c"]);
+
+        for (bad, why) in [
+            ("  ", "name"),
+            ("default", "already"),
+            (&"x".repeat(41), "40"),
+            ("two\nlines", "one line"),
+        ] {
+            let err = change(ProfileChange::New(bad.to_owned())).unwrap_err();
+            assert!(err.to_string().contains(why), "{bad:?}: {err}");
+        }
+        change(ProfileChange::Rename {
+            old: "Light".into(),
+            new: "light".into(),
+        })
+        .unwrap();
+        change(ProfileChange::Rename {
+            old: "Default".into(),
+            new: "Everything".into(),
+        })
+        .unwrap();
+        assert_eq!(place.overview().unwrap().profiles, ["Everything", "light"]);
+
+        // A mod deleted leaves every profile.
+        place
+            .change(|list| {
+                list.mods.retain(|entry| entry.id != "c");
+                Ok(())
+            })
+            .unwrap();
+        change(ProfileChange::Switch("Everything".into())).unwrap();
+        assert_eq!(on(&place.overview().unwrap()), ["a", "b"]);
+        // The one in use goes after a switch to the next; the last stays.
+        change(ProfileChange::Delete("Everything".into())).unwrap();
+        let overview = place.overview().unwrap();
+        assert_eq!(
+            (overview.profile.as_str(), on(&overview)),
+            ("light", vec!["b", "-"])
+        );
+        assert_eq!(overview.profiles, ["light"]);
+        let err = change(ProfileChange::Delete("light".into())).unwrap_err();
+        assert!(err.to_string().contains("at least one"), "{err}");
+        change(ProfileChange::New("Everything".into())).unwrap();
+
+        // Written and read back.
+        let text = fs::read_to_string(place.list_path()).unwrap();
+        assert!(text.contains("active_profile = \"Everything\""), "{text}");
+    }
+
+    #[test]
+    fn switching_while_applied_applies_the_other_profile() {
+        let scratch = Scratch::new("profile-apply");
+        let place = scratch.place(None, false);
+        add_unpacked(&place, "a", &[("same.txt", "from a")]);
+        add_unpacked(&place, "b", &[("same.txt", "from b")]);
+        place
+            .change_profiles(&ProfileChange::New("Only a".into()), true)
+            .unwrap();
+        place
+            .change(|list| {
+                list.mods[1].enabled = false;
+                Ok(())
+            })
+            .unwrap();
+        place.apply().unwrap();
+        let file = place.game_dir.join("same.txt");
+        assert_eq!(read(&file).as_deref(), Some("from a"));
+
+        place
+            .change_profiles(&ProfileChange::Switch("Default".into()), true)
+            .unwrap();
+        assert_eq!(read(&file).as_deref(), Some("from b"));
+        assert_eq!(place.overview().unwrap().applied, Applied::Current(2));
+
+        // With the game running the list changes and the game waits.
+        place
+            .change_profiles(&ProfileChange::Switch("Only a".into()), false)
+            .unwrap();
+        assert_eq!(read(&file).as_deref(), Some("from b"));
+        assert_eq!(place.overview().unwrap().applied, Applied::Changed);
+
+        // Not applied: switching applies nothing.
+        place.restore().unwrap();
+        place
+            .change_profiles(&ProfileChange::Switch("Default".into()), true)
+            .unwrap();
+        assert_eq!(read(&file), None);
     }
 
     #[test]

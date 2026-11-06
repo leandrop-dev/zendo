@@ -876,7 +876,27 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      and Nexus answering 401 to a made-up key; an ignored test asks the
      real Nexus with the key in Settings. The user tried it with a real
      key and link in the window (2026-11-06): it works.
-   - 7c Profiles: named sets of mods per game, switched in one go.
+   - 7c Profiles, built 2026-11-06: each game's mods have profiles, its
+     own order and mods on in each, over the same unpacked mods (as Mod
+     Organizer's and Amethyst's do). The list as it was becomes
+     "Default". A Profile row on the Mods card: a list to switch, New…
+     (a copy of the one in use, switched to), Rename… and Delete (asks
+     once; the profile in use goes after a switch to the next, the last
+     one stays). Names: one line, 40 characters at most, not another's in
+     any case. A mod added while another profile is in use comes last and
+     off in the others; a mod deleted leaves them all. Switching while
+     mods are applied applies the new profile in one go, unless the game
+     runs (then the card says Apply puts it in). In `mods.toml`:
+     `active_profile` and a `[[profile]]` per other profile (`order`,
+     `enabled`). The folder, overwrite and Nexus name stay per game, not
+     per profile [tentative].
+     Checked: clippy and tests (each profile's order and mods on kept
+     across switches, a later mod last and off, names refused, renames,
+     a deleted mod leaving every profile, deleting the one in use and
+     refusing the last; switching while applied puts the other profile's
+     file in, with the game running only the list changes, not applied
+     nothing is applied; the name field, Delete asking first and the
+     notes). The user tried it in the window (2026-11-06): it works.
    - 7d FOMOD installers and per-game knowledge (Bethesda plugin order).
 
 ## On hyprmonk's side
@@ -890,7 +910,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 7c, profiles: named sets of mods per game, switched in one go.
+- 7d, FOMOD installers and Bethesda plugin order.
 
 ## Conventions
 
