@@ -61,7 +61,7 @@ impl Zendo {
             }
             Message::DownloadNow => {
                 let task = self.download_images();
-                if self.downloads.left == 0 {
+                if self.images.left == 0 {
                     self.status = Some("No images to download".to_owned());
                 }
                 task
@@ -179,7 +179,7 @@ impl Zendo {
                 self.key_section(),
                 self.covers_section(),
                 self.sources_section(),
-                files_section(),
+                files_section(self.config.install_dir()),
             ]
             .spacing(20)
             .padding(24)
@@ -252,9 +252,9 @@ impl Zendo {
     }
 
     fn covers_section(&self) -> Element<'_, Message> {
-        let busy = self.downloads.left > 0;
+        let busy = self.images.left > 0;
         let progress = if busy {
-            format!("{} left", self.downloads.left)
+            format!("{} left", self.images.left)
         } else {
             String::new()
         };
@@ -326,7 +326,7 @@ impl Zendo {
     }
 }
 
-fn files_section<'a>() -> Element<'a, Message> {
+fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
     let entry = |label: &'static str, path: Option<PathBuf>| -> Element<'a, Message> {
         let shown = path.as_ref().map_or_else(
             || "no home folder".to_owned(),
@@ -363,11 +363,23 @@ fn files_section<'a>() -> Element<'a, Message> {
     };
     section(
         "Files",
-        "Zendo's own files. Removing one resets what it holds.",
+        "Zendo's own files. Removing one resets what it holds. Store games \
+         install into the games folder; `install_dir` in the settings file moves it.",
         column![
             entry("Settings", Config::path()),
             entry("Launches, pins, hidden", State::path()),
             entry("Downloaded images", covers::dir()),
+            entry(
+                "Download queue",
+                State::path().map(|state| state.with_file_name("downloads.json"))
+            ),
+            entry(
+                "Store sign-ins",
+                zendo_core::stores::Store::Epic
+                    .dir()
+                    .and_then(|dir| dir.parent().map(Path::to_path_buf))
+            ),
+            entry("Games", games),
         ]
         .spacing(10),
     )

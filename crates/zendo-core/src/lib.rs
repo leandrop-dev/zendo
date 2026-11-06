@@ -12,6 +12,7 @@
 pub mod config;
 pub mod covers;
 mod desktop;
+pub mod downloads;
 mod heroic;
 mod launch;
 pub mod owned;
@@ -71,6 +72,9 @@ pub enum Launch {
         args: Vec<String>,
         dir: Option<PathBuf>,
     },
+    /// Installed by Zendo through a store engine (`legendary`, `gogdl`,
+    /// `nile`). Starting these comes with launch options (phase 5).
+    Engine { runner: String, app: String },
 }
 
 /// When and how much a game was played, from its launcher's records and
@@ -196,7 +200,14 @@ impl Game {
                 format!("Heroic ({runner})")
             }
             (Launch::Command { program, .. }, _) => program.clone(),
+            (Launch::Engine { runner, .. }, _) => format!("Zendo ({runner})"),
         }
+    }
+
+    /// Installed by Zendo, so Zendo can update, repair and uninstall it.
+    #[must_use]
+    pub fn installed_by_zendo(&self) -> bool {
+        matches!(self.launch, Launch::Engine { .. })
     }
 
     /// The launch as one line, for the details card and logs.
@@ -204,6 +215,7 @@ impl Game {
     pub fn command_line(&self) -> String {
         match &self.launch {
             Launch::Uri { uri } => format!("xdg-open {uri}"),
+            Launch::Engine { .. } => "None yet: launch options come next".to_owned(),
             Launch::Command { program, args, .. } => std::iter::once(program.as_str())
                 .chain(args.iter().map(String::as_str))
                 .map(|word| {
@@ -247,6 +259,8 @@ impl Library {
     pub fn scan() -> Self {
         let mut scan = steam::scan(&steam::roots());
         scan.extend(heroic::scan(&heroic::roots()));
+        // After Heroic's: a game both installed keeps Heroic's launch.
+        scan.extend(downloads::scan());
         scan.extend(desktop::scan(&desktop::dirs()));
         let state = match State::load() {
             Ok(state) => state,

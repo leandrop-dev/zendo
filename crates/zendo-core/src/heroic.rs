@@ -72,12 +72,22 @@ struct SideloadInstall {
 
 /// What an installed-games file says about one install. The stores name
 /// the fields differently; each reader fills this in.
-#[derive(Default)]
-struct Install {
-    path: Option<PathBuf>,
-    size: Option<Size>,
-    platform: Option<String>,
-    version: Option<String>,
+#[derive(Debug, Default)]
+pub(crate) struct Install {
+    pub path: Option<PathBuf>,
+    pub size: Option<Size>,
+    pub platform: Option<String>,
+    pub version: Option<String>,
+}
+
+/// One game in an engine's installed-games file. The files are the same
+/// whether Heroic or Zendo runs the engine.
+#[derive(Debug)]
+pub(crate) struct Installed {
+    /// The store's id for the game.
+    pub app: String,
+    pub title: Option<String>,
+    pub install: Install,
 }
 
 /// legendary and nile write sizes in bytes; Heroic's GOG records hold a
@@ -109,10 +119,10 @@ fn library(file: &Path, scan: &mut Scan) -> HashMap<String, LibraryGame> {
         .unwrap_or_default()
 }
 
-/// `legendaryConfig/legendary/installed.json`: app name to installed game.
-fn epic(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+/// legendary's `installed.json`: app name to installed game, DLC left out.
+pub(crate) fn legendary_installs(file: &Path, scan: &mut Scan) -> Vec<Installed> {
     #[derive(Deserialize)]
-    struct Installed {
+    struct Entry {
         title: Option<String>,
         #[serde(default)]
         is_dlc: bool,
@@ -122,40 +132,55 @@ fn epic(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
         version: Option<String>,
     }
 
-    let file = root.join("legendaryConfig/legendary/installed.json");
-    let Some(installed) = read_json::<HashMap<String, Installed>>(&file, scan) else {
-        return;
+    let Some(installed) = read_json::<HashMap<String, Entry>>(file, scan) else {
+        return Vec::new();
     };
+    installed
+        .into_iter()
+        .filter(|(_, game)| !game.is_dlc)
+        .map(|(app, game)| Installed {
+            app,
+            title: game.title,
+            install: Install {
+                path: game.install_path,
+                size: size(game.install_size),
+                platform: game.platform,
+                version: game.version,
+            },
+        })
+        .collect()
+}
+
+/// `legendaryConfig/legendary/installed.json`.
+fn epic(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+    let installs = legendary_installs(&root.join("legendaryConfig/legendary/installed.json"), scan);
+    if installs.is_empty() {
+        return;
+    }
     let library = library(&root.join("store_cache/legendary_library.json"), scan);
-    for (app_name, game) in installed.into_iter().filter(|(_, game)| !game.is_dlc) {
-        let known = library.get(&app_name);
-        let install = Install {
-            path: game.install_path,
-            size: size(game.install_size),
-            platform: game.platform,
-            version: game.version,
-        };
+    for game in installs {
+        let known = library.get(&game.app);
         found.push(heroic_game(
             Source::Epic,
             "legendary",
-            &app_name,
+            &game.app,
             game.title,
             known,
-            install,
+            game.install,
         ));
     }
 }
 
-/// `gog_store/installed.json` lists what is installed; the titles are in
-/// Heroic's cache of the GOG library, `store_cache/gog_library.json`.
-fn gog(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+/// A GOG `installed.json` as Heroic writes it (`{"installed": [...]}`);
+/// gogdl keeps none, so Zendo writes its own the same way.
+pub(crate) fn gog_installs(file: &Path, scan: &mut Scan) -> Vec<Installed> {
     #[derive(Deserialize)]
     struct InstalledFile {
         #[serde(default)]
-        installed: Vec<Installed>,
+        installed: Vec<Entry>,
     }
     #[derive(Deserialize)]
-    struct Installed {
+    struct Entry {
         #[serde(rename = "appName")]
         app_name: String,
         #[serde(default)]
@@ -166,43 +191,58 @@ fn gog(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
         version: Option<String>,
     }
 
-    let file = root.join("gog_store/installed.json");
-    let Some(installed) = read_json::<InstalledFile>(&file, scan) else {
-        return;
+    let Some(installed) = read_json::<InstalledFile>(file, scan) else {
+        return Vec::new();
     };
+    installed
+        .installed
+        .into_iter()
+        .filter(|game| !game.is_dlc)
+        .map(|game| Installed {
+            app: game.app_name,
+            title: None,
+            install: Install {
+                path: game.install_path,
+                size: size(game.install_size),
+                platform: game.platform,
+                version: game.version,
+            },
+        })
+        .collect()
+}
+
+/// `gog_store/installed.json` lists what is installed; the titles are in
+/// Heroic's cache of the GOG library, `store_cache/gog_library.json`.
+fn gog(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+    let installs = gog_installs(&root.join("gog_store/installed.json"), scan);
+    if installs.is_empty() {
+        return;
+    }
     let library = library(&root.join("store_cache/gog_library.json"), scan);
-    for game in installed.installed.into_iter().filter(|game| !game.is_dlc) {
-        let known = library.get(&game.app_name);
-        let install = Install {
-            path: game.install_path,
-            size: size(game.install_size),
-            platform: game.platform,
-            version: game.version,
-        };
+    for game in installs {
+        let known = library.get(&game.app);
         found.push(heroic_game(
             Source::Gog,
             "gog",
-            &game.app_name,
+            &game.app,
             None,
             known,
-            install,
+            game.install,
         ));
     }
 }
 
-/// `nile_config/nile/installed.json` lists what is installed; the titles are
-/// in Heroic's `store_cache/nile_library.json`, or failing that in nile's
-/// own `library.json`.
-fn amazon(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+/// nile's `installed.json`, with titles from its `library.json` beside it.
+pub(crate) fn nile_installs(dir: &Path, scan: &mut Scan) -> Vec<Installed> {
     #[derive(Deserialize)]
-    struct Installed {
+    struct Entry {
         id: String,
         path: Option<PathBuf>,
         size: Option<serde_json::Value>,
         version: Option<String>,
     }
     #[derive(Deserialize)]
-    struct Entry {
+    struct LibraryEntry {
         product: Product,
     }
     #[derive(Deserialize)]
@@ -211,33 +251,49 @@ fn amazon(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
         title: Option<String>,
     }
 
-    let dir = root.join("nile_config/nile");
-    let Some(installed) = read_json::<Vec<Installed>>(&dir.join("installed.json"), scan) else {
-        return;
+    let Some(installed) = read_json::<Vec<Entry>>(&dir.join("installed.json"), scan) else {
+        return Vec::new();
     };
-    let library = library(&root.join("store_cache/nile_library.json"), scan);
-    let titles: HashMap<String, String> = read_json::<Vec<Entry>>(&dir.join("library.json"), scan)
-        .unwrap_or_default()
+    let titles: HashMap<String, String> =
+        read_json::<Vec<LibraryEntry>>(&dir.join("library.json"), scan)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| Some((entry.product.id, entry.product.title?)))
+            .collect();
+    installed
         .into_iter()
-        .filter_map(|entry| Some((entry.product.id, entry.product.title?)))
-        .collect();
-    for game in installed {
-        let title = titles.get(&game.id).cloned();
-        let known = library.get(&game.id);
-        let install = Install {
-            path: game.path,
-            size: size(game.size),
-            // Amazon Games has Windows games only.
-            platform: Some("Windows".to_owned()),
-            version: game.version,
-        };
+        .map(|game| Installed {
+            title: titles.get(&game.id).cloned(),
+            install: Install {
+                path: game.path,
+                size: size(game.size),
+                // Amazon Games has Windows games only.
+                platform: Some("Windows".to_owned()),
+                version: game.version,
+            },
+            app: game.id,
+        })
+        .collect()
+}
+
+/// `nile_config/nile/installed.json` lists what is installed; the titles are
+/// in Heroic's `store_cache/nile_library.json`, or failing that in nile's
+/// own `library.json`.
+fn amazon(root: &Path, found: &mut Vec<Game>, scan: &mut Scan) {
+    let installs = nile_installs(&root.join("nile_config/nile"), scan);
+    if installs.is_empty() {
+        return;
+    }
+    let library = library(&root.join("store_cache/nile_library.json"), scan);
+    for game in installs {
+        let known = library.get(&game.app);
         found.push(heroic_game(
             Source::Amazon,
             "nile",
-            &game.id,
-            title,
+            &game.app,
+            game.title,
             known,
-            install,
+            game.install,
         ));
     }
 }

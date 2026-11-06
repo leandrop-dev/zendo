@@ -113,7 +113,7 @@ impl Store {
 
     /// The engine as a command, pointed at Zendo's folder, which is made
     /// on the way.
-    fn command(self) -> anyhow::Result<Command> {
+    pub(crate) fn command(self) -> anyhow::Result<Command> {
         let engine = self.engine().with_context(|| {
             format!(
                 "{} not found: install it, or Heroic, which bundles it",

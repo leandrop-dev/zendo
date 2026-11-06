@@ -1,6 +1,6 @@
 //! hyprmonk's colours and the shapes every page shares.
 
-use iced::widget::{button, container, text, text_input};
+use iced::widget::{button, container, progress_bar, text, text_input};
 use iced::{Background, Border, Color, Element, Font, Theme, font};
 use zendo_core::Source;
 
@@ -128,6 +128,24 @@ pub fn secondary(_: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+/// A button that deletes something, once it has asked.
+pub fn danger(_: &Theme, status: button::Status) -> button::Style {
+    let background = match status {
+        button::Status::Hovered | button::Status::Pressed => Color::from_rgb8(0xf0, 0x6e, 0x60),
+        button::Status::Disabled => Color { a: 0.4, ..BAD },
+        button::Status::Active => BAD,
+    };
+    button::Style {
+        background: Some(Background::Color(background)),
+        text_color: BACKGROUND,
+        border: Border {
+            radius: 8.0.into(),
+            ..Border::default()
+        },
+        ..button::Style::default()
+    }
+}
+
 /// A button that reads as text: links, "← Library".
 pub fn link(_: &Theme, status: button::Status) -> button::Style {
     button::Style {
@@ -200,5 +218,17 @@ pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
         placeholder: DIM,
         value: TEXT,
         selection: Color { a: 0.35, ..ACCENT },
+    }
+}
+
+/// A download's bar: the accent on a raised track.
+pub fn progress(_: &Theme) -> progress_bar::Style {
+    progress_bar::Style {
+        background: Background::Color(RAISED),
+        bar: Background::Color(ACCENT),
+        border: Border {
+            radius: 4.0.into(),
+            ..Border::default()
+        },
     }
 }

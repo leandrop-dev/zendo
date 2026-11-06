@@ -53,14 +53,16 @@ impl Zendo {
         .spacing(10)
         .align_y(Alignment::Center);
 
-        scrollable(
-            column![trail, game_hero(game), actions, details(game)]
-                .spacing(20)
-                .padding(24),
-        )
-        .id(game_scroll_id())
-        .height(Length::Fill)
-        .into()
+        let mut page = column![trail, game_hero(game), actions]
+            .spacing(20)
+            .padding(24);
+        if game.installed_by_zendo() {
+            page = page.push(self.store_actions(game));
+        }
+        scrollable(page.push(details(game)))
+            .id(game_scroll_id())
+            .height(Length::Fill)
+            .into()
     }
 }
 

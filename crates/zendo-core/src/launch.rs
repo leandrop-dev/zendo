@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Instant;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 
 use crate::{Game, Launch, State};
 
@@ -32,6 +32,10 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
             }
             (command, true)
         }
+        Launch::Engine { .. } => bail!(
+            "Zendo cannot start the games it installs yet; that comes with launch options, \
+             the next step"
+        ),
     };
     let mut child = command
         .stdin(Stdio::null())

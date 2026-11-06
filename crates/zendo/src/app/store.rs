@@ -5,10 +5,12 @@ use std::collections::{HashMap, HashSet};
 
 use iced::widget::{button, column, container, row, scrollable, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
+use zendo_core::downloads::Job;
 use zendo_core::owned::{self, Owned};
 use zendo_core::stores::Store;
 
 use super::accounts::Account;
+use super::downloads::DownloadMessage;
 use super::game::{Hero, hero};
 use super::library::{Card, GRID_PADDING, card, cards_grid};
 use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
@@ -357,6 +359,63 @@ impl Zendo {
             .into()
     }
 
+    /// Installing this store game where Settings says, unless it is queued.
+    pub(super) fn install_job(&self, id: &str) -> Option<Job> {
+        if self.downloads.job_for(id).is_some() {
+            return None;
+        }
+        Job::install(self.store.owned(id)?, self.config.install_dir()?)
+    }
+
+    /// Open in library, the queued job, or Install.
+    fn owned_actions<'a>(&'a self, game: &'a Owned, installed: bool) -> Element<'a, Message> {
+        if installed {
+            row![
+                button(text("Open in library").size(16).font(BOLD))
+                    .padding([10, 24])
+                    .style(style::primary)
+                    .on_press(Message::Navigate(Page::Game(game.id.clone()))),
+                space::horizontal(),
+                text("Installed").size(14).color(DIM),
+            ]
+        } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
+            row![
+                button(
+                    text(if running { "Installing…" } else { "Queued" })
+                        .size(16)
+                        .font(BOLD)
+                )
+                .padding([10, 32])
+                .style(style::primary),
+                button(text("See downloads").size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::Navigate(Page::Downloads)),
+                space::horizontal(),
+                text(format!("Into {}", job.path.display()))
+                    .size(14)
+                    .color(DIM),
+            ]
+        } else {
+            let job = self.install_job(&game.id);
+            let note = match &job {
+                Some(job) => format!("Installs into {}", job.path.display()),
+                None => "No home folder to install into".to_owned(),
+            };
+            row![
+                button(text("Install").size(16).font(BOLD))
+                    .padding([10, 32])
+                    .style(style::primary)
+                    .on_press_maybe(job.map(|job| Message::Download(DownloadMessage::Queue(job)))),
+                space::horizontal(),
+                text(note).size(14).color(DIM),
+            ]
+        }
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .into()
+    }
+
     pub(super) fn owned_page<'a>(&'a self, game: &'a Owned) -> Element<'a, Message> {
         let installed = self.is_installed(&game.id);
         let trail = row![
@@ -387,28 +446,7 @@ impl Zendo {
             facts: Vec::new(),
         });
 
-        let actions = if installed {
-            row![
-                button(text("Open in library").size(16).font(BOLD))
-                    .padding([10, 24])
-                    .style(style::primary)
-                    .on_press(Message::Navigate(Page::Game(game.id.clone()))),
-                space::horizontal(),
-                text("Installed").size(14).color(DIM),
-            ]
-        } else {
-            row![
-                button(text("Install").size(16).font(BOLD))
-                    .padding([10, 32])
-                    .style(style::primary),
-                space::horizontal(),
-                text("Installing comes with Downloads, the next step")
-                    .size(14)
-                    .color(DIM),
-            ]
-        }
-        .spacing(10)
-        .align_y(Alignment::Center);
+        let actions = self.owned_actions(game, installed);
 
         let detail = |label: &'static str, value: String, code: bool| {
             row![

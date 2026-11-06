@@ -7,6 +7,8 @@
 //! steamgriddb_key = "…"
 //! # Set to false to never download covers.
 //! download_covers = true
+//! # Where store games are installed, each in a folder of its own.
+//! install_dir = "~/Games"
 //! ```
 //!
 //! The file can hold a key, so Zendo writes it readable by its owner only.
@@ -32,6 +34,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steamgriddb_key: Option<String>,
     pub download_covers: bool,
+    /// Where store games are installed; `~/Games` when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_dir: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -39,6 +44,7 @@ impl Default for Config {
         Self {
             steamgriddb_key: None,
             download_covers: true,
+            install_dir: None,
         }
     }
 }
@@ -47,6 +53,20 @@ impl Config {
     #[must_use]
     pub fn path() -> Option<PathBuf> {
         paths::config_home().map(|dir| dir.join("zendo/config.toml"))
+    }
+
+    /// Where store games go: `install_dir` with a leading `~` expanded, or
+    /// `~/Games`.
+    #[must_use]
+    pub fn install_dir(&self) -> Option<PathBuf> {
+        let home = paths::home();
+        match &self.install_dir {
+            Some(dir) => match dir.strip_prefix("~") {
+                Ok(rest) => home.map(|home| home.join(rest)),
+                Err(_) => Some(dir.clone()),
+            },
+            None => home.map(|home| home.join("Games")),
+        }
     }
 
     /// The user's settings, or the defaults when there is no file.
@@ -110,10 +130,21 @@ mod tests {
         let config = Config {
             steamgriddb_key: Some("abc".into()),
             download_covers: false,
+            install_dir: Some("/mnt/games".into()),
         };
         let text = format!("{HEADER}{}", toml::to_string(&config).unwrap());
         assert_eq!(Config::parse(&text).unwrap(), config);
         let text = toml::to_string(&Config::default()).unwrap();
         assert!(!text.contains("steamgriddb_key"), "{text}");
+    }
+
+    #[test]
+    fn puts_games_in_the_folder_asked_for() {
+        let home = paths::home().unwrap();
+        assert_eq!(Config::default().install_dir(), Some(home.join("Games")));
+        let config = Config::parse("install_dir = \"~/Spiele\"").unwrap();
+        assert_eq!(config.install_dir(), Some(home.join("Spiele")));
+        let config = Config::parse("install_dir = \"/mnt/games\"").unwrap();
+        assert_eq!(config.install_dir(), Some(PathBuf::from("/mnt/games")));
     }
 }

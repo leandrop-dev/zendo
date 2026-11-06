@@ -11,8 +11,8 @@ session: the repo, the package checks and phase 1 built (see Phases).
 built. Then the direction changed: Zendo follows Hikari's functionality
 and UI/UX [firm]; omarchy-games-menu was only ever a source of ideas for a
 Rust launcher. The phases below are reordered for that. Phase 3, the
-Hikari-layout shell, built the same day, then phase 4's Accounts and Store
-pages (4a, 4b); real sign-ins wait for the user.
+Hikari-layout shell, built the same day, then all of phase 4 (Accounts,
+Store, Downloads); real sign-ins and installs wait for the user.
 
 ## Direction [firm]
 
@@ -303,14 +303,55 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      arrives while images download is fetched for afterwards. Not yet
      tried: the real engines' lists through Zendo's own sign-ins, GOG's
      and Amazon's pages.
-   - 4c Downloads: install, update, repair and uninstall with a queue.
+   - 4c Downloads, built 2026-11-06: install, update, repair and uninstall
+     with a queue, a Downloads page (the running job with a progress bar,
+     percentage, size, speed and time left, Stop; up next with Remove;
+     finished this session), Install on a store game's page (Enter too),
+     and Update, Repair and Uninstall (pressed twice) on the page of a game
+     Zendo installed.
      No background process [firm, chosen 2026-11-06]: unlike Hikari's
      daemon, the window runs legendary, gogdl and nile as its own child
-     processes and reads their progress; the queue is kept in a file and
-     picks up on the next start, and closing the window while something
-     downloads asks first. A detached worker can come later if it is
-     missed. gogdl keeps no list of what it installed, so Zendo records its
-     installs itself.
+     processes and reads their progress; the queue is kept in
+     `~/.local/state/zendo/downloads.json` and picks up on the next start,
+     and closing the window while something downloads asks first (Iced's
+     `exit_on_close_request: false`, set in `window::Settings` itself,
+     since `.window()` replaces what the builder set before it). A
+     detached worker can come later if it is missed.
+     How each engine is driven, from their source and Heroic 2.22.4's:
+     legendary `install <app> --base-path <dir> --platform Windows
+     --skip-sdl --skip-dlcs -y`, `install <app> --update-only`, `repair
+     <app> -y`, `uninstall <app> -y`; nile `install --base-path <dir>
+     <id>`, `update`, `verify`, `uninstall`; gogdl `info <id> --platform
+     <p> --lang en-US` (JSON with `folder_name`, `versionName`, `buildId`
+     and `size` per language), then `download|update|repair <id>
+     --platform <p> --path <dir> --support <stores/gog>/support/<id>
+     --skip-dlcs --lang en-US` (`download` adds the game's folder to the
+     path, the others take the game's folder). All three log `= Progress:
+     12.34[%] …, ETA: hh:mm:ss`, `= Downloaded: N MiB` and `+ Download\t- N
+     MiB/s`. Each engine runs in a process group of its own; Stop sends
+     SIGINT to the group, as Ctrl+C would, then kills it after 15 s.
+     Choices [tentative]: games go into `~/Games` (`install_dir` in
+     config.toml); GOG's Linux build when there is one, else Windows;
+     English for GOG; no DLC; a game both Heroic and Zendo installed keeps
+     Heroic's launch. gogdl keeps no list of what it installed, so Zendo
+     writes `stores/gog/installed.json` in Heroic's shape and reads it
+     with the same code as Heroic's; uninstalling a GOG game deletes the
+     folder recorded there, refusing the home folder, anything right in
+     it, the games folder itself, a folder holding another game, links
+     and paths fewer than three levels deep. Games Zendo installed show in
+     the library through Heroic's readers pointed at Zendo's folders, with
+     titles and images from the Store's lists; Play on them says launching
+     comes with phase 5.
+     Checked on scratch folders with stand-in legendary and gogdl scripts
+     (progress in each engine's format): two installs, the library listing
+     both with size and version, Stop reaching the engine's process group,
+     a GOG update, both uninstalls leaving nothing behind; in the window,
+     the queue starting by itself, the footer's progress, the finished
+     games joining the library, and a close request opening Downloads
+     with the confirm. When Zendo was killed outright, the stand-in engine
+     died at its next log line (the pipe closed); whether the real engines
+     do the same is not checked. Not yet tried: any real engine install,
+     update, repair or uninstall.
 5. Launch options per game (a game settings sheet): Proton through umu with
    a prefix per game, a Wine/Proton manager (GE-Proton downloads), MangoHud,
    GameMode, gamescope, arguments and environment, a log of each launch.
@@ -332,8 +373,10 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   Recent afterwards.
 - Try a controller on the new pages.
 - Sign in to each store from Accounts and check its Store list and covers.
-- Build 4c, downloads run by the window: read how Heroic passes install
-  arguments to each engine and reads its progress.
+- Install a small game from each store, then update, repair and
+  uninstall it; check the progress line against each real engine's log.
+- Then phase 5: launch options, which also lets Zendo start the games it
+  installed.
 
 ## Conventions
 

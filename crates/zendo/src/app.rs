@@ -1,11 +1,12 @@
-//! The window: a sidebar of pages (Library, Store, Accounts, Settings,
-//! About), the library and the store as grids of covers with chips, and a
-//! page for each game with its art, actions and details. Keyboard and
-//! controller drive all of it; missing covers and wide images download in
-//! the background.
+//! The window: a sidebar of pages (Library, Store, Downloads, Accounts,
+//! Settings, About), the library and the store as grids of covers with
+//! chips, and a page for each game with its art, actions and details.
+//! Keyboard and controller drive all of it; missing covers and wide images
+//! download in the background, and store games install through a queue.
 
 mod about;
 mod accounts;
+mod downloads;
 mod format;
 mod game;
 mod library;
@@ -32,6 +33,7 @@ use zendo_core::{Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
+use downloads::{DownloadMessage, DownloadsState};
 use store::{StoreMessage, StoreState};
 use style::DIM;
 
@@ -70,6 +72,8 @@ pub fn run(fullscreen: bool) -> anyhow::Result<()> {
             size: START_SIZE,
             min_size: Some(Size::new(library::min_width(), 560.0)),
             fullscreen,
+            // A running download asks before the window goes.
+            exit_on_close_request: false,
             ..window::Settings::default()
         })
         .run()?;
@@ -84,6 +88,7 @@ enum Page {
     Store,
     /// The owned game with this id.
     Owned(String),
+    Downloads,
     Settings,
     Accounts,
     About,
@@ -143,6 +148,7 @@ enum Message {
     SetDownloadCovers(bool),
     DownloadNow,
     Account(AccountMessage),
+    Download(DownloadMessage),
     Store(StoreMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
     /// page is for.
@@ -164,7 +170,7 @@ struct KeyForm {
 }
 
 #[derive(Debug, Default)]
-struct Downloads {
+struct ImageDownloads {
     left: usize,
     failed: usize,
     /// More games came in while these downloaded; look again after.
@@ -191,7 +197,8 @@ struct Zendo {
     status: Option<String>,
     sort: Sort,
     show_hidden: bool,
-    downloads: Downloads,
+    images: ImageDownloads,
+    downloads: DownloadsState,
     config: Config,
     key: KeyForm,
     accounts: Accounts,
@@ -218,7 +225,8 @@ impl Zendo {
             status: None,
             sort: Sort::default(),
             show_hidden: false,
-            downloads: Downloads::default(),
+            images: ImageDownloads::default(),
+            downloads: DownloadsState::default(),
             config: Config::default(),
             key: KeyForm::default(),
             accounts: Accounts::default(),
@@ -227,7 +235,13 @@ impl Zendo {
         };
         // The window's id, so F11 works before the first resize event.
         let window = window::latest().and_then(|id| Task::done(Message::Focused(id, true)));
-        let tasks = [scan(), window, accounts::check_all(), store::load_cached()];
+        let tasks = [
+            scan(),
+            window,
+            accounts::check_all(),
+            store::load_cached(),
+            downloads::load(),
+        ];
         (zendo, Task::batch(tasks))
     }
 
@@ -284,7 +298,12 @@ impl Zendo {
         match &self.page {
             Page::Game(id) => Some(id.clone()),
             Page::Library => self.selected_id(),
-            Page::Store | Page::Owned(_) | Page::Accounts | Page::Settings | Page::About => None,
+            Page::Store
+            | Page::Owned(_)
+            | Page::Downloads
+            | Page::Accounts
+            | Page::Settings
+            | Page::About => None,
         }
     }
 
@@ -404,6 +423,7 @@ impl Zendo {
             | Message::SetDownloadCovers(_)
             | Message::DownloadNow => self.update_settings(message),
             Message::Account(message) => self.update_account(message),
+            Message::Download(message) => self.update_download(message),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -454,7 +474,7 @@ impl Zendo {
                 Task::none()
             }
             Page::Accounts => self.update_account(AccountMessage::Paste(pasted.to_owned())),
-            Page::Game(_) | Page::Owned(_) | Page::About => Task::none(),
+            Page::Game(_) | Page::Owned(_) | Page::Downloads | Page::About => Task::none(),
         }
     }
 
@@ -465,7 +485,14 @@ impl Zendo {
             Page::Game(_) => self.play(),
             Page::Store => self.open_owned(),
             Page::Owned(id) if self.is_installed(id) => self.navigate(Page::Game(id.clone())),
-            Page::Owned(_) | Page::Accounts | Page::Settings | Page::About => Task::none(),
+            Page::Owned(id) => match self.install_job(&id.clone()) {
+                Some(job) => self.update_download(DownloadMessage::Queue(job)),
+                None => Task::none(),
+            },
+            Page::Downloads if self.downloads.confirm_close => {
+                self.update_download(DownloadMessage::CloseAnyway)
+            }
+            Page::Downloads | Page::Accounts | Page::Settings | Page::About => Task::none(),
         }
     }
 
@@ -490,6 +517,7 @@ impl Zendo {
         }
         self.page = page;
         self.status = None;
+        self.downloads.confirm_uninstall = None;
         match &self.page {
             Page::Game(_) | Page::Owned(_) => {
                 operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 })
@@ -499,7 +527,7 @@ impl Zendo {
                 let y = *self.cursor().1;
                 operation::scroll_to(grid_id(), AbsoluteOffset { x: 0.0, y })
             }
-            Page::Accounts | Page::Settings | Page::About => Task::none(),
+            Page::Downloads | Page::Accounts | Page::Settings | Page::About => Task::none(),
         }
     }
 
@@ -516,6 +544,9 @@ impl Zendo {
                 self.store_filter_changed()
             }
             Page::Owned(_) => self.navigate(Page::Store),
+            Page::Downloads if self.downloads.confirm_close => {
+                self.update_download(DownloadMessage::StayOpen)
+            }
             _ => self.navigate(Page::Library),
         }
     }
@@ -566,7 +597,7 @@ impl Zendo {
     }
 
     fn image_arrived(&mut self, id: &str, kind: Kind, result: Result<Option<PathBuf>, String>) {
-        self.downloads.left = self.downloads.left.saturating_sub(1);
+        self.images.left = self.images.left.saturating_sub(1);
         match result {
             Ok(Some(path)) => {
                 // The library and the store can both hold a game.
@@ -584,19 +615,19 @@ impl Zendo {
                 }
             }
             Ok(None) => {}
-            Err(_) => self.downloads.failed += 1,
+            Err(_) => self.images.failed += 1,
         }
     }
 
     fn images_done(&mut self) -> Task<Message> {
-        self.downloads.left = 0;
-        if self.downloads.failed > 0 {
+        self.images.left = 0;
+        if self.images.failed > 0 {
             self.status = Some(format!(
                 "{} could not be downloaded; `zendo covers` says why",
-                format::count(self.downloads.failed, "image", "images")
+                format::count(self.images.failed, "image", "images")
             ));
         }
-        if std::mem::take(&mut self.downloads.again) {
+        if std::mem::take(&mut self.images.again) {
             self.download_images()
         } else {
             Task::none()
@@ -745,8 +776,8 @@ impl Zendo {
         if !self.persist {
             return Task::none();
         }
-        if self.downloads.left > 0 {
-            self.downloads.again = true;
+        if self.images.left > 0 {
+            self.images.again = true;
             return Task::none();
         }
         let Some(fetcher) = Fetcher::new(&self.config) else {
@@ -779,9 +810,9 @@ impl Zendo {
         if wanted.is_empty() {
             return Task::none();
         }
-        self.downloads = Downloads {
+        self.images = ImageDownloads {
             left: wanted.len(),
-            ..Downloads::default()
+            ..ImageDownloads::default()
         };
         Task::run(fetch_images(fetcher, wanted), |message| message)
     }
@@ -790,6 +821,7 @@ impl Zendo {
         Subscription::batch([
             event::listen_with(on_event),
             Subscription::run(gamepad::events).map(Message::Pad),
+            window::close_requests().map(|_| Message::Download(DownloadMessage::CloseRequested)),
         ])
     }
 
@@ -803,6 +835,7 @@ impl Zendo {
             Page::Settings => self.settings_page(),
             Page::About => about::page(),
             Page::Accounts => self.accounts_page(),
+            Page::Downloads => self.downloads_page(),
             Page::Store => self.store_page(),
             Page::Owned(id) => match self.store.owned(id) {
                 Some(game) => self.owned_page(game),
@@ -825,10 +858,13 @@ impl Zendo {
             &self.status
         };
         let left = match (status, problems) {
-            _ if self.downloads.left > 0 => {
-                text(format!("Downloading images, {} left", self.downloads.left))
+            _ if self.images.left > 0 => {
+                text(format!("Downloading images, {} left", self.images.left))
             }
             (Some(status), _) => text(status.clone()),
+            (None, _) if self.downloads.is_running() => {
+                text(self.downloads.summary().unwrap_or_default())
+            }
             (None, 0) => text(""),
             (None, n) => text(format!(
                 "{} could not be read; Settings names them",
@@ -841,7 +877,11 @@ impl Zendo {
             }
             Page::Game(_) => "Enter play · Esc back · Ctrl+P pin · Del hide · F11 full-screen",
             Page::Store => "Enter open · type to search · Esc clear · F11 full-screen",
-            Page::Accounts | Page::Owned(_) | Page::Settings | Page::About => {
+            Page::Owned(_) => "Enter install or open · Esc back · F11 full-screen",
+            Page::Downloads if self.downloads.confirm_close => {
+                "Enter close anyway · Esc keep downloading"
+            }
+            Page::Accounts | Page::Downloads | Page::Settings | Page::About => {
                 "Esc back · F11 full-screen"
             }
         };
@@ -984,9 +1024,10 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             "v" => Some(Message::PasteClipboard),
             "1" => Some(Message::Navigate(Page::Library)),
             "2" => Some(Message::Navigate(Page::Store)),
-            "3" => Some(Message::Navigate(Page::Accounts)),
-            "4" | "," => Some(Message::Navigate(Page::Settings)),
-            "5" => Some(Message::Navigate(Page::About)),
+            "3" => Some(Message::Navigate(Page::Downloads)),
+            "4" => Some(Message::Navigate(Page::Accounts)),
+            "5" | "," => Some(Message::Navigate(Page::Settings)),
+            "6" => Some(Message::Navigate(Page::About)),
             _ => None,
         };
     }

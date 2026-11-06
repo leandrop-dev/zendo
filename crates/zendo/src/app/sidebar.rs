@@ -66,6 +66,15 @@ impl Zendo {
                     Page::Store,
                     matches!(self.page, Page::Store | Page::Owned(_))
                 ),
+                entry(
+                    "Downloads",
+                    match self.downloads.queue.len() {
+                        0 => String::new(),
+                        n => n.to_string(),
+                    },
+                    Page::Downloads,
+                    self.page == Page::Downloads
+                ),
                 heading("SYSTEM"),
                 entry(
                     "Accounts",
