@@ -90,7 +90,10 @@ pub enum SheetMessage {
 
 /// Whether the game has launch options Zendo applies.
 pub fn applies(game: &Game) -> bool {
-    matches!(game.launch, Launch::Engine { .. } | Launch::Command { .. })
+    matches!(
+        game.launch,
+        Launch::Engine { .. } | Launch::Command { .. } | Launch::Local { .. }
+    )
 }
 
 /// The Proton list: the default first, then each one installed, and the
@@ -201,7 +204,8 @@ impl Zendo {
         } else {
             LaunchOptions::default()
         };
-        let windows = game.installed_by_zendo() && launch::needs_proton(&game);
+        let windows = matches!(game.launch, Launch::Engine { .. } | Launch::Local { .. })
+            && launch::needs_proton(&game);
         self.sheet = Some(Sheet {
             id: game.id.clone(),
             title: game.title.clone(),
@@ -254,17 +258,23 @@ impl Zendo {
 
     /// The sheet over the page, when it is open.
     pub(super) fn with_sheet<'a>(&'a self, page: Element<'a, Message>) -> Element<'a, Message> {
-        let Some(sheet) = &self.sheet else {
-            return page;
-        };
-        let backdrop = center(sheet_card(sheet))
-            .padding(32)
-            .style(|_| container::Style {
-                background: Some(Background::Color(Color::from_rgba8(0, 0, 0, 0.6))),
-                ..container::Style::default()
-            });
-        iced::widget::stack![page, opaque(backdrop)].into()
+        match &self.sheet {
+            Some(sheet) => overlay(page, sheet_card(sheet)),
+            None => page,
+        }
     }
+}
+
+/// A card over the page, on a dimmed backdrop that takes the clicks.
+pub(super) fn overlay<'a>(
+    page: Element<'a, Message>,
+    card: Element<'a, Message>,
+) -> Element<'a, Message> {
+    let backdrop = center(card).padding(32).style(|_| container::Style {
+        background: Some(Background::Color(Color::from_rgba8(0, 0, 0, 0.6))),
+        ..container::Style::default()
+    });
+    iced::widget::stack![page, opaque(backdrop)].into()
 }
 
 fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {

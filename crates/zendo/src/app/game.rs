@@ -40,6 +40,7 @@ impl Zendo {
         let actions = row![
             self.play_buttons(game),
             launch_options_button(game),
+            self.local_buttons(game),
             button(text(if game.pinned { "Unpin" } else { "Pin" }).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
@@ -68,6 +69,9 @@ impl Zendo {
         .padding(24);
         if game.installed_by_zendo() {
             page = page.push(self.store_actions(game));
+            page = page.push(self.launch_card(game));
+        }
+        if game.source == Source::Local {
             page = page.push(self.launch_card(game));
         }
         let facts = store_facts(

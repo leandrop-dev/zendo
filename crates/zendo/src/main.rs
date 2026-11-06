@@ -2,6 +2,7 @@
 //! a terminal or a keybind.
 
 mod app;
+mod file_dialog;
 mod gamepad;
 mod sign_in_window;
 
@@ -34,6 +35,10 @@ fn main() -> ExitCode {
     // Started by the window for a store's sign-in; not for people.
     if let ["sign-in-window", store, url] = args.as_slice() {
         return sign_in_window::main(store, url);
+    }
+    // Started by the window to choose a file.
+    if let ["pick-file", title] = args.as_slice() {
+        return file_dialog::main(title);
     }
     let result = match args.as_slice() {
         [] => app::run(false),

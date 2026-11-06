@@ -720,7 +720,45 @@ Nothing is required. Zendo detects each tool and shows what is missing.
        logs show `OPENSSL_ia32cap`, which avoids a crash on newer Intel
        CPUs); game-specific fixes need umu to know the game.
        `PROTONFIXES_DISABLE=1` in a game's environment turns them off.
-6. Local games: "Add game", with a cover search on SteamGridDB.
+6. Local games: "Add game", with a cover search on SteamGridDB. Split in
+   two:
+   - 6a Games added by hand, built 2026-11-06: "Add game" in the
+     Library's header opens a sheet: the program (typed, or "Choose…",
+     the desktop's own file dialog through GTK's native chooser, which
+     goes through the portal; a second process, `zendo pick-file`, as
+     with the sign-in window), the title (filled from the program's
+     folder when empty: `Cave Story/Doukutsu.exe` gives "Cave Story",
+     past folders like `bin` or `x64`) and arguments. A `.exe`, `.bat`
+     or `.msi` is a Windows game [tentative: by extension only], run
+     through umu-run with Proton in a prefix of its own
+     (`<install_dir>/Prefixes/<id's name>`, made on the first launch);
+     anything else must be executable and runs as it is. Both start from
+     the program's folder, as many games expect. Kept in
+     `~/.config/zendo/local.toml` (`[[game]]`: id, title, program,
+     arguments); the id is `local:<title as a slug>` from the title
+     first given and stays when the title changes, so play time, pins,
+     launch options and the prefix stay with the game. umu's id is
+     looked up by title (there is no store), so umu's fixes and ProtonDB
+     apply to the games it knows. The source chip is "Added"; the page
+     has Edit (the same sheet), Remove (asks once; the files and the
+     prefix stay), launch options and the launch card; play time is
+     counted as for the games Zendo installed. The cover comes from
+     SteamGridDB by title like any game without a store's [tentative
+     until 6b: a renamed game keeps the cover found under its first
+     title].
+     Checked: clippy and tests (ids from titles, Windows by extension,
+     what is refused: no title, a missing file, a Linux file that is not
+     executable, an open quote; the file written and read back; the
+     command a Linux game gets with options on, from its folder; the
+     title guessed from a folder; the sheet refusing a game with no title,
+     Escape closing it, Remove asking first). The user then added a
+     Windows `.exe` and a Linux game, which found their covers on
+     SteamGridDB, and tried Edit and Remove; all worked. Jet Set Radio
+     Future's `jsrf_launcher` started (its log has the command, run from
+     its folder) but the game did not come up, which the user is taking
+     up with its developer.
+   - 6b Covers picked by hand: search SteamGridDB for a game's title and
+     choose the cover, for any game.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
 ## On hyprmonk's side
@@ -734,8 +772,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Phase 6, local games: "Add game", with a cover search on SteamGridDB.
-  An Epic install and launch is still untried.
+- Phase 6b, the cover picker: search SteamGridDB, choose a game's cover.
 
 ## Conventions
 

@@ -63,7 +63,13 @@ pub fn game_id(store: &str, app: &str, title: &str) -> String {
     }
     // Offline is no answer: asked again next time.
     let agent = agent();
-    let asked = ask(&agent, store, app).and_then(|id| match id {
+    // A game added by hand has no store to ask.
+    let by_store = if store == "local" {
+        Ok(None)
+    } else {
+        ask(&agent, store, app)
+    };
+    let asked = by_store.and_then(|id| match id {
         Some(id) => Ok(Some(id)),
         None => by_title(&agent, title),
     });

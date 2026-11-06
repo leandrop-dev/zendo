@@ -82,16 +82,15 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             }
             (command, None, None)
         }
+        Launch::Local { program, args, dir } => {
+            let options = options_for(game)?;
+            let command = local_command(game, program, args, dir.as_deref(), &options)?;
+            make_prefix(&command)?;
+            (command, log_path(&game.id), None)
+        }
         Launch::Engine { app, .. } => {
             let command = engine_command(game, app)?;
-            if let Some(prefix) = command
-                .get_envs()
-                .find(|(key, _)| *key == "WINEPREFIX")
-                .and_then(|(_, value)| value)
-            {
-                fs::create_dir_all(prefix)
-                    .with_context(|| format!("could not make {}", Path::new(prefix).display()))?;
-            }
+            make_prefix(&command)?;
             let log = log_path(&game.id);
             (command, log, None)
         }
@@ -313,16 +312,108 @@ pub fn log_path(id: &str) -> Option<PathBuf> {
     paths::state_home().map(|dir| dir.join(format!("zendo/logs/{name}.log")))
 }
 
-/// The Wine prefix a Windows game Zendo installed runs in.
+/// The Wine prefix a Windows game Zendo starts runs in.
 #[must_use]
 pub fn prefix(game: &Game) -> Option<PathBuf> {
     let dir = Config::load()
         .ok()
         .and_then(|config| config.install_dir())?;
-    Some(
-        dir.join("Prefixes")
-            .join(downloads::folder_name(&game.title)),
-    )
+    Some(prefix_in(&dir, game))
+}
+
+/// The game's prefix in the games folder `dir`: `Prefixes/<title>`, or for
+/// a game added by hand, its id's name, which stays when its title changes.
+#[must_use]
+pub fn prefix_in(dir: &Path, game: &Game) -> PathBuf {
+    let name = match game.id.strip_prefix("local:") {
+        Some(name) if game.source == Source::Local => name.to_owned(),
+        _ => downloads::folder_name(&game.title),
+    };
+    dir.join("Prefixes").join(name)
+}
+
+/// Makes the prefix the command's `WINEPREFIX` names, when it has one.
+fn make_prefix(command: &Command) -> anyhow::Result<()> {
+    if let Some(prefix) = command
+        .get_envs()
+        .find(|(key, _)| *key == "WINEPREFIX")
+        .and_then(|(_, value)| value)
+    {
+        fs::create_dir_all(prefix)
+            .with_context(|| format!("could not make {}", Path::new(prefix).display()))?;
+    }
+    Ok(())
+}
+
+/// What umu-run needs for a Windows game: the path to umu-run, and the
+/// environment it reads.
+struct Umu {
+    program: String,
+    env: Vec<(&'static str, std::ffi::OsString)>,
+}
+
+fn umu_setup(
+    game: &Game,
+    options: &LaunchOptions,
+    store: Option<(&str, &str)>,
+) -> anyhow::Result<Umu> {
+    let umu = which("umu-run")
+        .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
+    let prefix = prefix(game).context("no folder for the game's Wine prefix")?;
+    let mut env = vec![("WINEPREFIX", prefix.into_os_string())];
+    match store {
+        Some((store, app)) => {
+            env.push(("GAMEID", umu::game_id(store, app, &game.title).into()));
+            env.push(("STORE", store.into()));
+        }
+        None => env.push((
+            "GAMEID",
+            umu::game_id("local", &game.id, &game.title).into(),
+        )),
+    }
+    // The one chosen, or the default when it is gone; without any, umu
+    // downloads UMU-Proton on the first launch.
+    let chosen = options.proton.as_deref().and_then(proton::named);
+    if let Some(proton) = chosen.or_else(proton::default) {
+        env.push(("PROTONPATH", proton.path.into_os_string()));
+    }
+    if options.xbox_controllers {
+        env.push(("PROTON_PREFER_SDL", "1".into()));
+    }
+    Ok(Umu {
+        program: umu.to_string_lossy().into_owned(),
+        env,
+    })
+}
+
+/// A game added by hand: its wrappers, umu-run for a Windows program, the
+/// program and its arguments, from its own folder.
+fn local_command(
+    game: &Game,
+    program: &Path,
+    args: &[String],
+    dir: Option<&Path>,
+    options: &LaunchOptions,
+) -> anyhow::Result<Command> {
+    let mut words = options.wrappers();
+    let mut env = Vec::new();
+    if needs_proton(game) {
+        let umu = umu_setup(game, options, None)?;
+        words.push(umu.program);
+        env = umu.env;
+    }
+    words.push(program.to_string_lossy().into_owned());
+    words.extend(args.iter().cloned());
+    words.extend(options.arguments()?);
+    let mut command = Command::new(&words[0]);
+    command
+        .args(&words[1..])
+        .envs(env)
+        .envs(options.environment()?);
+    if let Some(dir) = dir.filter(|dir| dir.is_dir()) {
+        command.current_dir(dir);
+    }
+    Ok(command)
 }
 
 /// Whether the game needs Proton: a Windows build.
@@ -373,24 +464,10 @@ fn engine_command_with(
     let mut wrapper = options.wrappers();
     let windows = needs_proton(game);
     if windows {
-        let umu = which("umu-run")
-            .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
-        let prefix = prefix(game).context("no folder for the game's Wine prefix")?;
         let store_key = umu::store_name(store_key(store));
-        command
-            .env("WINEPREFIX", &prefix)
-            .env("GAMEID", umu::game_id(store_key, app, &game.title))
-            .env("STORE", store_key);
-        // The one chosen, or the default when it is gone; without any, umu
-        // downloads UMU-Proton on the first launch.
-        let chosen = options.proton.as_deref().and_then(proton::named);
-        if let Some(proton) = chosen.or_else(proton::default) {
-            command.env("PROTONPATH", &proton.path);
-        }
-        if options.xbox_controllers {
-            command.env("PROTON_PREFER_SDL", "1");
-        }
-        wrapper.push(umu.to_string_lossy().into_owned());
+        let umu = umu_setup(game, options, Some((store_key, app)))?;
+        command.envs(umu.env);
+        wrapper.push(umu.program);
     }
     command.envs(options.environment()?);
     match store {
@@ -548,6 +625,44 @@ mod tests {
             "DXVK_HUD=fps gogdl launch /games/Sugar 1 --platform linux \
              --wrapper 'gamemoderun mangohud' -windowed --name 'Lea P'"
         );
+    }
+
+    #[test]
+    fn a_linux_game_added_by_hand_runs_from_its_folder() {
+        let dir = std::env::temp_dir();
+        let program = dir.join("zendo-test-game");
+        let mut game = Game::new(
+            "local:game".into(),
+            "Game".into(),
+            Source::Local,
+            Launch::Local {
+                program: program.clone(),
+                args: vec!["--level".into(), "two words".into()],
+                dir: Some(dir.clone()),
+            },
+        );
+        game.details.platform = Some("linux".into());
+        let options = LaunchOptions {
+            gamemode: true,
+            arguments: "-fullscreen".into(),
+            ..LaunchOptions::default()
+        };
+        let command = local_command(
+            &game,
+            &program,
+            &["--level".into(), "two words".into()],
+            Some(&dir),
+            &options,
+        )
+        .unwrap();
+        assert_eq!(
+            describe(&command),
+            format!(
+                "gamemoderun {} --level 'two words' -fullscreen",
+                program.display()
+            )
+        );
+        assert_eq!(command.get_current_dir(), Some(dir.as_path()));
     }
 
     #[test]

@@ -295,6 +295,7 @@ impl Zendo {
             (Source::Amazon, "Amazon Games, through Heroic"),
             (Source::Heroic, "Added to Heroic by hand"),
             (Source::Desktop, ".desktop files in the Game category"),
+            (Source::Local, "Added by hand in Zendo"),
         ]
         .into_iter()
         .map(|(source, label)| {

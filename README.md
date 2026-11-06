@@ -49,6 +49,10 @@ install it and give it its colours, but it runs on any Linux desktop.
   - **`.desktop` files** in the Game category, except the launchers
     themselves and the shortcuts Steam and Heroic make for games already
     listed.
+  - **Games you add yourself** with "Add game": a Windows `.exe`, run
+    through umu-launcher and Proton in a prefix of its own, or a Linux
+    program, chosen in the desktop's file dialog, with a title and
+    arguments. Edit and Remove are on its page; Remove leaves its files.
 - Starts a game the way its launcher would: Steam games through Steam,
   Heroic's through Heroic (so its settings for the game apply), the others
   from their `.desktop` file.
@@ -97,8 +101,8 @@ install it and give it its colours, but it runs on any Linux desktop.
   at once. Steam and
   Heroic games get the same once their launcher has started them, found
   by their install folder.
-- Gives each game it starts itself (the ones it installed, `.desktop`
-  ones) launch options on its page: the Proton build, MangoHud, GameMode,
+- Gives each game it starts itself (the ones it installed or you added,
+  `.desktop` ones) launch options on its page: the Proton build, MangoHud, GameMode,
   gamescope with full screen and a size, controllers as Xbox pads for
   games that ignore others, arguments and environment. Steam and Heroic
   games keep their launcher's own settings.
@@ -216,6 +220,17 @@ install_dir = "~/Games"
 default_proton = "GE-Proton11-12-x86_64"
 ```
 
+`~/.config/zendo/local.toml` holds the games added by hand; the
+Library's "Add game" and their pages' Edit and Remove write it:
+
+```toml
+[[game]]
+id = "local:cave-story"         # from the first title; stays when it changes
+title = "Cave Story"
+program = "/home/you/Games/Cave Story/Doukutsu.exe"
+arguments = "-fullscreen"
+```
+
 `~/.config/zendo/games.toml` holds each game's launch options, as set on
 its page (readable by you only, as an environment can hold a token):
 
@@ -247,17 +262,17 @@ What Zendo keeps itself:
 | `~/.local/share/Steam/compatibilitytools.d/` | GE-Proton builds downloaded from Settings (Zendo does not own the folder; Steam reads it) |
 | `~/.cache/zendo/protondb.json` | Each game's Steam app id and ProtonDB rating, asked again after a week |
 
-Play time of games Zendo starts itself (the ones it installed, `.desktop`
-ones) is counted until the game's last process ends; Steam and Heroic
+Play time of games Zendo starts itself (the ones it installed or you
+added, `.desktop` ones) is counted until the game's last process ends; Steam and Heroic
 count their own.
 
 ## Layout
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -278,7 +293,8 @@ count their own.
    per game, a launch log, Running and Stop, a launch options sheet with
    MangoHud, GameMode and gamescope, the ProtonDB rating on the game's
    page, and GE-Proton downloads.
-6. Local games: add a game by hand, with a cover from SteamGridDB.
+6. **Local games** (6a built): add a game by hand; next, choosing its
+   cover from SteamGridDB.
 7. Mods: Nexus links, profiles, back to vanilla.
 
 See [PLAN.md](PLAN.md) for the details.

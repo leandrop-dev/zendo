@@ -12,7 +12,7 @@ use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::launch::{self, Started, Watch};
-use zendo_core::{Game, Launch, downloads};
+use zendo_core::{Game, Launch};
 
 use super::style::{self, BOLD, DIM};
 use super::{Message, Zendo};
@@ -256,9 +256,7 @@ impl Zendo {
         if launch::needs_proton(game)
             && let Some(dir) = self.config.install_dir()
         {
-            let prefix = dir
-                .join("Prefixes")
-                .join(downloads::folder_name(&game.title));
+            let prefix = launch::prefix_in(&dir, game);
             rows = rows.push(path_row("Wine prefix", &prefix));
         }
         if let Some(log) = launch::log_path(&game.id) {

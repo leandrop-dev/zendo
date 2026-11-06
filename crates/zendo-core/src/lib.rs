@@ -18,6 +18,7 @@ mod heroic;
 pub mod info;
 pub mod launch;
 pub mod launch_options;
+pub mod local;
 pub mod owned;
 mod paths;
 pub mod proton;
@@ -49,6 +50,8 @@ pub enum Source {
     Heroic,
     /// A `.desktop` file in the `Game` category.
     Desktop,
+    /// Added by hand in Zendo.
+    Local,
 }
 
 impl Source {
@@ -62,6 +65,7 @@ impl Source {
             Self::Amazon => "Amazon",
             Self::Heroic => "Heroic",
             Self::Desktop => "Desktop",
+            Self::Local => "Added",
         }
     }
 }
@@ -82,6 +86,13 @@ pub enum Launch {
     /// Installed by Zendo through a store engine (`legendary`, `gogdl`,
     /// `nile`), and started through its `launch`.
     Engine { runner: String, app: String },
+    /// Added by hand: a program, through umu and Proton when it is a
+    /// Windows one.
+    Local {
+        program: PathBuf,
+        args: Vec<String>,
+        dir: Option<PathBuf>,
+    },
 }
 
 /// When and how much a game was played, from its launcher's records and
@@ -208,6 +219,10 @@ impl Game {
             }
             (Launch::Command { program, .. }, _) => program.clone(),
             (Launch::Engine { runner, .. }, _) => format!("Zendo ({runner})"),
+            (Launch::Local { .. }, _) if launch::needs_proton(self) => {
+                "Zendo (umu-launcher)".to_owned()
+            }
+            (Launch::Local { .. }, _) => "Zendo".to_owned(),
         }
     }
 
@@ -226,19 +241,32 @@ impl Game {
                 format!("{runner} launch {app} --no-wine --wrapper umu-run")
             }
             Launch::Engine { runner, app } => format!("{runner} launch {app}"),
-            Launch::Command { program, args, .. } => std::iter::once(program.as_str())
-                .chain(args.iter().map(String::as_str))
-                .map(|word| {
-                    if word.contains(char::is_whitespace) {
-                        format!("\"{word}\"")
-                    } else {
-                        word.to_owned()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" "),
+            Launch::Command { program, args, .. } => words(program, args),
+            Launch::Local { program, args, .. } => {
+                let line = words(&program.to_string_lossy(), args);
+                if launch::needs_proton(self) {
+                    format!("umu-run {line}")
+                } else {
+                    line
+                }
+            }
         }
     }
+}
+
+/// A program and its arguments as one line, words with spaces quoted.
+fn words(program: &str, args: &[String]) -> String {
+    std::iter::once(program)
+        .chain(args.iter().map(String::as_str))
+        .map(|word| {
+            if word.contains(char::is_whitespace) {
+                format!("\"{word}\"")
+            } else {
+                word.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// What a scanner found.
@@ -272,6 +300,7 @@ impl Library {
         // After Heroic's: a game both installed keeps Heroic's launch.
         scan.extend(downloads::scan());
         scan.extend(desktop::scan(&desktop::dirs()));
+        scan.extend(local::scan());
         let state = match State::load() {
             Ok(state) => state,
             Err(err) => {

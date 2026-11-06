@@ -24,13 +24,14 @@ pub const GRID_PADDING: f32 = 24.0;
 /// Room kept for the scrollbar beside the grid.
 const SCROLLBAR: f32 = 12.0;
 
-const SOURCES: [Source; 6] = [
+const SOURCES: [Source; 7] = [
     Source::Steam,
     Source::Epic,
     Source::Gog,
     Source::Amazon,
     Source::Heroic,
     Source::Desktop,
+    Source::Local,
 ];
 
 /// How many cards fit across a window this wide, beside the sidebar.
@@ -127,6 +128,10 @@ impl Zendo {
                 .size(14)
                 .width(280)
                 .style(style::input),
+            button(text("Add game").size(14))
+                .padding([8, 14])
+                .style(style::secondary)
+                .on_press(Message::Local(super::local::LocalMessage::Add)),
             refresh,
         ]
         .spacing(12)

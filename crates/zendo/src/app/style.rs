@@ -43,6 +43,7 @@ pub fn source_color(source: Source) -> Color {
         Source::Amazon => Color::from_rgb8(0xf0, 0xa0, 0x30),
         Source::Heroic => Color::from_rgb8(0xe0, 0x6c, 0x75),
         Source::Desktop => GOOD,
+        Source::Local => ACCENT,
     }
 }
 

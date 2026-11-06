@@ -11,6 +11,7 @@ mod format;
 mod game;
 mod launch_options;
 mod library;
+mod local;
 mod protondb;
 mod protons;
 mod running;
@@ -39,6 +40,7 @@ use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
 use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
+use local::{LocalMessage, LocalState};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
@@ -167,6 +169,7 @@ enum Message {
     Download(DownloadMessage),
     Run(RunMessage),
     Sheet(SheetMessage),
+    Local(LocalMessage),
     Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
@@ -223,6 +226,8 @@ struct Zendo {
     running: Running,
     /// A game's launch options, open over its page.
     sheet: Option<Sheet>,
+    /// Games added by hand: the Add game sheet and Remove.
+    local: LocalState,
     /// The Proton section of Settings.
     protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -257,6 +262,7 @@ impl Zendo {
             downloads: DownloadsState::default(),
             running: Running::default(),
             sheet: None,
+            local: LocalState::default(),
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
@@ -370,19 +376,13 @@ impl Zendo {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
-        if let Some(task) = self.sheet_takes(&message) {
+        let sheet = self.sheet_takes(&message);
+        if let Some(task) = sheet.or_else(|| self.form_takes(&message)) {
             return task;
         }
         match message {
             Message::Loaded(library, sort, config) => self.loaded(library, sort, config),
-            Message::Refresh => {
-                if self.scanning {
-                    return Task::none();
-                }
-                self.scanning = true;
-                self.status = Some("Looking for games…".to_owned());
-                scan()
-            }
+            Message::Refresh => self.refresh(),
             Message::Image(id, kind, result) => {
                 self.image_arrived(&id, kind, result);
                 Task::none()
@@ -461,6 +461,7 @@ impl Zendo {
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
+            Message::Local(message) => self.update_local(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
@@ -474,6 +475,16 @@ impl Zendo {
         }
     }
 
+    /// Reads the library again, unless it is being read already.
+    fn refresh(&mut self) -> Task<Message> {
+        if self.scanning {
+            return Task::none();
+        }
+        self.scanning = true;
+        self.status = Some("Looking for games…".to_owned());
+        scan()
+    }
+
     fn loaded(
         &mut self,
         library: Library,
@@ -481,7 +492,8 @@ impl Zendo {
         config: Result<Config, String>,
     ) -> Task<Message> {
         let first = self.library.is_none();
-        let id = self.selected_id();
+        let mut id = self.selected_id();
+        let after = self.local.after_scan.take();
         self.library = Some(library);
         self.scanning = false;
         self.status = None;
@@ -495,6 +507,13 @@ impl Zendo {
                 Err(err) => self.status = Some(err),
             }
         }
+        // A game just added or edited opens.
+        if let Some((Some(open), _)) = &after
+            && self.game(open).is_some()
+        {
+            self.page = Page::Game(open.clone());
+            id = Some(open.clone());
+        }
         // A game whose page is open may be gone after a rescan.
         if let Page::Game(id) = &self.page
             && self.game(id).is_none()
@@ -502,6 +521,9 @@ impl Zendo {
             self.page = Page::Library;
         }
         let select = self.select(id.as_deref());
+        if let Some((_, note)) = after {
+            self.status = Some(note);
+        }
         let info = match &self.page {
             Page::Game(id) => {
                 let id = id.clone();
@@ -883,7 +905,7 @@ impl Zendo {
             },
         };
         let main = column![page, self.footer()].width(Length::Fill);
-        self.with_sheet(row![self.sidebar(), main].into())
+        self.with_form(self.with_sheet(row![self.sidebar(), main].into()))
     }
 
     fn footer(&self) -> Element<'_, Message> {
