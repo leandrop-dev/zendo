@@ -37,8 +37,10 @@ fn main() -> ExitCode {
         return sign_in_window::main(store, url);
     }
     // Started by the window to choose a file.
-    if let ["pick-file", title] = args.as_slice() {
-        return file_dialog::main(title);
+    if let ["pick-file", kind, title] = args.as_slice()
+        && let Some(kind) = file_dialog::Kind::from_name(kind)
+    {
+        return file_dialog::main(kind, title);
     }
     let result = match args.as_slice() {
         [] => app::run(false),

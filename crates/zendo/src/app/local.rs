@@ -115,8 +115,11 @@ impl Zendo {
                 form.picking = true;
                 return Task::perform(
                     blocking(|| {
-                        crate::file_dialog::pick("Choose the game's program")
-                            .map_err(|err| format!("{err:#}"))
+                        crate::file_dialog::pick(
+                            crate::file_dialog::Kind::Program,
+                            "Choose the game's program",
+                        )
+                        .map_err(|err| format!("{err:#}"))
                     }),
                     |result| Message::Local(LocalMessage::Picked(result)),
                 );

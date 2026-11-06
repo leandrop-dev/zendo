@@ -786,7 +786,62 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      ignored test: Jet Set Radio Future found, 2002, portrait covers and
      wide heroes, a thumbnail, Portal 2 by Steam id). The user then tried
      it in the window, and it worked.
-7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
+7. Mods: Nexus, `nxm://`, profiles, back to vanilla. Decided with the
+   user on 2026-11-06 [firm]: Amethyst Mod Manager's model (GPL-3.0, its
+   README and wiki read for ideas only): a few games known by their Steam
+   id or title with where their mods go, any other game taking mods in
+   its own folder or one the user sets; mods kept unpacked and copied in
+   on Apply, Back to vanilla putting the folder back as it was. Nexus
+   through the user's personal API key while Zendo is in testing, which
+   Nexus's API policy allows ("testing stage … or personal use only");
+   a public release needs an SSO slug from support@nexusmods.com, the
+   user's call. First test: Cat Quest (64-bit Mono Unity, owned) with
+   BepInEx 5, whose `BepInEx/LogOutput.log` shows it loaded. Split:
+   - 7a Mods from files, built 2026-11-06: a Mods card on the page of
+     every game with an install folder. "Add mod…" takes an archive
+     (zip, 7z, rar, tar) in the desktop's dialog, from `~/Downloads`,
+     unpacked with 7-Zip (bsdtar when it is missing); archives holding
+     links are refused. Kept in `~/.local/share/zendo/mods/<game id>/`:
+     `mods.toml` (the order, on or off, the folder when set),
+     `files/<mod>/`, `applied.json`, `backup/`, `overwrite/`. Each mod
+     shows its file count and whose files it replaces or loses to
+     (later ones win); ↑ ↓ to reorder, Delete asks once. Known games
+     [tentative, a start]: Stardew Valley (`Mods`), Skyrim SE and LE,
+     Fallout 4 and New Vegas, Starfield (`Data`, a wrapping `Data`
+     folder taken off), Cyberpunk 2077 (its folder; wrappers taken off
+     until `archive`, `bin`, `r6`, `red4ext`, `engine` or `mods` shows);
+     each with its Nexus name for 7b. Mod folder editable per game, not
+     while applied.
+     Apply first takes out what was applied, then copies each file from
+     the last mod on that has it (copies, not links: a game writing a
+     file never changes the kept mod; on btrfs `copy_file_range` shares
+     the blocks, checked with `filefrag` here), backing up game files
+     it replaces and recording each file and folder it placed. For a
+     Windows game, paths take the case of what is there (`data/Textures`
+     goes into `Data/textures`), as Wine sees them as one; a Linux game
+     keeps case apart. A failed Apply takes out what went in. Back to
+     vanilla removes the files placed, puts the backups back, and
+     removes the folders it made; what the game wrote in those folders,
+     and mod files it changed, go to `overwrite/`, applied after every
+     mod next time (a config kept), with a Delete for them. The card
+     says whether the list is applied, changed since, or not; Apply and
+     Back to vanilla wait while the game runs. Not handled yet: files the
+     game writes outside folders Zendo made stay; FOMOD installers and
+     Bethesda plugin lists (7d).
+     Checked: clippy and tests (apply and back to vanilla exact, with a
+     log and a changed file kept and applied again; case for Windows and
+     Linux games; a failed apply undone; wrappers found for Cyberpunk,
+     Skyrim and Stardew; a zip made with 7z added, an archive with a link
+     to `/etc/passwd` refused; games known by Steam id and title), and
+     BepInEx_win_x64_5.4.23.6.zip from GitHub added, applied to a game
+     folder made for the test and taken out to the two files it held
+     (an ignored test). The user tried it in the window on Cat Quest with
+     BepInEx 5 (2026-11-06): it works.
+   - 7b Nexus: the personal API key in Settings, `nxm://` links
+     ("Mod Manager Download") opened by Zendo, downloads on the Downloads
+     page, names, versions and update checks.
+   - 7c Profiles: named sets of mods per game, switched in one go.
+   - 7d FOMOD installers and per-game knowledge (Bethesda plugin order).
 
 ## On hyprmonk's side
 
@@ -799,7 +854,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Phase 7, mods: Nexus, `nxm://`, profiles, back to vanilla.
+- 7b, Nexus: the personal key in Settings first; ask before registering
+  Zendo as the `nxm://` handler.
 
 ## Conventions
 

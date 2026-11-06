@@ -105,16 +105,7 @@ pub fn dir() -> Option<PathBuf> {
 /// The file name for a game's image, without the extension: the id with
 /// anything outside `[A-Za-z0-9._-]` as `_`, then the kind's suffix.
 fn stem(id: &str, kind: Kind) -> String {
-    let mut stem: String = id
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || "._-".contains(c) {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    let mut stem = paths::safe_name(id);
     stem.push_str(kind.suffix());
     stem
 }

@@ -74,6 +74,9 @@ impl Zendo {
         if game.source == Source::Local {
             page = page.push(self.launch_card(game));
         }
+        if let Some(mods) = self.mods_card(game) {
+            page = page.push(mods);
+        }
         let facts = store_facts(
             owned,
             self.store.info.get(&game.id),

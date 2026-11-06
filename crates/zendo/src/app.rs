@@ -13,6 +13,7 @@ mod game;
 mod launch_options;
 mod library;
 mod local;
+mod mods;
 mod protondb;
 mod protons;
 mod running;
@@ -43,6 +44,7 @@ use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
+use mods::{ModsMessage, ModsState};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
@@ -173,6 +175,7 @@ enum Message {
     Sheet(SheetMessage),
     Local(LocalMessage),
     Art(ArtMessage),
+    Mods(ModsMessage),
     Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
@@ -233,6 +236,8 @@ struct Zendo {
     local: LocalState,
     /// The art picker, open over a game's page.
     picker: Option<Picker>,
+    /// Each game's mods, on its page.
+    mods: ModsState,
     /// The Proton section of Settings.
     protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -269,6 +274,7 @@ impl Zendo {
             sheet: None,
             local: LocalState::default(),
             picker: None,
+            mods: ModsState::default(),
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
@@ -472,6 +478,7 @@ impl Zendo {
             Message::Sheet(message) => self.update_sheet(message),
             Message::Local(message) => self.update_local(message),
             Message::Art(message) => self.update_art(message),
+            Message::Mods(message) => self.update_mods(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
@@ -537,7 +544,11 @@ impl Zendo {
         let info = match &self.page {
             Page::Game(id) => {
                 let id = id.clone();
-                Task::batch([self.want_info(&id), self.want_rating(&id)])
+                Task::batch([
+                    self.want_info(&id),
+                    self.want_rating(&id),
+                    self.want_mods(&id),
+                ])
             }
             _ => Task::none(),
         };
@@ -611,6 +622,7 @@ impl Zendo {
                     operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 }),
                     self.want_info(&id),
                     self.want_rating(&id),
+                    self.want_mods(&id),
                 ])
             }
             // The grid is built anew; put it back where the cursor is.

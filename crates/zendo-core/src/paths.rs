@@ -39,6 +39,19 @@ pub fn data_dirs() -> Vec<PathBuf> {
         .collect()
 }
 
+/// A file name from an id: anything outside `[A-Za-z0-9._-]` as `_`.
+pub fn safe_name(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || "._-".contains(c) {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 pub fn cache_home() -> Option<PathBuf> {
     xdg_home("XDG_CACHE_HOME", ".cache")
 }

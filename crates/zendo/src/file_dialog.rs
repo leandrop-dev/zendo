@@ -1,4 +1,6 @@
-//! Choosing a file in the desktop's own dialog: `zendo pick-file <title>`,
+//! Choosing a file in the desktop's own dialog:
+//! `zendo pick-file <kind> <title>`, where the kind is `program` (from
+//! `~/Games`) or `mod` (an archive, from `~/Downloads`);
 //! a second process like the sign-in window, since GTK needs its own loop
 //! apart from Iced's. GTK's native chooser goes through the desktop portal
 //! when there is one, so it is the dialog every other app shows. The path
@@ -11,8 +13,54 @@ use std::process::{Command, ExitCode, Stdio};
 use anyhow::{Context, bail};
 use gtk::prelude::*;
 
-/// `zendo pick-file <title>`: shows the dialog, prints the file chosen.
-pub fn main(title: &str) -> ExitCode {
+/// What is being chosen, which picks the folder the dialog starts in and
+/// the files it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// A game's program.
+    Program,
+    /// A mod's archive.
+    Mod,
+}
+
+impl Kind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Program => "program",
+            Self::Mod => "mod",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Self::Program, Self::Mod]
+            .into_iter()
+            .find(|kind| kind.name() == name)
+    }
+
+    fn start(self) -> &'static str {
+        match self {
+            Self::Program => "Games",
+            Self::Mod => "Downloads",
+        }
+    }
+}
+
+/// The archives 7-Zip unpacks that mods come in.
+const ARCHIVES: [&str; 9] = [
+    "*.zip",
+    "*.7z",
+    "*.rar",
+    "*.tar",
+    "*.tar.gz",
+    "*.tgz",
+    "*.tar.xz",
+    "*.tar.bz2",
+    "*.tar.zst",
+];
+
+/// `zendo pick-file <kind> <title>`: shows the dialog, prints the file
+/// chosen.
+pub fn main(kind: Kind, title: &str) -> ExitCode {
     gtk::glib::set_prgname(Some(crate::app::APP_ID));
     gtk::glib::set_application_name("Zendo");
     if let Err(err) = gtk::init() {
@@ -27,13 +75,25 @@ pub fn main(title: &str) -> ExitCode {
         Some("Cancel"),
     );
     if let Some(home) = std::env::var_os("HOME") {
-        let games = PathBuf::from(home).join("Games");
-        let start = if games.is_dir() {
-            games
+        let folder = PathBuf::from(home).join(kind.start());
+        let start = if folder.is_dir() {
+            folder
         } else {
-            games.parent().map(PathBuf::from).unwrap_or_default()
+            folder.parent().map(PathBuf::from).unwrap_or_default()
         };
         let _ = dialog.set_current_folder(start);
+    }
+    if kind == Kind::Mod {
+        let archives = gtk::FileFilter::new();
+        archives.set_name(Some("Archives"));
+        for pattern in ARCHIVES {
+            archives.add_pattern(pattern);
+        }
+        dialog.add_filter(archives);
+        let all = gtk::FileFilter::new();
+        all.set_name(Some("All files"));
+        all.add_pattern("*");
+        dialog.add_filter(all);
     }
     if dialog.run() != gtk::ResponseType::Accept {
         return ExitCode::SUCCESS;
@@ -57,10 +117,10 @@ pub fn main(title: &str) -> ExitCode {
 /// # Errors
 ///
 /// When the dialog cannot be started or fails.
-pub fn pick(title: &str) -> anyhow::Result<Option<PathBuf>> {
+pub fn pick(kind: Kind, title: &str) -> anyhow::Result<Option<PathBuf>> {
     let exe = std::env::current_exe().context("could not find Zendo's own program")?;
     let output = Command::new(exe)
-        .args(["pick-file", title])
+        .args(["pick-file", kind.name(), title])
         .stdin(Stdio::null())
         .output()
         .context("could not open the file dialog")?;
