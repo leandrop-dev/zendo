@@ -92,7 +92,9 @@ install it and give it its colours, but it runs on any Linux desktop.
   Proton through umu-launcher, each in a Wine prefix of its own
   (`<install_dir>/Prefixes/<title>`), with each launch's output kept in a
   log. While a game Zendo started runs, Play turns into Running with a
-  Stop beside it; pressed again, Stop ends the game at once.
+  Stop beside it; pressed again, Stop ends the game at once. Steam and
+  Heroic games get the same once their launcher has started them, found
+  by their install folder.
 
 ## What you need
 
@@ -238,8 +240,7 @@ count their own.
    gogdl and nile, with pause and resume, update status and sizes, and a
    sign-in window of Zendo's own, so there is no code to copy.
 5. Launch options per game (in progress): Proton through umu-launcher with
-   a prefix per game, a launch log, Running and Stop (built for the games
-   Zendo installed); Running and Stop for Steam and Heroic games, a
+   a prefix per game, a launch log, Running and Stop (built); a
    settings sheet with MangoHud, GameMode and gamescope, a GE-Proton
    manager, and the ProtonDB rating on the game's page (to come).
 6. Local games: add a game by hand, with a cover from SteamGridDB.

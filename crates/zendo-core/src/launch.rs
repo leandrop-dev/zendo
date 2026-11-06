@@ -1,10 +1,17 @@
 //! Starting a game, telling whether it still runs, and stopping it.
 //!
-//! A game runs in a process group of its own, started from the home folder
-//! (a relative path in a launcher's settings then means the same wherever
-//! Zendo was started). It counts as running while any process of the group
-//! is alive: legendary, for one, starts the game and exits at once, and
-//! the game's processes stay in the group. Stop signals the whole group.
+//! A game Zendo starts itself runs in a process group of its own, started
+//! from the home folder (a relative path in a launcher's settings then
+//! means the same wherever Zendo was started). It counts as running while
+//! any process of the group is alive: legendary, for one, starts the game
+//! and exits at once, and the game's processes stay in the group. Stop
+//! signals the whole group.
+//!
+//! A game handed to Steam or Heroic runs under their processes instead, so
+//! it is found by its install folder: a process whose program is in it or
+//! whose arguments name it (Steam's `reaper` and Proton's script, which
+//! last as long as the game, Heroic's `umu-run` or `wine`), with everything
+//! those processes started. Stop signals those.
 //!
 //! The games Zendo installed start through their engine's own `launch`
 //! (which knows the store's arguments, such as Epic's sign-in token), with
@@ -29,13 +36,20 @@ use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
 /// A game just started.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Started {
-    /// The process group the game runs in.
-    pub group: u32,
+    pub watch: Watch,
     /// Where its output goes, for the games Zendo starts itself.
     pub log: Option<PathBuf>,
-    /// Whether Zendo can tell when it ends: not for a game handed to Steam
-    /// or Heroic.
-    pub tracked: bool,
+}
+
+/// How Zendo tells a game it started still runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Watch {
+    /// The process group Zendo started it in.
+    Group(u32),
+    /// The game's install folder, for a game its launcher runs.
+    Folder(PathBuf),
+    /// Not at all: a link with no install folder known.
+    Nothing,
 }
 
 /// Starts the game without waiting for it, and notes the launch in Zendo's
@@ -47,11 +61,12 @@ pub struct Started {
 /// When the program, or `xdg-open` for a link, cannot be started. Failing
 /// to note the launch is not an error: the game is already running.
 pub fn start(game: &Game) -> anyhow::Result<Started> {
-    let (mut command, log, tracked) = match &game.launch {
+    let (mut command, log, folder) = match &game.launch {
         Launch::Uri { uri } => {
             let mut command = Command::new("xdg-open");
             command.arg(uri);
-            (command, None, false)
+            let folder = game.details.install_path.clone().filter(|dir| dir.is_dir());
+            (command, None, Some(folder))
         }
         Launch::Command { program, args, dir } => {
             let mut command = Command::new(program);
@@ -59,7 +74,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             if let Some(dir) = dir.as_ref().filter(|dir| dir.is_dir()) {
                 command.current_dir(dir);
             }
-            (command, None, true)
+            (command, None, None)
         }
         Launch::Engine { app, .. } => {
             let command = engine_command(game, app)?;
@@ -72,7 +87,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
                     .with_context(|| format!("could not make {}", Path::new(prefix).display()))?;
             }
             let log = log_path(&game.id);
-            (command, log, true)
+            (command, log, None)
         }
     };
     if let Launch::Uri { .. } | Launch::Engine { .. } = game.launch
@@ -93,17 +108,18 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         .spawn()
         .with_context(|| format!("could not start {}", game.title))?;
     let group = child.id();
+    let watch = match folder {
+        None => Watch::Group(group),
+        Some(Some(folder)) => Watch::Folder(folder),
+        Some(None) => Watch::Nothing,
+    };
     let _ = State::update(|state| state.launched(&game.id));
     // Reap it when it ends, so it does not linger as a zombie; the rest of
     // the group carries on.
     thread::spawn(move || {
         let _ = child.wait();
     });
-    Ok(Started {
-        group,
-        log,
-        tracked,
-    })
+    Ok(Started { watch, log })
 }
 
 /// Starts the game and leaves it running, for `zendo launch`.
@@ -115,47 +131,135 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
     start(game).map(|_| ())
 }
 
-/// Whether any process of the group is alive (and not a zombie).
+/// Whether the game still runs: any process of its group, or of those
+/// found by its folder, alive (and not a zombie).
 #[must_use]
-pub fn running(group: u32) -> bool {
-    let Ok(entries) = fs::read_dir("/proc") else {
-        return false;
+pub fn running(watch: &Watch) -> bool {
+    match watch {
+        Watch::Group(group) => processes().iter().any(|process| process.group == *group),
+        Watch::Folder(folder) => !in_folder(folder).is_empty(),
+        Watch::Nothing => false,
+    }
+}
+
+/// Asks every process of the game to end, as closing it would.
+pub fn stop(watch: &Watch) {
+    signal(watch, "-TERM");
+}
+
+/// Ends every process of the game at once, for a game that is frozen.
+pub fn kill(watch: &Watch) {
+    signal(watch, "-KILL");
+}
+
+fn signal(watch: &Watch, signal: &str) {
+    let own = own_group();
+    let targets: Vec<String> = match watch {
+        // 0 is the caller's own group and 1 init's: never a game's.
+        Watch::Group(group) if *group > 1 && i64::from(*group) != i64::from(own) => {
+            vec![format!("-{group}")]
+        }
+        Watch::Folder(folder) => in_folder(folder)
+            .into_iter()
+            .filter(|&pid| pid > 1 && pid != std::process::id())
+            .map(|pid| pid.to_string())
+            .collect(),
+        _ => Vec::new(),
     };
-    entries.filter_map(Result::ok).any(|entry| {
-        let stat = fs::read_to_string(entry.path().join("stat")).unwrap_or_default();
-        // `pid (name) state ppid pgrp …`; the name may hold spaces.
-        let Some((_, rest)) = stat.rsplit_once(") ") else {
-            return false;
-        };
-        let mut fields = rest.split_whitespace();
-        let state = fields.next();
-        let pgrp = fields.nth(1).and_then(|pgrp| pgrp.parse::<u32>().ok());
-        pgrp == Some(group) && state != Some("Z")
-    })
-}
-
-/// Asks every process of the game's group to end, as closing it would.
-pub fn stop(group: u32) {
-    signal(group, "-TERM");
-}
-
-/// Ends every process of the game's group at once, for a game that is
-/// frozen.
-pub fn kill(group: u32) {
-    signal(group, "-KILL");
-}
-
-fn signal(group: u32, signal: &str) {
-    // 0 is the caller's own group and 1 init's: never a game's.
-    if group <= 1 || i64::from(group) == i64::from(own_group()) {
+    if targets.is_empty() {
         return;
     }
     let _ = Command::new("kill")
-        .args([signal, "--", &format!("-{group}")])
+        .arg(signal)
+        .arg("--")
+        .args(targets)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+}
+
+/// A live process, as `/proc/<pid>/stat` has it.
+struct Process {
+    pid: u32,
+    parent: u32,
+    group: u32,
+}
+
+/// Every process alive, zombies left out.
+fn processes() -> Vec<Process> {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let pid = entry.file_name().to_str()?.parse().ok()?;
+            let stat = fs::read_to_string(entry.path().join("stat")).ok()?;
+            // `pid (name) state ppid pgrp …`; the name may hold spaces.
+            let (_, rest) = stat.rsplit_once(") ")?;
+            let mut fields = rest.split_whitespace();
+            if fields.next()? == "Z" {
+                return None;
+            }
+            let parent = fields.next()?.parse().ok()?;
+            let group = fields.next()?.parse().ok()?;
+            Some(Process { pid, parent, group })
+        })
+        .collect()
+}
+
+/// The processes of a game its launcher runs: those whose program is in
+/// its folder or whose arguments name it, and everything they started.
+#[must_use]
+pub fn in_folder(folder: &Path) -> Vec<u32> {
+    let all = processes();
+    let own = std::process::id();
+    let mut found: Vec<u32> = all
+        .iter()
+        .filter(|process| process.pid != own && names_folder(process.pid, folder))
+        .map(|process| process.pid)
+        .collect();
+    // Their children, and theirs: Proton's wine processes, the game itself.
+    let mut index = 0;
+    while index < found.len() {
+        let parent = found[index];
+        for process in &all {
+            if process.parent == parent && !found.contains(&process.pid) {
+                found.push(process.pid);
+            }
+        }
+        index += 1;
+    }
+    found
+}
+
+/// Whether the process's program is in the folder or its arguments name
+/// it.
+fn names_folder(pid: u32, folder: &Path) -> bool {
+    let proc = PathBuf::from(format!("/proc/{pid}"));
+    if fs::read_link(proc.join("exe")).is_ok_and(|exe| exe.starts_with(folder)) {
+        return true;
+    }
+    let Ok(cmdline) = fs::read(proc.join("cmdline")) else {
+        return false;
+    };
+    let folder = folder.to_string_lossy();
+    let folder = folder.trim_end_matches('/');
+    cmdline
+        .split(|&byte| byte == 0)
+        .any(|arg| mentions(&String::from_utf8_lossy(arg), folder))
+}
+
+/// Whether an argument is the folder or a path inside it, alone or after
+/// an option's `=`.
+fn mentions(arg: &str, folder: &str) -> bool {
+    arg.match_indices(folder).any(|(at, _)| {
+        let before = arg[..at].chars().next_back();
+        let after = arg[at + folder.len()..].chars().next();
+        matches!(before, None | Some('=' | '"' | '\'' | ' '))
+            && matches!(after, None | Some('/' | '"' | '\''))
+    })
 }
 
 /// Zendo's own process group, from `/proc/self/stat`.
@@ -368,10 +472,59 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap();
-        let group = child.id();
-        assert!(running(group));
-        kill(group);
+        let watch = Watch::Group(child.id());
+        assert!(running(&watch));
+        kill(&watch);
         let _ = child.wait();
-        assert!(!running(group));
+        assert!(!running(&watch));
+    }
+
+    #[test]
+    fn finds_a_game_by_the_folder_its_launcher_names() {
+        let dir = std::env::temp_dir().join(format!("zendo-folder-{}", std::process::id()));
+        let game = dir.join("My Game");
+        fs::create_dir_all(&game).unwrap();
+        // As Steam's reaper would: the game's path among its arguments,
+        // and the game itself a child of it.
+        let script = format!("sleep 30 & wait # {}/Game.exe", game.display());
+        let mut child = Command::new("sh")
+            .args(["-c", &script, &format!("{}/Game.exe", game.display())])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let watch = Watch::Folder(game.clone());
+        let mut found = Vec::new();
+        for _ in 0..50 {
+            found = in_folder(&game);
+            if found.len() >= 2 {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(found.contains(&child.id()));
+        assert!(found.len() >= 2, "the sleep it started is found too");
+        assert!(!running(&Watch::Folder(dir.join("My Gam"))));
+        assert!(!running(&Watch::Folder(dir.join("My Game 2"))));
+        kill(&watch);
+        let _ = child.wait();
+        for _ in 0..50 {
+            if !running(&watch) {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!running(&watch));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_argument_names_a_folder_only_whole() {
+        let folder = "/games/Foo";
+        assert!(mentions("/games/Foo/foo.exe", folder));
+        assert!(mentions("/games/Foo", folder));
+        assert!(mentions("--path=/games/Foo", folder));
+        assert!(!mentions("/games/Foo Bar/foo.exe", folder));
+        assert!(!mentions("/games/Foobar", folder));
+        assert!(!mentions("/other/games/Foo", folder));
     }
 }

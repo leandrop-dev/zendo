@@ -18,7 +18,10 @@ order agreed [firm]: 4d (fixes to downloads, update status, sizes), then a
 sign-in window, then phase 5 with Running/Stop and the ProtonDB rating. The
 user checked 4d in the window; 4d and 4e (the sign-in window) were built
 the same day, and the user checked both. Phase 5 started the same day,
-split into 5a to 5e (below); 5a is built and the user checked it.
+split into 5a to 5e (below); 5a is built and the user checked it, and 5b
+is built and checked by the user. The user asked to leave in-game quirks (controllers, full
+screen) for the settings sheet, and to get most features working first
+[firm].
 
 ## Direction [firm]
 
@@ -497,6 +500,42 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      checked: an Epic game through legendary, and how long umu's first
      run takes to fetch the Steam Linux Runtime on a fresh PC, with
      nothing shown meanwhile.
+     Quirks the user found, left for 5c [firm]: Gunslugs 3 opened in a
+     window, not full screen (a Java game keeping its own window mode,
+     `storedWindowedModeID` in its preferences in the prefix; gamescope's
+     `-f` is the general answer); the DualSense did nothing in 10 Second
+     Ninja X, though the game's options had the controller on (a
+     GameMaker game, which reads controllers through XInput; Proton hands
+     a DualSense to the game as a raw HID device, and Steam Input's
+     virtual Xbox pad is not there outside Steam). Proton's
+     `PROTON_PREFER_SDL=1` (it sets `PROTON_DISABLE_HIDRAW=1` and
+     `PROTON_NO_STEAMINPUT=1`) is the likely switch, untried; the user
+     wants it a per-game choice in the settings sheet, not a default, so
+     games that use a DualSense or an Xbox pad natively keep it, and will
+     test it with both (a PS5 DualSense and an Xbox Series S pad).
+   - 5b Running and Stop for Steam and Heroic games, built 2026-11-06:
+     after the link is handed over, Play shows Starting ("Waiting for
+     Steam to start …") until a process turns up whose program is in the
+     game's install folder or whose arguments name it (as a whole path,
+     alone or after `=`: `/games/Foo Bar` is not `/games/Foo`); with it,
+     every process those started. For Steam that is its `reaper` and
+     Proton's script (`waitforexitandrun`), which last as long as the
+     game; for Heroic its `umu-run`, `wine` or the native program. Then
+     Running with Stop (SIGTERM to those processes, then Force stop with
+     SIGKILL), and closed once three looks in a row (6 s) find none, as a
+     game's own launcher may hand over to the game with a gap. Zendo waits
+     5 minutes [tentative] for the game to turn up (Steam may update it
+     first), then says it did not see it start. Play time is left to
+     Steam and Heroic, which count their own. A game with no install
+     folder known is handed over unfollowed, as before.
+     Checked: clippy and tests (a process naming a folder and its child
+     found, then gone after a kill; whole-path matching; Starting, Seen,
+     Running and closed in the window's state). The user then tried it
+     with Hexologic from Steam, and it worked. Not checked with a Heroic
+     game. Known edges: anything else naming the folder
+     counts too (an editor open on a file in it, Heroic's engine updating
+     the game); a game started outside Zendo shows Play until it is
+     started from Zendo.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -511,8 +550,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 5b: Running and Stop for Steam and Heroic games, by install folder.
-- Then 5c to 5e. An Epic install and launch is still untried.
+- 5c (with the controller and full-screen options above), 5d, 5e.
+  An Epic install and launch is still untried.
 
 ## Conventions
 
