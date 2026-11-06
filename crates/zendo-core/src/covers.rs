@@ -4,26 +4,30 @@
 //! games), `SteamGridDB` second when the user has set a key. A game with no
 //! image anywhere is noted in `misses.json` and asked about again after a
 //! week, not on every start.
+//!
+//! An image the user picks in the cover picker goes in `chosen/cover/` or
+//! `chosen/hero/`, named `<id>.<SteamGridDB image id>.<ext>` (a new name
+//! for each pick, so the window shows the new one), and comes before any
+//! other, Steam's own included.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::PathBuf;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Context;
 use serde::Deserialize;
 
 use crate::config::Config;
-use crate::{Game, Source, heroic, paths, time};
+use crate::steamgriddb::{self, PORTRAIT, is_status};
+use crate::{Game, Source, paths, time};
 
-const STEAMGRIDDB: &str = "https://www.steamgriddb.com/api/v2";
-/// Steam's portrait grid sizes.
-const PORTRAIT: &str = "600x900,342x482,660x930";
 const EXTENSIONS: [&str; 3] = ["jpg", "png", "webp"];
 const RETRY_AFTER: u64 = 7 * 24 * 3600;
 
 /// Which image of a game.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
     /// Portrait, for the grid.
     Cover,
@@ -37,6 +41,14 @@ impl Kind {
         match self {
             Self::Cover => "",
             Self::Hero => ".hero",
+        }
+    }
+
+    /// The folder of the images chosen by hand, under the covers folder.
+    fn chosen_folder(self) -> &'static str {
+        match self {
+            Self::Cover => "chosen/cover",
+            Self::Hero => "chosen/hero",
         }
     }
 
@@ -118,7 +130,7 @@ pub fn cached(id: &str, kind: Kind) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn agent() -> ureq::Agent {
+pub(crate) fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(20)))
         .user_agent(concat!(
@@ -146,7 +158,7 @@ pub enum KeyCheck {
 /// When the site cannot be reached or answers with anything but yes or no.
 pub fn check_key(key: &str) -> anyhow::Result<KeyCheck> {
     let response = agent()
-        .get(format!("{STEAMGRIDDB}/search/autocomplete/zendo"))
+        .get(format!("{}/search/autocomplete/zendo", steamgriddb::API))
         .header("Authorization", format!("Bearer {}", key.trim()))
         .call()
         .context("could not reach SteamGridDB")?;
@@ -218,20 +230,7 @@ impl Fetcher {
             self.missed(&kind.miss_key(game.id()));
             return Ok(None);
         };
-        // Epic hands out some image addresses with bare spaces in them.
-        let url = url.replace(' ', "%20");
-        let response = self
-            .agent
-            .get(&url)
-            .call()
-            .with_context(|| format!("could not download {url}"))?;
-        let status = response.status();
-        anyhow::ensure!(status.is_success(), "could not download {url}: {status}");
-        let bytes = response
-            .into_body()
-            .read_to_vec()
-            .with_context(|| format!("could not download {url}"))?;
-        let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
+        let (bytes, ext) = download(&self.agent, &url)?;
         let stem = stem(game.id(), kind);
         let path = self.dir.join(format!("{stem}.{ext}"));
         paths::write_atomic(&path, &bytes)
@@ -277,21 +276,22 @@ impl Fetcher {
             };
 
         if kind == Kind::Hero {
-            let heroes = self.api::<Vec<Image>>(&key, &path, None)?;
+            let heroes = steamgriddb::api::<Vec<Image>>(&self.agent, &key, &path, &[])?;
             return Ok(heroes.and_then(|heroes| heroes.into_iter().next().map(|hero| hero.url)));
         }
         // Ask for Steam's portrait sizes; should the filter be turned down,
         // look through the unfiltered list for an image taller than wide,
         // and take none rather than a banner.
-        let grid = match self.api::<Vec<Image>>(&key, &path, Some(PORTRAIT)) {
+        let portrait = [("dimensions", PORTRAIT)];
+        let grid = match steamgriddb::api::<Vec<Image>>(&self.agent, &key, &path, &portrait) {
             Ok(found) => found.and_then(|grids| grids.into_iter().next()),
-            Err(err) if is_status(&err, 400) => self
-                .api::<Vec<Image>>(&key, &path, None)?
-                .and_then(|grids| {
+            Err(err) if is_status(&err, 400) => {
+                steamgriddb::api::<Vec<Image>>(&self.agent, &key, &path, &[])?.and_then(|grids| {
                     grids.into_iter().find(
                         |grid| matches!((grid.width, grid.height), (Some(w), Some(h)) if h > w),
                     )
-                }),
+                })
+            }
             Err(err) => return Err(err),
         };
         Ok(grid.map(|grid| grid.url))
@@ -308,58 +308,129 @@ impl Fetcher {
         }
         let search = format!(
             "search/autocomplete/{}",
-            heroic::percent_encode(game.title())
+            crate::heroic::percent_encode(game.title())
         );
-        let id = self
-            .api::<Vec<Found>>(key, &search, None)?
+        let id = steamgriddb::api::<Vec<Found>>(&self.agent, key, &search, &[])?
             .and_then(|found| found.first().map(|first| first.id));
         self.found.insert(game.id().to_owned(), id);
         Ok(id)
     }
+}
 
-    /// One `SteamGridDB` call: its `data`, or `None` when the game is unknown.
-    fn api<T: serde::de::DeserializeOwned>(
-        &self,
-        key: &str,
-        path: &str,
-        dimensions: Option<&str>,
-    ) -> anyhow::Result<Option<T>> {
-        #[derive(Deserialize)]
-        struct Envelope<T> {
-            #[serde(default)]
-            success: bool,
-            data: Option<T>,
-        }
-        let mut request = self
-            .agent
-            .get(format!("{STEAMGRIDDB}/{path}"))
-            .header("Authorization", format!("Bearer {key}"));
-        if let Some(dimensions) = dimensions {
-            request = request.query("dimensions", dimensions);
-        }
-        let response = request
-            .call()
-            .with_context(|| format!("SteamGridDB {path}"))?;
-        match response.status().as_u16() {
-            200..=299 => {}
-            404 => return Ok(None),
-            code => {
-                return Err(anyhow::Error::new(ureq::Error::StatusCode(code))
-                    .context(format!("SteamGridDB {path}")));
+/// Downloads an image: its bytes, and the extension their signature gives.
+pub(crate) fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<(Vec<u8>, &'static str)> {
+    // Epic hands out some image addresses with bare spaces in them.
+    let url = url.replace(' ', "%20");
+    let response = agent
+        .get(&url)
+        .call()
+        .with_context(|| format!("could not download {url}"))?;
+    let status = response.status();
+    anyhow::ensure!(status.is_success(), "could not download {url}: {status}");
+    let bytes = response
+        .into_body()
+        .read_to_vec()
+        .with_context(|| format!("could not download {url}"))?;
+    let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
+    Ok((bytes, ext))
+}
+
+/// The images chosen by hand, read once for a whole library.
+#[derive(Debug, Default)]
+pub struct Choices {
+    found: HashMap<(String, Kind), PathBuf>,
+}
+
+impl Choices {
+    #[must_use]
+    pub fn load() -> Self {
+        let mut found = HashMap::new();
+        if let Some(dir) = dir() {
+            for kind in [Kind::Cover, Kind::Hero] {
+                let Ok(entries) = fs::read_dir(dir.join(kind.chosen_folder())) else {
+                    continue;
+                };
+                for entry in entries.flatten() {
+                    if let Some(base) = chosen_base(&entry.file_name().to_string_lossy()) {
+                        found.insert((base.to_owned(), kind), entry.path());
+                    }
+                }
             }
         }
-        let text = response
-            .into_body()
-            .read_to_string()
-            .with_context(|| format!("SteamGridDB {path}"))?;
-        let envelope: Envelope<T> = serde_json::from_str(&text)
-            .with_context(|| format!("SteamGridDB {path}: unexpected reply"))?;
-        Ok(envelope.data.filter(|_| envelope.success))
+        Self { found }
+    }
+
+    /// The image chosen for this game, if one was.
+    #[must_use]
+    pub fn get(&self, id: &str, kind: Kind) -> Option<&Path> {
+        self.found
+            .get(&(stem(id, Kind::Cover), kind))
+            .map(PathBuf::as_path)
     }
 }
 
-fn is_status(err: &anyhow::Error, code: u16) -> bool {
-    matches!(err.downcast_ref::<ureq::Error>(), Some(ureq::Error::StatusCode(c)) if *c == code)
+/// The image chosen for one game, if one was.
+#[must_use]
+pub fn chosen(id: &str, kind: Kind) -> Option<PathBuf> {
+    Choices::load().get(id, kind).map(Path::to_path_buf)
+}
+
+/// The game's part of a chosen image's name, `<stem>.<number>.<ext>`.
+fn chosen_base(name: &str) -> Option<&str> {
+    let (rest, ext) = name.rsplit_once('.')?;
+    let (base, number) = rest.rsplit_once('.')?;
+    let numbered = !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit());
+    (EXTENSIONS.contains(&ext) && numbered && !base.is_empty()).then_some(base)
+}
+
+/// Downloads an image picked on `SteamGridDB` as the game's own, in place
+/// of any chosen before.
+///
+/// # Errors
+///
+/// When it cannot be downloaded or saved.
+pub fn choose(id: &str, kind: Kind, image: &steamgriddb::Image) -> anyhow::Result<PathBuf> {
+    let folder = dir()
+        .context("no cache folder for covers")?
+        .join(kind.chosen_folder());
+    let (bytes, ext) = download(&agent(), &image.url)?;
+    let path = folder.join(format!("{}.{}.{ext}", stem(id, Kind::Cover), image.id));
+    paths::write_atomic(&path, &bytes)
+        .with_context(|| format!("could not save {}", path.display()))?;
+    remove_chosen(&folder, id, Some(&path))?;
+    Ok(path)
+}
+
+/// Goes back to the image found by itself.
+///
+/// # Errors
+///
+/// When the chosen image cannot be deleted.
+pub fn forget_choice(id: &str, kind: Kind) -> anyhow::Result<()> {
+    match dir() {
+        Some(dir) => remove_chosen(&dir.join(kind.chosen_folder()), id, None),
+        None => Ok(()),
+    }
+}
+
+fn remove_chosen(folder: &Path, id: &str, keep: Option<&Path>) -> anyhow::Result<()> {
+    let base = stem(id, Kind::Cover);
+    let entries = match fs::read_dir(folder) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err).with_context(|| format!("could not read {}", folder.display()));
+        }
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let theirs = chosen_base(&entry.file_name().to_string_lossy()) == Some(base.as_str());
+        if theirs && Some(path.as_path()) != keep {
+            fs::remove_file(&path)
+                .with_context(|| format!("could not delete {}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// The file extension for an image's bytes, read from its signature.
@@ -398,6 +469,18 @@ mod tests {
         );
         assert_eq!(stem("steam:620", Kind::Hero), "steam_620.hero");
         assert_eq!(Kind::Hero.miss_key("steam:620"), "steam:620#hero");
+    }
+
+    #[test]
+    fn knows_a_chosen_image_by_its_name() {
+        assert_eq!(chosen_base("steam_620.40269.jpg"), Some("steam_620"));
+        assert_eq!(
+            chosen_base("amazon_amzn1.adg.product.x.7.png"),
+            Some("amazon_amzn1.adg.product.x")
+        );
+        assert_eq!(chosen_base("steam_620.jpg"), None);
+        assert_eq!(chosen_base("steam_620.40269.jpg.123.tmp"), None);
+        assert_eq!(chosen_base("steam_620.x1.jpg"), None);
     }
 
     #[test]

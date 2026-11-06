@@ -25,6 +25,7 @@ pub mod proton;
 pub mod protondb;
 pub mod state;
 mod steam;
+pub mod steamgriddb;
 pub mod stores;
 mod time;
 mod umu;
@@ -310,7 +311,15 @@ impl Library {
         };
         let mut library = Self::from_scan(scan);
         library.apply(&state);
+        let chosen = covers::Choices::load();
         for game in &mut library.games {
+            // One chosen by hand comes before Steam's and the stores'.
+            if let Some(cover) = chosen.get(&game.id, covers::Kind::Cover) {
+                game.cover = Some(cover.to_path_buf());
+            }
+            if let Some(hero) = chosen.get(&game.id, covers::Kind::Hero) {
+                game.hero = Some(hero.to_path_buf());
+            }
             if game.cover.is_none() {
                 game.cover = covers::cached(&game.id, covers::Kind::Cover);
             }

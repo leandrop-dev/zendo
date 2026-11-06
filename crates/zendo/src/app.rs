@@ -6,6 +6,7 @@
 
 mod about;
 mod accounts;
+mod artwork;
 mod downloads;
 mod format;
 mod game;
@@ -21,7 +22,7 @@ mod store;
 mod style;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 
@@ -38,6 +39,7 @@ use zendo_core::{Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
+use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
@@ -170,6 +172,7 @@ enum Message {
     Run(RunMessage),
     Sheet(SheetMessage),
     Local(LocalMessage),
+    Art(ArtMessage),
     Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
@@ -228,6 +231,8 @@ struct Zendo {
     sheet: Option<Sheet>,
     /// Games added by hand: the Add game sheet and Remove.
     local: LocalState,
+    /// The art picker, open over a game's page.
+    picker: Option<Picker>,
     /// The Proton section of Settings.
     protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -263,6 +268,7 @@ impl Zendo {
             running: Running::default(),
             sheet: None,
             local: LocalState::default(),
+            picker: None,
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
@@ -377,7 +383,10 @@ impl Zendo {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         let sheet = self.sheet_takes(&message);
-        if let Some(task) = sheet.or_else(|| self.form_takes(&message)) {
+        let taken = sheet
+            .or_else(|| self.form_takes(&message))
+            .or_else(|| self.picker_takes(&message));
+        if let Some(task) = taken {
             return task;
         }
         match message {
@@ -462,6 +471,7 @@ impl Zendo {
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
             Message::Local(message) => self.update_local(message),
+            Message::Art(message) => self.update_art(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
@@ -681,23 +691,26 @@ impl Zendo {
     fn image_arrived(&mut self, id: &str, kind: Kind, result: Result<Option<PathBuf>, String>) {
         self.images.left = self.images.left.saturating_sub(1);
         match result {
-            Ok(Some(path)) => {
-                // The library and the store can both hold a game.
-                if let Some(game) = self.game_mut(id) {
-                    match kind {
-                        Kind::Cover => game.cover = Some(path.clone()),
-                        Kind::Hero => game.hero = Some(path.clone()),
-                    }
-                }
-                for owned in self.store.each_mut(id) {
-                    match kind {
-                        Kind::Cover => owned.cover = Some(path.clone()),
-                        Kind::Hero => owned.hero = Some(path.clone()),
-                    }
-                }
-            }
+            Ok(Some(path)) => self.set_image(id, kind, &path),
             Ok(None) => {}
             Err(_) => self.images.failed += 1,
+        }
+    }
+
+    /// Shows a game's new image, in the library and the store, which can
+    /// both hold it.
+    fn set_image(&mut self, id: &str, kind: Kind, path: &Path) {
+        if let Some(game) = self.game_mut(id) {
+            match kind {
+                Kind::Cover => game.cover = Some(path.to_path_buf()),
+                Kind::Hero => game.hero = Some(path.to_path_buf()),
+            }
+        }
+        for owned in self.store.each_mut(id) {
+            match kind {
+                Kind::Cover => owned.cover = Some(path.to_path_buf()),
+                Kind::Hero => owned.hero = Some(path.to_path_buf()),
+            }
         }
     }
 
@@ -905,7 +918,8 @@ impl Zendo {
             },
         };
         let main = column![page, self.footer()].width(Length::Fill);
-        self.with_form(self.with_sheet(row![self.sidebar(), main].into()))
+        let page = self.with_sheet(row![self.sidebar(), main].into());
+        self.with_picker(self.with_form(page))
     }
 
     fn footer(&self) -> Element<'_, Message> {

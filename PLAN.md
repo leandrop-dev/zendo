@@ -757,8 +757,35 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Future's `jsrf_launcher` started (its log has the command, run from
      its folder) but the game did not come up, which the user is taking
      up with its developer.
-   - 6b Covers picked by hand: search SteamGridDB for a game's title and
-     choose the cover, for any game.
+   - 6b Art picked by hand, built 2026-11-06: "Change art" at the top
+     right of the wide image on both game pages (the library's and the
+     Store's) opens a picker over the page: Cover or Wide image, a search
+     box with the game's title, the games SteamGridDB finds for it (a
+     Steam game's own entry first, through `games/steam/<appid>`; then
+     `search/autocomplete/<title>`, eight shown, with their year), and
+     the first one's images: `grids/game/<id>` in Steam's portrait sizes,
+     or `heroes/game/<id>`, still images only (`types=static`, as
+     animated ones may not show), SteamGridDB's default of no NSFW ones.
+     Pages of 50 with "Show more"; thumbnails download four at a time and
+     show as they come, with the size, style and author in a tooltip. A
+     click downloads the full image into
+     `~/.cache/zendo/covers/chosen/cover/` or `chosen/hero/`, named
+     `<id>.<SteamGridDB image id>.<ext>` (a new name each time, as Iced
+     keeps images by path), deleting the one chosen before. A chosen image
+     comes before any other, Steam's own included, in the library and the
+     Store, and the automatic downloads leave the game alone. "Use the
+     automatic cover" (or wide image) deletes it and reads the library
+     again, which puts Steam's or the store's back or downloads one. With
+     no key the picker says so and offers Settings. A later search or a
+     switch of game drops the answers and thumbnails still coming for the
+     earlier one. Escape closes it, Enter searches.
+     Checked: clippy and tests (a chosen image's name read back; the year
+     from SteamGridDB's dates; a page of images read; no key; a late
+     search answer dropped; the page's keys doing nothing under the
+     picker), and the real SteamGridDB with the key in Settings (an
+     ignored test: Jet Set Radio Future found, 2002, portrait covers and
+     wide heroes, a thumbnail, Portal 2 by Steam id). The user then tried
+     it in the window, and it worked.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
 ## On hyprmonk's side
@@ -772,7 +799,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Phase 6b, the cover picker: search SteamGridDB, choose a game's cover.
+- Phase 7, mods: Nexus, `nxm://`, profiles, back to vanilla.
 
 ## Conventions
 

@@ -324,7 +324,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                 .padding([8, 12])
                 .style(style::input),
         ),
-        text("Its cover comes from SteamGridDB by its title, when Settings has a key. Proton, MangoHud and the rest are in its launch options, on its page.")
+        text("Its cover comes from SteamGridDB by its title when Settings has a key, and Change art on its page picks another. Proton, MangoHud and the rest are in its launch options.")
             .size(13)
             .color(DIM),
     ]

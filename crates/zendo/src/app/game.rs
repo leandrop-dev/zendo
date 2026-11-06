@@ -101,6 +101,8 @@ pub struct Hero<'a> {
     pub facts: Vec<String>,
     /// The `ProtonDB` pill, beside the badges.
     pub rating: Option<Element<'a, Message>>,
+    /// The game whose art "Change art" picks.
+    pub id: &'a str,
 }
 
 fn game_hero<'a>(
@@ -130,6 +132,7 @@ fn game_hero<'a>(
         developer: game.details.developer.as_deref(),
         facts: facts(game),
         rating,
+        id: &game.id,
     })
 }
 
@@ -217,8 +220,19 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(HERO_HEIGHT)
         .align_y(Alignment::End);
+    let change = container(
+        button(text("Change art").size(13))
+            .padding([6, 12])
+            .style(style::secondary)
+            .on_press(Message::Art(super::artwork::ArtMessage::Open(
+                hero.id.to_owned(),
+            ))),
+    )
+    .padding(16)
+    .width(Length::Fill)
+    .align_x(Alignment::End);
 
-    stack![art, down, across, content].into()
+    stack![art, down, across, content, change].into()
 }
 
 /// A rounded panel the hero's size filled with a gradient.

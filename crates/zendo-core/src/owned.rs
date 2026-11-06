@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -154,9 +154,18 @@ pub fn forget(store: Store) {
 }
 
 fn with_images(games: &mut [Owned]) {
+    let chosen = covers::Choices::load();
     for game in games {
-        game.cover = covers::cached(&game.id, Kind::Cover);
-        game.hero = covers::cached(&game.id, Kind::Hero);
+        for kind in [Kind::Cover, Kind::Hero] {
+            let image = chosen
+                .get(&game.id, kind)
+                .map(Path::to_path_buf)
+                .or_else(|| covers::cached(&game.id, kind));
+            match kind {
+                Kind::Cover => game.cover = image,
+                Kind::Hero => game.hero = image,
+            }
+        }
     }
 }
 

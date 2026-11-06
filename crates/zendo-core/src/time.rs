@@ -1,4 +1,5 @@
-//! Unix seconds: now, and from the ISO-8601 dates Heroic writes.
+//! Unix seconds: now, from the ISO-8601 dates Heroic writes, and the year
+//! of one.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,6 +31,19 @@ pub fn parse_utc(text: &str) -> Option<u64> {
     u64::try_from(seconds).ok()
 }
 
+/// The year (UTC) of a moment in Unix seconds (Howard Hinnant's
+/// `civil_from_days`).
+pub fn year_of(seconds: i64) -> i64 {
+    let days = seconds.div_euclid(86_400) + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_from_march = (5 * day_of_year + 2) / 153;
+    era * 400 + year_of_era + i64::from(month_from_march >= 10)
+}
+
 /// Days since 1970-01-01 in the proleptic Gregorian calendar (Howard
 /// Hinnant's `days_from_civil`).
 fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
@@ -53,5 +67,16 @@ mod tests {
         assert_eq!(parse_utc("2026-11-06T01:08:40.436Z"), Some(1_793_927_320));
         assert_eq!(parse_utc(""), None);
         assert_eq!(parse_utc("2026-13-01T00:00:00Z"), None);
+    }
+
+    #[test]
+    fn gives_the_year() {
+        assert_eq!(year_of(0), 1970);
+        assert_eq!(year_of(951_868_800), 2000);
+        assert_eq!(year_of(1_793_927_320), 2026);
+        // The first and last second of 1999.
+        assert_eq!(year_of(915_148_800), 1999);
+        assert_eq!(year_of(946_684_799), 1999);
+        assert_eq!(year_of(-1), 1969);
     }
 }

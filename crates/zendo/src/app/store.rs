@@ -510,6 +510,7 @@ impl Zendo {
             developer: game.developer.as_deref(),
             facts: Vec::new(),
             rating: self.rating_pill(&game.id),
+            id: &game.id,
         });
 
         let actions = self.owned_actions(game, installed);
