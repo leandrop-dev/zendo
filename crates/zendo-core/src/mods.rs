@@ -4,7 +4,11 @@
 //! Each game's are in `$XDG_DATA_HOME/zendo/mods/<game id>/`:
 //!
 //! - `mods.toml`: the mods in order (a later one wins a file both have),
-//!   whether each is on, and the game's mod folder when the user set one;
+//!   whether each is on and the Nexus file it came from, the game's mod
+//!   folder when the user set one, and its name on Nexus when the user
+//!   chose it;
+//! - `downloads/`: files from Nexus while they download, deleted once
+//!   unpacked;
 //! - `files/<mod>/`: each mod as its archive held it;
 //! - `applied.json`: every file and folder Apply placed, so Back to vanilla
 //!   removes exactly those;
@@ -27,12 +31,22 @@ use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::nexus::{self, Files};
 use crate::{Game, Source, launch, paths, protondb};
+
+/// One change at a time to any game's mods: the window's, and a download
+/// from Nexus finishing on its own thread.
+static LOCK: Mutex<()> = Mutex::new(());
+
+fn lock() -> MutexGuard<'static, ()> {
+    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// A game whose mods Zendo knows where to put.
 #[derive(Debug, PartialEq, Eq)]
@@ -140,6 +154,9 @@ struct List {
     /// The mod folder the user chose, from the game's folder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     folder: Option<String>,
+    /// The game's name on Nexus, as the user chose it for a link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    nexus: Option<String>,
     #[serde(default, rename = "mod")]
     mods: Vec<Entry>,
 }
@@ -157,6 +174,28 @@ struct Entry {
     /// The archive it came from.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     source: String,
+    /// The file on Nexus it came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    nexus: Option<NexusSource>,
+}
+
+impl Entry {
+    /// What Apply put in, to tell when the mod's files changed since.
+    fn stamp(&self) -> String {
+        let file = self.nexus.as_ref().map_or(0, |nexus| nexus.file_id);
+        format!("{}#{}#{file}", self.id, self.source)
+    }
+}
+
+/// The file on Nexus Mods a mod came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NexusSource {
+    /// The game's name on Nexus.
+    pub domain: String,
+    pub mod_id: u64,
+    pub file_id: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub version: String,
 }
 
 /// What Apply placed, so Back to vanilla can take it out.
@@ -165,6 +204,9 @@ struct Manifest {
     game_dir: PathBuf,
     /// The mods applied, in order.
     mods: Vec<String>,
+    /// Each one's [`Entry::stamp`]; missing from manifests before them.
+    #[serde(default)]
+    stamps: Vec<String>,
     /// Files placed, from the game's folder.
     files: Vec<Placed>,
     /// The game's own files a mod replaced, kept in `backup/`.
@@ -191,6 +233,8 @@ pub struct Overview {
     /// Whether the user set it.
     pub custom_folder: bool,
     pub known: Option<&'static Known>,
+    /// The game's name on Nexus, when known.
+    pub nexus: Option<String>,
     pub mods: Vec<ModInfo>,
     /// Files in `overwrite/`.
     pub overwrite: usize,
@@ -203,6 +247,7 @@ pub struct ModInfo {
     pub name: String,
     pub enabled: bool,
     pub files: usize,
+    pub nexus: Option<NexusSource>,
     /// Mods before it whose files it replaces, and how many.
     pub wins: Vec<(String, usize)>,
     /// Mods after it that replace its files, and how many.
@@ -255,10 +300,15 @@ fn place(game: &Game) -> anyhow::Result<Place> {
 ///
 /// When Zendo's files for the game cannot be read.
 pub fn overview(game: &Game) -> anyhow::Result<Option<Overview>> {
+    let _lock = lock();
     let Ok(place) = place(game) else {
         return Ok(None);
     };
-    place.overview().map(Some)
+    let mut overview = place.overview()?;
+    if overview.nexus.is_none() {
+        overview.nexus = nexus::domain_for(&game.title, &nexus::cached_games());
+    }
+    Ok(Some(overview))
 }
 
 /// Adds a mod from an archive (zip, 7z, rar, tar…), on and last.
@@ -267,9 +317,77 @@ pub fn overview(game: &Game) -> anyhow::Result<Option<Overview>> {
 ///
 /// When it cannot be unpacked, is empty, holds links, or cannot be kept.
 pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
-    place.add(archive)?;
+    place.add(archive, None, None)?;
     place.overview()
+}
+
+/// Adds a file downloaded from Nexus: in place of the mod it updates (kept
+/// where it was in the order, on or off), or as a new mod, on and last.
+/// The archive is deleted once unpacked. Says whether it was an update.
+///
+/// # Errors
+///
+/// As [`add`].
+pub fn add_from_nexus(
+    game: &Game,
+    fetched: &nexus::Fetched,
+    domain: &str,
+    mod_id: u64,
+) -> anyhow::Result<(Overview, bool)> {
+    let _lock = lock();
+    let place = place(game)?;
+    let updated = place.add_fetched(fetched, domain, mod_id)?;
+    Ok((place.overview()?, updated))
+}
+
+/// The mod this file updates: the same mod on Nexus, from a file this one
+/// replaced (or this very file, downloaded again).
+fn updated_entry<'a>(list: &'a List, source: &NexusSource, files: &Files) -> Option<&'a Entry> {
+    list.mods.iter().find(|entry| {
+        entry.nexus.as_ref().is_some_and(|old| {
+            old.domain == source.domain
+                && old.mod_id == source.mod_id
+                && (old.file_id == source.file_id || files.replaces(source.file_id, old.file_id))
+        })
+    })
+}
+
+/// Where a game's downloads from Nexus go while they download.
+///
+/// # Errors
+///
+/// When the game has no folder to put mods in.
+pub fn downloads_dir(game: &Game) -> anyhow::Result<PathBuf> {
+    Ok(place(game)?.data.join("downloads"))
+}
+
+/// The game's name on Nexus: the one Zendo knows, the one the user chose,
+/// or the game with its title in Nexus's list.
+#[must_use]
+pub fn nexus_domain(game: &Game) -> Option<String> {
+    let _lock = lock();
+    let chosen = place(game)
+        .ok()
+        .and_then(|place| place.list().ok())
+        .and_then(|list| list.nexus);
+    chosen
+        .or_else(|| known(game).map(|known| known.nexus.to_owned()))
+        .or_else(|| nexus::domain_for(&game.title, &nexus::cached_games()))
+}
+
+/// Remembers the game's name on Nexus, as the user chose it for a link.
+///
+/// # Errors
+///
+/// When the list cannot be written.
+pub fn set_nexus(game: &Game, domain: &str) -> anyhow::Result<()> {
+    let _lock = lock();
+    place(game)?.change(|list| {
+        list.nexus = Some(domain.to_owned());
+        Ok(())
+    })
 }
 
 /// Turns a mod on or off; Apply makes it so.
@@ -278,6 +396,7 @@ pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Overview> {
 ///
 /// When the list cannot be read or written.
 pub fn set_enabled(game: &Game, id: &str, enabled: bool) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     place.change(|list| {
         if let Some(entry) = list.mods.iter_mut().find(|entry| entry.id == id) {
@@ -294,6 +413,7 @@ pub fn set_enabled(game: &Game, id: &str, enabled: bool) -> anyhow::Result<Overv
 ///
 /// When the list cannot be read or written.
 pub fn move_mod(game: &Game, id: &str, up: bool) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     place.change(|list| {
         if let Some(at) = list.mods.iter().position(|entry| entry.id == id) {
@@ -314,6 +434,7 @@ pub fn move_mod(game: &Game, id: &str, up: bool) -> anyhow::Result<Overview> {
 ///
 /// When its files or the list cannot be changed.
 pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     place.change(|list| {
         list.mods.retain(|entry| entry.id != id);
@@ -334,6 +455,7 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
 ///
 /// When mods are applied, or the folder is not inside the game's.
 pub fn set_folder(game: &Game, folder: Option<&str>) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     if place.manifest()?.is_some() {
         bail!("Go back to vanilla before changing where mods go");
@@ -355,6 +477,7 @@ pub fn set_folder(game: &Game, folder: Option<&str>) -> anyhow::Result<Overview>
 ///
 /// When it cannot be deleted.
 pub fn clear_overwrite(game: &Game) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     let overwrite = place.overwrite();
     if overwrite.is_dir() {
@@ -372,6 +495,7 @@ pub fn clear_overwrite(game: &Game) -> anyhow::Result<Overview> {
 /// When a file cannot be copied or backed up; what was placed is taken
 /// out again.
 pub fn apply(game: &Game) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     place.apply()?;
     place.overview()
@@ -383,6 +507,7 @@ pub fn apply(game: &Game) -> anyhow::Result<Overview> {
 ///
 /// When a file cannot be removed or put back.
 pub fn restore(game: &Game) -> anyhow::Result<Overview> {
+    let _lock = lock();
     let place = place(game)?;
     place.restore()?;
     place.overview()
@@ -463,6 +588,7 @@ impl Place {
                 name: entry.name.clone(),
                 enabled: entry.enabled,
                 files: files.len(),
+                nexus: entry.nexus.clone(),
                 wins: Vec::new(),
                 loses: Vec::new(),
             });
@@ -485,13 +611,11 @@ impl Place {
         let applied = match self.manifest()? {
             None => Applied::No,
             Some(manifest) => {
-                let enabled: Vec<String> = list
-                    .mods
-                    .iter()
-                    .filter(|entry| entry.enabled)
-                    .map(|entry| entry.id.clone())
-                    .collect();
-                if manifest.mods == enabled {
+                let enabled: Vec<&Entry> = list.mods.iter().filter(|entry| entry.enabled).collect();
+                let ids: Vec<&String> = enabled.iter().map(|entry| &entry.id).collect();
+                let stamps: Vec<String> = enabled.iter().map(|entry| entry.stamp()).collect();
+                let same_files = manifest.stamps.is_empty() || manifest.stamps == stamps;
+                if manifest.mods.iter().collect::<Vec<_>>() == ids && same_files {
                     Applied::Current(enabled.len())
                 } else {
                     Applied::Changed
@@ -504,6 +628,10 @@ impl Place {
             folder,
             custom_folder,
             known: self.known,
+            nexus: list
+                .nexus
+                .clone()
+                .or_else(|| self.known.map(|known| known.nexus.to_owned())),
             mods,
             overwrite: walk(&self.overwrite()).map_or(0, |files| files.len()),
             applied,
@@ -523,12 +651,10 @@ impl Place {
         self.files().join(&entry.id).join(&entry.root)
     }
 
-    fn add(&self, archive: &Path) -> anyhow::Result<String> {
-        let list = self.list()?;
-        let name = archive_name(archive);
-        let id = new_id(&name, &list.mods);
-        let files = self.files();
-        let unpacking = files.join(format!(".adding-{id}"));
+    /// Unpacks an archive into `files/.adding-<id>`: that folder, and the
+    /// mod's root inside it.
+    fn unpack_new(&self, archive: &Path, id: &str) -> anyhow::Result<(PathBuf, String)> {
+        let unpacking = self.files().join(format!(".adding-{id}"));
         if unpacking.exists() {
             fs::remove_dir_all(&unpacking)
                 .with_context(|| format!("could not clear {}", unpacking.display()))?;
@@ -548,31 +674,99 @@ impl Place {
             }
             Ok(self.find_root(&unpacking))
         });
-        let root = match root {
-            Ok(root) => root,
+        match root {
+            Ok(root) => Ok((unpacking, root)),
             Err(err) => {
                 let _ = fs::remove_dir_all(&unpacking);
-                return Err(err);
+                Err(err)
             }
-        };
-        let kept = files.join(&id);
-        fs::rename(&unpacking, &kept)
+        }
+    }
+
+    fn add(
+        &self,
+        archive: &Path,
+        name: Option<String>,
+        nexus: Option<NexusSource>,
+    ) -> anyhow::Result<String> {
+        let list = self.list()?;
+        let name = name.unwrap_or_else(|| archive_name(archive));
+        let id = new_id(&name, &list.mods);
+        let (unpacked, root) = self.unpack_new(archive, &id)?;
+        let kept = self.files().join(&id);
+        fs::rename(&unpacked, &kept)
             .with_context(|| format!("could not keep the mod in {}", kept.display()))?;
-        let source = archive
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
         self.change(|list| {
             list.mods.push(Entry {
                 id: id.clone(),
                 name,
                 enabled: true,
                 root,
-                source,
+                source: file_name(archive),
+                nexus,
             });
             Ok(())
         })?;
         Ok(id)
+    }
+
+    /// [`add_from_nexus`]'s work; says whether it was an update.
+    fn add_fetched(
+        &self,
+        fetched: &nexus::Fetched,
+        domain: &str,
+        mod_id: u64,
+    ) -> anyhow::Result<bool> {
+        let source = NexusSource {
+            domain: domain.to_owned(),
+            mod_id,
+            file_id: fetched.file.file_id,
+            version: fetched.file.version.clone().unwrap_or_default(),
+        };
+        let list = self.list()?;
+        let updates = updated_entry(&list, &source, &fetched.files).map(|entry| entry.id.clone());
+        let result = match &updates {
+            Some(id) => self.replace(id, &fetched.archive, source),
+            None => self
+                .add(
+                    &fetched.archive,
+                    Some(fetched.mod_name.clone()),
+                    Some(source),
+                )
+                .map(|_| ()),
+        };
+        let _ = fs::remove_file(&fetched.archive);
+        result.map(|()| updates.is_some())
+    }
+
+    /// Puts a newer archive's files in place of a mod's.
+    fn replace(&self, id: &str, archive: &Path, nexus: NexusSource) -> anyhow::Result<()> {
+        let (unpacked, root) = self.unpack_new(archive, id)?;
+        let kept = self.files().join(id);
+        let old = self.files().join(format!(".old-{id}"));
+        if old.exists() {
+            fs::remove_dir_all(&old)
+                .with_context(|| format!("could not clear {}", old.display()))?;
+        }
+        if kept.exists() {
+            fs::rename(&kept, &old)
+                .with_context(|| format!("could not move {} aside", kept.display()))?;
+        }
+        if let Err(err) = fs::rename(&unpacked, &kept) {
+            let _ = fs::rename(&old, &kept);
+            let _ = fs::remove_dir_all(&unpacked);
+            return Err(err)
+                .with_context(|| format!("could not keep the mod in {}", kept.display()));
+        }
+        let _ = fs::remove_dir_all(&old);
+        self.change(|list| {
+            if let Some(entry) = list.mods.iter_mut().find(|entry| entry.id == id) {
+                entry.root = root;
+                entry.source = file_name(archive);
+                entry.nexus = Some(nexus);
+            }
+            Ok(())
+        })
     }
 
     /// The folder inside an unpacked archive whose contents are the mod.
@@ -634,6 +828,7 @@ impl Place {
         let mut manifest = Manifest {
             game_dir: self.game_dir.clone(),
             mods: enabled.iter().map(|entry| entry.id.clone()).collect(),
+            stamps: enabled.iter().map(|entry| entry.stamp()).collect(),
             ..Manifest::default()
         };
         if winners.is_empty() {
@@ -873,6 +1068,12 @@ fn check_relative(folder: &Path) -> anyhow::Result<()> {
 }
 
 /// A mod's name from its archive: `SkyUI_5_2_SE.7z` is `SkyUI_5_2_SE`.
+fn file_name(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
 fn archive_name(archive: &Path) -> String {
     let mut name = archive
         .file_name()
@@ -995,6 +1196,7 @@ mod tests {
                     enabled: true,
                     root: String::new(),
                     source: String::new(),
+                    nexus: None,
                 });
                 Ok(())
             })
@@ -1161,7 +1363,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let id = place.add(&archive).unwrap();
+        let id = place.add(&archive, None, None).unwrap();
         assert_eq!(id, "bepinex-win-x64-5-4-23-2");
         let overview = place.overview().unwrap();
         assert_eq!(overview.mods[0].name, "BepInEx_win_x64_5.4.23.2");
@@ -1178,10 +1380,88 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let err = place.add(&linked).unwrap_err();
+        let err = place.add(&linked, None, None).unwrap_err();
         assert!(format!("{err:#}").contains("links"), "{err:#}");
         assert_eq!(place.overview().unwrap().mods.len(), 1);
         assert_eq!(entries(&place.files()).0, vec![id]);
+    }
+
+    #[test]
+    fn a_nexus_update_takes_the_mods_place_and_shows_as_a_change() {
+        if launch::which("bsdtar").is_none() {
+            return;
+        }
+        let scratch = Scratch::new("nexus");
+        let place = scratch.place(None, false);
+        add_unpacked(&place, "first", &[("first.txt", "first")]);
+        let files: Files = serde_json::from_str(
+            r#"{"files":[{"file_id":10,"version":"1.0","file_name":"m.tar"},
+                         {"file_id":11,"version":"1.1","file_name":"m.tar"},
+                         {"file_id":20,"version":"1.0","file_name":"extra.tar"}],
+                "file_updates":[{"old_file_id":10,"new_file_id":11}]}"#,
+        )
+        .unwrap();
+        let fetched = |file_id: u64, text: &str| {
+            let source = scratch.0.join(format!("source-{file_id}"));
+            write(&source.join("mod.txt"), text);
+            let archive = scratch.0.join(format!("m-{file_id}.tar"));
+            let status = Command::new("bsdtar")
+                .arg("-cf")
+                .arg(&archive)
+                .arg("-C")
+                .arg(&source)
+                .arg(".")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            nexus::Fetched {
+                archive,
+                mod_name: "Cool Mod".into(),
+                file: files.get(file_id).unwrap().clone(),
+                files: files.clone(),
+            }
+        };
+
+        let old = fetched(10, "old");
+        assert!(!place.add_fetched(&old, "catquest", 7).unwrap());
+        assert!(
+            !old.archive.exists(),
+            "the download is deleted once unpacked"
+        );
+        add_unpacked(&place, "last", &[("last.txt", "last")]);
+        place.apply().unwrap();
+        let game = place.game_dir.clone();
+        assert_eq!(read(&game.join("mod.txt")).as_deref(), Some("old"));
+        assert_eq!(place.overview().unwrap().applied, Applied::Current(3));
+
+        assert!(
+            place
+                .add_fetched(&fetched(11, "new"), "catquest", 7)
+                .unwrap()
+        );
+        let overview = place.overview().unwrap();
+        let names: Vec<&str> = overview
+            .mods
+            .iter()
+            .map(|info| info.name.as_str())
+            .collect();
+        assert_eq!(names, ["first", "Cool Mod", "last"], "kept in its place");
+        let nexus = overview.mods[1].nexus.as_ref().unwrap();
+        assert_eq!((nexus.file_id, nexus.version.as_str()), (11, "1.1"));
+        assert_eq!(overview.applied, Applied::Changed);
+        assert_eq!(entries(&place.files()).0.len(), 3, "nothing left aside");
+        place.apply().unwrap();
+        assert_eq!(read(&game.join("mod.txt")).as_deref(), Some("new"));
+
+        // Another file of the same mod is a mod of its own.
+        assert!(
+            !place
+                .add_fetched(&fetched(20, "extra"), "catquest", 7)
+                .unwrap()
+        );
+        assert_eq!(place.overview().unwrap().mods.len(), 4);
+        place.restore().unwrap();
+        assert_eq!(entries(&game), (Vec::new(), Vec::new()));
     }
 
     /// A real mod archive, added, applied to a game folder made for the
@@ -1197,7 +1477,7 @@ mod tests {
         let place = scratch.place(None, true);
         write(&place.game_dir.join("Game.exe"), "game");
         write(&place.game_dir.join("Game_Data/level0"), "level");
-        place.add(Path::new(&archive)).unwrap();
+        place.add(Path::new(&archive), None, None).unwrap();
         let overview = place.overview().unwrap();
         assert!(overview.mods[0].files > 0);
         place.apply().unwrap();

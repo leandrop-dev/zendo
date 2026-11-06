@@ -837,9 +837,45 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      folder made for the test and taken out to the two files it held
      (an ignored test). The user tried it in the window on Cat Quest with
      BepInEx 5 (2026-11-06): it works.
-   - 7b Nexus: the personal API key in Settings, `nxm://` links
-     ("Mod Manager Download") opened by Zendo, downloads on the Downloads
-     page, names, versions and update checks.
+   - 7b Nexus, built 2026-11-06: a Nexus Mods section in Settings with
+     the personal key (checked with `users/validate` before it is saved,
+     which says the account's name and whether it has Premium; kept in
+     `config.toml` as `nexus_key`), a link to the "API Access" page
+     [tentative: the address, `users/myaccount?tab=api`, could not be
+     checked, the site turns curl away], and "Open them with Zendo",
+     which writes a hidden `zendo-nxm.desktop` for `x-scheme-handler/nxm`
+     pointing at the running binary and sets it with `xdg-mime default`;
+     only that button changes the desktop. `zendo nxm://…` hands the link
+     to the open window over `$XDG_RUNTIME_DIR/zendo/links.sock` (folder
+     0700, one window listens, a stale socket is taken over) or opens one.
+     A link's game: the game Zendo knows, the one the user chose before
+     (`nexus` in `mods.toml`), or the installed game with its title in
+     Nexus's game list (`~/.cache/zendo/nexus-games.json`, asked weekly);
+     with no single match, a chooser lists the installed games and
+     remembers the one chosen. The file downloads into the game's
+     `downloads/` with progress and Stop, in the Mods card and the
+     Downloads page (not the store queue: these are plain HTTP), then is
+     unpacked and deleted. A file Nexus lists as replacing the one a mod
+     came from takes that mod's place (order and on or off kept, Apply
+     says changed); another file of the same mod is a mod of its own.
+     Each mod from Nexus shows its version; once a session Zendo asks
+     Nexus for newer files of the game's mods, and Update downloads with
+     Premium or opens the file's page for the Mod manager download button
+     otherwise. A Find mods on Nexus button opens the game's mods there.
+     Three calls per download, one per mod for updates, and one for the
+     key at start, with `Application-Name: Zendo`. Collections are
+     refused with a message. One change at a time to any game's mods
+     across threads (a lock in `mods.rs`).
+     Checked: clippy and tests (links read, collections and bad ones
+     refused; updates followed to the newest, a loop ended; games found by
+     title; the desktop file's quoting; an update taking its mod's place
+     and showing as changed, then applied; the socket passing a link, mode
+     0700, a second listener refused, a stale socket taken over; the key
+     saved only once accepted; a link before the library waits; the
+     chooser), `zendo nxm://` refusing a collection and a bad game name,
+     and Nexus answering 401 to a made-up key; an ignored test asks the
+     real Nexus with the key in Settings. The user tried it with a real
+     key and link in the window (2026-11-06): it works.
    - 7c Profiles: named sets of mods per game, switched in one go.
    - 7d FOMOD installers and per-game knowledge (Bethesda plugin order).
 
@@ -854,8 +890,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 7b, Nexus: the personal key in Settings first; ask before registering
-  Zendo as the `nxm://` handler.
+- 7c, profiles: named sets of mods per game, switched in one go.
 
 ## Conventions
 

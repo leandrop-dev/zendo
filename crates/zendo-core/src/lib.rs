@@ -20,6 +20,7 @@ pub mod launch;
 pub mod launch_options;
 pub mod local;
 pub mod mods;
+pub mod nexus;
 pub mod owned;
 mod paths;
 pub mod proton;

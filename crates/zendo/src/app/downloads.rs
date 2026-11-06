@@ -579,7 +579,13 @@ impl Zendo {
         if state.confirm_close {
             body = body.push(close_banner());
         }
+        if let Some(mods) = self.mod_downloads_card() {
+            body = body.push(mods);
+        }
         if state.queue.is_empty() && state.finished.is_empty() {
+            if !self.nexus.downloads.is_empty() {
+                return body.into();
+            }
             return column![
                 body,
                 centered(

@@ -14,6 +14,7 @@ mod launch_options;
 mod library;
 mod local;
 mod mods;
+mod nexus;
 mod protondb;
 mod protons;
 mod running;
@@ -45,6 +46,7 @@ use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
 use mods::{ModsMessage, ModsState};
+use nexus::{NexusMessage, NexusState};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
@@ -80,8 +82,16 @@ fn key_id() -> Id {
 /// Zendo's windows' application id (Wayland) or class (X11): `zendo`.
 pub const APP_ID: &str = "zendo";
 
-pub fn run(fullscreen: bool) -> anyhow::Result<()> {
-    iced::application(Zendo::boot, Zendo::update, Zendo::view)
+/// Opens the window; `link` is an `nxm://` link it was started for.
+pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
+    let boot = move || {
+        let (mut zendo, task) = Zendo::boot();
+        if let Some(link) = link.clone() {
+            zendo.nexus_pending(link);
+        }
+        (zendo, task)
+    };
+    iced::application(boot, Zendo::update, Zendo::view)
         .title("Zendo")
         .theme(style::theme())
         .subscription(Zendo::subscription)
@@ -176,6 +186,7 @@ enum Message {
     Local(LocalMessage),
     Art(ArtMessage),
     Mods(ModsMessage),
+    Nexus(NexusMessage),
     Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
@@ -238,6 +249,8 @@ struct Zendo {
     picker: Option<Picker>,
     /// Each game's mods, on its page.
     mods: ModsState,
+    /// Nexus Mods: the key, links coming in and mods downloading.
+    nexus: NexusState,
     /// The Proton section of Settings.
     protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -275,6 +288,7 @@ impl Zendo {
             local: LocalState::default(),
             picker: None,
             mods: ModsState::default(),
+            nexus: NexusState::default(),
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
@@ -387,12 +401,16 @@ impl Zendo {
         }
     }
 
+    /// What an open sheet, form, picker or chooser does with a key press.
+    fn overlay_takes(&mut self, message: &Message) -> Option<Task<Message>> {
+        self.sheet_takes(message)
+            .or_else(|| self.form_takes(message))
+            .or_else(|| self.picker_takes(message))
+            .or_else(|| self.chooser_takes(message))
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
-        let sheet = self.sheet_takes(&message);
-        let taken = sheet
-            .or_else(|| self.form_takes(&message))
-            .or_else(|| self.picker_takes(&message));
-        if let Some(task) = taken {
+        if let Some(task) = self.overlay_takes(&message) {
             return task;
         }
         match message {
@@ -479,6 +497,7 @@ impl Zendo {
             Message::Local(message) => self.update_local(message),
             Message::Art(message) => self.update_art(message),
             Message::Mods(message) => self.update_mods(message),
+            Message::Nexus(message) => self.update_nexus(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
@@ -514,6 +533,7 @@ impl Zendo {
         self.library = Some(library);
         self.scanning = false;
         self.status = None;
+        let mut nexus = Task::none();
         if first {
             self.sort = sort;
             match config {
@@ -523,6 +543,7 @@ impl Zendo {
                 }
                 Err(err) => self.status = Some(err),
             }
+            nexus = self.nexus_loaded();
         }
         // A game just added or edited opens.
         if let Some((Some(open), _)) = &after
@@ -557,6 +578,7 @@ impl Zendo {
             self.download_images(),
             self.check_new_updates(),
             info,
+            nexus,
         ])
     }
 
@@ -909,6 +931,8 @@ impl Zendo {
             event::listen_with(on_event),
             Subscription::run(gamepad::events).map(Message::Pad),
             window::close_requests().map(|_| Message::Download(DownloadMessage::CloseRequested)),
+            Subscription::run(crate::links::listen)
+                .map(|link| Message::Nexus(NexusMessage::Link(link))),
         ])
     }
 
@@ -931,7 +955,7 @@ impl Zendo {
         };
         let main = column![page, self.footer()].width(Length::Fill);
         let page = self.with_sheet(row![self.sidebar(), main].into());
-        self.with_picker(self.with_form(page))
+        self.with_chooser(self.with_picker(self.with_form(page)))
     }
 
     fn footer(&self) -> Element<'_, Message> {

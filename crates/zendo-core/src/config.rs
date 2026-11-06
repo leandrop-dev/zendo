@@ -5,6 +5,8 @@
 //! # A key from https://www.steamgriddb.com/profile/preferences, for covers
 //! # of games whose store has none.
 //! steamgriddb_key = "…"
+//! # A personal key from Nexus Mods' API Access page, for downloading mods.
+//! nexus_key = "…"
 //! # Set to false to never download covers.
 //! download_covers = true
 //! # Where store games are installed, each in a folder of its own.
@@ -14,7 +16,7 @@
 //! default_proton = "GE-Proton11-12-x86_64"
 //! ```
 //!
-//! The file can hold a key, so Zendo writes it readable by its owner only.
+//! The file can hold keys, so Zendo writes it readable by its owner only.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -36,6 +38,9 @@ const HEADER: &str = "\
 pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steamgriddb_key: Option<String>,
+    /// The user's personal Nexus Mods API key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nexus_key: Option<String>,
     pub download_covers: bool,
     /// Where store games are installed; `~/Games` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -49,6 +54,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             steamgriddb_key: None,
+            nexus_key: None,
             download_covers: true,
             install_dir: None,
             default_proton: None,
@@ -102,6 +108,7 @@ impl Config {
         let path = Self::path().context("no home folder to keep Zendo's settings in")?;
         let mut config = self.clone();
         config.steamgriddb_key = normalise_key(config.steamgriddb_key);
+        config.nexus_key = normalise_key(config.nexus_key);
         let text = format!("{HEADER}{}", toml::to_string(&config)?);
         paths::write_private(&path, text.as_bytes())
             .with_context(|| format!("could not write {}", path.display()))
@@ -110,6 +117,7 @@ impl Config {
     fn parse(text: &str) -> anyhow::Result<Self> {
         let mut config: Self = toml::from_str(text)?;
         config.steamgriddb_key = normalise_key(config.steamgriddb_key);
+        config.nexus_key = normalise_key(config.nexus_key);
         Ok(config)
     }
 }
@@ -136,6 +144,7 @@ mod tests {
     fn writes_what_it_reads() {
         let config = Config {
             steamgriddb_key: Some("abc".into()),
+            nexus_key: Some("nx".into()),
             download_covers: false,
             install_dir: Some("/mnt/games".into()),
             default_proton: Some("GE-Proton11-12".into()),
@@ -144,6 +153,7 @@ mod tests {
         assert_eq!(Config::parse(&text).unwrap(), config);
         let text = toml::to_string(&Config::default()).unwrap();
         assert!(!text.contains("steamgriddb_key"), "{text}");
+        assert!(!text.contains("nexus_key"), "{text}");
     }
 
     #[test]

@@ -4,6 +4,7 @@
 mod app;
 mod file_dialog;
 mod gamepad;
+mod links;
 mod sign_in_window;
 
 use std::process::ExitCode;
@@ -27,6 +28,8 @@ Usage:
   zendo pin <id>               put a game first in every order
   zendo unpin <id>             stop
   zendo covers                 download the covers and wide images missing
+  zendo nxm://…                download a mod from a Nexus Mods link, in the
+                               open window or a new one
 ";
 
 fn main() -> ExitCode {
@@ -43,8 +46,15 @@ fn main() -> ExitCode {
         return file_dialog::main(kind, title);
     }
     let result = match args.as_slice() {
-        [] => app::run(false),
-        ["--fullscreen"] => app::run(true),
+        [] => app::run(false, None),
+        ["--fullscreen"] => app::run(true, None),
+        [link]
+            if link
+                .get(..6)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("nxm://")) =>
+        {
+            open_link(link)
+        }
         ["list", flags @ ..] if flags.iter().all(|flag| ["--all", "--json"].contains(flag)) => {
             list(flags.contains(&"--all"), flags.contains(&"--json"))
         }
@@ -74,6 +84,15 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Hands a Nexus link to the open window, or opens one for it.
+fn open_link(link: &str) -> anyhow::Result<()> {
+    zendo_core::nexus::Link::parse(link)?;
+    if links::send(link) {
+        return Ok(());
+    }
+    app::run(false, Some(link.to_owned()))
 }
 
 fn list(all: bool, json: bool) -> anyhow::Result<()> {

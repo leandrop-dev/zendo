@@ -121,6 +121,13 @@ install it and give it its colours, but it runs on any Linux desktop.
   mods go for Stardew Valley, Skyrim, Fallout 4 and New Vegas, Starfield
   and Cyberpunk 2077; for any other game they go in its folder, or one
   you set.
+- Mods from [Nexus Mods](https://www.nexusmods.com), with your personal
+  API key in Settings: once Zendo opens `nxm://` links (one button in
+  Settings), a Mod manager download on Nexus goes straight into the
+  game's mods, with progress on its page and the Downloads page. Zendo
+  tells when a mod has a newer file; Update downloads it with Premium,
+  or opens its page for the button there. Collections are not supported
+  yet.
 - Shows a game's [ProtonDB](https://www.protondb.com) rating on its page,
   Platinum to Borked, or Native for a game with a Linux version on Steam,
   and opens its ProtonDB page when clicked. Games
@@ -141,6 +148,7 @@ launcher is needed only for its own games:
 | umu-launcher | Starting the Windows games Zendo installed; it uses the newest GE-Proton or other Proton in Steam's compatibility tools folders, or downloads UMU-Proton (another can be chosen per game) |
 | MangoHud, GameMode, gamescope | Only for a game whose launch options turn them on |
 | 7-Zip (`7zip`), or bsdtar | Unpacking mods |
+| xdg-utils | Opening `nxm://` links from Nexus Mods in Zendo (`xdg-mime`) |
 
 ## Build
 
@@ -209,6 +217,7 @@ zendo unhide <id>            bring it back
 zendo pin <id>               put a game first in every order
 zendo unpin <id>             stop
 zendo covers                 download the covers and wide images missing, saying what it found
+zendo nxm://…                download a mod from a Nexus Mods link, in the open window or a new one
 ```
 
 `list` also names any launcher file it found but could not read.
@@ -223,6 +232,8 @@ readable by you only, and does not keep comments added by hand:
 # games whose store has none (.desktop games, Steam games Steam has no cover
 # for).
 steamgriddb_key = "…"
+# Your personal key from API Access on Nexus Mods, for downloading mods.
+nexus_key = "…"
 # false to never download covers.
 download_covers = true
 # Where store games are installed, each in a folder of its own.
@@ -273,7 +284,10 @@ What Zendo keeps itself:
 | `~/.cache/zendo/umu.json` | umu-launcher's id for each game, which picks the fixes it applies |
 | `~/.local/share/Steam/compatibilitytools.d/` | GE-Proton builds downloaded from Settings (Zendo does not own the folder; Steam reads it) |
 | `~/.cache/zendo/protondb.json` | Each game's Steam app id and ProtonDB rating, asked again after a week |
-| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, mod folder), `files/` (each mod unpacked), `applied.json` (what Apply placed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
+| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, the Nexus file each came from, mod folder, the game's name on Nexus when you chose it), `files/` (each mod unpacked), `downloads/` (files from Nexus while they download), `applied.json` (what Apply placed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
+| `~/.cache/zendo/nexus-games.json` | The games Nexus Mods has, to match yours by title, asked again after a week |
+| `~/.local/share/applications/zendo-nxm.desktop` | Written by Settings' "Open them with Zendo", so `nxm://` links open in Zendo; hidden from menus |
+| `$XDG_RUNTIME_DIR/zendo/links.sock` | Where `zendo nxm://…` hands a link to the open window |
 
 Play time of games Zendo starts itself (the ones it installed or you
 added, `.desktop` ones) is counted until the game's last process ends; Steam and Heroic
@@ -283,9 +297,9 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` keeps mods and applies them, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` keeps mods and applies them, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -308,8 +322,9 @@ count their own.
    page, and GE-Proton downloads.
 6. **Local games** (built): add a game by hand, and pick any game's
    cover or wide image from SteamGridDB.
-7. **Mods** (7a done): mods from archives with Apply and Back to
-   vanilla; next Nexus links, profiles and installers.
+7. **Mods** (7a and 7b done): mods from archives with Apply and Back
+   to vanilla, and from Nexus Mods links with updates; next profiles and
+   installers.
 
 See [PLAN.md](PLAN.md) for the details.
 

@@ -1,7 +1,7 @@
 //! The Mods card on a game's page: the mods Zendo keeps for the game, in
 //! order, each on or off, Add mod, the folder they go in, Apply and Back to
-//! vanilla. The work is `zendo_core::mods`'; this shows it and runs it on
-//! a thread.
+//! vanilla, with downloads and updates from Nexus (`nexus.rs`). The work is
+//! `zendo_core::mods`'; this shows it and runs it on a thread.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,7 +10,9 @@ use iced::widget::{button, checkbox, column, container, row, space, text, text_i
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Game;
 use zendo_core::mods::{self, Applied, ModInfo, Overview};
+use zendo_core::nexus;
 
+use super::nexus::{NexusMessage, download_row};
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
 
@@ -91,15 +93,17 @@ impl Zendo {
 
     pub(super) fn update_mods(&mut self, message: ModsMessage) -> Task<Message> {
         match message {
-            ModsMessage::Read(id, result) => {
-                let shown = match result {
-                    Ok(Some(overview)) => Shown::Ready(overview),
-                    Ok(None) => Shown::Nowhere,
-                    Err(err) => Shown::Failed(err),
-                };
-                self.mods.shown.insert(id, shown);
-                Task::none()
-            }
+            ModsMessage::Read(id, result) => match result {
+                Ok(Some(overview)) => self.mods_ready(id, overview),
+                Ok(None) => {
+                    self.mods.shown.insert(id, Shown::Nowhere);
+                    Task::none()
+                }
+                Err(err) => {
+                    self.mods.shown.insert(id, Shown::Failed(err));
+                    Task::none()
+                }
+            },
             ModsMessage::Pick(id) => {
                 if self.mods.busy.is_some() || !self.persist {
                     return Task::none();
@@ -170,12 +174,29 @@ impl Zendo {
                         if !note.is_empty() {
                             self.status = Some(note);
                         }
-                        self.mods.shown.insert(id, Shown::Ready(overview));
+                        self.mods_ready(id, overview)
                     }
-                    Err(err) => self.status = Some(err),
+                    Err(err) => {
+                        self.status = Some(err);
+                        Task::none()
+                    }
                 }
-                Task::none()
             }
+        }
+    }
+
+    /// A game's mods as they now stand; their updates are asked of Nexus
+    /// once a session.
+    pub(super) fn mods_ready(&mut self, id: String, overview: Overview) -> Task<Message> {
+        let check = self.check_mod_updates(&id, &overview);
+        self.mods.shown.insert(id, Shown::Ready(overview));
+        check
+    }
+
+    pub(super) fn mods_overview(&self, id: &str) -> Option<&Overview> {
+        match self.mods.shown.get(id)? {
+            Shown::Ready(overview) => Some(overview),
+            _ => None,
         }
     }
 
@@ -264,12 +285,25 @@ impl Zendo {
             .padding([8, 14])
             .style(style::secondary)
             .on_press_maybe(free.then(|| Message::Mods(ModsMessage::Pick(id.clone()))));
-        let mut card = column![
-            row![text("Mods").size(18).font(BOLD), space::horizontal(), add,]
-                .align_y(Alignment::Center),
-            body,
-        ]
-        .spacing(12);
+        let mut header = row![text("Mods").size(18).font(BOLD), space::horizontal()]
+            .spacing(8)
+            .align_y(Alignment::Center);
+        if let Some(domain) = self
+            .mods_overview(id)
+            .and_then(|overview| overview.nexus.as_ref())
+        {
+            header = header.push(
+                button(text("Find mods on Nexus").size(14))
+                    .padding([8, 14])
+                    .style(style::secondary)
+                    .on_press(Message::Open(nexus::game_url(domain))),
+            );
+        }
+        let mut card = column![header.push(add)].spacing(12);
+        for download in self.nexus_downloads_for(id) {
+            card = card.push(download_row(download));
+        }
+        card = card.push(body);
         if let Some(busy) = busy {
             card = card.push(text(busy).size(13).color(DIM));
         }
@@ -357,7 +391,18 @@ impl Zendo {
         last: bool,
         free: bool,
     ) -> Element<'a, Message> {
-        let mut facts = vec![super::format::count(info.files, "file", "files")];
+        let mut facts = Vec::new();
+        if let Some(version) = info
+            .nexus
+            .as_ref()
+            .map(|nexus| nexus.version.as_str())
+            .filter(|version| !version.is_empty())
+        {
+            facts.push(format!("version {version} from Nexus"));
+        } else if info.nexus.is_some() {
+            facts.push("from Nexus".to_owned());
+        }
+        facts.push(super::format::count(info.files, "file", "files"));
         for (other, count) in &info.wins {
             facts.push(format!("replaces {count} of {other}"));
         }
@@ -380,6 +425,23 @@ impl Zendo {
                         Message::Mods(ModsMessage::Move(game.clone(), mod_id.clone(), up))
                     }))
             };
+        let update = self.mod_update(id, &info.id).map(|file| {
+            let label = match file
+                .version
+                .as_deref()
+                .filter(|version| !version.is_empty())
+            {
+                Some(version) => format!("Update to {version}"),
+                None => "Update".to_owned(),
+            };
+            button(text(label).size(13).color(GOOD))
+                .padding([4, 10])
+                .style(style::secondary)
+                .on_press(Message::Nexus(NexusMessage::Update(
+                    game.clone(),
+                    mod_id.clone(),
+                )))
+        });
         row![
             checkbox(info.enabled)
                 .on_toggle_maybe(free.then_some(toggle))
@@ -390,19 +452,29 @@ impl Zendo {
             ]
             .spacing(2)
             .width(Length::Fill),
-            step("↑", true, !first),
-            step("↓", false, !last),
-            button(text(if asking { "Really delete" } else { "Delete" }).size(13))
-                .padding([4, 10])
-                .style(if asking {
-                    style::danger
-                } else {
-                    style::secondary
-                })
-                .on_press_maybe(
-                    free.then(|| Message::Mods(ModsMessage::Remove(game.clone(), mod_id.clone()))),
-                ),
         ]
+        .push(update)
+        .push(
+            row![
+                step("↑", true, !first),
+                step("↓", false, !last),
+                button(text(if asking { "Really delete" } else { "Delete" }).size(13))
+                    .padding([4, 10])
+                    .style(if asking {
+                        style::danger
+                    } else {
+                        style::secondary
+                    })
+                    .on_press_maybe(
+                        free.then(|| Message::Mods(ModsMessage::Remove(
+                            game.clone(),
+                            mod_id.clone()
+                        ))),
+                    ),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
+        )
         .spacing(10)
         .align_y(Alignment::Center)
         .into()
@@ -521,11 +593,13 @@ mod tests {
             folder: String::new(),
             custom_folder: false,
             known: None,
+            nexus: None,
             mods: vec![ModInfo {
                 id: "bepinex".into(),
                 name: "BepInEx".into(),
                 enabled: true,
                 files: 22,
+                nexus: None,
                 wins: Vec::new(),
                 loses: Vec::new(),
             }],
