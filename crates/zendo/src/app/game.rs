@@ -59,9 +59,13 @@ impl Zendo {
             self.downloads.updates.get(&game.id),
             Some(UpdateState::Available(_))
         );
-        let mut page = column![trail, game_hero(game, update), actions]
-            .spacing(20)
-            .padding(24);
+        let mut page = column![
+            trail,
+            game_hero(game, update, self.rating_pill(&game.id)),
+            actions
+        ]
+        .spacing(20)
+        .padding(24);
         if game.installed_by_zendo() {
             page = page.push(self.store_actions(game));
             page = page.push(self.launch_card(game));
@@ -91,9 +95,15 @@ pub struct Hero<'a> {
     pub badges: Vec<(String, Color)>,
     pub developer: Option<&'a str>,
     pub facts: Vec<String>,
+    /// The `ProtonDB` pill, beside the badges.
+    pub rating: Option<Element<'a, Message>>,
 }
 
-fn game_hero(game: &Game, update: bool) -> Element<'_, Message> {
+fn game_hero<'a>(
+    game: &'a Game,
+    update: bool,
+    rating: Option<Element<'a, Message>>,
+) -> Element<'a, Message> {
     let mut badges = Vec::new();
     if update {
         badges.push(("UPDATE AVAILABLE".to_owned(), ACCENT));
@@ -115,6 +125,7 @@ fn game_hero(game: &Game, update: bool) -> Element<'_, Message> {
         badges,
         developer: game.details.developer.as_deref(),
         facts: facts(game),
+        rating,
     })
 }
 
@@ -172,6 +183,9 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
     .spacing(6);
     for (label, color) in hero.badges {
         badges = badges.push(style::badge(label, color));
+    }
+    if let Some(rating) = hero.rating {
+        badges = badges.push(rating);
     }
     let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
     if let Some(developer) = hero.developer {

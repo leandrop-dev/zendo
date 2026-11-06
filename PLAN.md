@@ -19,7 +19,8 @@ sign-in window, then phase 5 with Running/Stop and the ProtonDB rating. The
 user checked 4d in the window; 4d and 4e (the sign-in window) were built
 the same day, and the user checked both. Phase 5 started the same day,
 split into 5a to 5e (below); 5a and 5b are built and the user checked
-them; 5c is built, and its options fixed both quirks the user found. The user asked to leave in-game quirks (controllers, full
+them; 5c is built, and its options fixed both quirks the user found. 5d
+is built and checked by the user. The user asked to leave in-game quirks (controllers, full
 screen) for the settings sheet, and to get most features working first
 [firm].
 
@@ -575,6 +576,35 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Gunslugs 3 went full screen with gamescope and full screen on, and
      the controller worked in 10 Second Ninja X with controllers as Xbox
      pads on (`PROTON_PREFER_SDL=1`, confirming the cause above).
+   - 5d ProtonDB pill [firm], built 2026-11-06: on both game pages (the
+     library's and the Store's), beside the badges: PROTONDB PLATINUM,
+     GOLD, SILVER, BRONZE, BORKED or PENDING in the tier's colour, or
+     "NO REPORTS"; a tooltip gives the number of reports, and a click
+     opens `https://www.protondb.com/app/<appid>` in the browser. Nothing
+     shows for a game ProtonDB cannot know. The rating is ProtonDB's
+     summary, `/api/v1/reports/summaries/<appid>.json` (`tier`, `total`;
+     a 404 when there are no reports). The Steam app id: a Steam game's
+     own; for an Epic, GOG or Amazon game, umu's id when it is
+     `umu-<number>` (umu uses Steam's ids); otherwise the Steam store's
+     search (`/api/storesearch/?term=<title>`) when an app's name has
+     exactly the title's letters and digits, case aside [tentative: no
+     fuzzy match, so a title spelt differently finds nothing rather than
+     the wrong game]. Kept in `~/.cache/zendo/protondb.json`, asked again
+     after a week; a failed lookup is not kept and is asked again when
+     the page next opens. A game with a Linux build on Steam shows
+     PROTONDB NATIVE in green instead, as ProtonDB's own pages do: the
+     summary has no such field, ProtonDB's site takes it from Steam's
+     platforms, and Zendo asks Steam the same
+     (`/api/appdetails?appids=<id>&filters=platforms`,
+     `platforms.linux`); the tooltip still gives the Proton tier. Cache
+     entries from before that carry no version and are asked again.
+     Checked against the real services: Hexologic (Steam id, Native, with
+     Platinum from 9 reports), 10 Second Ninja X (umu's `umu-435790`,
+     Platinum, 37), Bō: Path of the Teal Lotus (found by title, 1614440,
+     Platinum, 9), Gunslugs 3 Rogue Tactics (none: Steam calls it
+     "Gunslugs : Rogue Tactics"). The user checked the pill on screen;
+     they noticed Hexologic showing Platinum where ProtonDB says Native,
+     which led to the Native check.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -589,7 +619,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 5d (ProtonDB pill), then 5e (GE-Proton downloads).
+- 5e: GE-Proton downloads.
   An Epic install and launch is still untried.
 
 ## Conventions

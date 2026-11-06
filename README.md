@@ -100,6 +100,11 @@ install it and give it its colours, but it runs on any Linux desktop.
   gamescope with full screen and a size, controllers as Xbox pads for
   games that ignore others, arguments and environment. Steam and Heroic
   games keep their launcher's own settings.
+- Shows a game's [ProtonDB](https://www.protondb.com) rating on its page,
+  Platinum to Borked, or Native for a game with a Linux version on Steam,
+  and opens its ProtonDB page when clicked. Games
+  from other stores are matched to Steam through umu's database or their
+  exact title.
 
 ## What you need
 
@@ -230,6 +235,7 @@ What Zendo keeps itself:
 | `~/.cache/zendo/store/` | Each store's list of your games (`<store>.json`), shown at once on the next start; `gogdb/` keeps GOG's answers about each game |
 | `~/.local/state/zendo/logs/` | The output of each game's last launch (`<id>.log`) |
 | `~/.cache/zendo/umu.json` | umu-launcher's id for each game, which picks the fixes it applies |
+| `~/.cache/zendo/protondb.json` | Each game's Steam app id and ProtonDB rating, asked again after a week |
 
 Play time of games Zendo starts itself (the ones it installed, `.desktop`
 ones) is counted until the game's last process ends; Steam and Heroic
@@ -239,9 +245,9 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them (with `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `launch.rs` starts them (with `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `covers.rs` downloads covers, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `protondb.rs` for its rating pill, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -260,8 +266,8 @@ count their own.
    sign-in window of Zendo's own, so there is no code to copy.
 5. Launch options per game (in progress): Proton through umu-launcher with
    a prefix per game, a launch log, Running and Stop, a launch options
-   sheet with MangoHud, GameMode and gamescope (built); a GE-Proton
-   manager, and the ProtonDB rating on the game's page (to come).
+   sheet with MangoHud, GameMode and gamescope, the ProtonDB rating on the
+   game's page (built); a GE-Proton manager (to come).
 6. Local games: add a game by hand, with a cover from SteamGridDB.
 7. Mods: Nexus links, profiles, back to vanilla.
 

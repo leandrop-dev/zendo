@@ -11,6 +11,7 @@ mod format;
 mod game;
 mod launch_options;
 mod library;
+mod protondb;
 mod running;
 mod settings;
 mod sidebar;
@@ -37,6 +38,7 @@ use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
 use downloads::{DownloadMessage, DownloadsState};
 use launch_options::{Sheet, SheetMessage};
+use protondb::RatingState;
 use running::{RunMessage, Running};
 use store::{StoreMessage, StoreState};
 use style::DIM;
@@ -155,6 +157,8 @@ enum Message {
     Download(DownloadMessage),
     Run(RunMessage),
     Sheet(SheetMessage),
+    /// What `ProtonDB` says of a game.
+    Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
     Store(StoreMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
     /// page is for.
@@ -208,6 +212,8 @@ struct Zendo {
     running: Running,
     /// A game's launch options, open over its page.
     sheet: Option<Sheet>,
+    /// `ProtonDB`'s rating of each game whose page was opened.
+    ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
     key: KeyForm,
     accounts: Accounts,
@@ -238,6 +244,7 @@ impl Zendo {
             downloads: DownloadsState::default(),
             running: Running::default(),
             sheet: None,
+            ratings: std::collections::HashMap::new(),
             config: Config::default(),
             key: KeyForm::default(),
             accounts: Accounts::default(),
@@ -440,6 +447,10 @@ impl Zendo {
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
+            Message::Rating(id, result) => {
+                self.rating_arrived(id, result);
+                Task::none()
+            }
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -477,7 +488,10 @@ impl Zendo {
         }
         let select = self.select(id.as_deref());
         let info = match &self.page {
-            Page::Game(id) => self.want_info(&id.clone()),
+            Page::Game(id) => {
+                let id = id.clone();
+                Task::batch([self.want_info(&id), self.want_rating(&id)])
+            }
             _ => Task::none(),
         };
         Task::batch([
@@ -549,6 +563,7 @@ impl Zendo {
                 Task::batch([
                     operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 }),
                     self.want_info(&id),
+                    self.want_rating(&id),
                 ])
             }
             // The grid is built anew; put it back where the cursor is.

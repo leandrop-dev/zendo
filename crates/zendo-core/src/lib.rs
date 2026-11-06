@@ -20,6 +20,7 @@ pub mod launch_options;
 pub mod owned;
 mod paths;
 pub mod proton;
+pub mod protondb;
 pub mod state;
 mod steam;
 pub mod stores;

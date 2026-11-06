@@ -65,6 +65,34 @@ pub fn badge<'a, M: 'a>(label: impl text::IntoFragment<'a>, color: Color) -> Ele
         .into()
 }
 
+/// A badge that is a link: the `ProtonDB` rating. It fills with its colour
+/// under the pointer.
+pub fn pill(color: Color) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| {
+        let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+        button::Style {
+            background: Some(Background::Color(if hovered {
+                Color { a: 0.3, ..color }
+            } else {
+                Color {
+                    a: 0.82,
+                    ..BACKGROUND
+                }
+            })),
+            text_color: color,
+            border: Border {
+                color: Color {
+                    a: if hovered { 1.0 } else { 0.5 },
+                    ..color
+                },
+                width: 1.0,
+                radius: 5.0.into(),
+            },
+            ..button::Style::default()
+        }
+    }
+}
+
 /// A raised panel: the details card, a settings section.
 pub fn card(_: &Theme) -> container::Style {
     container::Style {
