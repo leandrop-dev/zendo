@@ -55,13 +55,17 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
-/// The latest releases with a build for this machine, newest first.
+/// How many releases a page of GitHub's list holds.
+pub const PAGE: usize = 30;
+
+/// A page of the releases with a build for this machine, newest first
+/// (page 1 the latest), and whether GitHub has more after it.
 ///
 /// # Errors
 ///
 /// When GitHub cannot be reached or answers oddly (it allows 60 requests an
 /// hour without an account).
-pub fn releases() -> anyhow::Result<Vec<Release>> {
+pub fn releases(page: u32) -> anyhow::Result<(Vec<Release>, bool)> {
     #[derive(Deserialize)]
     struct Entry {
         tag_name: String,
@@ -78,7 +82,8 @@ pub fn releases() -> anyhow::Result<Vec<Release>> {
     }
     let body = agent()
         .get(RELEASES)
-        .query("per_page", "10")
+        .query("per_page", PAGE.to_string())
+        .query("page", page.to_string())
         .header("Accept", "application/vnd.github+json")
         .call()
         .context("could not reach GitHub")?
@@ -87,7 +92,8 @@ pub fn releases() -> anyhow::Result<Vec<Release>> {
     let entries: Vec<Entry> =
         serde_json::from_str(&body).context("GitHub's list of releases answered oddly")?;
     let arch = std::env::consts::ARCH;
-    Ok(entries
+    let more = entries.len() == PAGE;
+    let releases = entries
         .into_iter()
         .filter(|entry| !entry.prerelease)
         .filter_map(|entry| {
@@ -114,7 +120,8 @@ pub fn releases() -> anyhow::Result<Vec<Release>> {
                 name,
             })
         })
-        .collect())
+        .collect();
+    Ok((releases, more))
 }
 
 /// Whether a Proton found on the machine is this release.
@@ -391,7 +398,9 @@ mod online {
     #[test]
     #[ignore = "needs the network"]
     fn lists_real_releases() {
-        for release in super::releases().unwrap() {
+        let (releases, more) = super::releases(2).unwrap();
+        println!("more after page 2: {more}");
+        for release in releases {
             println!(
                 "{} {} {} {}",
                 release.name,

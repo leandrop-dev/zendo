@@ -97,8 +97,8 @@ pub fn applies(game: &Game) -> bool {
 /// one chosen even when it is gone.
 fn proton_choices(chosen: Option<&str>) -> Vec<ProtonChoice> {
     let installed = proton::installed();
-    let default = match installed.first() {
-        Some(first) => format!("Default ({})", first.name),
+    let default = match proton::default() {
+        Some(default) => format!("Default ({})", default.name),
         None => "Default (UMU-Proton, downloaded by umu)".to_owned(),
     };
     let mut choices = vec![ProtonChoice {
@@ -285,7 +285,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
             .cloned();
         body = body.push(field(
             "Proton",
-            "Runs the Windows game. GE-Proton carries the most fixes; the default is the first found.",
+            "Runs the Windows game. GE-Proton carries the most fixes; Settings sets the default.",
             pick_list(sheet.protons.as_slice(), selected, |choice| {
                 Message::Sheet(SheetMessage::Proton(choice))
             })

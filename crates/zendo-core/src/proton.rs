@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::config::Config;
 use crate::paths;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,12 +65,24 @@ pub fn installed() -> Vec<Proton> {
     found
 }
 
-/// The Proton a game runs with unless told otherwise: the newest GE-Proton
-/// or UMU-Proton, which carry the protonfixes umu applies, then a
-/// distribution's Proton, then Valve's. `None` lets umu download
-/// UMU-Proton itself.
+/// The Proton a game runs with unless its launch options choose one: the
+/// one Settings made the default (`default_proton`), while it is
+/// installed, else [`automatic`]. `None` lets umu download UMU-Proton
+/// itself.
 #[must_use]
 pub fn default() -> Option<Proton> {
+    Config::load()
+        .ok()
+        .and_then(|config| config.default_proton)
+        .and_then(|name| named(&name))
+        .or_else(automatic)
+}
+
+/// The Proton picked when none is chosen: the newest GE-Proton or
+/// UMU-Proton, which carry the protonfixes umu applies, then a
+/// distribution's Proton, then Valve's.
+#[must_use]
+pub fn automatic() -> Option<Proton> {
     installed().into_iter().next()
 }
 

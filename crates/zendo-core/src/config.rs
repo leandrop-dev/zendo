@@ -9,6 +9,9 @@
 //! download_covers = true
 //! # Where store games are installed, each in a folder of its own.
 //! install_dir = "~/Games"
+//! # The Proton Windows games run with unless their launch options choose
+//! # one: a folder name. Left out, the newest GE-Proton found, then others.
+//! default_proton = "GE-Proton11-12-x86_64"
 //! ```
 //!
 //! The file can hold a key, so Zendo writes it readable by its owner only.
@@ -37,6 +40,9 @@ pub struct Config {
     /// Where store games are installed; `~/Games` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_dir: Option<PathBuf>,
+    /// The Proton games run with unless their launch options choose one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_proton: Option<String>,
 }
 
 impl Default for Config {
@@ -45,6 +51,7 @@ impl Default for Config {
             steamgriddb_key: None,
             download_covers: true,
             install_dir: None,
+            default_proton: None,
         }
     }
 }
@@ -131,6 +138,7 @@ mod tests {
             steamgriddb_key: Some("abc".into()),
             download_covers: false,
             install_dir: Some("/mnt/games".into()),
+            default_proton: Some("GE-Proton11-12".into()),
         };
         let text = format!("{HEADER}{}", toml::to_string(&config).unwrap());
         assert_eq!(Config::parse(&text).unwrap(), config);

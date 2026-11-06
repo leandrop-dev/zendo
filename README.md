@@ -100,9 +100,10 @@ install it and give it its colours, but it runs on any Linux desktop.
   gamescope with full screen and a size, controllers as Xbox pads for
   games that ignore others, arguments and environment. Steam and Heroic
   games keep their launcher's own settings.
-- Downloads GE-Proton from Settings: the latest releases, checked against
-  their checksums, into Steam's compatibility tools folder, where Steam
-  and Heroic find them too; and removes the ones there.
+- Downloads GE-Proton from Settings: the latest releases, and older ones
+  on asking, checked against their checksums, into Steam's compatibility
+  tools folder, where Steam and Heroic find them too; removes the ones
+  there; and sets the Proton games run with by default.
 - Shows a game's [ProtonDB](https://www.protondb.com) rating on its page,
   Platinum to Borked, or Native for a game with a Linux version on Steam,
   and opens its ProtonDB page when clicked. Games
@@ -208,6 +209,9 @@ steamgriddb_key = "…"
 download_covers = true
 # Where store games are installed, each in a folder of its own.
 install_dir = "~/Games"
+# The Proton Windows games run with unless their launch options choose one
+# (a folder name; Settings sets it). Left out: the newest GE-Proton found.
+default_proton = "GE-Proton11-12-x86_64"
 ```
 
 `~/.config/zendo/games.toml` holds each game's launch options, as set on

@@ -20,8 +20,9 @@ user checked 4d in the window; 4d and 4e (the sign-in window) were built
 the same day, and the user checked both. Phase 5 started the same day,
 split into 5a to 5e (below); 5a and 5b are built and the user checked
 them; 5c is built, and its options fixed both quirks the user found. 5d
-is built and checked by the user. 5e is built; a real download is still
-to be confirmed. The user asked to leave in-game quirks (controllers, full
+is built and checked by the user. 5e is built and the user checked it,
+then asked for a default Proton setting and older releases, both built
+and checked. Phase 5 is done. The user asked to leave in-game quirks (controllers, full
 screen) for the settings sheet, and to get most features working first
 [firm].
 
@@ -634,12 +635,28 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      release known by either name; a system Proton refused for removal;
      one download at a time, Stop and a checksum failure reported, Remove
      asking first); GitHub's real list read (GE-Proton11-12 to 11-3, all
-     with checksums). The user said it works; but no download left a
-     trace on this PC (no `~/.cache/zendo/ge-proton/`, which every
-     download makes first and nothing deletes; the tools folder empty;
-     the logs only name proton-cachyos-slr), so a real download, its
-     checksum and unpacking, and a game run with it are still to be
-     confirmed.
+     with checksums). The user then downloaded GE-Proton11-12 (into
+     `compatibilitytools.d/GE-Proton11-12-x86_64`), chose it, ran a game
+     with it (its log names that `PROTONPATH`) and removed it.
+     From that test [firm, the user's asks]:
+     - A default Proton in Settings: downloading GE-Proton made it the
+       default, as Automatic picks the newest GE-Proton first. The
+       section now starts with a Default list, "Automatic: newest
+       GE-Proton first (<its pick>)" or any Proton found, kept as
+       `default_proton` in `config.toml`; a game whose launch options
+       leave Proton as it comes runs with it, and the sheet's "Default
+       (…)" names it. One chosen and not found falls back to Automatic
+       and says so in the list; removing the default from Settings sets
+       it back to Automatic.
+     - Older releases: "Show older versions" under the latest five adds
+       ten more each press, asking GitHub for its next page of 30 only
+       when those read run out (GitHub allows 60 requests an hour
+       without an account, and GE-Proton has well over a hundred
+       releases). Checked with GitHub's real page 2: GE-Proton10-16 and
+       older, with the old tarball names.
+     Checked: clippy and tests (pages joined in order, the next page
+     asked only past what was read; the default set and Automatic
+     first). The user then tried both in the window, and they worked.
 6. Local games: "Add game", with a cover search on SteamGridDB.
 7. Mods: Nexus, `nxm://`, profiles, back to vanilla.
 
@@ -654,8 +671,6 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- Confirm 5e with a real download: GE-Proton into the tools folder,
-  chosen for a game, the game's log naming it, Remove.
 - Then phase 6, local games.
   An Epic install and launch is still untried.
 

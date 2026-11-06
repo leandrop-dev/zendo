@@ -1,14 +1,16 @@
-//! The Proton section of Settings: the Protons found, the latest GE-Proton
-//! releases to download, one at a time with its progress, and Remove for
-//! the ones in the user's own tools folder.
+//! The Proton section of Settings: the default Proton, the Protons found,
+//! GE-Proton releases to download (the latest few, older ones on asking),
+//! one at a time with its progress, and Remove for the ones in the user's
+//! own tools folder.
 
+use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{button, column, progress_bar, row, text};
+use iced::widget::{button, column, pick_list, progress_bar, row, text};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Size;
 use zendo_core::ge_proton::{self, Release};
@@ -19,20 +21,60 @@ use super::settings::section;
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
 
-/// How many releases the section offers.
+/// How many releases the section offers at first.
 const SHOWN: usize = 5;
+/// How many more each "Show older versions" adds.
+const OLDER: usize = 10;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Protons {
     installed: Vec<Proton>,
-    /// `None` until asked.
-    releases: Option<Result<Vec<Release>, String>>,
+    /// The releases read so far, newest first.
+    releases: Vec<Release>,
+    /// Pages of GitHub's list read; 0 until asked.
+    pages: u32,
+    /// GitHub has pages after those.
+    more: bool,
+    /// How many releases are on show.
+    shown: usize,
+    error: Option<String>,
     asking: bool,
     download: Option<Download>,
     /// The Proton whose Remove was pressed once.
     confirm_remove: Option<String>,
     /// The last thing that happened, and whether it went well.
     note: Option<(String, bool)>,
+}
+
+impl Default for Protons {
+    fn default() -> Self {
+        Self {
+            installed: Vec::new(),
+            releases: Vec::new(),
+            pages: 0,
+            more: false,
+            shown: SHOWN,
+            error: None,
+            asking: false,
+            download: None,
+            confirm_remove: None,
+            note: None,
+        }
+    }
+}
+
+/// An entry of the default Proton list: a build by name, or `None` for
+/// Automatic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultChoice {
+    name: Option<String>,
+    label: String,
+}
+
+impl fmt::Display for DefaultChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
 }
 
 #[derive(Debug)]
@@ -45,8 +87,11 @@ struct Download {
 
 #[derive(Debug, Clone)]
 pub enum ProtonMessage {
-    Releases(Result<Vec<Release>, String>),
+    /// A page of GitHub's list, and whether more follow.
+    Releases(u32, Result<(Vec<Release>, bool), String>),
     Refresh,
+    ShowOlder,
+    SetDefault(DefaultChoice),
     Download(Release),
     Progress(String, u64, u64),
     Installed(String, Result<(), String>),
@@ -59,33 +104,56 @@ impl Zendo {
     /// once a session.
     pub(super) fn want_protons(&mut self) -> Task<Message> {
         self.protons.installed = proton::installed();
-        if !self.persist || self.protons.releases.is_some() || self.protons.asking {
+        if !self.persist || self.protons.pages > 0 || self.protons.asking {
             return Task::none();
         }
-        self.ask_releases()
+        self.ask_page(1)
     }
 
-    fn ask_releases(&mut self) -> Task<Message> {
+    fn ask_page(&mut self, page: u32) -> Task<Message> {
         self.protons.asking = true;
+        self.protons.error = None;
+        if !self.persist {
+            return Task::none();
+        }
         Task::perform(
-            blocking(|| ge_proton::releases().map_err(|err| format!("{err:#}"))),
-            |result| Message::Proton(ProtonMessage::Releases(result)),
+            blocking(move || ge_proton::releases(page).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Proton(ProtonMessage::Releases(page, result)),
         )
     }
 
     pub(super) fn update_protons(&mut self, message: ProtonMessage) -> Task<Message> {
         let protons = &mut self.protons;
         match message {
-            ProtonMessage::Releases(result) => {
+            ProtonMessage::Releases(page, result) => {
                 protons.asking = false;
-                protons.releases = Some(result);
+                match result {
+                    Ok((releases, more)) => {
+                        if page == 1 {
+                            protons.releases.clear();
+                        }
+                        protons.releases.extend(releases);
+                        protons.pages = page;
+                        protons.more = more;
+                    }
+                    Err(err) => protons.error = Some(err),
+                }
             }
             ProtonMessage::Refresh => {
                 protons.installed = proton::installed();
-                if !protons.asking && self.persist {
-                    return self.ask_releases();
+                protons.shown = SHOWN;
+                if !protons.asking {
+                    return self.ask_page(1);
                 }
             }
+            ProtonMessage::ShowOlder => {
+                protons.shown += OLDER;
+                if protons.shown > protons.releases.len() && protons.more && !protons.asking {
+                    let next = protons.pages + 1;
+                    return self.ask_page(next);
+                }
+            }
+            ProtonMessage::SetDefault(choice) => return self.set_default_proton(choice.name),
             ProtonMessage::Download(release) => {
                 if protons.download.is_some() {
                     return Task::none();
@@ -129,33 +197,118 @@ impl Zendo {
                     download.stop.store(true, Ordering::Relaxed);
                 }
             }
-            ProtonMessage::Remove(name) => {
-                if protons.confirm_remove.as_deref() != Some(name.as_str()) {
-                    protons.confirm_remove = Some(name);
-                    return Task::none();
-                }
-                protons.confirm_remove = None;
-                let Some(found) = protons.installed.iter().find(|p| p.name == name) else {
-                    return Task::none();
-                };
-                let result = if self.persist {
-                    ge_proton::remove(found)
-                } else {
-                    Ok(())
-                };
-                protons.note = Some(match result {
-                    Ok(()) => (format!("Removed {name}"), true),
-                    Err(err) => (format!("{err:#}"), false),
-                });
-                protons.installed = proton::installed();
-            }
+            ProtonMessage::Remove(name) => return self.remove_proton(name),
         }
         Task::none()
     }
 
+    /// Remove, pressed once to ask and again to delete.
+    fn remove_proton(&mut self, name: String) -> Task<Message> {
+        let protons = &mut self.protons;
+        if protons.confirm_remove.as_deref() != Some(name.as_str()) {
+            protons.confirm_remove = Some(name);
+            return Task::none();
+        }
+        protons.confirm_remove = None;
+        let Some(found) = protons.installed.iter().find(|p| p.name == name) else {
+            return Task::none();
+        };
+        let result = if self.persist {
+            ge_proton::remove(found)
+        } else {
+            Ok(())
+        };
+        protons.installed = proton::installed();
+        if let Err(err) = result {
+            protons.note = Some((format!("{err:#}"), false));
+            return Task::none();
+        }
+        // A default that is gone goes back to Automatic.
+        if self.config.default_proton.as_deref() == Some(name.as_str()) {
+            let _ = self.set_default_proton(None);
+            if self.protons.note.as_ref().is_some_and(|(_, good)| *good) {
+                self.protons.note = Some((
+                    format!("Removed {name}; it was the default, so Automatic is used now"),
+                    true,
+                ));
+            }
+        } else {
+            self.protons.note = Some((format!("Removed {name}"), true));
+        }
+        Task::none()
+    }
+
+    /// Makes a Proton the default for games without one of their own, or
+    /// goes back to Automatic with `None`, in `config.toml`.
+    fn set_default_proton(&mut self, name: Option<String>) -> Task<Message> {
+        self.config.default_proton = name;
+        let saved = if self.persist {
+            self.config.save()
+        } else {
+            Ok(())
+        };
+        let shown = proton::default().map_or_else(
+            || "UMU-Proton, which umu downloads".to_owned(),
+            |proton| proton.name,
+        );
+        self.protons.note = Some(match saved {
+            Ok(()) => (
+                format!("Games without a Proton of their own now run with {shown}"),
+                true,
+            ),
+            Err(err) => (format!("{err:#}"), false),
+        });
+        Task::none()
+    }
+
+    /// Automatic, each Proton found, and the one chosen even when gone.
+    fn default_choices(&self) -> Vec<DefaultChoice> {
+        let automatic = match proton::automatic() {
+            Some(first) => format!("Automatic: newest GE-Proton first ({})", first.name),
+            None => "Automatic: UMU-Proton, downloaded by umu".to_owned(),
+        };
+        let mut choices = vec![DefaultChoice {
+            name: None,
+            label: automatic,
+        }];
+        choices.extend(self.protons.installed.iter().map(|found| DefaultChoice {
+            name: Some(found.name.clone()),
+            label: found.name.clone(),
+        }));
+        if let Some(chosen) = &self.config.default_proton
+            && !choices
+                .iter()
+                .any(|choice| choice.name.as_ref() == Some(chosen))
+        {
+            choices.push(DefaultChoice {
+                name: Some(chosen.clone()),
+                label: format!("{chosen} (not installed; Automatic is used)"),
+            });
+        }
+        choices
+    }
+
     pub(super) fn protons_section(&self) -> Element<'_, Message> {
         let protons = &self.protons;
-        let mut body = column![text("On this computer").size(15).font(BOLD)].spacing(10);
+        let choices = self.default_choices();
+        let selected = choices
+            .iter()
+            .find(|choice| choice.name == self.config.default_proton)
+            .cloned();
+        let mut body = column![
+            text("Default").size(15).font(BOLD),
+            text("For the Windows games whose launch options leave Proton as it comes.")
+                .size(13)
+                .color(DIM),
+            pick_list(choices, selected, |choice| {
+                Message::Proton(ProtonMessage::SetDefault(choice))
+            })
+            .text_size(14)
+            .padding([8, 12])
+            .width(Length::Fill),
+            text("On this computer").size(15).font(BOLD),
+        ]
+        .spacing(10);
         if protons.installed.is_empty() {
             body = body.push(
                 text("None yet: umu downloads UMU-Proton the first time a Windows game starts.")
@@ -180,14 +333,20 @@ impl Zendo {
             .spacing(12)
             .align_y(Alignment::Center),
         );
-        match &protons.releases {
-            None => body = body.push(text("Asking GitHub…").size(14).color(DIM)),
-            Some(Err(err)) => body = body.push(text(err).size(13).color(BAD)),
-            Some(Ok(releases)) => {
-                for release in releases.iter().take(SHOWN) {
-                    body = body.push(self.release_row(release));
-                }
-            }
+        for release in protons.releases.iter().take(protons.shown) {
+            body = body.push(self.release_row(release));
+        }
+        if protons.asking {
+            body = body.push(text("Asking GitHub…").size(14).color(DIM));
+        } else if let Some(err) = &protons.error {
+            body = body.push(text(err).size(13).color(BAD));
+        } else if protons.releases.len() > protons.shown || protons.more {
+            body = body.push(
+                button(text("Show older versions").size(13))
+                    .padding([6, 12])
+                    .style(style::secondary)
+                    .on_press(Message::Proton(ProtonMessage::ShowOlder)),
+            );
         }
         if let Some(download) = &protons.download {
             body = body.push(download_bar(download));
@@ -436,5 +595,52 @@ mod tests {
             Some("GE-Proton11-12")
         );
         assert!(zendo.protons.note.is_none());
+    }
+
+    #[test]
+    fn shows_older_versions_a_few_at_a_time() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let page = |from: usize, to: usize| {
+            (from..to)
+                .map(|n| release(&format!("GE-Proton11-{n}")))
+                .collect::<Vec<_>>()
+        };
+        let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            1,
+            Ok((page(0, 12), true)),
+        )));
+        assert_eq!(zendo.protons.shown, SHOWN);
+        let _ = zendo.update(Message::Proton(ProtonMessage::ShowOlder));
+        assert_eq!(zendo.protons.shown, SHOWN + OLDER);
+        assert!(
+            zendo.protons.asking,
+            "past what was read, the next page is asked"
+        );
+        let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            2,
+            Ok((page(12, 20), false)),
+        )));
+        assert_eq!(zendo.protons.releases.len(), 20);
+        assert_eq!(zendo.protons.pages, 2);
+        assert!(!zendo.protons.more);
+    }
+
+    #[test]
+    fn sets_the_default_proton() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let choice = DefaultChoice {
+            name: Some("GE-Proton11-12".into()),
+            label: "GE-Proton11-12".into(),
+        };
+        let _ = zendo.update(Message::Proton(ProtonMessage::SetDefault(choice)));
+        assert_eq!(
+            zendo.config.default_proton.as_deref(),
+            Some("GE-Proton11-12")
+        );
+        assert!(zendo.protons.note.as_ref().is_some_and(|(_, good)| *good));
+        let choices = zendo.default_choices();
+        assert_eq!(choices[0].name, None, "Automatic comes first");
     }
 }
