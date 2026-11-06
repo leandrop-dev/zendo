@@ -27,6 +27,7 @@ mod steam;
 pub mod stores;
 mod time;
 mod umu;
+mod windows;
 
 use std::collections::HashSet;
 use std::path::PathBuf;

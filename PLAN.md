@@ -666,10 +666,24 @@ Nothing is required. Zendo detects each tool and shows what is missing.
        children." (Super+Q closed gamescope's window, and gamescope kills
        the game), and 10 Second Ninja X's save was last written the
        minute it started. Games that save on quit lose the change.
-       Zendo's Stop does the same (SIGTERM to every process; a Windows
-       game under Proton just dies). Idea [tentative, not built]: Stop
-       first asks the game's windows to close, as their X would, and
-       signals only when that fails.
+       Zendo's Stop did the same (SIGTERM to every process; a Windows
+       game under Proton just dies). Built at the user's ask: Stop now
+       first asks the game's windows to close, as their X button would
+       (`WM_DELETE_WINDOW`, which Wine turns into the game's own close),
+       so the game can save, or ask to; with no such window it sends
+       SIGTERM as before (native games take that as a quit); a second
+       press is still Force stop (SIGKILL). The windows are found over
+       X11 (`x11rb`, already in the build through Iced): every mapped
+       top-level window, or one level down, on the X displays the game's
+       processes use (their `DISPLAY`, so gamescope's own X server too,
+       and Zendo's), whose `_NET_WM_PID` is one of the game's processes
+       and which takes `WM_DELETE_WINDOW`. umu's container shares the
+       system's process ids (pressure-vessel's `--share-pid`, its
+       default), so Wine's pids are the ones Zendo sees. Native Wayland
+       windows are not reached this way; their games get SIGTERM.
+       Checked on gamescope's headless X server (nothing on screen): of
+       two windows, only the one with the game's pid got the request.
+       The user then tried Stop on their games and said it seems right.
      - Cat Quest stayed cropped in gamescope full screen: Unity had saved
        the tile Hyprland first gave it, windowed at 235x465, and draws at
        that size; gamescope's `-W`/`-H` size its own screen, not the

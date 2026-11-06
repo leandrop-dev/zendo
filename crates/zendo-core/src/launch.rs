@@ -148,9 +148,27 @@ pub fn running(watch: &Watch) -> bool {
     }
 }
 
-/// Asks every process of the game to end, as closing it would.
-pub fn stop(watch: &Watch) {
+/// Asks the game to quit: its windows to close, as their X button would,
+/// so it can save first; a game with no window that takes that request
+/// (no X11 window, or none open) is sent SIGTERM instead, which native
+/// games take as a quit but a Windows game under Proton does not live
+/// through. Returns whether windows were asked.
+#[must_use]
+pub fn stop(watch: &Watch) -> bool {
+    let pids: std::collections::HashSet<u32> = match watch {
+        Watch::Group(group) => processes()
+            .into_iter()
+            .filter(|process| process.group == *group)
+            .map(|process| process.pid)
+            .collect(),
+        Watch::Folder(folder) => in_folder(folder).into_iter().collect(),
+        Watch::Nothing => return false,
+    };
+    if crate::windows::ask_to_close(&pids) > 0 {
+        return true;
+    }
     signal(watch, "-TERM");
+    false
 }
 
 /// Ends every process of the game at once, for a game that is frozen.

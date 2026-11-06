@@ -190,10 +190,16 @@ impl Zendo {
                 };
                 if session.stopping {
                     launch::kill(watch);
-                } else {
-                    session.stopping = true;
-                    launch::stop(watch);
+                    return Task::none();
                 }
+                session.stopping = true;
+                let asked = launch::stop(watch);
+                let title = self.title_of(&id);
+                self.status = Some(if asked {
+                    format!("Asked {title} to close; it may ask to save first")
+                } else {
+                    format!("Asked {title} to end")
+                });
                 Task::none()
             }
         }

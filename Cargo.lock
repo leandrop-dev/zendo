@@ -6413,6 +6413,7 @@ dependencies = [
  "shlex",
  "toml 1.2.0+spec-1.1.0",
  "ureq",
+ "x11rb",
 ]
 
 [[package]]
