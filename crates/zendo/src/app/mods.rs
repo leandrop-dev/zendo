@@ -17,13 +17,14 @@ use zendo_core::plugins::{self, Plugin, Rank, Style};
 use super::nexus::{NexusMessage, download_row};
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
+use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct ModsState {
     /// Each game's, read when its page opens.
     shown: HashMap<String, Shown>,
     /// The game whose mods are being changed, and what is happening.
-    busy: Option<(String, &'static str)>,
+    busy: Option<(String, String)>,
     /// A press that asks first: the game, and what it would do.
     confirm: Option<(String, Confirm)>,
     /// The mod folder as typed, before Save.
@@ -91,29 +92,31 @@ pub enum ModsMessage {
 
 /// What a change to the profiles says.
 fn profile_note(change: &ProfileChange, overview: &Overview) -> String {
-    let now = &overview.profile;
+    let now = overview.profile.as_str();
     let state = match overview.applied {
-        Applied::Current(_) => format!("; {now} is applied"),
-        Applied::Changed => "; Apply puts it in the game".to_owned(),
-        Applied::No => String::new(),
+        Applied::Current(_) => "applied",
+        Applied::Changed => "changed",
+        Applied::No => "no",
     };
     match change {
-        ProfileChange::New(_) => format!("Made {now}, a copy of the profile before"),
-        ProfileChange::Switch(_) => format!("Switched to {now}{state}"),
-        ProfileChange::Rename { new, .. } => format!("Renamed the profile {}", new.trim()),
-        ProfileChange::Delete(name) => format!("Deleted {name}; now in {now}{state}"),
+        ProfileChange::New(_) => t!("profile-made", now = now),
+        ProfileChange::Switch(_) => t!("profile-switched", now = now, state = state),
+        ProfileChange::Rename { new, .. } => t!("profile-renamed", name = new.trim()),
+        ProfileChange::Delete(name) => t!(
+            "profile-deleted",
+            name = name.as_str(),
+            now = now,
+            state = state
+        ),
     }
 }
 
 /// What a finished change says.
 fn applied_note(overview: &Overview, title: &str) -> String {
     match overview.applied {
-        Applied::Current(count) => format!(
-            "Applied {} to {title}",
-            super::format::count(count, "mod", "mods")
-        ),
-        Applied::No => format!("{title} is back to vanilla"),
-        Applied::Changed => format!("Applied to {title}"),
+        Applied::Current(count) => t!("mods-applied-count", count = count, title = title),
+        Applied::No => t!("mods-vanilla", title = title),
+        Applied::Changed => t!("mods-applied", title = title),
     }
 }
 
@@ -149,33 +152,23 @@ impl Zendo {
                     Task::none()
                 }
             },
-            ModsMessage::Pick(id) => {
-                if self.mods.busy.is_some() || !self.persist {
-                    return Task::none();
-                }
-                self.mods.busy = Some((id.clone(), "Choosing a mod…"));
-                Task::perform(
-                    blocking(|| {
-                        crate::file_dialog::pick(crate::file_dialog::Kind::Mod, "Choose a mod")
-                            .map_err(|err| format!("{err:#}"))
-                    }),
-                    move |result| Message::Mods(ModsMessage::Picked(id.clone(), result)),
-                )
-            }
+            ModsMessage::Pick(id) => self.pick_mod(id),
             ModsMessage::Picked(id, result) => self.mod_picked(id, result),
-            ModsMessage::Toggle(id, mod_id, on) => self.change_mods(id, "Saving…", move |game| {
-                mods::set_enabled(game, &mod_id, on).map(|overview| (overview, String::new()))
-            }),
-            ModsMessage::Move(id, mod_id, up) => self.change_mods(id, "Saving…", move |game| {
+            ModsMessage::Toggle(id, mod_id, on) => {
+                self.change_mods(id, t!("saving"), move |game| {
+                    mods::set_enabled(game, &mod_id, on).map(|overview| (overview, String::new()))
+                })
+            }
+            ModsMessage::Move(id, mod_id, up) => self.change_mods(id, t!("saving"), move |game| {
                 mods::move_mod(game, &mod_id, up).map(|overview| (overview, String::new()))
             }),
             ModsMessage::TogglePlugin(id, name, on) => {
-                self.change_mods(id, "Saving…", move |game| {
+                self.change_mods(id, t!("saving"), move |game| {
                     mods::set_plugin(game, &name, on).map(|overview| (overview, String::new()))
                 })
             }
             ModsMessage::MovePlugin(id, name, up) => {
-                self.change_mods(id, "Saving…", move |game| {
+                self.change_mods(id, t!("saving"), move |game| {
                     mods::move_plugin(game, &name, up).map(|overview| (overview, String::new()))
                 })
             }
@@ -185,8 +178,9 @@ impl Zendo {
                     self.mods.confirm = Some((id, ask));
                     return Task::none();
                 }
-                self.change_mods(id, "Deleting…", move |game| {
-                    mods::remove(game, &mod_id).map(|overview| (overview, "Mod deleted".to_owned()))
+                let note = t!("mods-deleted");
+                self.change_mods(id, t!("deleting"), move |game| {
+                    mods::remove(game, &mod_id).map(|overview| (overview, note))
                 })
             }
             ModsMessage::Folder(id, folder) => {
@@ -198,14 +192,14 @@ impl Zendo {
                     Some((game, folder)) if game == id => folder,
                     _ => return Task::none(),
                 };
-                self.change_mods(id, "Saving…", move |game| {
-                    mods::set_folder(game, Some(&folder))
-                        .map(|overview| (overview, "Mods go to the new folder".to_owned()))
+                let note = t!("mods-new-folder");
+                self.change_mods(id, t!("saving"), move |game| {
+                    mods::set_folder(game, Some(&folder)).map(|overview| (overview, note))
                 })
             }
             ModsMessage::KnownFolder(id) => {
                 self.mods.folder = None;
-                self.change_mods(id, "Saving…", |game| {
+                self.change_mods(id, t!("saving"), |game| {
                     mods::set_folder(game, None).map(|overview| (overview, String::new()))
                 })
             }
@@ -214,9 +208,9 @@ impl Zendo {
                     self.mods.confirm = Some((id, Confirm::ClearOverwrite));
                     return Task::none();
                 }
-                self.change_mods(id, "Deleting…", |game| {
-                    mods::clear_overwrite(game)
-                        .map(|overview| (overview, "Deleted what the game wrote".to_owned()))
+                let note = t!("mods-overwrite-deleted");
+                self.change_mods(id, t!("deleting"), |game| {
+                    mods::clear_overwrite(game).map(|overview| (overview, note))
                 })
             }
             ModsMessage::Profile(..)
@@ -227,16 +221,32 @@ impl Zendo {
             | ModsMessage::CancelProfile
             | ModsMessage::DeleteProfile(_) => self.update_profiles(message),
             ModsMessage::Options(id, mod_id) => {
-                self.add_mods(id, "Reading the installer…", move |game| {
+                self.add_mods(id, t!("mods-reading-installer"), move |game| {
                     let pending = mods::reinstall(game, &mod_id)?;
                     Ok((Added::Choose(Box::new(pending)), String::new()))
                 })
             }
             ModsMessage::Added(id, result) => self.mods_added(id, result),
-            ModsMessage::Apply(id) => self.change_game_files(id, "Applying…", true),
-            ModsMessage::Restore(id) => self.change_game_files(id, "Going back to vanilla…", false),
+            ModsMessage::Apply(id) => self.change_game_files(id, t!("mods-applying"), true),
+            ModsMessage::Restore(id) => self.change_game_files(id, t!("mods-restoring"), false),
             ModsMessage::Done(id, result) => self.mods_done(id, result),
         }
+    }
+
+    /// The file dialog for a mod's archive, on a thread.
+    fn pick_mod(&mut self, id: String) -> Task<Message> {
+        if self.mods.busy.is_some() || !self.persist {
+            return Task::none();
+        }
+        self.mods.busy = Some((id.clone(), t!("mods-choosing")));
+        let title = t!("mods-choose");
+        Task::perform(
+            blocking(move || {
+                crate::file_dialog::pick(crate::file_dialog::Kind::Mod, &title)
+                    .map_err(|err| format!("{err:#}"))
+            }),
+            move |result| Message::Mods(ModsMessage::Picked(id.clone(), result)),
+        )
     }
 
     /// A game's mods as they now stand; their updates are asked of Nexus
@@ -263,8 +273,9 @@ impl Zendo {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                self.add_mods(id, "Unpacking…", move |game| {
-                    mods::add(game, &archive).map(|added| (added, format!("Added {name}")))
+                let note = t!("mods-added", name = name);
+                self.add_mods(id, t!("mods-unpacking"), move |game| {
+                    mods::add(game, &archive).map(|added| (added, note))
                 })
             }
             Ok(None) => Task::none(),
@@ -278,7 +289,7 @@ impl Zendo {
     fn update_profiles(&mut self, message: ModsMessage) -> Task<Message> {
         match message {
             ModsMessage::Profile(id, name) => {
-                self.change_profile(id, ProfileChange::Switch(name), "Switching…")
+                self.change_profile(id, ProfileChange::Switch(name), t!("mods-switching"))
             }
             ModsMessage::NewProfile(id) => self.start_naming(id, false),
             ModsMessage::RenameProfile(id) => self.start_naming(id, true),
@@ -299,7 +310,7 @@ impl Zendo {
                         },
                         None => ProfileChange::New(naming.name),
                     };
-                    self.change_profile(id, change, "Saving…")
+                    self.change_profile(id, change, t!("saving"))
                 }
                 other => {
                     self.mods.naming = other;
@@ -322,7 +333,7 @@ impl Zendo {
                     self.mods.confirm = Some((id, ask));
                     return Task::none();
                 }
-                self.change_profile(id, ProfileChange::Delete(name), "Deleting…")
+                self.change_profile(id, ProfileChange::Delete(name), t!("deleting"))
             }
             _ => Task::none(),
         }
@@ -348,12 +359,7 @@ impl Zendo {
 
     /// A change to the game's profiles; a switch while mods are applied
     /// applies the new profile, unless the game runs.
-    fn change_profile(
-        &mut self,
-        id: String,
-        change: ProfileChange,
-        busy: &'static str,
-    ) -> Task<Message> {
+    fn change_profile(&mut self, id: String, change: ProfileChange, busy: String) -> Task<Message> {
         let apply = !self.running.is_running(&id);
         self.change_mods(id, busy, move |game| {
             let overview = mods::change_profiles(game, &change, apply)?;
@@ -363,9 +369,9 @@ impl Zendo {
     }
 
     /// Apply or Back to vanilla, never while the game runs.
-    fn change_game_files(&mut self, id: String, busy: &'static str, apply: bool) -> Task<Message> {
+    fn change_game_files(&mut self, id: String, busy: String, apply: bool) -> Task<Message> {
         if self.running.is_running(&id) {
-            self.status = Some("Close the game first: its files are in use".to_owned());
+            self.status = Some(t!("mods-close-game-first"));
             return Task::none();
         }
         let title = self
@@ -387,7 +393,7 @@ impl Zendo {
     fn add_mods(
         &mut self,
         id: String,
-        busy: &'static str,
+        busy: String,
         work: impl FnOnce(&Game) -> anyhow::Result<(Added, String)> + Send + 'static,
     ) -> Task<Message> {
         if self.mods.busy.is_some() {
@@ -449,7 +455,7 @@ impl Zendo {
     pub(super) fn change_mods(
         &mut self,
         id: String,
-        busy: &'static str,
+        busy: String,
         work: impl FnOnce(&Game) -> anyhow::Result<(Overview, String)> + Send + 'static,
     ) -> Task<Message> {
         if self.mods.busy.is_some() {
@@ -476,27 +482,30 @@ impl Zendo {
             .busy
             .as_ref()
             .filter(|(game, _)| game == id)
-            .map(|(_, busy)| *busy);
+            .map(|(_, busy)| busy.as_str());
         let free = self.mods.busy.is_none();
         let body: Element<'_, Message> = match self.mods.shown.get(id)? {
             Shown::Nowhere => return None,
-            Shown::Reading => text("Reading…").size(13).color(DIM).into(),
+            Shown::Reading => text(t!("mods-reading")).size(13).color(DIM).into(),
             Shown::Failed(err) => text(err).size(13).color(BAD).into(),
             Shown::Ready(overview) => self.mods_body(id, overview, free),
         };
-        let add = button(text("Add mod…").size(14))
+        let add = button(text(t!("mods-add")).size(14))
             .padding([8, 14])
             .style(style::secondary)
             .on_press_maybe(free.then(|| Message::Mods(ModsMessage::Pick(id.clone()))));
-        let mut header = row![text("Mods").size(18).font(BOLD), space::horizontal()]
-            .spacing(8)
-            .align_y(Alignment::Center);
+        let mut header = row![
+            text(t!("mods-title")).size(18).font(BOLD),
+            space::horizontal()
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center);
         if let Some(domain) = self
             .mods_overview(id)
             .and_then(|overview| overview.nexus.as_ref())
         {
             header = header.push(
-                button(text("Find mods on Nexus").size(14))
+                button(text(t!("mods-find-on-nexus")).size(14))
                     .padding([8, 14])
                     .style(style::secondary)
                     .on_press(Message::Open(nexus::game_url(domain))),
@@ -527,14 +536,15 @@ impl Zendo {
     ) -> Element<'a, Message> {
         let place = match overview.known {
             Some(_) if !overview.custom_folder && overview.folder.is_empty() => {
-                "Zendo knows this game: mods go in its own folder.".to_owned()
+                t!("mods-place-known-root")
             }
             Some(_) if !overview.custom_folder => {
-                format!("Zendo knows this game: mods go in {}.", overview.folder)
+                t!("mods-place-known", folder = overview.folder.as_str())
             }
-            _ if overview.custom_folder => format!("Mods go in {}, as you set.", overview.folder),
-            _ => "Mods go in the game's own folder; set another below if they belong elsewhere."
-                .to_owned(),
+            _ if overview.custom_folder => {
+                t!("mods-place-custom", folder = overview.folder.as_str())
+            }
+            _ => t!("mods-place-root"),
         };
         let mut body = column![
             self.profile_row(id, overview, free),
@@ -546,11 +556,7 @@ impl Zendo {
         .spacing(10);
 
         if overview.mods.is_empty() {
-            body = body.push(
-                text("No mods yet. Add mod… takes an archive (zip, 7z, rar) you downloaded.")
-                    .size(14)
-                    .color(DIM),
-            );
+            body = body.push(text(t!("mods-none")).size(14).color(DIM));
         }
         let last = overview.mods.len().saturating_sub(1);
         for (at, info) in overview.mods.iter().enumerate() {
@@ -568,14 +574,11 @@ impl Zendo {
                 self.mods.confirm.as_ref() == Some(&(id.to_owned(), Confirm::ClearOverwrite));
             body = body.push(
                 row![
-                    text(format!(
-                        "Files the game wrote while modded: {}, applied after every mod",
-                        overview.overwrite
-                    ))
-                    .size(13)
-                    .color(DIM)
-                    .width(Length::Fill),
-                    button(text(if asking { "Really delete" } else { "Delete" }).size(13))
+                    text(t!("mods-overwrite", count = overview.overwrite))
+                        .size(13)
+                        .color(DIM)
+                        .width(Length::Fill),
+                    button(text(delete_label(asking)).size(13))
                         .padding([4, 10])
                         .style(if asking {
                             style::danger
@@ -609,16 +612,16 @@ impl Zendo {
             .map(|nexus| nexus.version.as_str())
             .filter(|version| !version.is_empty())
         {
-            facts.push(format!("version {version} from Nexus"));
+            facts.push(t!("mods-from-nexus-version", version = version));
         } else if info.nexus.is_some() {
-            facts.push("from Nexus".to_owned());
+            facts.push(t!("mods-from-nexus"));
         }
-        facts.push(super::format::count(info.files, "file", "files"));
+        facts.push(t!("count-files", count = info.files));
         for (other, count) in &info.wins {
-            facts.push(format!("replaces {count} of {other}"));
+            facts.push(t!("mods-wins", count = *count, other = other.as_str()));
         }
         for (other, count) in &info.loses {
-            facts.push(format!("{count} replaced by {other}"));
+            facts.push(t!("mods-loses", count = *count, other = other.as_str()));
         }
         let asking =
             self.mods.confirm.as_ref() == Some(&(id.to_owned(), Confirm::Remove(info.id.clone())));
@@ -637,7 +640,7 @@ impl Zendo {
                     }))
             };
         let options = info.installer.then(|| {
-            button(text("Options…").size(13))
+            button(text(t!("mods-options")).size(13))
                 .padding([4, 10])
                 .style(style::secondary)
                 .on_press_maybe(
@@ -650,8 +653,8 @@ impl Zendo {
                 .as_deref()
                 .filter(|version| !version.is_empty())
             {
-                Some(version) => format!("Update to {version}"),
-                None => "Update".to_owned(),
+                Some(version) => t!("mods-update-to", version = version),
+                None => t!("mods-update"),
             };
             button(text(label).size(13).color(GOOD))
                 .padding([4, 10])
@@ -678,7 +681,7 @@ impl Zendo {
             row![
                 step("↑", true, !first),
                 step("↓", false, !last),
-                button(text(if asking { "Really delete" } else { "Delete" }).size(13))
+                button(text(delete_label(asking)).size(13))
                     .padding([4, 10])
                     .style(if asking {
                         style::danger
@@ -708,8 +711,8 @@ impl Zendo {
         overview: &'a Overview,
         free: bool,
     ) -> Element<'a, Message> {
-        let label = text("Profile").size(14).color(DIM).width(110);
-        let small = |label: &'a str| {
+        let label = text(t!("mods-profile")).size(14).color(DIM).width(110);
+        let small = |label: String| {
             button(text(label).size(13))
                 .padding([6, 12])
                 .style(style::secondary)
@@ -718,10 +721,10 @@ impl Zendo {
             return row![
                 label,
                 text_input(
-                    if naming.renaming.is_some() {
-                        "A new name for this profile"
+                    &if naming.renaming.is_some() {
+                        t!("mods-profile-rename")
                     } else {
-                        "A name for the new profile, a copy of this one"
+                        t!("mods-profile-new-name")
                     },
                     &naming.name,
                 )
@@ -730,11 +733,11 @@ impl Zendo {
                 .size(13)
                 .padding([6, 10])
                 .style(style::input),
-                small("Save").on_press_maybe(
+                small(t!("key-save")).on_press_maybe(
                     (free && !naming.name.trim().is_empty())
                         .then(|| Message::Mods(ModsMessage::SaveProfile(id.to_owned()))),
                 ),
-                small("Cancel").on_press(Message::Mods(ModsMessage::CancelProfile)),
+                small(t!("cancel")).on_press(Message::Mods(ModsMessage::CancelProfile)),
             ]
             .spacing(10)
             .align_y(Alignment::Center)
@@ -756,13 +759,13 @@ impl Zendo {
         row![
             label,
             choose,
-            small("New…").on_press_maybe(
+            small(t!("mods-profile-new")).on_press_maybe(
                 free.then(|| Message::Mods(ModsMessage::NewProfile(id.to_owned())))
             ),
-            small("Rename…").on_press_maybe(
+            small(t!("mods-profile-rename-button")).on_press_maybe(
                 free.then(|| Message::Mods(ModsMessage::RenameProfile(id.to_owned())))
             ),
-            button(text(if asking { "Really delete" } else { "Delete" }).size(13))
+            button(text(delete_label(asking)).size(13))
                 .padding([6, 12])
                 .style(if asking {
                     style::danger
@@ -794,8 +797,8 @@ impl Zendo {
         let value = typed.unwrap_or(&overview.folder);
         let applied = overview.applied != Applied::No;
         let mut folder = row![
-            text("Mod folder").size(14).color(DIM).width(110),
-            text_input("the game's own folder", value)
+            text(t!("mods-folder")).size(14).color(DIM).width(110),
+            text_input(&t!("mods-folder-placeholder"), value)
                 .on_input_maybe((!applied).then(|| {
                     let id = id.to_owned();
                     move |folder| Message::Mods(ModsMessage::Folder(id.clone(), folder))
@@ -809,7 +812,7 @@ impl Zendo {
         .align_y(Alignment::Center);
         if typed.is_some_and(|typed| typed != overview.folder) {
             folder = folder.push(
-                button(text("Save").size(13))
+                button(text(t!("key-save")).size(13))
                     .padding([6, 12])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -819,7 +822,7 @@ impl Zendo {
         }
         if overview.custom_folder && !applied {
             folder = folder.push(
-                button(text("As Zendo knows").size(13))
+                button(text(t!("mods-folder-known")).size(13))
                     .padding([6, 12])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -842,26 +845,15 @@ impl Zendo {
             .as_ref()
             .is_some_and(|plugins| plugins.file.is_some());
         let (state, color) = match overview.applied {
-            Applied::No => ("Not applied: the game is as it was".to_owned(), DIM),
-            Applied::Current(count) => (
-                format!(
-                    "Applied: {}{} in the game",
-                    super::format::count(count, "mod", "mods"),
-                    if writes_plugins {
-                        " and the plugin order"
-                    } else {
-                        ""
-                    }
-                ),
-                GOOD,
-            ),
-            Applied::Changed => (
-                "Changed since applied: Apply to put the list in".to_owned(),
-                BAD,
-            ),
+            Applied::No => (t!("mods-state-no"), DIM),
+            Applied::Current(count) if writes_plugins => {
+                (t!("mods-state-applied-plugins", count = count), GOOD)
+            }
+            Applied::Current(count) => (t!("mods-state-applied", count = count), GOOD),
+            Applied::Changed => (t!("mods-state-changed"), BAD),
         };
         let state = if running {
-            "The game is running: close it to apply or go back to vanilla".to_owned()
+            t!("mods-state-running")
         } else {
             state
         };
@@ -871,14 +863,14 @@ impl Zendo {
             || writes_plugins;
         row![
             text(state).size(13).color(color).width(Length::Fill),
-            button(text("Back to vanilla").size(14))
+            button(text(t!("mods-back-to-vanilla")).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press_maybe(
                     (can && overview.applied != Applied::No)
                         .then(|| Message::Mods(ModsMessage::Restore(id.to_owned()))),
                 ),
-            button(text("Apply").size(14).font(BOLD))
+            button(text(t!("mods-apply")).size(14).font(BOLD))
                 .padding([10, 24])
                 .style(style::primary)
                 .on_press_maybe(
@@ -892,6 +884,15 @@ impl Zendo {
     }
 }
 
+/// Delete, or Really delete once pressed.
+fn delete_label(asking: bool) -> String {
+    if asking {
+        t!("really-delete")
+    } else {
+        t!("delete")
+    }
+}
+
 /// A Bethesda game's plugins in load order, each on or off, and where
 /// Apply writes the order.
 fn plugins_section<'a>(
@@ -901,17 +902,12 @@ fn plugins_section<'a>(
     free: bool,
 ) -> Element<'a, Message> {
     let note = match (&plugins.file, style) {
-        (Some(_), Some(Style::Timestamps)) => {
-            "Apply writes this order to the game's plugin list below, and dates the plugins \
-             in it, which is how this game reads the order."
-        }
-        (Some(_), _) => "Apply writes this order to the game's plugin list below.",
-        (None, _) => {
-            "Start the game once, so its prefix is made; Apply writes this order there after."
-        }
+        (Some(_), Some(Style::Timestamps)) => t!("plugins-note-dates"),
+        (Some(_), _) => t!("plugins-note"),
+        (None, _) => t!("plugins-note-no-prefix"),
     };
     let mut section = column![
-        text("Plugins").size(15).font(BOLD),
+        text(t!("plugins-title")).size(15).font(BOLD),
         text(note)
             .size(13)
             .color(if plugins.file.is_some() { DIM } else { BAD }),
@@ -926,11 +922,7 @@ fn plugins_section<'a>(
         );
     }
     if plugins.list.is_empty() {
-        section = section.push(
-            text("No plugins in the game's Data folder or the mods on.")
-                .size(13)
-                .color(DIM),
-        );
+        section = section.push(text(t!("plugins-none")).size(13).color(DIM));
     }
     for (at, plugin) in plugins.list.iter().enumerate() {
         section = section.push(plugin_row(id, &plugins.list, at, plugin, free));
@@ -946,27 +938,24 @@ fn plugin_row<'a>(
     free: bool,
 ) -> Element<'a, Message> {
     let mut facts = vec![match &plugin.from {
-        Some(name) => format!("from {name}"),
-        None => "the game's".to_owned(),
+        Some(name) => t!("plugins-from", name = name.as_str()),
+        None => t!("plugins-games-own"),
     }];
     if plugin.master {
-        facts.push("master".to_owned());
+        facts.push(t!("plugins-master"));
     }
     if plugin.rank == Rank::Implicit {
-        facts.push("always loads".to_owned());
+        facts.push(t!("plugins-always"));
     }
     let mut problems = Vec::new();
     if !plugin.missing.is_empty() {
-        problems.push(format!("needs {}, not on", plugin.missing.join(", ")));
+        problems.push(t!("plugins-needs", names = plugin.missing.join(", ")));
     }
     if !plugin.after.is_empty() {
-        problems.push(format!(
-            "loads before {}, which it needs",
-            plugin.after.join(", ")
-        ));
+        problems.push(t!("plugins-before", names = plugin.after.join(", ")));
     }
     if plugin.unreadable {
-        problems.push("its header cannot be read".to_owned());
+        problems.push(t!("plugins-unreadable"));
     }
     let name = plugin.name.clone();
     let toggle = {

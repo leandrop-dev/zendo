@@ -61,6 +61,7 @@ const ARCHIVES: [&str; 9] = [
 /// `zendo pick-file <kind> <title>`: shows the dialog, prints the file
 /// chosen.
 pub fn main(kind: Kind, title: &str) -> ExitCode {
+    crate::i18n::set_from_settings();
     gtk::glib::set_prgname(Some(crate::app::APP_ID));
     gtk::glib::set_application_name("Zendo");
     if let Err(err) = gtk::init() {
@@ -71,8 +72,8 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
         Some(title),
         None::<&gtk::Window>,
         gtk::FileChooserAction::Open,
-        Some("Choose"),
-        Some("Cancel"),
+        Some(&crate::i18n::t!("dialog-choose")),
+        Some(&crate::i18n::t!("cancel")),
     );
     if let Some(home) = std::env::var_os("HOME") {
         let folder = PathBuf::from(home).join(kind.start());
@@ -85,13 +86,13 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
     }
     if kind == Kind::Mod {
         let archives = gtk::FileFilter::new();
-        archives.set_name(Some("Archives"));
+        archives.set_name(Some(&crate::i18n::t!("dialog-archives")));
         for pattern in ARCHIVES {
             archives.add_pattern(pattern);
         }
         dialog.add_filter(archives);
         let all = gtk::FileFilter::new();
-        all.set_name(Some("All files"));
+        all.set_name(Some(&crate::i18n::t!("dialog-all-files")));
         all.add_pattern("*");
         dialog.add_filter(all);
     }

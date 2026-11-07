@@ -14,6 +14,7 @@ use super::downloads::UpdateState;
 use super::store::InfoState;
 use super::style::{self, ACCENT, BACKGROUND, BOLD, DIM, LINE, SURFACE};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
+use crate::i18n::t;
 
 const HERO_HEIGHT: f32 = 340.0;
 const COVER_WIDTH: f32 = 140.0;
@@ -24,7 +25,7 @@ const LABEL_WIDTH: f32 = 170.0;
 impl Zendo {
     pub(super) fn game_page<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
         let trail = row![
-            button(text("← Library").size(14))
+            button(text(t!("game-back")).size(14))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Navigate(Page::Library)),
@@ -33,22 +34,33 @@ impl Zendo {
         ]
         .spacing(8);
 
-        let status = self
-            .status
-            .clone()
-            .unwrap_or_else(|| "Ready when you are".to_owned());
+        let status = self.status.clone().unwrap_or_else(|| t!("game-ready"));
         let actions = row![
             self.play_buttons(game),
             launch_options_button(game),
             self.local_buttons(game),
-            button(text(if game.pinned { "Unpin" } else { "Pin" }).size(14))
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::TogglePinned),
-            button(text(if game.hidden { "Unhide" } else { "Hide" }).size(14))
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::ToggleHidden),
+            button(
+                text(if game.pinned {
+                    t!("game-unpin")
+                } else {
+                    t!("game-pin")
+                })
+                .size(14)
+            )
+            .padding([10, 18])
+            .style(style::secondary)
+            .on_press(Message::TogglePinned),
+            button(
+                text(if game.hidden {
+                    t!("game-unhide")
+                } else {
+                    t!("game-hide")
+                })
+                .size(14)
+            )
+            .padding([10, 18])
+            .style(style::secondary)
+            .on_press(Message::ToggleHidden),
             space::horizontal(),
             text(status).size(14).color(DIM),
         ]
@@ -115,16 +127,16 @@ fn game_hero<'a>(
 ) -> Element<'a, Message> {
     let mut badges = Vec::new();
     if update {
-        badges.push(("UPDATE AVAILABLE".to_owned(), ACCENT));
+        badges.push((t!("badge-update"), ACCENT));
     }
     if let Some(platform) = &game.details.platform {
         badges.push((platform_label(platform), DIM));
     }
     if game.pinned {
-        badges.push(("PINNED".to_owned(), ACCENT));
+        badges.push((t!("badge-pinned"), ACCENT));
     }
     if game.hidden {
-        badges.push(("HIDDEN".to_owned(), DIM));
+        badges.push((t!("badge-hidden"), DIM));
     }
     hero(Hero {
         title: &game.title,
@@ -187,7 +199,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
     );
 
     let mut badges = row![style::badge(
-        hero.source.label(),
+        format::source(hero.source),
         style::source_color(hero.source)
     )]
     .spacing(6);
@@ -224,7 +236,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
         .height(HERO_HEIGHT)
         .align_y(Alignment::End);
     let change = container(
-        button(text("Change art").size(13))
+        button(text(t!("game-change-art")).size(13))
             .padding([6, 12])
             .style(style::secondary)
             .on_press(Message::Art(super::artwork::ArtMessage::Open(
@@ -258,10 +270,13 @@ fn shade<'a>(gradient: Linear) -> Element<'a, Message> {
 fn facts(game: &Game) -> Vec<String> {
     let mut facts = Vec::new();
     if game.played.minutes > 0 {
-        facts.push(format!("{} played", format::play_time(game.played.minutes)));
+        facts.push(t!(
+            "played-time",
+            time = format::play_time(game.played.minutes)
+        ));
     }
     if let Some(last) = game.played.last {
-        facts.push(format!("Last played {}", format::ago(last, now())));
+        facts.push(t!("game-last-played", when = format::ago(last, now())));
     }
     if let Some(size) = &game.details.size {
         facts.push(size.to_string());
@@ -301,38 +316,41 @@ pub fn store_facts(
     owned: Option<&Owned>,
     info: Option<&InfoState>,
     installed: bool,
-) -> Vec<(&'static str, String)> {
+) -> Vec<(String, String)> {
     let mut facts = Vec::new();
     match info {
-        Some(InfoState::Asking) => facts.push(("Download size", "Asking the store…".to_owned())),
+        Some(InfoState::Asking) => facts.push((t!("fact-download-size"), t!("fact-asking"))),
         Some(InfoState::Got(info)) => {
             if let Some(bytes) = info.download_size {
-                facts.push(("Download size", Size::Bytes(bytes).to_string()));
+                facts.push((t!("fact-download-size"), Size::Bytes(bytes).to_string()));
             }
             if let Some(bytes) = info.install_size.filter(|_| !installed) {
-                facts.push(("Size on disk", Size::Bytes(bytes).to_string()));
+                facts.push((t!("fact-size-on-disk"), Size::Bytes(bytes).to_string()));
             }
             if let Some(version) = &info.version {
-                facts.push(("Latest version", version.clone()));
+                facts.push((t!("fact-latest-version"), version.clone()));
             }
             if let Some(day) = &info.updated {
-                facts.push(("Latest build", day.clone()));
+                facts.push((t!("fact-latest-build"), day.clone()));
             }
         }
         Some(InfoState::Failed(err)) => {
-            facts.push(("Store details", format!("The store could not say: {err}")));
+            facts.push((
+                t!("fact-store-details"),
+                t!("fact-store-failed", error = err.as_str()),
+            ));
         }
         None => {}
     }
     if let Some(owned) = owned {
         if let Some(publisher) = &owned.publisher {
-            facts.push(("Publisher", publisher.clone()));
+            facts.push((t!("fact-publisher"), publisher.clone()));
         }
         if let Some(day) = &owned.released {
-            facts.push(("Released", day.clone()));
+            facts.push((t!("fact-released"), day.clone()));
         }
         if !owned.genres.is_empty() {
-            facts.push(("Genres", owned.genres.join(", ")));
+            facts.push((t!("fact-genres"), owned.genres.join(", ")));
         }
     }
     facts
@@ -342,7 +360,7 @@ pub fn store_facts(
 pub fn about_card(summary: &str) -> Element<'_, Message> {
     container(
         column![
-            text("About").size(18).font(BOLD),
+            text(t!("game-about")).size(18).font(BOLD),
             text(summary).size(14).line_height(1.5),
         ]
         .spacing(12),
@@ -353,9 +371,9 @@ pub fn about_card(summary: &str) -> Element<'_, Message> {
     .into()
 }
 
-fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a, Message> {
+fn details(game: &Game, facts: Vec<(String, String)>) -> Element<'_, Message> {
     let mut rows: Vec<Element<'_, Message>> = Vec::new();
-    let mut add = |label: &'static str, value: Element<'static, Message>| {
+    let mut add = |label: String, value: Element<'static, Message>| {
         rows.push(
             row![
                 text(label).size(14).color(DIM).width(LABEL_WIDTH),
@@ -370,23 +388,23 @@ fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a
         text(value).size(13).font(Font::MONOSPACE).into()
     };
 
-    add("Store", plain(game.source.label().to_owned()));
-    add("Started by", plain(game.launcher()));
+    add(t!("fact-store"), plain(format::source(game.source)));
+    add(t!("fact-started-by"), plain(game.launcher()));
     if let Some(platform) = &game.details.platform {
-        add("Platform", plain(platform_label(platform)));
+        add(t!("fact-platform"), plain(platform_label(platform)));
     }
     if let Some(version) = &game.details.version {
-        add("Version", plain(version.clone()));
+        add(t!("fact-version"), plain(version.clone()));
     }
     if let Some(size) = &game.details.size {
-        add("Install size", plain(size.to_string()));
+        add(t!("fact-install-size"), plain(size.to_string()));
     }
     for (label, value) in facts {
         add(label, plain(value));
     }
     if let Some(path) = &game.details.install_path {
         let shown = path.display().to_string();
-        let open = button(text("Open folder").size(13))
+        let open = button(text(t!("files-open-folder")).size(13))
             .padding([4, 10])
             .style(style::secondary)
             .on_press_maybe(
@@ -394,7 +412,7 @@ fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a
                     .then(|| Message::Open(path.to_string_lossy().into_owned())),
             );
         add(
-            "Install path",
+            t!("fact-install-path"),
             row![text(shown).size(13).font(Font::MONOSPACE), open]
                 .spacing(12)
                 .align_y(Alignment::Center)
@@ -402,30 +420,29 @@ fn details<'a>(game: &'a Game, facts: Vec<(&'static str, String)>) -> Element<'a
         );
     }
     add(
-        "Last played",
+        t!("fact-last-played"),
         plain(
             game.played
                 .last
-                .map_or_else(|| "Never".to_owned(), |last| format::ago(last, now())),
+                .map_or_else(|| t!("fact-never"), |last| format::ago(last, now())),
         ),
     );
     if game.played.minutes > 0 {
-        add("Play time", plain(format::play_time(game.played.minutes)));
+        add(
+            t!("fact-play-time"),
+            plain(format::play_time(game.played.minutes)),
+        );
     }
     add(
-        "Started from Zendo",
-        plain(format::count(
-            game.played.launches as usize,
-            "time",
-            "times",
-        )),
+        t!("fact-started-from-zendo"),
+        plain(t!("count-times", count = game.played.launches)),
     );
-    add("Launch command", code(game.command_line()));
-    add("Zendo id", code(game.id.clone()));
+    add(t!("fact-launch-command"), code(game.command_line()));
+    add(t!("fact-zendo-id"), code(game.id.clone()));
 
     container(
         column![
-            text("Game details").size(18).font(BOLD),
+            text(t!("game-details")).size(18).font(BOLD),
             column(rows).spacing(12)
         ]
         .spacing(16),
@@ -441,7 +458,7 @@ fn launch_options_button(game: &Game) -> Element<'_, Message> {
     if !super::launch_options::applies(game) {
         return space::horizontal().width(0).into();
     }
-    button(text("Launch options").size(14))
+    button(text(t!("game-launch-options")).size(14))
         .padding([10, 18])
         .style(style::secondary)
         .on_press(Message::Sheet(super::launch_options::SheetMessage::Open))

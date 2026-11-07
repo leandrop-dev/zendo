@@ -20,6 +20,7 @@ use zendo_core::steamgriddb::{self, Found, Page as ImagePage};
 use super::launch_options::overlay;
 use super::style::{self, BAD, BOLD, DIM, SURFACE};
 use super::{Message, Page, Zendo, blocking};
+use crate::i18n::t;
 
 /// Thumbnails downloaded at once.
 const WORKERS: usize = 4;
@@ -38,7 +39,7 @@ pub struct Picker {
     thumbs: HashMap<u64, image::Handle>,
     page: u32,
     more: bool,
-    busy: Option<&'static str>,
+    busy: Option<String>,
     note: Option<String>,
     /// Whether the game has an image of this kind chosen by hand.
     chosen: bool,
@@ -67,10 +68,11 @@ pub enum ArtMessage {
     Close,
 }
 
+/// The kind, as the messages choose their words by: `cover` or `hero`.
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::Cover => "cover",
-        Kind::Hero => "wide image",
+        Kind::Hero => "hero",
     }
 }
 
@@ -100,10 +102,7 @@ impl Zendo {
                 match result {
                     Ok(games) if games.is_empty() => {
                         picker.games.clear();
-                        picker.note = Some(format!(
-                            "SteamGridDB has no game called “{}”; try another title",
-                            picker.query.trim()
-                        ));
+                        picker.note = Some(t!("art-no-game", query = picker.query.trim()));
                     }
                     Ok(games) => {
                         let first = games[0].id;
@@ -134,10 +133,7 @@ impl Zendo {
                             .collect();
                         picker.images.extend(page.images);
                         if picker.images.is_empty() {
-                            picker.note = Some(format!(
-                                "This game has no {} on SteamGridDB yet",
-                                kind_name(picker.kind)
-                            ));
+                            picker.note = Some(t!("art-no-images", kind = kind_name(picker.kind)));
                         }
                         return self.download_thumbs(wanted);
                     }
@@ -188,8 +184,7 @@ impl Zendo {
         });
         if self.config.steamgriddb_key.is_none() {
             if let Some(picker) = self.picker.as_mut() {
-                picker.note =
-                    Some("Searching SteamGridDB needs a key: add yours in Settings".to_owned());
+                picker.note = Some(t!("art-needs-key"));
             }
             return Task::none();
         }
@@ -212,7 +207,7 @@ impl Zendo {
         picker.images.clear();
         picker.thumbs.clear();
         picker.note = None;
-        picker.busy = Some("Searching…");
+        picker.busy = Some(t!("art-searching"));
         if !self.persist {
             return Task::none();
         }
@@ -261,7 +256,7 @@ impl Zendo {
         picker.page = page;
         picker.more = false;
         picker.note = None;
-        picker.busy = Some("Looking for images…");
+        picker.busy = Some(t!("art-looking"));
         if !self.persist {
             return Task::none();
         }
@@ -304,7 +299,7 @@ impl Zendo {
         else {
             return Task::none();
         };
-        picker.busy = Some("Saving…");
+        picker.busy = Some(t!("saving"));
         picker.note = None;
         let (id, kind) = (picker.id.clone(), picker.kind);
         if !self.persist {
@@ -338,7 +333,11 @@ impl Zendo {
                     .picker
                     .take()
                     .map_or_else(|| id.to_owned(), |picker| picker.title);
-                self.status = Some(format!("New {} for {title}", kind_name(kind)));
+                self.status = Some(t!(
+                    "art-new",
+                    kind = kind_name(kind),
+                    title = title.as_str()
+                ));
             }
             Err(err) => {
                 if let Some(picker) = self.picker.as_mut() {
@@ -378,7 +377,11 @@ impl Zendo {
                 }
             }
         }
-        let note = format!("Back to the automatic {} for {title}", kind_name(kind));
+        let note = t!(
+            "art-back-to-automatic",
+            kind = kind_name(kind),
+            title = title.as_str()
+        );
         self.status = Some(note.clone());
         if self.game(&id).is_none() {
             return Task::none();
@@ -453,24 +456,24 @@ fn thumbnails(generation: u64, wanted: Vec<(u64, String)>) -> impl Stream<Item =
 
 fn picker_card(picker: &Picker) -> Element<'_, Message> {
     let tabs = row![
-        button(text("Cover").size(14))
+        button(text(t!("art-cover")).size(14))
             .padding([6, 14])
             .style(style::chip(picker.kind == Kind::Cover))
             .on_press(Message::Art(ArtMessage::Kind(Kind::Cover))),
-        button(text("Wide image").size(14))
+        button(text(t!("art-hero")).size(14))
             .padding([6, 14])
             .style(style::chip(picker.kind == Kind::Hero))
             .on_press(Message::Art(ArtMessage::Kind(Kind::Hero))),
     ]
     .spacing(8);
     let search = row![
-        text_input("A title to search SteamGridDB for", &picker.query)
+        text_input(&t!("art-search-placeholder"), &picker.query)
             .on_input(|query| Message::Art(ArtMessage::Query(query)))
             .on_submit(Message::Art(ArtMessage::Search))
             .size(14)
             .padding([8, 12])
             .style(style::input),
-        button(text("Search").size(14))
+        button(text(t!("art-search")).size(14))
             .padding([8, 14])
             .style(style::secondary)
             .on_press(Message::Art(ArtMessage::Search)),
@@ -480,7 +483,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
 
     let mut body = column![
         row![
-            text(format!("Art for {}", picker.title))
+            text(t!("art-title", title = picker.title.as_str()))
                 .size(20)
                 .font(BOLD),
             space::horizontal(),
@@ -510,7 +513,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
     body = body.push(row(thumbs).spacing(12).wrap().vertical_spacing(12));
     if picker.more {
         body = body.push(
-            button(text("Show more").size(14))
+            button(text(t!("art-show-more")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
                 .on_press_maybe(
@@ -543,7 +546,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
 /// What the picker is doing or what went wrong, and its buttons.
 fn picker_footer(picker: &Picker) -> Element<'_, Message> {
     let mut footer = row![].spacing(10).align_y(Alignment::Center);
-    if let Some(busy) = picker.busy {
+    if let Some(busy) = &picker.busy {
         footer = footer.push(text(busy).size(13).color(DIM));
     } else if let Some(note) = &picker.note {
         footer = footer.push(text(note).size(13).color(BAD));
@@ -552,10 +555,10 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
     if picker
         .note
         .as_deref()
-        .is_some_and(|note| note.contains("Settings"))
+        .is_some_and(|note| *note == t!("art-needs-key"))
     {
         footer = footer.push(
-            button(text("Open Settings").size(14))
+            button(text(t!("art-open-settings")).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press(Message::Art(ArtMessage::Settings)),
@@ -563,14 +566,14 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
     }
     if picker.chosen {
         footer = footer.push(
-            button(text(format!("Use the automatic {}", kind_name(picker.kind))).size(14))
+            button(text(t!("art-use-automatic", kind = kind_name(picker.kind))).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press(Message::Art(ArtMessage::Automatic)),
         );
     }
     footer = footer.push(
-        button(text("Close").size(14))
+        button(text(t!("close")).size(14))
             .padding([10, 18])
             .style(style::secondary)
             .on_press(Message::Art(ArtMessage::Close)),
@@ -610,7 +613,7 @@ fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, M
         about = format!("{about}, {}", found.style);
     }
     if let Some(author) = &found.author {
-        about = format!("{about}, by {}", author.name);
+        about = t!("art-by", about = about, author = author.name.as_str());
     }
     tooltip(
         button(shown).padding(0).style(style::link).on_press_maybe(
@@ -654,7 +657,10 @@ mod tests {
         let _ = zendo.update(Message::Art(ArtMessage::Open("steam:620".into())));
         let generation = zendo.picker.as_ref().map(|picker| picker.generation);
         assert_eq!(
-            zendo.picker.as_ref().and_then(|picker| picker.busy),
+            zendo
+                .picker
+                .as_ref()
+                .and_then(|picker| picker.busy.as_deref()),
             Some("Searching…")
         );
         // An answer to an earlier search is dropped.
@@ -681,7 +687,7 @@ mod tests {
         )));
         let picker = zendo.picker.as_ref().unwrap();
         assert_eq!(picker.game, Some(17830));
-        assert_eq!(picker.busy, Some("Looking for images…"));
+        assert_eq!(picker.busy.as_deref(), Some("Looking for images…"));
         let _ = zendo.update(Message::Play);
         assert!(zendo.picker.is_some(), "Play does nothing under the picker");
     }

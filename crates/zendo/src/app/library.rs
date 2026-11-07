@@ -11,6 +11,7 @@ use zendo_core::{Game, Sort, Source};
 
 use super::style::{self, ACCENT, BOLD, DIM, GOOD, SURFACE, TEXT};
 use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
+use crate::i18n::t;
 
 pub const COVER_WIDTH: f32 = 180.0;
 pub const COVER_HEIGHT: f32 = 270.0;
@@ -55,28 +56,22 @@ impl Zendo {
     pub(super) fn library_page(&self) -> Element<'_, Message> {
         let visible = self.visible();
         let body: Element<'_, Message> = match &self.library {
-            None => centered(text("Looking for games…").color(DIM)),
+            None => centered(text(t!("library-looking")).color(DIM)),
             Some(library) if library.games.is_empty() => centered(
                 column![
-                    text("No games found").size(20),
-                    text(
-                        "Zendo reads Steam's libraries, the games Heroic installed \
-                         and .desktop files in the Game category."
-                    )
-                    .color(DIM),
+                    text(t!("library-none-found")).size(20),
+                    text(t!("library-none-found-about")).color(DIM),
                 ]
                 .spacing(8)
                 .align_x(Alignment::Center),
             ),
             Some(_) if visible.is_empty() && !self.search.is_empty() => {
-                centered(text(format!("Nothing matches “{}”", self.search)).color(DIM))
+                centered(text(t!("library-no-match", search = self.search.as_str())).color(DIM))
             }
             Some(_) if visible.is_empty() && self.source.is_some() => {
-                centered(text("No games here · choose All to see every store").color(DIM))
+                centered(text(t!("library-none-here")).color(DIM))
             }
-            Some(_) if visible.is_empty() => {
-                centered(text("Every game is hidden · Ctrl+H or Start shows them").color(DIM))
-            }
+            Some(_) if visible.is_empty() => centered(text(t!("library-all-hidden")).color(DIM)),
             Some(_) => self.grid(&visible),
         };
         column![self.library_header(), self.toolbar(), body]
@@ -96,20 +91,24 @@ impl Zendo {
             .iter()
             .filter(|source| games.iter().any(|game| game.source == **source))
             .count();
-        let mut subtitle = format!(
-            "{} from {}",
-            format::count(shown, "game", "games"),
-            format::count(stores, "source", "sources")
+        let mut subtitle = t!(
+            "library-subtitle",
+            games = t!("count-games", count = shown),
+            sources = t!("count-sources", count = stores)
         );
         if hidden > 0 {
-            subtitle = format!("{subtitle} · {hidden} hidden");
+            subtitle = t!(
+                "library-subtitle-hidden",
+                subtitle = subtitle,
+                hidden = hidden
+            );
         }
 
         let refresh = button(
             text(if self.scanning {
-                "Scanning…"
+                t!("library-scanning")
             } else {
-                "Refresh"
+                t!("library-refresh")
             })
             .size(14),
         )
@@ -118,12 +117,12 @@ impl Zendo {
         .on_press_maybe((!self.scanning).then_some(Message::Refresh));
         row![
             column![
-                text("Library").size(28).font(BOLD),
+                text(t!("page-library")).size(28).font(BOLD),
                 text(subtitle).size(13).color(DIM),
             ]
             .spacing(2),
             space::horizontal(),
-            text_input("Search your library", &self.search)
+            text_input(&t!("library-search"), &self.search)
                 .id(search_id())
                 .on_input(Message::Search)
                 .on_submit(Message::Activate)
@@ -131,7 +130,7 @@ impl Zendo {
                 .size(14)
                 .width(280)
                 .style(style::input),
-            button(text("Add game").size(14))
+            button(text(t!("library-add-game")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
                 .on_press(Message::Local(super::local::LocalMessage::Add)),
@@ -164,7 +163,7 @@ impl Zendo {
             .count();
 
         let mut chips: Vec<Element<'_, Message>> = vec![chip(
-            "All",
+            t!("library-all"),
             Some(games.len()),
             self.source.is_none(),
             Message::SetSource(None),
@@ -173,7 +172,7 @@ impl Zendo {
             let count = games.iter().filter(|game| game.source == source).count();
             if count > 0 {
                 chips.push(chip(
-                    source.label(),
+                    format::source(source),
                     Some(count),
                     self.source == Some(source),
                     Message::SetSource(Some(source)),
@@ -182,13 +181,13 @@ impl Zendo {
         }
         chips.push(space::horizontal().width(16).into());
         chips.push(
-            container(text("Sort").size(13).color(DIM))
+            container(text(t!("library-sort")).size(13).color(DIM))
                 .padding([6, 0])
                 .into(),
         );
         for sort in [Sort::Recent, Sort::MostPlayed, Sort::Title] {
             chips.push(chip(
-                sort.label(),
+                format::sort(sort),
                 None,
                 self.sort == sort,
                 Message::SetSort(sort),
@@ -197,7 +196,7 @@ impl Zendo {
         if hidden > 0 || self.show_hidden {
             chips.push(space::horizontal().width(16).into());
             chips.push(chip(
-                "Show hidden",
+                t!("library-show-hidden"),
                 Some(hidden),
                 self.show_hidden,
                 Message::ShowHidden,
@@ -216,7 +215,7 @@ impl Zendo {
         let now = now();
         let cards = visible.iter().enumerate().map(|(index, game)| {
             let (line, line_color) = if game.hidden {
-                ("Hidden".to_owned(), ACCENT)
+                (t!("library-hidden"), ACCENT)
             } else {
                 (played_line(game, now), DIM)
             };
@@ -226,9 +225,9 @@ impl Zendo {
                 cover: game.cover.as_deref(),
                 faded: game.hidden,
                 badge: if self.running.is_running(&game.id) {
-                    Some(("RUNNING", GOOD))
+                    Some((t!("badge-running"), GOOD))
                 } else {
-                    game.pinned.then_some(("PINNED", ACCENT))
+                    game.pinned.then(|| (t!("badge-pinned"), ACCENT))
                 },
                 line,
                 line_color,
@@ -269,7 +268,12 @@ pub fn cards_grid<'a>(
         .into()
 }
 
-fn chip(label: &str, count: Option<usize>, chosen: bool, message: Message) -> Element<'_, Message> {
+fn chip<'a>(
+    label: String,
+    count: Option<usize>,
+    chosen: bool,
+    message: Message,
+) -> Element<'a, Message> {
     let mut content = row![text(label).size(13)].spacing(6);
     if let Some(count) = count {
         content =
@@ -289,9 +293,9 @@ fn chip(label: &str, count: Option<usize>, chosen: bool, message: Message) -> El
 /// The line under a card's title: how much it was played.
 fn played_line(game: &Game, now: u64) -> String {
     match (game.played.minutes, game.played.last) {
-        (0, None) => "Not played yet".to_owned(),
-        (0, Some(last)) => format!("Played {}", format::ago(last, now)),
-        (minutes, _) => format!("{} played", format::play_time(minutes)),
+        (0, None) => t!("played-never"),
+        (0, Some(last)) => t!("played-when", when = format::ago(last, now)),
+        (minutes, _) => t!("played-time", time = format::play_time(minutes)),
     }
 }
 
@@ -302,7 +306,7 @@ pub struct Card<'a> {
     pub cover: Option<&'a Path>,
     pub faded: bool,
     /// A label in the cover's top right corner.
-    pub badge: Option<(&'static str, Color)>,
+    pub badge: Option<(String, Color)>,
     pub line: String,
     pub line_color: Color,
     pub selected: bool,
@@ -344,8 +348,11 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
             })
             .into(),
     };
-    let mut badges =
-        row![style::badge(source.label(), style::source_color(source))].width(COVER_WIDTH);
+    let mut badges = row![style::badge(
+        format::source(source),
+        style::source_color(source)
+    )]
+    .width(COVER_WIDTH);
     if let Some((label, color)) = badge {
         badges = badges
             .push(space::horizontal())

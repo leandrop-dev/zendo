@@ -11,6 +11,7 @@ use zendo_core::local::{self, LocalGame};
 use super::launch_options::overlay;
 use super::style::{self, BAD, BOLD, DIM};
 use super::{Message, Page, Zendo, blocking};
+use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct LocalState {
@@ -90,7 +91,7 @@ impl Zendo {
                             ..Form::default()
                         });
                     }
-                    Ok(None) => self.status = Some("Zendo has no record of this game".into()),
+                    Ok(None) => self.status = Some(t!("local-no-record")),
                     Err(err) => self.status = Some(format!("{err:#}")),
                 }
                 Task::none()
@@ -117,7 +118,7 @@ impl Zendo {
                     blocking(|| {
                         crate::file_dialog::pick(
                             crate::file_dialog::Kind::Program,
-                            "Choose the game's program",
+                            &t!("local-choose-program"),
                         )
                         .map_err(|err| format!("{err:#}"))
                     }),
@@ -166,9 +167,9 @@ impl Zendo {
                 let title = form.title.trim().to_owned();
                 self.local.form = None;
                 let note = if added {
-                    format!("Added {title}")
+                    t!("local-added", title = title)
                 } else {
-                    format!("Saved {title}")
+                    t!("local-saved", title = title)
                 };
                 self.local.after_scan = Some((Some(id), note));
                 self.refresh()
@@ -197,8 +198,7 @@ impl Zendo {
                 let title = self
                     .game(&id)
                     .map_or_else(|| id.clone(), |game| game.title.clone());
-                let note =
-                    format!("Removed {title} from the library; its files are where they were");
+                let note = t!("local-removed", title = title);
                 self.local.after_scan = Some((None, note.clone()));
                 let back = self.navigate(Page::Library);
                 self.status = Some(note);
@@ -249,15 +249,15 @@ impl Zendo {
         }
         let confirming = self.local.confirm_remove.as_deref() == Some(game.id.as_str());
         row![
-            button(text("Edit").size(14))
+            button(text(t!("edit")).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press(Message::Local(LocalMessage::Edit(game.id.clone()))),
             button(
                 text(if confirming {
-                    "Really remove"
+                    t!("really-remove")
                 } else {
-                    "Remove"
+                    t!("remove")
                 })
                 .size(14)
             )
@@ -276,42 +276,48 @@ impl Zendo {
 
 fn form_card(form: &Form) -> Element<'_, Message> {
     let heading = if form.id.is_some() {
-        "Edit game"
+        t!("local-edit-game")
     } else {
-        "Add a game"
+        t!("local-add-game")
     };
     let windows = local::is_windows(Path::new(form.program.trim()));
     let about = if form.program.trim().is_empty() {
-        "A game you installed yourself: its .exe for a Windows game, which runs through \
-         Proton in a prefix of its own, or the program for a Linux one."
+        t!("local-about-empty")
     } else if windows {
-        "A Windows game: it runs through umu-launcher and Proton, in a prefix of its own."
+        t!("local-about-windows")
     } else {
-        "A Linux program: it runs as it is."
+        t!("local-about-linux")
     };
     let mut body = column![
         text(heading).size(20).font(BOLD),
         text(about).size(13).color(DIM),
         field(
-            "Program",
+            t!("local-program"),
             row![
-                text_input("/home/you/Games/Some Game/Game.exe", &form.program)
+                text_input(&t!("local-program-placeholder"), &form.program)
                     .on_input(|value| Message::Local(LocalMessage::Program(value)))
                     .on_submit(Message::Local(LocalMessage::Save))
                     .size(14)
                     .padding([8, 12])
                     .style(style::input),
-                button(text(if form.picking { "Choosing…" } else { "Choose…" }).size(14))
-                    .padding([8, 14])
-                    .style(style::secondary)
-                    .on_press_maybe((!form.picking).then_some(Message::Local(LocalMessage::Pick))),
+                button(
+                    text(if form.picking {
+                        t!("choosing")
+                    } else {
+                        t!("choose")
+                    })
+                    .size(14)
+                )
+                .padding([8, 14])
+                .style(style::secondary)
+                .on_press_maybe((!form.picking).then_some(Message::Local(LocalMessage::Pick))),
             ]
             .spacing(10)
             .align_y(Alignment::Center),
         ),
         field(
-            "Title",
-            text_input("Some Game", &form.title)
+            t!("local-title"),
+            text_input(&t!("local-title-placeholder"), &form.title)
                 .on_input(|value| Message::Local(LocalMessage::Title(value)))
                 .on_submit(Message::Local(LocalMessage::Save))
                 .size(14)
@@ -319,17 +325,15 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                 .style(style::input),
         ),
         field(
-            "Arguments",
-            text_input("Passed to the game, as a shell splits them", &form.arguments)
+            t!("local-arguments"),
+            text_input(&t!("local-arguments-placeholder"), &form.arguments)
                 .on_input(|value| Message::Local(LocalMessage::Arguments(value)))
                 .on_submit(Message::Local(LocalMessage::Save))
                 .size(14)
                 .padding([8, 12])
                 .style(style::input),
         ),
-        text("Its cover comes from SteamGridDB by its title when Settings has a key, and Change art on its page picks another. Proton, MangoHud and the rest are in its launch options.")
-            .size(13)
-            .color(DIM),
+        text(t!("local-cover-note")).size(13).color(DIM),
     ]
     .spacing(18);
     if let Some(error) = &form.error {
@@ -338,14 +342,18 @@ fn form_card(form: &Form) -> Element<'_, Message> {
     body = body.push(
         row![
             space::horizontal(),
-            button(text("Cancel").size(14))
+            button(text(t!("cancel")).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press(Message::Local(LocalMessage::Close)),
             button(
-                text(if form.id.is_some() { "Save" } else { "Add" })
-                    .size(14)
-                    .font(BOLD)
+                text(if form.id.is_some() {
+                    t!("save")
+                } else {
+                    t!("add")
+                })
+                .size(14)
+                .font(BOLD)
             )
             .padding([10, 24])
             .style(style::primary)
@@ -359,7 +367,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
         .into()
 }
 
-fn field<'a>(label: &'a str, input: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+fn field<'a>(label: String, input: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
     column![text(label).size(15).font(BOLD), input.into()]
         .spacing(6)
         .width(Length::Fill)

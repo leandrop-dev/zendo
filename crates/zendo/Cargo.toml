@@ -9,10 +9,13 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+fluent-bundle.workspace = true
 gilrs.workspace = true
 gtk.workspace = true
 iced.workspace = true
 serde_json.workspace = true
+sys-locale.workspace = true
+unic-langid.workspace = true
 webkit2gtk.workspace = true
 wry.workspace = true
 zendo-core.workspace = true

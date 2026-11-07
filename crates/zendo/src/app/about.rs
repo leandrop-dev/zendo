@@ -5,26 +5,27 @@ use iced::{Element, Length};
 
 use super::Message;
 use super::style::{self, BOLD, DIM};
+use crate::i18n::t;
 
 const REPOSITORY: &str = "https://github.com/leandrop-dev/zendo";
 
 pub fn page<'a>() -> Element<'a, Message> {
     let links = row![
-        button(text("Source code").size(14))
+        button(text(t!("about-source-code")).size(14))
             .padding([8, 14])
             .style(style::secondary)
             .on_press(Message::Open(REPOSITORY.to_owned())),
-        button(text("Report a problem").size(14))
+        button(text(t!("about-report-problem")).size(14))
             .padding([8, 14])
             .style(style::secondary)
             .on_press(Message::Open(format!("{REPOSITORY}/issues"))),
     ]
     .spacing(8);
 
-    let card = |title: &'a str, lines: &[&'a str]| -> Element<'a, Message> {
+    let card = |title: String, lines: Vec<String>| -> Element<'a, Message> {
         container(
             column![text(title).size(18).font(BOLD)]
-                .extend(lines.iter().map(|line| text(*line).size(14).into()))
+                .extend(lines.into_iter().map(|line| text(line).size(14).into()))
                 .spacing(8),
         )
         .padding(20)
@@ -37,37 +38,31 @@ pub fn page<'a>() -> Element<'a, Message> {
         column![
             column![
                 text("Zendo").size(40).font(BOLD),
-                text(concat!("Version ", env!("CARGO_PKG_VERSION")))
+                text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
                     .size(14)
                     .color(DIM),
             ]
             .spacing(2),
-            text(
-                "Every game on this machine in one library: Steam, Epic, GOG, Amazon \
-                 and the rest, each started the way its own launcher would."
-            )
-            .size(15),
+            text(t!("about-intro")).size(15),
             links,
+            card(t!("about-licence"), vec![t!("about-licence-text")]),
             card(
-                "Licence",
-                &["MIT. Zendo reads the launchers' files and never writes to them."]
-            ),
-            card(
-                "Built on",
-                &[
-                    "Iced, the window and everything in it",
-                    "gilrs, for controllers",
-                    "keyvalues-parser, for Steam's files",
-                    "ureq, serde and toml",
-                    "SteamGridDB, for covers no store has",
+                t!("about-built-on"),
+                vec![
+                    t!("about-built-iced"),
+                    t!("about-built-gilrs"),
+                    t!("about-built-keyvalues"),
+                    t!("about-built-ureq"),
+                    t!("about-built-steamgriddb"),
+                    t!("about-built-fluent"),
                 ]
             ),
             card(
-                "Ideas from",
-                &[
-                    "Hikari: the sidebar, the library and the game pages",
-                    "omarchy-games-menu: typing anywhere to filter",
-                    "Heroic: where its games are kept, and its launch links",
+                t!("about-ideas-from"),
+                vec![
+                    t!("about-ideas-hikari"),
+                    t!("about-ideas-omarchy"),
+                    t!("about-ideas-heroic"),
                 ]
             ),
         ]

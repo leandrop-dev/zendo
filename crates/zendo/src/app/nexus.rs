@@ -23,6 +23,7 @@ use super::launch_options::overlay;
 use super::settings::{kept_note, section};
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
+use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct NexusState {
@@ -145,9 +146,7 @@ impl Zendo {
                     return self.download_mod(id, link, false);
                 }
                 if installed.is_empty() {
-                    self.status = Some(format!(
-                        "A mod for {name} came from Nexus, but no installed game takes mods"
-                    ));
+                    self.status = Some(t!("nexus-no-game", name = name.as_str()));
                     return Task::none();
                 }
                 let all = matched.is_empty();
@@ -187,7 +186,7 @@ impl Zendo {
                         self.nexus.updates.insert(game, found.into_iter().collect());
                     }
                     Err(err) => {
-                        self.status = Some(format!("Could not ask Nexus for updates: {err}"));
+                        self.status = Some(t!("nexus-updates-failed", error = err));
                     }
                 }
                 Task::none()
@@ -215,7 +214,7 @@ impl Zendo {
                 if key.is_empty() {
                     if self.store_nexus_key(None) {
                         self.nexus.user = None;
-                        self.nexus.key.note = Some(("Key removed".to_owned(), true));
+                        self.nexus.key.note = Some((t!("key-removed"), true));
                     }
                     return Task::none();
                 }
@@ -239,7 +238,7 @@ impl Zendo {
                 Task::perform(
                     blocking(|| {
                         let exe = std::env::current_exe()
-                            .map_err(|err| format!("could not tell where Zendo is: {err}"))?;
+                            .map_err(|err| t!("nexus-no-exe", error = err.to_string()))?;
                         nexus::become_handler(&exe)
                             .map(|_| exe.display().to_string())
                             .map_err(|err| format!("{err:#}"))
@@ -251,7 +250,7 @@ impl Zendo {
                 match result {
                     Ok(exe) => {
                         self.nexus.handler = Some(Handler::Zendo);
-                        self.status = Some(format!("Nexus's links now open in {exe}"));
+                        self.status = Some(t!("nexus-links-open-in", exe = exe));
                     }
                     Err(err) => self.status = Some(err),
                 }
@@ -263,7 +262,7 @@ impl Zendo {
 
     fn check_nexus_key(&mut self, key: String) -> Task<Message> {
         if key.is_empty() {
-            self.nexus.key.note = Some(("Paste a key first".to_owned(), false));
+            self.nexus.key.note = Some((t!("key-paste-first"), false));
             return Task::none();
         }
         self.nexus.key.checking = Some(key.clone());
@@ -290,26 +289,25 @@ impl Zendo {
             Ok(KeyCheck::Accepted(user)) => {
                 let who = signed_in(&user);
                 if save && self.store_nexus_key(Some(key)) {
-                    self.nexus.key.note = Some((format!("Saved. {who}."), true));
+                    self.nexus.key.note = Some((t!("nexus-key-saved", who = who), true));
                     self.nexus.user = Some(user);
                     // Updates are asked again with the new key.
                     self.nexus.checked.clear();
                 } else if !save {
-                    self.nexus.key.note = Some((format!("{who}; Save keeps the key."), true));
+                    self.nexus.key.note = Some((t!("nexus-key-accepted", who = who), true));
                 }
             }
             Ok(KeyCheck::Rejected) => {
-                self.nexus.key.note = Some((
-                    format!(
-                        "Nexus turned this key down{}. Copy it again from API Access on Nexus.",
-                        if save { ", so it was not saved" } else { "" }
-                    ),
-                    false,
-                ));
+                let note = if save {
+                    t!("nexus-key-rejected-unsaved")
+                } else {
+                    t!("nexus-key-rejected")
+                };
+                self.nexus.key.note = Some((note, false));
             }
             Err(err) if save => {
                 if self.store_nexus_key(Some(key)) {
-                    self.nexus.key.note = Some((format!("Saved, but not checked: {err}"), false));
+                    self.nexus.key.note = Some((t!("key-saved-unchecked", error = err), false));
                 }
             }
             Err(err) => self.nexus.key.note = Some((err, false)),
@@ -368,7 +366,7 @@ impl Zendo {
             })
             .cloned()
             .collect();
-        self.status = Some("A mod came from Nexus…".to_owned());
+        self.status = Some(t!("nexus-mod-arrived"));
         Task::perform(
             blocking({
                 let domain = link.domain.clone();
@@ -420,12 +418,16 @@ impl Zendo {
             id: number,
             game: id.to_owned(),
             file: link.file_id,
-            name: format!("{} · file #{}", game.title, link.file_id),
+            name: t!(
+                "nexus-download-name",
+                title = game.title.as_str(),
+                file = link.file_id
+            ),
             done: 0,
             total: None,
             stop: Arc::clone(&stop),
         });
-        self.status = Some(format!("Downloading a mod for {} from Nexus…", game.title));
+        self.status = Some(t!("nexus-downloading", title = game.title.as_str()));
         if !self.persist {
             return Task::none();
         }
@@ -467,11 +469,11 @@ impl Zendo {
                 self.mods_ready(game, *overview)
             }
             Err(_) if stopped => {
-                self.status = Some("Download stopped".to_owned());
+                self.status = Some(t!("nexus-download-stopped"));
                 Task::none()
             }
             Err(err) => {
-                self.status = Some(format!("Could not download the mod: {err}"));
+                self.status = Some(t!("nexus-download-failed", error = err));
                 Task::none()
             }
         }
@@ -569,7 +571,7 @@ impl Zendo {
         if self.nexus.downloads.is_empty() {
             return None;
         }
-        let mut card = column![text("Mods from Nexus").size(18).font(BOLD)].spacing(12);
+        let mut card = column![text(t!("nexus-downloads-title")).size(18).font(BOLD)].spacing(12);
         for download in &self.nexus.downloads {
             card = card.push(download_row(download));
         }
@@ -617,22 +619,29 @@ impl Zendo {
         let saved = self.config.nexus_key.as_deref().unwrap_or("");
         let changed = key.value.trim() != saved;
         let field = row![
-            text_input("Paste your Nexus Mods personal API key", &key.value)
+            text_input(&t!("nexus-paste"), &key.value)
                 .secure(!key.shown)
                 .on_input(|value| Message::Nexus(NexusMessage::KeyInput(value)))
                 .on_submit(Message::Nexus(NexusMessage::SaveKey))
                 .padding([8, 12])
                 .size(14)
                 .style(style::input),
-            button(text(if key.shown { "Hide" } else { "Show" }).size(14))
-                .padding([8, 14])
-                .style(style::secondary)
-                .on_press(Message::Nexus(NexusMessage::ToggleShown)),
+            button(
+                text(if key.shown {
+                    t!("key-hide")
+                } else {
+                    t!("key-show")
+                })
+                .size(14)
+            )
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press(Message::Nexus(NexusMessage::ToggleShown)),
             button(
                 text(if key.checking.is_some() {
-                    "Checking…"
+                    t!("key-checking")
                 } else {
-                    "Check"
+                    t!("key-check")
                 })
                 .size(14)
             )
@@ -642,7 +651,7 @@ impl Zendo {
                 (key.checking.is_none() && !key.value.trim().is_empty())
                     .then_some(Message::Nexus(NexusMessage::CheckKey))
             ),
-            button(text("Save").size(14).font(BOLD))
+            button(text(t!("key-save")).size(14).font(BOLD))
                 .padding([8, 18])
                 .style(style::primary)
                 .on_press_maybe(changed.then_some(Message::Nexus(NexusMessage::SaveKey))),
@@ -656,7 +665,7 @@ impl Zendo {
                 body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
             }
             (None, _) if saved.is_empty() => {
-                body = body.push(text("No key set").size(13).color(DIM));
+                body = body.push(text(t!("key-none")).size(13).color(DIM));
             }
             (None, Some(user)) => {
                 body = body.push(text(signed_in(user)).size(13).color(GOOD));
@@ -665,21 +674,17 @@ impl Zendo {
         }
         body = body.push(kept_note(self.config.kept(Key::Nexus)));
         body = body.push(
-            button(text("Get your personal API key from API Access on Nexus Mods").size(13))
+            button(text(t!("nexus-get-key")).size(13))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Open(nexus::KEY_PAGE.to_owned())),
         );
         let (handler, is_zendo) = match &self.nexus.handler {
-            Some(Handler::Zendo) => ("Zendo opens Mod manager download links.".to_owned(), true),
-            Some(Handler::Other(other)) => (
-                format!("Mod manager download links open in {other}, not Zendo."),
-                false,
-            ),
-            Some(Handler::Nothing) => (
-                "Nothing opens Mod manager download links yet.".to_owned(),
-                false,
-            ),
+            Some(Handler::Zendo) => (t!("nexus-handler-zendo"), true),
+            Some(Handler::Other(other)) => {
+                (t!("nexus-handler-other", other = other.as_str()), false)
+            }
+            Some(Handler::Nothing) => (t!("nexus-handler-nothing"), false),
             None => (String::new(), false),
         };
         body = body.push(
@@ -688,7 +693,7 @@ impl Zendo {
                     .size(13)
                     .color(if is_zendo { GOOD } else { DIM })
                     .width(Length::Fill),
-                button(text("Open them with Zendo").size(13))
+                button(text(t!("nexus-become-handler")).size(13))
                     .padding([6, 12])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -699,28 +704,16 @@ impl Zendo {
             .spacing(10)
             .align_y(Alignment::Center),
         );
-        section(
-            "Nexus Mods",
-            "Mods from Nexus's Mod manager download buttons go straight into the game's \
-             mods, and Zendo tells when they have updates. Without Premium, Nexus gives \
-             files only through that button on its site. The key is kept in the \
-             system keyring, or in your settings file, readable only by you, when \
-             there is none.",
-            body,
-        )
+        section("Nexus Mods", t!("nexus-about"), body)
     }
 }
 
 fn signed_in(user: &User) -> String {
-    format!(
-        "Nexus knows this key as {}{}",
-        user.name,
-        if user.is_premium {
-            ", with Premium"
-        } else {
-            ""
-        }
-    )
+    if user.is_premium {
+        t!("nexus-known-as-premium", name = user.name.as_str())
+    } else {
+        t!("nexus-known-as", name = user.name.as_str())
+    }
 }
 
 /// One download's row, for the Mods card and the Downloads page.
@@ -736,9 +729,19 @@ pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
     let (bar, words) = match download.total {
         Some(total) if total > 0 => (
             mib(download.done) / mib(total).max(f32::MIN_POSITIVE),
-            format!("{:.1} of {:.1} MiB", mib(download.done), mib(total)),
+            t!(
+                "nexus-progress",
+                done = format!("{:.1}", mib(download.done)),
+                total = format!("{:.1}", mib(total))
+            ),
         ),
-        _ => (0.0, format!("{:.1} MiB", mib(download.done))),
+        _ => (
+            0.0,
+            t!(
+                "nexus-progress-unknown",
+                done = format!("{:.1}", mib(download.done))
+            ),
+        ),
     };
     let stopping = download.stop.load(Ordering::Relaxed);
     row![
@@ -749,10 +752,17 @@ pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
         ]
         .spacing(4)
         .width(Length::Fill),
-        button(text(if stopping { "Stopping…" } else { "Stop" }).size(13))
-            .padding([4, 10])
-            .style(style::secondary)
-            .on_press_maybe((!stopping).then_some(Message::Nexus(NexusMessage::Stop(download.id)))),
+        button(
+            text(if stopping {
+                t!("nexus-stopping")
+            } else {
+                t!("nexus-stop")
+            })
+            .size(13)
+        )
+        .padding([4, 10])
+        .style(style::secondary)
+        .on_press_maybe((!stopping).then_some(Message::Nexus(NexusMessage::Stop(download.id)))),
     ]
     .spacing(10)
     .align_y(Alignment::Center)
@@ -761,16 +771,9 @@ pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
 
 fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
     let about = if choosing.all {
-        format!(
-            "Nexus says this mod is for {}, and no installed game goes by that name. \
-             Choose the game it is for; Zendo remembers it for this game's next mods.",
-            choosing.name
-        )
+        t!("nexus-choose-none", name = choosing.name.as_str())
     } else {
-        format!(
-            "Nexus says this mod is for {}, and more than one installed game matches.",
-            choosing.name
-        )
+        t!("nexus-choose-several", name = choosing.name.as_str())
     };
     let mut games = column![].spacing(4);
     for (id, title) in &choosing.games {
@@ -784,12 +787,12 @@ fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
     }
     container(
         column![
-            text("Which game is this mod for?").size(20).font(BOLD),
+            text(t!("nexus-choose-title")).size(20).font(BOLD),
             text(about).size(13).color(DIM),
             scrollable(games).height(Length::Shrink),
             row![
                 space::horizontal(),
-                button(text("Cancel").size(14))
+                button(text(t!("cancel")).size(14))
                     .padding([8, 16])
                     .style(style::secondary)
                     .on_press(Message::Nexus(NexusMessage::CancelChoose)),
@@ -834,13 +837,21 @@ fn fetch_mod(
                     .file
                     .version
                     .as_deref()
-                    .filter(|version| !version.is_empty())
-                    .map(|version| format!(" {version}"))
-                    .unwrap_or_default();
-                let note = if updated {
-                    format!("Updated {} to{version}", fetched.mod_name)
-                } else {
-                    format!("Added {}{version} to {}", fetched.mod_name, game.title)
+                    .filter(|version| !version.is_empty());
+                let name = fetched.mod_name.as_str();
+                let title = game.title.as_str();
+                let note = match (updated, version) {
+                    (true, Some(version)) => {
+                        t!("nexus-updated-to", name = name, version = version)
+                    }
+                    (true, None) => t!("nexus-updated", name = name),
+                    (false, Some(version)) => t!(
+                        "nexus-added-version",
+                        name = name,
+                        version = version,
+                        title = title
+                    ),
+                    (false, None) => t!("nexus-added", name = name, title = title),
                 };
                 anyhow::Ok((added, note))
             })()

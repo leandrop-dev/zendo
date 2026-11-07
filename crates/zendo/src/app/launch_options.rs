@@ -15,6 +15,7 @@ use zendo_core::{Game, Launch, launch, proton};
 
 use super::style::{self, BAD, BOLD, DIM};
 use super::{Message, Zendo};
+use crate::i18n::t;
 
 #[derive(Debug)]
 pub struct Sheet {
@@ -101,8 +102,8 @@ pub fn applies(game: &Game) -> bool {
 fn proton_choices(chosen: Option<&str>) -> Vec<ProtonChoice> {
     let installed = proton::installed();
     let default = match proton::default() {
-        Some(default) => format!("Default ({})", default.name),
-        None => "Default (UMU-Proton, downloaded by umu)".to_owned(),
+        Some(default) => t!("options-proton-default", name = default.name.as_str()),
+        None => t!("options-proton-default-umu"),
     };
     let mut choices = vec![ProtonChoice {
         name: None,
@@ -119,7 +120,7 @@ fn proton_choices(chosen: Option<&str>) -> Vec<ProtonChoice> {
     {
         choices.push(ProtonChoice {
             name: Some(chosen.to_owned()),
-            label: format!("{chosen} (not installed; the default runs)"),
+            label: t!("options-proton-missing", name = chosen),
         });
     }
     choices
@@ -238,7 +239,7 @@ impl Zendo {
         options.gamescope_width = number(&sheet.width);
         options.gamescope_height = number(&sheet.height);
         if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
-            sheet.error = Some("Give gamescope both a width and a height, or neither".into());
+            sheet.error = Some(t!("options-size-both"));
             return Task::none();
         }
         let saved = if self.persist {
@@ -248,7 +249,7 @@ impl Zendo {
         };
         match saved {
             Ok(()) => {
-                self.status = Some(format!("Saved {}'s launch options", sheet.title));
+                self.status = Some(t!("options-saved", title = sheet.title.as_str()));
                 self.sheet = None;
             }
             Err(err) => sheet.error = Some(format!("{err:#}")),
@@ -281,7 +282,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
     let tools = sheet.tools;
     let mut body = column![
-        text(format!("{} · Launch options", sheet.title))
+        text(t!("options-title", title = sheet.title.as_str()))
             .size(20)
             .font(BOLD),
     ]
@@ -294,8 +295,8 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
             .find(|choice| choice.name == options.proton)
             .cloned();
         body = body.push(field(
-            "Proton",
-            "Runs the Windows game. GE-Proton carries the most fixes; Settings sets the default.",
+            "Proton".to_owned(),
+            t!("options-proton-about"),
             pick_list(sheet.protons.as_slice(), selected, |choice| {
                 Message::Sheet(SheetMessage::Proton(choice))
             })
@@ -311,23 +312,22 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         tools.mangohud
     };
     body = body.push(switch(
-        "MangoHud",
-        "An overlay with the frame rate, frame times and temperatures.",
+        "MangoHud".to_owned(),
+        t!("options-mangohud-about"),
         options.mangohud,
         mangohud_ready,
         SheetMessage::MangoHud,
     ));
     body = body.push(switch(
-        "GameMode",
-        "Asks the system for full performance while the game runs.",
+        "GameMode".to_owned(),
+        t!("options-gamemode-about"),
         options.gamemode,
         tools.gamemode,
         SheetMessage::GameMode,
     ));
     body = body.push(switch(
-        "Gamescope",
-        "Runs the game in a compositor of its own: full screen, a size of your choice, \
-         for games that will not go full screen themselves.",
+        "Gamescope".to_owned(),
+        t!("options-gamescope-about"),
         options.gamescope,
         tools.gamescope,
         SheetMessage::Gamescope,
@@ -337,9 +337,8 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     }
     if sheet.windows {
         body = body.push(switch(
-            "Controllers as Xbox pads",
-            "For games that ignore a PlayStation or other controller. The game then gets no \
-             touchpad, motion or adaptive triggers from it.",
+            t!("options-xbox"),
+            t!("options-xbox-about"),
             options.xbox_controllers,
             true,
             SheetMessage::XboxControllers,
@@ -352,11 +351,11 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     body = body.push(
         row![
             space::horizontal(),
-            button(text("Cancel").size(14))
+            button(text(t!("cancel")).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
                 .on_press(Message::Sheet(SheetMessage::Close)),
-            button(text("Save").size(14).font(BOLD))
+            button(text(t!("save")).size(14).font(BOLD))
                 .padding([10, 24])
                 .style(style::primary)
                 .on_press(Message::Sheet(SheetMessage::Save)),
@@ -373,17 +372,17 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
 /// Full screen and the size, under gamescope's switch.
 fn gamescope_options(sheet: &Sheet) -> Element<'_, Message> {
     let size = row![
-        text("Size").size(14).color(DIM).width(60),
-        size_input("Width", &sheet.width, SheetMessage::Width),
+        text(t!("options-size")).size(14).color(DIM).width(60),
+        size_input(&t!("options-width"), &sheet.width, SheetMessage::Width),
         text("×").size(14).color(DIM),
-        size_input("Height", &sheet.height, SheetMessage::Height),
-        text("Empty: the game's own").size(13).color(DIM),
+        size_input(&t!("options-height"), &sheet.height, SheetMessage::Height),
+        text(t!("options-size-empty")).size(13).color(DIM),
     ]
     .spacing(10)
     .align_y(Alignment::Center);
     column![
         toggler(sheet.options.gamescope_fullscreen)
-            .label("Full screen")
+            .label(t!("options-full-screen"))
             .text_size(14)
             .on_toggle(|on| Message::Sheet(SheetMessage::Fullscreen(on))),
         size,
@@ -397,8 +396,8 @@ fn gamescope_options(sheet: &Sheet) -> Element<'_, Message> {
 fn text_fields(options: &LaunchOptions) -> Element<'_, Message> {
     column![
         field(
-            "Arguments",
-            "Passed to the game, as a shell splits them.",
+            t!("local-arguments"),
+            t!("options-arguments-about"),
             text_input("-windowed", &options.arguments)
                 .on_input(|value| Message::Sheet(SheetMessage::Arguments(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
@@ -407,8 +406,8 @@ fn text_fields(options: &LaunchOptions) -> Element<'_, Message> {
                 .style(style::input),
         ),
         field(
-            "Environment",
-            "NAME=value pairs for the game, separated by spaces.",
+            t!("options-environment"),
+            t!("options-environment-about"),
             text_input("DXVK_HUD=fps", &options.environment)
                 .on_input(|value| Message::Sheet(SheetMessage::Environment(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
@@ -422,8 +421,8 @@ fn text_fields(options: &LaunchOptions) -> Element<'_, Message> {
 }
 
 fn field<'a>(
-    label: &'a str,
-    about: &'a str,
+    label: String,
+    about: String,
     input: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     column![
@@ -438,15 +437,16 @@ fn field<'a>(
 /// A switch, greyed out with a note when its program is missing (unless
 /// already on, so it can be turned off).
 fn switch<'a>(
-    label: &'a str,
-    about: &'a str,
+    label: String,
+    about: String,
     on: bool,
     installed: bool,
     message: fn(bool) -> SheetMessage,
 ) -> Element<'a, Message> {
-    let mut about = about.to_owned();
+    let mut about = about;
     if !installed {
-        about.push_str(" Not installed.");
+        about.push(' ');
+        about.push_str(&t!("options-not-installed"));
     }
     let toggle = toggler(on).label(label).text_size(15);
     let toggle = if installed || on {
@@ -460,7 +460,7 @@ fn switch<'a>(
 }
 
 fn size_input<'a>(
-    placeholder: &'a str,
+    placeholder: &str,
     value: &'a str,
     message: fn(String) -> SheetMessage,
 ) -> Element<'a, Message> {

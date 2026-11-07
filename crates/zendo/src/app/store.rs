@@ -15,7 +15,8 @@ use super::downloads::DownloadMessage;
 use super::game::{Hero, about_card, hero, store_facts};
 use super::library::{Card, GRID_PADDING, card, cards_grid};
 use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
-use super::{Message, Page, Zendo, blocking, centered, format, game_scroll_id, store_search_id};
+use super::{Message, Page, Zendo, blocking, centered, game_scroll_id, store_search_id};
+use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct StoreState {
@@ -277,20 +278,21 @@ impl Zendo {
             .collect();
         let subtitle = if asking.is_empty() {
             format!(
-                "{} owned · {installed} installed",
-                format::count(shown.len(), "game", "games")
+                "{} · {}",
+                t!("store-owned", count = shown.len()),
+                t!("store-installed", count = installed)
             )
         } else {
-            format!("Asking {} for your games…", asking.join(", "))
+            t!("store-asking-stores", stores = asking.join(", "))
         };
         let header = row![
             column![
-                text("Store").size(28).font(BOLD),
+                text(t!("page-store")).size(28).font(BOLD),
                 text(subtitle).size(13).color(DIM),
             ]
             .spacing(2),
             space::horizontal(),
-            text_input("Search your games", &self.store.search)
+            text_input(&t!("store-search"), &self.store.search)
                 .id(store_search_id())
                 .on_input(|search| Message::Store(StoreMessage::Search(search)))
                 .on_submit(Message::Activate)
@@ -300,9 +302,9 @@ impl Zendo {
                 .style(style::input),
             button(
                 text(if asking.is_empty() {
-                    "Refresh"
+                    t!("library-refresh")
                 } else {
-                    "Asking…"
+                    t!("store-asking")
                 })
                 .size(14)
             )
@@ -336,8 +338,8 @@ impl Zendo {
         let body: Element<'_, Message> = if signed_in.is_empty() && shown.is_empty() {
             centered(
                 column![
-                    text("Sign in to a store to see the games you own").size(18),
-                    button(text("Go to Accounts").size(14))
+                    text(t!("store-sign-in-first")).size(18),
+                    button(text(t!("store-go-accounts")).size(14))
                         .padding([8, 14])
                         .style(style::secondary)
                         .on_press(Message::Navigate(Page::Accounts)),
@@ -346,9 +348,9 @@ impl Zendo {
                 .align_x(Alignment::Center),
             )
         } else if visible.is_empty() && !self.store.asking.is_empty() {
-            centered(text("Asking the stores for your games…").color(DIM))
+            centered(text(t!("store-asking-all")).color(DIM))
         } else if visible.is_empty() {
-            centered(text("Nothing here").color(DIM))
+            centered(text(t!("store-nothing")).color(DIM))
         } else {
             self.store_grid(visible)
         };
@@ -364,7 +366,9 @@ impl Zendo {
                     source: game.store().source(),
                     cover: game.cover.as_deref(),
                     faded: false,
-                    badge: self.is_installed(&game.id).then_some(("INSTALLED", GOOD)),
+                    badge: self
+                        .is_installed(&game.id)
+                        .then(|| (t!("badge-installed"), GOOD)),
                     line: game
                         .developer
                         .clone()
@@ -381,7 +385,7 @@ impl Zendo {
     /// A chip for each store, and one to leave the installed games out.
     fn store_toolbar(&self, shown: &[&Owned], installed: usize) -> Element<'_, Message> {
         let mut chips: Vec<Element<'_, Message>> = vec![chip(
-            "All".to_owned(),
+            t!("library-all"),
             shown.len(),
             self.store.source.is_none(),
             Message::Store(StoreMessage::Source(None)),
@@ -399,7 +403,7 @@ impl Zendo {
         }
         chips.push(space::horizontal().width(16).into());
         chips.push(chip(
-            "Not installed only".to_owned(),
+            t!("store-not-installed-only"),
             shown.len() - installed,
             self.store.hide_installed,
             Message::Store(StoreMessage::ToggleInstalled),
@@ -424,33 +428,33 @@ impl Zendo {
     fn owned_actions<'a>(&'a self, game: &'a Owned, installed: bool) -> Element<'a, Message> {
         if installed {
             row![
-                button(text("Open in library").size(16).font(BOLD))
+                button(text(t!("store-open-in-library")).size(16).font(BOLD))
                     .padding([10, 24])
                     .style(style::primary)
                     .on_press(Message::Navigate(Page::Game(game.id.clone()))),
                 space::horizontal(),
-                text("Installed").size(14).color(DIM),
+                text(t!("installed")).size(14).color(DIM),
             ]
         } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
             let (label, press) = match (running, job.paused) {
-                (true, _) => ("Installing…", None),
+                (true, _) => (t!("installing"), None),
                 (false, true) => (
-                    "Resume",
+                    t!("resume"),
                     Some(Message::Download(DownloadMessage::Resume(game.id.clone()))),
                 ),
-                (false, false) => ("Queued", None),
+                (false, false) => (t!("queued"), None),
             };
             row![
                 button(text(label).size(16).font(BOLD))
                     .padding([10, 32])
                     .style(style::primary)
                     .on_press_maybe(press),
-                button(text("See downloads").size(14))
+                button(text(t!("see-downloads")).size(14))
                     .padding([10, 18])
                     .style(style::secondary)
                     .on_press(Message::Navigate(Page::Downloads)),
                 space::horizontal(),
-                text(format!("Into {}", job.path.display()))
+                text(t!("store-into", path = job.path.display().to_string()))
                     .size(14)
                     .color(DIM),
             ]
@@ -459,16 +463,22 @@ impl Zendo {
             let needs = match self.store.info.get(&game.id) {
                 Some(InfoState::Got(info)) => info
                     .install_size
-                    .map(|bytes| format!(" · needs {}", zendo_core::Size::Bytes(bytes)))
-                    .unwrap_or_default(),
-                _ => String::new(),
+                    .map(|bytes| zendo_core::Size::Bytes(bytes).to_string()),
+                _ => None,
             };
-            let note = match &job {
-                Some(job) => format!("Installs into {}{needs}", job.path.display()),
-                None => "No home folder to install into".to_owned(),
+            let note = match (&job, needs) {
+                (Some(job), Some(needs)) => t!(
+                    "store-installs-into-needs",
+                    path = job.path.display().to_string(),
+                    size = needs
+                ),
+                (Some(job), None) => {
+                    t!("store-installs-into", path = job.path.display().to_string())
+                }
+                (None, _) => t!("store-no-home"),
             };
             row![
-                button(text("Install").size(16).font(BOLD))
+                button(text(t!("install")).size(16).font(BOLD))
                     .padding([10, 32])
                     .style(style::primary)
                     .on_press_maybe(job.map(|job| Message::Download(DownloadMessage::Queue(job)))),
@@ -484,7 +494,7 @@ impl Zendo {
     pub(super) fn owned_page<'a>(&'a self, game: &'a Owned) -> Element<'a, Message> {
         let installed = self.is_installed(&game.id);
         let trail = row![
-            button(text("← Store").size(14))
+            button(text(t!("store-back")).size(14))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Navigate(Page::Store)),
@@ -499,7 +509,7 @@ impl Zendo {
             .map(|platform| (platform.clone(), DIM))
             .collect();
         if installed {
-            badges.push(("INSTALLED".to_owned(), GOOD));
+            badges.push((t!("badge-installed"), GOOD));
         }
         let art = hero(Hero {
             title: &game.title,
@@ -515,7 +525,7 @@ impl Zendo {
 
         let actions = self.owned_actions(game, installed);
 
-        let detail = |label: &'static str, value: String, code: bool| {
+        let detail = |label: String, value: String, code: bool| {
             row![
                 text(label).size(14).color(DIM).width(170),
                 if code {
@@ -527,20 +537,24 @@ impl Zendo {
             .align_y(Alignment::Center)
         };
         let mut details = column![
-            text("Game details").size(18).font(BOLD),
-            detail("Store", game.store().label().to_owned(), false),
+            text(t!("game-details")).size(18).font(BOLD),
+            detail(t!("fact-store"), game.store().label().to_owned(), false),
         ]
         .spacing(12);
         if !game.platforms.is_empty() {
-            details = details.push(detail("Platforms", game.platforms.join(", "), false));
+            details = details.push(detail(
+                t!("fact-platforms"),
+                game.platforms.join(", "),
+                false,
+            ));
         }
         if let Some(developer) = &game.developer {
-            details = details.push(detail("Developer", developer.clone(), false));
+            details = details.push(detail(t!("fact-developer"), developer.clone(), false));
         }
         for (label, value) in store_facts(Some(game), self.store.info.get(&game.id), false) {
             details = details.push(detail(label, value, false));
         }
-        details = details.push(detail("Zendo id", game.id.clone(), true));
+        details = details.push(detail(t!("fact-zendo-id"), game.id.clone(), true));
 
         let mut page = column![
             trail,

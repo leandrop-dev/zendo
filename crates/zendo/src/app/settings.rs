@@ -1,6 +1,6 @@
-//! The Settings page: the `SteamGridDB` key, the Nexus Mods key (in
-//! `nexus.rs`), covers, Proton (in `protons.rs`), the sources found and
-//! Zendo's own files.
+//! The Settings page: the window's language, the `SteamGridDB` key, the
+//! Nexus Mods key (in `nexus.rs`), covers, Proton (in `protons.rs`), the
+//! sources found and Zendo's own files.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,8 @@ use zendo_core::secrets::Key;
 use zendo_core::{Source, State, launch, report};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
-use super::{Message, Zendo, blocking, format, key_id};
+use super::{Message, Zendo, blocking, key_id};
+use crate::i18n::{self, Language, t};
 
 const KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
 
@@ -35,7 +36,7 @@ impl Zendo {
                 self.key.value.clone_from(&key);
                 if key.is_empty() {
                     if self.store_key(None) {
-                        self.key.note = Some(("Key removed".to_owned(), true));
+                        self.key.note = Some((t!("key-removed"), true));
                     }
                     return Task::none();
                 }
@@ -79,8 +80,7 @@ impl Zendo {
                 match result {
                     Ok(text) => {
                         let lines = text.lines().count();
-                        self.diagnostics.note =
-                            Some((format!("Copied the report: {lines} lines."), true));
+                        self.diagnostics.note = Some((t!("report-copied", count = lines), true));
                         if self.persist {
                             iced::clipboard::write(text)
                         } else {
@@ -93,10 +93,21 @@ impl Zendo {
                     }
                 }
             }
+            Message::SetLanguage(language) => {
+                let previous = std::mem::replace(
+                    &mut self.config.language,
+                    language.map(|language| language.tag().to_owned()),
+                );
+                if !self.save_config() {
+                    self.config.language = previous;
+                }
+                i18n::set(Language::chosen(self.config.language.as_deref()));
+                Task::none()
+            }
             Message::DownloadNow => {
                 let task = self.download_images();
                 if self.images.left == 0 {
-                    self.status = Some("No images to download".to_owned());
+                    self.status = Some(t!("images-none"));
                 }
                 task
             }
@@ -126,30 +137,25 @@ impl Zendo {
         match result {
             Ok(KeyCheck::Accepted) if save => {
                 if self.store_key(Some(key)) {
-                    self.key.note = Some(("Saved. SteamGridDB accepts this key.".to_owned(), true));
+                    self.key.note = Some((t!("steamgriddb-saved"), true));
                     return self.download_images();
                 }
             }
             Ok(KeyCheck::Accepted) => {
-                self.key.note = Some((
-                    "SteamGridDB accepts this key; Save keeps it.".to_owned(),
-                    true,
-                ));
+                self.key.note = Some((t!("steamgriddb-accepted"), true));
             }
             Ok(KeyCheck::Rejected) => {
-                self.key.note = Some((
-                    format!(
-                        "SteamGridDB turned this key down{}. Copy it again from your \
-                         SteamGridDB preferences.",
-                        if save { ", so it was not saved" } else { "" }
-                    ),
-                    false,
-                ));
+                let note = if save {
+                    t!("steamgriddb-rejected-unsaved")
+                } else {
+                    t!("steamgriddb-rejected")
+                };
+                self.key.note = Some((note, false));
             }
             // Offline is no reason to lose what the user pasted.
             Err(err) if save => {
                 if self.store_key(Some(key)) {
-                    self.key.note = Some((format!("Saved, but not checked: {err}"), false));
+                    self.key.note = Some((t!("key-saved-unchecked", error = err), false));
                 }
             }
             Err(err) => self.key.note = Some((err, false)),
@@ -185,7 +191,7 @@ impl Zendo {
     fn check_key(&mut self) -> Task<Message> {
         let key = self.key.value.trim().to_owned();
         if key.is_empty() {
-            self.key.note = Some(("Paste a key first".to_owned(), false));
+            self.key.note = Some((t!("key-paste-first"), false));
             return Task::none();
         }
         self.key.checking = Some(key.clone());
@@ -201,15 +207,14 @@ impl Zendo {
 
     pub(super) fn settings_page(&self) -> Element<'_, Message> {
         let header = column![
-            text("Settings").size(28).font(BOLD),
-            text("Covers, Nexus Mods, Proton, the sources Zendo reads and its own files")
-                .size(13)
-                .color(DIM),
+            text(t!("page-settings")).size(28).font(BOLD),
+            text(t!("settings-subtitle")).size(13).color(DIM),
         ]
         .spacing(2);
         scrollable(
             column![
                 header,
+                self.language_section(),
                 self.key_section(),
                 self.nexus_section(),
                 self.covers_section(),
@@ -230,7 +235,7 @@ impl Zendo {
         let saved = self.config.steamgriddb_key.as_deref().unwrap_or("");
         let changed = self.key.value.trim() != saved;
         let field = row![
-            text_input("Paste your SteamGridDB API key", &self.key.value)
+            text_input(&t!("steamgriddb-paste"), &self.key.value)
                 .id(key_id())
                 .secure(!self.key.shown)
                 .on_input(Message::KeyInput)
@@ -238,15 +243,22 @@ impl Zendo {
                 .padding([8, 12])
                 .size(14)
                 .style(style::input),
-            button(text(if self.key.shown { "Hide" } else { "Show" }).size(14))
-                .padding([8, 14])
-                .style(style::secondary)
-                .on_press(Message::ToggleKeyShown),
+            button(
+                text(if self.key.shown {
+                    t!("key-hide")
+                } else {
+                    t!("key-show")
+                })
+                .size(14)
+            )
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press(Message::ToggleKeyShown),
             button(
                 text(if self.key.checking.is_some() {
-                    "Checking…"
+                    t!("key-checking")
                 } else {
-                    "Check"
+                    t!("key-check")
                 })
                 .size(14)
             )
@@ -256,7 +268,7 @@ impl Zendo {
                 (self.key.checking.is_none() && !self.key.value.trim().is_empty())
                     .then_some(Message::CheckKey)
             ),
-            button(text("Save").size(14).font(BOLD))
+            button(text(t!("key-save")).size(14).font(BOLD))
                 .padding([8, 18])
                 .style(style::primary)
                 .on_press_maybe(changed.then_some(Message::SaveKey)),
@@ -270,24 +282,18 @@ impl Zendo {
                 body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
             }
             None if saved.is_empty() => {
-                body = body.push(text("No key set").size(13).color(DIM));
+                body = body.push(text(t!("key-none")).size(13).color(DIM));
             }
             None => {}
         }
         body = body.push(kept_note(self.config.kept(Key::SteamGridDb)));
         body = body.push(
-            button(text("Get a free key from your SteamGridDB preferences").size(13))
+            button(text(t!("steamgriddb-get-key")).size(13))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Open(KEY_PAGE.to_owned())),
         );
-        section(
-            "SteamGridDB",
-            "Covers and wide images for games whose store has none. The key is \
-             kept in the system keyring, or in your settings file, readable only \
-             by you, when there is none.",
-            body,
-        )
+        section("SteamGridDB", t!("steamgriddb-about"), body)
     }
 
     fn diagnostics_section(&self) -> Element<'_, Message> {
@@ -296,9 +302,9 @@ impl Zendo {
             row![
                 button(
                     text(if self.diagnostics.gathering {
-                        "Gathering…"
+                        t!("report-gathering")
                     } else {
-                        "Copy report"
+                        t!("report-copy")
                     })
                     .size(14)
                     .font(BOLD)
@@ -306,7 +312,7 @@ impl Zendo {
                 .padding([8, 18])
                 .style(style::primary)
                 .on_press_maybe((!self.diagnostics.gathering).then_some(Message::CopyReport)),
-                button(text("Open launch logs").size(14))
+                button(text(t!("report-open-logs")).size(14))
                     .padding([8, 14])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -320,32 +326,42 @@ impl Zendo {
         if let Some((note, good)) = &self.diagnostics.note {
             body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
         }
-        section(
-            "Diagnostics",
-            "A report of what Zendo found, to paste into a bug report: the system, the \
-             tools and their versions, the Protons, the settings (never the keys), \
-             whether each store is signed in (never the account), the library's \
-             counts, the Wine prefixes and the last three launches' logs. Your home \
-             folder shows as ~. Read it before you share it: a game's log can name \
-             more. `zendo report` prints the same, `zendo logs` lists the logs.",
-            body,
-        )
+        section(t!("report-title"), t!("report-about"), body)
+    }
+
+    fn language_section(&self) -> Element<'_, Message> {
+        let chosen = self.config.language.as_deref().and_then(Language::from_tag);
+        let choice = |label: String, language: Option<Language>| {
+            button(text(label).size(13))
+                .padding([5, 12])
+                .style(style::chip(chosen == language))
+                .on_press(Message::SetLanguage(language))
+        };
+        let mut choices = row![choice(
+            t!("language-system", language = Language::system().name()),
+            None
+        )]
+        .spacing(8);
+        for language in Language::ALL {
+            choices = choices.push(choice(language.name().to_owned(), Some(language)));
+        }
+        section(t!("language-title"), t!("language-about"), choices)
     }
 
     fn covers_section(&self) -> Element<'_, Message> {
         let busy = self.images.left > 0;
         let progress = if busy {
-            format!("{} left", self.images.left)
+            t!("images-left", count = self.images.left)
         } else {
             String::new()
         };
         let body = column![
             toggler(self.config.download_covers)
-                .label("Download missing covers and wide images")
+                .label(t!("covers-download"))
                 .text_size(14)
                 .on_toggle(Message::SetDownloadCovers),
             row![
-                button(text("Download missing images now").size(14))
+                button(text(t!("covers-download-now")).size(14))
                     .padding([8, 14])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -357,25 +373,19 @@ impl Zendo {
             .align_y(Alignment::Center),
         ]
         .spacing(14);
-        section(
-            "Covers",
-            "Steam's come from its own cache. Epic, GOG and Amazon publish theirs; \
-             the rest come from SteamGridDB. A game with none anywhere is asked \
-             about again after a week.",
-            body,
-        )
+        section(t!("covers-title"), t!("covers-about"), body)
     }
 
     fn sources_section(&self) -> Element<'_, Message> {
         let games = self.library.iter().flat_map(|library| &library.games);
         let mut rows: Vec<Element<'_, Message>> = [
-            (Source::Steam, "Steam"),
-            (Source::Epic, "Epic Games, through Heroic"),
-            (Source::Gog, "GOG, through Heroic"),
-            (Source::Amazon, "Amazon Games, through Heroic"),
-            (Source::Heroic, "Added to Heroic by hand"),
-            (Source::Desktop, ".desktop files in the Game category"),
-            (Source::Local, "Added by hand in Zendo"),
+            (Source::Steam, "Steam".to_owned()),
+            (Source::Epic, t!("sources-epic")),
+            (Source::Gog, t!("sources-gog")),
+            (Source::Amazon, t!("sources-amazon")),
+            (Source::Heroic, t!("sources-heroic")),
+            (Source::Desktop, t!("sources-desktop")),
+            (Source::Local, t!("sources-local")),
         ]
         .into_iter()
         .map(|(source, label)| {
@@ -383,9 +393,9 @@ impl Zendo {
             row![
                 text(label).size(14).width(320),
                 if count == 0 {
-                    text("none found").size(14).color(DIM)
+                    text(t!("sources-none-found")).size(14).color(DIM)
                 } else {
-                    text(format::count(count, "game", "games")).size(14)
+                    text(t!("count-games", count = count)).size(14)
                 },
             ]
             .into()
@@ -393,27 +403,25 @@ impl Zendo {
         .collect();
         for problem in self.library.iter().flat_map(|library| &library.problems) {
             rows.push(
-                text(format!("Could not read {problem}"))
+                text(t!("sources-unreadable", problem = problem.as_str()))
                     .size(13)
                     .color(BAD)
                     .into(),
             );
         }
         section(
-            "Sources",
-            "Where Zendo looks for games. It reads these and never writes to them; \
-             Refresh in the library looks again.",
+            t!("sources-title"),
+            t!("sources-about"),
             column(rows).spacing(8),
         )
     }
 }
 
 fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
-    let entry = |label: &'static str, path: Option<PathBuf>| -> Element<'a, Message> {
-        let shown = path.as_ref().map_or_else(
-            || "no home folder".to_owned(),
-            |path| path.display().to_string(),
-        );
+    let entry = |label: String, path: Option<PathBuf>| -> Element<'a, Message> {
+        let shown = path
+            .as_ref()
+            .map_or_else(|| t!("files-no-home"), |path| path.display().to_string());
         // The folder, as the file may not exist yet.
         let folder = path
             .as_deref()
@@ -432,7 +440,7 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
                 .size(13)
                 .font(Font::MONOSPACE)
                 .width(Length::Fill),
-            button(text("Open folder").size(13))
+            button(text(t!("files-open-folder")).size(13))
                 .padding([4, 10])
                 .style(style::secondary)
                 .on_press_maybe(
@@ -444,24 +452,23 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
         .into()
     };
     section(
-        "Files",
-        "Zendo's own files. Removing one resets what it holds. Store games \
-         install into the games folder; `install_dir` in the settings file moves it.",
+        t!("files-title"),
+        t!("files-about"),
         column![
-            entry("Settings", Config::path()),
-            entry("Launches, pins, hidden", State::path()),
-            entry("Downloaded images", covers::dir()),
+            entry(t!("files-settings"), Config::path()),
+            entry(t!("files-state"), State::path()),
+            entry(t!("files-images"), covers::dir()),
             entry(
-                "Download queue",
+                t!("files-queue"),
                 State::path().map(|state| state.with_file_name("downloads.json"))
             ),
             entry(
-                "Store sign-ins",
+                t!("files-sign-ins"),
                 zendo_core::stores::Store::Epic
                     .dir()
                     .and_then(|dir| dir.parent().map(Path::to_path_buf))
             ),
-            entry("Games", games),
+            entry(t!("files-games"), games),
         ]
         .spacing(10),
     )
@@ -487,20 +494,17 @@ impl Diagnostics {
 pub(super) fn kept_note<'a>(kept: &Kept) -> Option<Element<'a, Message>> {
     let (note, color) = match kept {
         Kept::Nowhere => return None,
-        Kept::Keyring => ("Kept in the system keyring.".to_owned(), DIM),
-        Kept::File(None) => ("Kept in config.toml, readable only by you.".to_owned(), DIM),
-        Kept::File(Some(why)) => (
-            format!("Kept in config.toml, readable only by you: {why}."),
-            DIM,
-        ),
-        Kept::Unread(why) => (format!("Could not read the keyring: {why}."), BAD),
+        Kept::Keyring => (t!("kept-keyring"), DIM),
+        Kept::File(None) => (t!("kept-file"), DIM),
+        Kept::File(Some(why)) => (t!("kept-file-why", why = why.as_str()), DIM),
+        Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), BAD),
     };
     Some(text(note).size(13).color(color).into())
 }
 
 pub(super) fn section<'a>(
-    title: &'a str,
-    about: &'a str,
+    title: impl text::IntoFragment<'a>,
+    about: impl text::IntoFragment<'a>,
     body: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     container(

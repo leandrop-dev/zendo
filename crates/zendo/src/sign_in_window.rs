@@ -100,8 +100,12 @@ fn show(store: Store, url: &str) -> anyhow::Result<Option<String>> {
     gtk::glib::set_prgname(Some(crate::app::APP_ID));
     gtk::glib::set_application_name("Zendo");
     gtk::init().context("could not start GTK")?;
+    crate::i18n::set_from_settings();
     let window = gtk::Window::new(gtk::WindowType::Toplevel);
-    window.set_title(&format!("Sign in to {} · Zendo", store.label()));
+    window.set_title(&crate::i18n::t!(
+        "sign-in-window-title",
+        store = store.label()
+    ));
     window.set_default_size(560, 760);
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     window.add(&container);
@@ -221,7 +225,7 @@ fn popup(
     popups: &Popups,
 ) -> Option<webkit2gtk::WebView> {
     let window = gtk::Window::new(gtk::WindowType::Toplevel);
-    window.set_title("Sign in · Zendo");
+    window.set_title(&crate::i18n::t!("sign-in-popup-title"));
     window.set_default_size(520, 680);
     if let Some(parent) = opener
         .toplevel()

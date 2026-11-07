@@ -12,6 +12,7 @@ use zendo_core::stores::{self, AmazonLogin, Store};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking, code_id, open};
+use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
 
 /// What Zendo knows of one store's sign-in.
@@ -154,7 +155,11 @@ impl Zendo {
                 match result {
                     Ok(name) => {
                         self.accounts.signing_in = None;
-                        self.status = Some(format!("Signed in to {} as {name}", store.label()));
+                        self.status = Some(t!(
+                            "accounts-signed-in-to",
+                            store = store.label(),
+                            name = name.as_str()
+                        ));
                         self.accounts.set(store, Account::SignedIn(name));
                         self.fetch_owned(store)
                     }
@@ -234,7 +239,7 @@ impl Zendo {
                 if self.persist {
                     zendo_core::owned::forget(store);
                 }
-                self.status = Some(format!("Signed out of {}", store.label()));
+                self.status = Some(t!("accounts-signed-out-of", store = store.label()));
             }
             Err(err) => self.accounts.set(store, Account::Failed(err)),
         }
@@ -295,12 +300,12 @@ impl Zendo {
             Ok(Some(code)) => self.sign_in_with(code),
             Ok(None) => {
                 self.accounts.signing_in = None;
-                self.status = Some(format!("Closed the {} sign-in", store.label()));
+                self.status = Some(t!("accounts-closed", store = store.label()));
                 Task::none()
             }
             // Without a web view, the browser still works.
             Err(err) => {
-                sign_in.note = Some(format!("{err}. Sign in in your browser instead."));
+                sign_in.note = Some(t!("accounts-no-web-view", error = err));
                 sign_in.browser = true;
                 self.update_account(AccountMessage::OpenPage)
             }
@@ -323,15 +328,10 @@ impl Zendo {
             return Task::none();
         }
         let Some(code) = stores::code_from(sign_in.store, &sign_in.pasted) else {
-            sign_in.note = Some(
-                match sign_in.store {
-                    Store::Epic => "No code there: paste the whole page Epic showed",
-                    Store::Gog | Store::Amazon => {
-                        "No code there: paste the address the page ended on"
-                    }
-                }
-                .to_owned(),
-            );
+            sign_in.note = Some(match sign_in.store {
+                Store::Epic => t!("accounts-no-code-epic"),
+                Store::Gog | Store::Amazon => t!("accounts-no-code-address"),
+            });
             return Task::none();
         };
         if !persist {
@@ -377,13 +377,8 @@ impl Zendo {
 
     pub(super) fn accounts_page(&self) -> Element<'_, Message> {
         let header = column![
-            text("Accounts").size(28).font(BOLD),
-            text(
-                "Sign in to see and install the games you own. These sign-ins are \
-                 Zendo's own, apart from Heroic's."
-            )
-            .size(13)
-            .color(DIM),
+            text(t!("page-accounts")).size(28).font(BOLD),
+            text(t!("accounts-about")).size(13).color(DIM),
         ]
         .spacing(2);
         scrollable(
@@ -405,26 +400,28 @@ impl Zendo {
             .as_ref()
             .filter(|sign_in| sign_in.store == store);
         let (status, color) = match self.accounts.get(store) {
-            Account::Checking => ("Checking…".to_owned(), DIM),
-            Account::SignedOut => ("Not signed in".to_owned(), DIM),
-            Account::SignedIn(name) => (format!("Signed in as {name}"), GOOD),
+            Account::Checking => (t!("key-checking"), DIM),
+            Account::SignedOut => (t!("accounts-signed-out"), DIM),
+            Account::SignedIn(name) => (t!("accounts-signed-in-as", name = name.as_str()), GOOD),
             Account::Failed(err) => (err.clone(), BAD),
         };
         let action: Element<'_, Message> = match self.accounts.get(store) {
-            Account::SignedIn(_) => button(text("Sign out").size(14))
+            Account::SignedIn(_) => button(text(t!("accounts-sign-out")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
                 .on_press(Message::Account(AccountMessage::SignOut(store)))
                 .into(),
             Account::Checking => space::horizontal().width(0).into(),
-            Account::SignedOut | Account::Failed(_) => button(text("Sign in").size(14).font(BOLD))
-                .padding([8, 18])
-                .style(style::primary)
-                .on_press_maybe(
-                    (engine.is_some() && signing_in.is_none())
-                        .then_some(Message::Account(AccountMessage::Start(store))),
-                )
-                .into(),
+            Account::SignedOut | Account::Failed(_) => {
+                button(text(t!("accounts-sign-in")).size(14).font(BOLD))
+                    .padding([8, 18])
+                    .style(style::primary)
+                    .on_press_maybe(
+                        (engine.is_some() && signing_in.is_none())
+                            .then_some(Message::Account(AccountMessage::Start(store))),
+                    )
+                    .into()
+            }
         };
 
         let title = row![
@@ -437,16 +434,13 @@ impl Zendo {
         .align_y(Alignment::Center);
 
         let engine_line = match &engine {
-            Some(path) => text(format!("Through {}", path.display()))
+            Some(path) => text(t!("accounts-through", path = path.display().to_string()))
                 .size(12)
                 .font(Font::MONOSPACE)
                 .color(DIM),
-            None => text(format!(
-                "{} not found: install it, or Heroic, which bundles it",
-                store.engine_name()
-            ))
-            .size(13)
-            .color(BAD),
+            None => text(t!("accounts-engine-missing", engine = store.engine_name()))
+                .size(13)
+                .color(BAD),
         };
 
         let mut body = column![title, text(status).size(14).color(color), engine_line].spacing(8);
@@ -471,23 +465,17 @@ fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
     let store = sign_in.store;
     let (line, retry) = match (&sign_in.window, sign_in.busy, &sign_in.note) {
         (_, true, _) if sign_in.amazon.is_none() && store == Store::Amazon => {
-            ("Preparing Amazon's page…".to_owned(), false)
+            (t!("accounts-preparing-amazon"), false)
         }
-        (_, true, _) => ("Signing in…".to_owned(), false),
-        (Some(_), false, _) => (
-            format!(
-                "Sign in to {} in the window that opened; Zendo finishes by itself.",
-                store.label()
-            ),
-            false,
-        ),
+        (_, true, _) => (t!("accounts-signing-in"), false),
+        (Some(_), false, _) => (t!("accounts-in-window", store = store.label()), false),
         (None, false, Some(_)) => (String::new(), true),
-        (None, false, None) => ("Opening the sign-in window…".to_owned(), false),
+        (None, false, None) => (t!("accounts-opening-window"), false),
     };
     let mut buttons = row![].spacing(8).align_y(Alignment::Center);
     if retry {
         buttons = buttons.push(
-            button(text("Try again").size(14).font(BOLD))
+            button(text(t!("try-again")).size(14).font(BOLD))
                 .padding([8, 18])
                 .style(style::primary)
                 .on_press(Message::Account(AccountMessage::Start(store))),
@@ -495,7 +483,7 @@ fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
     }
     buttons = buttons
         .push(
-            button(text("Use my browser instead").size(14))
+            button(text(t!("accounts-use-browser")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
                 .on_press_maybe(
@@ -503,7 +491,7 @@ fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
                 ),
         )
         .push(
-            button(text("Cancel").size(14))
+            button(text(t!("cancel")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
                 .on_press(Message::Account(AccountMessage::Cancel)),
@@ -523,19 +511,13 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
     let store = sign_in.store;
     let ready = store != Store::Amazon || sign_in.amazon.is_some();
     let second = match store {
-        Store::Epic => {
-            "2. Epic then shows a page of text. Copy all of it, or the \
-             authorizationCode value."
-        }
-        Store::Gog => "2. GOG then shows an empty page. Copy its address from the address bar.",
-        Store::Amazon => {
-            "2. Amazon then goes to its home page. Copy that page's address from the \
-             address bar."
-        }
+        Store::Epic => t!("accounts-step-two-epic"),
+        Store::Gog => t!("accounts-step-two-gog"),
+        Store::Amazon => t!("accounts-step-two-amazon"),
     };
     let can_finish = !sign_in.busy && ready && !sign_in.pasted.trim().is_empty();
     let field = row![
-        text_input("Paste it here", &sign_in.pasted)
+        text_input(&t!("accounts-paste-here"), &sign_in.pasted)
             .id(code_id())
             .on_input(|pasted| Message::Account(AccountMessage::Paste(pasted)))
             .on_submit(Message::Account(AccountMessage::Finish))
@@ -544,9 +526,9 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
             .style(style::input),
         button(
             text(if sign_in.busy && ready {
-                "Signing in…"
+                t!("accounts-signing-in")
             } else {
-                "Finish"
+                t!("accounts-finish")
             })
             .size(14)
             .font(BOLD)
@@ -554,7 +536,7 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
         .padding([8, 18])
         .style(style::primary)
         .on_press_maybe(can_finish.then_some(Message::Account(AccountMessage::Finish))),
-        button(text("Cancel").size(14))
+        button(text(t!("cancel")).size(14))
             .padding([8, 14])
             .style(style::secondary)
             .on_press(Message::Account(AccountMessage::Cancel)),
@@ -564,12 +546,12 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
 
     let mut steps = column![
         row![
-            text("1. Sign in on the store's page, in your browser.").size(14),
+            text(t!("accounts-step-one")).size(14),
             button(
                 text(if ready {
-                    "Open the page again"
+                    t!("accounts-open-again")
                 } else {
-                    "Preparing…"
+                    t!("accounts-preparing")
                 })
                 .size(13)
             )
@@ -580,7 +562,7 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
         .spacing(12)
         .align_y(Alignment::Center),
         text(second).size(14),
-        text("3. Paste it below. Ctrl+V works anywhere on this page.").size(14),
+        text(t!("accounts-step-three")).size(14),
         field,
     ]
     .spacing(10);

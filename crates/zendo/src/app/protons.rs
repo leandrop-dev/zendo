@@ -20,6 +20,7 @@ use zendo_core::proton::{self, Proton};
 use super::settings::section;
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
+use crate::i18n::t;
 
 /// How many releases the section offers at first.
 const SHOWN: usize = 5;
@@ -184,11 +185,8 @@ impl Zendo {
                     .is_some_and(|download| download.stop.load(Ordering::Relaxed));
                 protons.installed = proton::installed();
                 protons.note = Some(match result {
-                    Ok(()) => (
-                        format!("{name} is installed; launch options can choose it"),
-                        true,
-                    ),
-                    Err(_) if stopped => (format!("Stopped downloading {name}"), true),
+                    Ok(()) => (t!("protons-installed-note", name = name.as_str()), true),
+                    Err(_) if stopped => (t!("protons-stopped", name = name.as_str()), true),
                     Err(err) => (err, false),
                 });
             }
@@ -227,13 +225,11 @@ impl Zendo {
         if self.config.default_proton.as_deref() == Some(name.as_str()) {
             let _ = self.set_default_proton(None);
             if self.protons.note.as_ref().is_some_and(|(_, good)| *good) {
-                self.protons.note = Some((
-                    format!("Removed {name}; it was the default, so Automatic is used now"),
-                    true,
-                ));
+                self.protons.note =
+                    Some((t!("protons-removed-default", name = name.as_str()), true));
             }
         } else {
-            self.protons.note = Some((format!("Removed {name}"), true));
+            self.protons.note = Some((t!("protons-removed", name = name.as_str()), true));
         }
         Task::none()
     }
@@ -247,15 +243,9 @@ impl Zendo {
         } else {
             Ok(())
         };
-        let shown = proton::default().map_or_else(
-            || "UMU-Proton, which umu downloads".to_owned(),
-            |proton| proton.name,
-        );
+        let shown = proton::default().map_or_else(|| t!("protons-umu"), |proton| proton.name);
         self.protons.note = Some(match saved {
-            Ok(()) => (
-                format!("Games without a Proton of their own now run with {shown}"),
-                true,
-            ),
+            Ok(()) => (t!("protons-default-set", name = shown), true),
             Err(err) => (format!("{err:#}"), false),
         });
         Task::none()
@@ -264,8 +254,8 @@ impl Zendo {
     /// Automatic, each Proton found, and the one chosen even when gone.
     fn default_choices(&self) -> Vec<DefaultChoice> {
         let automatic = match proton::automatic() {
-            Some(first) => format!("Automatic: newest GE-Proton first ({})", first.name),
-            None => "Automatic: UMU-Proton, downloaded by umu".to_owned(),
+            Some(first) => t!("protons-automatic", name = first.name.as_str()),
+            None => t!("protons-automatic-umu"),
         };
         let mut choices = vec![DefaultChoice {
             name: None,
@@ -282,7 +272,7 @@ impl Zendo {
         {
             choices.push(DefaultChoice {
                 name: Some(chosen.clone()),
-                label: format!("{chosen} (not installed; Automatic is used)"),
+                label: t!("protons-missing", name = chosen.as_str()),
             });
         }
         choices
@@ -296,25 +286,19 @@ impl Zendo {
             .find(|choice| choice.name == self.config.default_proton)
             .cloned();
         let mut body = column![
-            text("Default").size(15).font(BOLD),
-            text("For the Windows games whose launch options leave Proton as it comes.")
-                .size(13)
-                .color(DIM),
+            text(t!("protons-default")).size(15).font(BOLD),
+            text(t!("protons-default-about")).size(13).color(DIM),
             pick_list(choices, selected, |choice| {
                 Message::Proton(ProtonMessage::SetDefault(choice))
             })
             .text_size(14)
             .padding([8, 12])
             .width(Length::Fill),
-            text("On this computer").size(15).font(BOLD),
+            text(t!("protons-here")).size(15).font(BOLD),
         ]
         .spacing(10);
         if protons.installed.is_empty() {
-            body = body.push(
-                text("None yet: umu downloads UMU-Proton the first time a Windows game starts.")
-                    .size(14)
-                    .color(DIM),
-            );
+            body = body.push(text(t!("protons-none")).size(14).color(DIM));
         }
         for found in &protons.installed {
             body = body.push(self.installed_row(found));
@@ -322,8 +306,8 @@ impl Zendo {
 
         body = body.push(
             row![
-                text("GE-Proton releases").size(15).font(BOLD),
-                button(text("Check again").size(13))
+                text(t!("protons-releases")).size(15).font(BOLD),
+                button(text(t!("protons-check-again")).size(13))
                     .padding([4, 10])
                     .style(style::secondary)
                     .on_press_maybe(
@@ -337,12 +321,12 @@ impl Zendo {
             body = body.push(self.release_row(release));
         }
         if protons.asking {
-            body = body.push(text("Asking GitHub…").size(14).color(DIM));
+            body = body.push(text(t!("protons-asking")).size(14).color(DIM));
         } else if let Some(err) = &protons.error {
             body = body.push(text(err).size(13).color(BAD));
         } else if protons.releases.len() > protons.shown || protons.more {
             body = body.push(
-                button(text("Show older versions").size(13))
+                button(text(t!("protons-show-older")).size(13))
                     .padding([6, 12])
                     .style(style::secondary)
                     .on_press(Message::Proton(ProtonMessage::ShowOlder)),
@@ -354,13 +338,7 @@ impl Zendo {
         if let Some((note, good)) = &protons.note {
             body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
         }
-        section(
-            "Proton",
-            "Runs the Windows games Zendo installed; each game's launch options choose one. \
-             GE-Proton carries the most fixes, and goes into Steam's compatibility tools \
-             folder, where Steam and Heroic find it too.",
-            body,
-        )
+        section("Proton", t!("protons-about"), body)
     }
 
     fn installed_row<'a>(&'a self, found: &'a Proton) -> Element<'a, Message> {
@@ -380,16 +358,9 @@ impl Zendo {
         };
         if users > 0 {
             label = label.push(
-                text(format!(
-                    "{} chose it; they will run with the default",
-                    if users == 1 {
-                        "1 game".to_owned()
-                    } else {
-                        format!("{users} games")
-                    }
-                ))
-                .size(12)
-                .color(BAD),
+                text(t!("protons-chosen-by", count = users))
+                    .size(12)
+                    .color(BAD),
             );
         }
         let mut line = row![label.width(Length::Fill)]
@@ -399,9 +370,9 @@ impl Zendo {
             line = line.push(
                 button(
                     text(if confirming {
-                        "Really remove"
+                        t!("really-remove")
                     } else {
-                        "Remove"
+                        t!("remove")
                     })
                     .size(13),
                 )
@@ -424,9 +395,9 @@ impl Zendo {
             .iter()
             .any(|found| ge_proton::is_release(found, release));
         let action: Element<'a, Message> = if installed {
-            text("Installed").size(13).color(GOOD).into()
+            text(t!("installed")).size(13).color(GOOD).into()
         } else {
-            button(text("Download").size(13))
+            button(text(t!("download")).size(13))
                 .padding([6, 12])
                 .style(style::secondary)
                 .on_press_maybe(
@@ -471,17 +442,17 @@ fn download_bar(download: &Download) -> Element<'_, Message> {
     let stopping = download.stop.load(Ordering::Relaxed);
     column![
         row![
-            text(format!("Downloading {}", download.name))
+            text(t!("protons-downloading", name = download.name.as_str()))
                 .size(14)
                 .width(Length::Fill),
-            text(format!(
-                "{} of {}",
-                Size::Bytes(download.done),
-                Size::Bytes(download.total)
+            text(t!(
+                "size-of",
+                done = Size::Bytes(download.done).to_string(),
+                total = Size::Bytes(download.total).to_string()
             ))
             .size(13)
             .color(DIM),
-            button(text(if stopping { "Stopping…" } else { "Stop" }).size(13))
+            button(text(if stopping { t!("stopping") } else { t!("stop") }).size(13))
                 .padding([6, 12])
                 .style(style::secondary)
                 .on_press_maybe((!stopping).then_some(Message::Proton(ProtonMessage::Cancel))),

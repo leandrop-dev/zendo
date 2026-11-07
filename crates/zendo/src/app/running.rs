@@ -16,6 +16,7 @@ use zendo_core::{Game, Launch};
 
 use super::style::{self, BOLD, DIM};
 use super::{Message, Zendo};
+use crate::i18n::t;
 
 /// How often Zendo looks whether a game still runs.
 const POLL: Duration = Duration::from_secs(2);
@@ -76,11 +77,11 @@ impl Running {
 }
 
 /// The program a link hands the game to.
-fn launcher(game: Option<&Game>) -> &'static str {
+fn launcher(game: Option<&Game>) -> String {
     match game.map(|game| &game.launch) {
-        Some(Launch::Uri { uri }) if uri.starts_with("steam:") => "Steam",
-        Some(Launch::Uri { uri }) if uri.starts_with("heroic:") => "Heroic",
-        _ => "its launcher",
+        Some(Launch::Uri { uri }) if uri.starts_with("steam:") => "Steam".to_owned(),
+        Some(Launch::Uri { uri }) if uri.starts_with("heroic:") => "Heroic".to_owned(),
+        _ => t!("run-its-launcher"),
     }
 }
 
@@ -91,7 +92,7 @@ impl Zendo {
         if self.running.games.contains_key(&game.id) {
             return Task::none();
         }
-        self.status = Some(format!("Starting {}…", game.title));
+        self.status = Some(t!("run-starting-game", title = game.title.as_str()));
         // Tests start nothing: as if the game went to its launcher.
         if !self.persist {
             let started = Started {
@@ -114,16 +115,16 @@ impl Zendo {
                 match started.watch {
                     Watch::Nothing => {
                         self.running.games.remove(&id);
-                        self.status = Some(format!("Handed {title} to {launcher}"));
+                        self.status = Some(t!("run-handed", title = title, launcher = launcher));
                     }
                     watch => {
                         if let Some(session) = self.running.games.get_mut(&id) {
                             session.seen = matches!(watch, Watch::Group(_));
                             session.started = Instant::now();
                             self.status = Some(if session.seen {
-                                format!("{title} is running")
+                                t!("run-running", title = title)
                             } else {
-                                format!("Waiting for {launcher} to start {title}…")
+                                t!("run-waiting", title = title, launcher = launcher)
                             });
                             session.watch = Some(watch);
                         }
@@ -146,7 +147,7 @@ impl Zendo {
                 if let Some(session) = self.running.games.get_mut(&id) {
                     session.seen = true;
                     session.started = Instant::now();
-                    self.status = Some(format!("{} is running", self.title_of(&id)));
+                    self.status = Some(t!("run-running", title = self.title_of(&id)));
                 }
                 Task::none()
             }
@@ -154,9 +155,7 @@ impl Zendo {
                 if self.running.games.remove(&id).is_some() {
                     let title = self.title_of(&id);
                     let launcher = launcher(self.game(&id));
-                    self.status = Some(format!(
-                        "Handed {title} to {launcher}; Zendo did not see it start"
-                    ));
+                    self.status = Some(t!("run-missed", title = title, launcher = launcher));
                 }
                 Task::none()
             }
@@ -174,11 +173,7 @@ impl Zendo {
                     }
                 }
                 let title = self.title_of(&id);
-                self.status = Some(match minutes {
-                    0 => format!("{title} closed"),
-                    1 => format!("{title} closed after a minute"),
-                    n => format!("{title} closed after {n} minutes"),
-                });
+                self.status = Some(t!("run-closed", title = title, minutes = minutes));
                 Task::none()
             }
             RunMessage::Stop(id) => {
@@ -196,9 +191,9 @@ impl Zendo {
                 let asked = launch::stop(watch);
                 let title = self.title_of(&id);
                 self.status = Some(if asked {
-                    format!("Asked {title} to close; it may ask to save first")
+                    t!("run-asked-close", title = title)
                 } else {
-                    format!("Asked {title} to end")
+                    t!("run-asked-end", title = title)
                 });
                 Task::none()
             }
@@ -213,21 +208,21 @@ impl Zendo {
     /// Play, or Running with Stop while the game runs.
     pub(super) fn play_buttons(&self, game: &Game) -> Element<'_, Message> {
         let Some(session) = self.running.games.get(&game.id) else {
-            return button(text("Play").size(16).font(BOLD))
+            return button(text(t!("run-play")).size(16).font(BOLD))
                 .padding([10, 32])
                 .style(style::primary)
                 .on_press(Message::Play)
                 .into();
         };
         let state = if session.seen {
-            "Running"
+            t!("run-state-running")
         } else {
-            "Starting…"
+            t!("run-state-starting")
         };
         let stop = if session.stopping {
-            "Force stop"
+            t!("run-force-stop")
         } else {
-            "Stop"
+            t!("run-stop")
         };
         row![
             button(text(state).size(16).font(BOLD))
@@ -257,17 +252,15 @@ impl Zendo {
             && let Some(dir) = self.config.install_dir()
         {
             let prefix = launch::prefix_in(&dir, game);
-            rows = rows.push(path_row("Wine prefix", &prefix));
+            rows = rows.push(path_row(t!("run-wine-prefix"), &prefix));
         }
         if let Some(log) = launch::log_path(&game.id) {
-            rows = rows.push(path_row("Last launch's log", &log));
+            rows = rows.push(path_row(t!("run-last-log"), &log));
         }
         container(
             column![
-                text("Launch").size(18).font(BOLD),
-                text("Windows games run through umu-launcher with Proton, each in a prefix of its own.")
-                    .size(13)
-                    .color(DIM),
+                text(t!("run-launch-title")).size(18).font(BOLD),
+                text(t!("run-launch-about")).size(13).color(DIM),
                 rows,
             ]
             .spacing(10),
@@ -279,7 +272,7 @@ impl Zendo {
     }
 }
 
-fn path_row<'a>(label: &'static str, path: &std::path::Path) -> Element<'a, Message> {
+fn path_row<'a>(label: String, path: &std::path::Path) -> Element<'a, Message> {
     let exists = path.exists();
     row![
         text(label).size(14).color(DIM).width(170),
@@ -287,7 +280,7 @@ fn path_row<'a>(label: &'static str, path: &std::path::Path) -> Element<'a, Mess
             .size(13)
             .font(Font::MONOSPACE)
             .width(Length::Fill),
-        button(text("Open").size(13))
+        button(text(t!("run-open")).size(13))
             .padding([4, 10])
             .style(style::secondary)
             .on_press_maybe(exists.then(|| Message::Open(path.to_string_lossy().into_owned()))),

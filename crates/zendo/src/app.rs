@@ -41,6 +41,7 @@ use zendo_core::owned::Owned;
 use zendo_core::{Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
+use crate::i18n::{self, Language, t};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
@@ -87,6 +88,7 @@ pub const APP_ID: &str = "zendo";
 
 /// Opens the window; `link` is an `nxm://` link it was started for.
 pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
+    i18n::set_from_settings();
     let boot = move || {
         let (mut zendo, task) = Zendo::boot();
         if let Some(link) = link.clone() {
@@ -185,6 +187,8 @@ enum Message {
     /// Settings' Copy report: gathered on a thread, then copied.
     CopyReport,
     ReportReady(Result<String, String>),
+    /// The window's language; `None` follows the system's.
+    SetLanguage(Option<Language>),
     Account(AccountMessage),
     Download(DownloadMessage),
     Run(RunMessage),
@@ -491,12 +495,7 @@ impl Zendo {
             // typing reaches it there all the same.
             Message::FocusSearch if self.page != Page::Library => self.navigate(Page::Library),
             Message::FocusSearch => operation::focus(search_id()),
-            Message::Open(target) => {
-                if self.persist {
-                    open(&target);
-                }
-                Task::none()
-            }
+            Message::Open(target) => self.open_target(&target),
             Message::KeyInput(_)
             | Message::ToggleKeyShown
             | Message::SaveKey
@@ -505,7 +504,8 @@ impl Zendo {
             | Message::SetDownloadCovers(_)
             | Message::DownloadNow
             | Message::CopyReport
-            | Message::ReportReady(_) => self.update_settings(message),
+            | Message::ReportReady(_)
+            | Message::SetLanguage(_) => self.update_settings(message),
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
@@ -528,13 +528,22 @@ impl Zendo {
         }
     }
 
+    /// Opens a link or a folder in the program the desktop chooses; tests
+    /// open nothing.
+    fn open_target(&self, target: &str) -> Task<Message> {
+        if self.persist {
+            open(target);
+        }
+        Task::none()
+    }
+
     /// Reads the library again, unless it is being read already.
     fn refresh(&mut self) -> Task<Message> {
         if self.scanning {
             return Task::none();
         }
         self.scanning = true;
-        self.status = Some("Looking for games…".to_owned());
+        self.status = Some(t!("library-looking"));
         scan()
     }
 
@@ -555,6 +564,7 @@ impl Zendo {
             self.sort = sort;
             match config {
                 Ok(config) => {
+                    i18n::set(Language::chosen(config.language.as_deref()));
                     self.key.value = config.steamgriddb_key.clone().unwrap_or_default();
                     self.config = config;
                 }
@@ -768,10 +778,7 @@ impl Zendo {
     fn images_done(&mut self) -> Task<Message> {
         self.images.left = 0;
         if self.images.failed > 0 {
-            self.status = Some(format!(
-                "{} could not be downloaded; `zendo covers` says why",
-                format::count(self.images.failed, "image", "images")
-            ));
+            self.status = Some(t!("images-failed", count = self.images.failed));
         }
         if std::mem::take(&mut self.images.again) {
             self.download_images()
@@ -791,9 +798,9 @@ impl Zendo {
         let (hidden, title) = (game.hidden, game.title.clone());
         self.save(|state| state.set_hidden(&id, hidden));
         self.status = Some(if hidden {
-            format!("Hid {title} · Ctrl+H shows hidden games")
+            t!("status-hid", title = title)
         } else {
-            format!("{title} is back in the library")
+            t!("status-unhid", title = title)
         });
         // A hidden game leaves the grid; the cursor stays in place.
         if self.page == Page::Library {
@@ -814,9 +821,9 @@ impl Zendo {
         let (pinned, title) = (game.pinned, game.title.clone());
         self.save(|state| state.set_pinned(&id, pinned));
         self.status = Some(if pinned {
-            format!("Pinned {title}: it leads the library")
+            t!("status-pinned", title = title)
         } else {
-            format!("Unpinned {title}")
+            t!("status-unpinned", title = title)
         });
         self.select(Some(&id))
     }
@@ -961,7 +968,7 @@ impl Zendo {
             Page::Library => self.library_page(),
             Page::Game(id) => match self.game(id) {
                 Some(game) => self.game_page(game),
-                None => centered(text("This game is no longer in the library").color(DIM)),
+                None => centered(text(t!("game-gone")).color(DIM)),
             },
             Page::Settings => self.settings_page(),
             Page::About => about::page(),
@@ -970,7 +977,7 @@ impl Zendo {
             Page::Store => self.store_page(),
             Page::Owned(id) => match self.store.owned(id) {
                 Some(game) => self.owned_page(game),
-                None => centered(text("This game is no longer in your stores' lists").color(DIM)),
+                None => centered(text(t!("owned-gone")).color(DIM)),
             },
         };
         let main = column![page, self.footer()].width(Length::Fill);
@@ -990,33 +997,22 @@ impl Zendo {
             &self.status
         };
         let left = match (status, problems) {
-            _ if self.images.left > 0 => {
-                text(format!("Downloading images, {} left", self.images.left))
-            }
+            _ if self.images.left > 0 => text(t!("images-downloading", count = self.images.left)),
             (Some(status), _) => text(status.clone()),
             (None, _) if self.downloads.summary().is_some() => {
                 text(self.downloads.summary().unwrap_or_default())
             }
             (None, 0) => text(""),
-            (None, n) => text(format!(
-                "{} could not be read; Settings names them",
-                format::count(n, "file", "files")
-            )),
+            (None, n) => text(t!("footer-unreadable", count = n)),
         };
         let hints = match self.page {
-            Page::Library => {
-                "Enter open · Tab sort · Ctrl+P pin · Del hide · Ctrl+H hidden · F11 full-screen"
-            }
-            Page::Game(_) if self.sheet.is_some() => "Enter save · Esc cancel",
-            Page::Game(_) => "Enter play · Esc back · Ctrl+P pin · Del hide · F11 full-screen",
-            Page::Store => "Enter open · type to search · Esc clear · F11 full-screen",
-            Page::Owned(_) => "Enter install or open · Esc back · F11 full-screen",
-            Page::Downloads if self.downloads.confirm_close => {
-                "Enter close anyway · Esc keep downloading"
-            }
-            Page::Accounts | Page::Downloads | Page::Settings | Page::About => {
-                "Esc back · F11 full-screen"
-            }
+            Page::Library => t!("hints-library"),
+            Page::Game(_) if self.sheet.is_some() => t!("hints-sheet"),
+            Page::Game(_) => t!("hints-game"),
+            Page::Store => t!("hints-store"),
+            Page::Owned(_) => t!("hints-owned"),
+            Page::Downloads if self.downloads.confirm_close => t!("hints-closing"),
+            Page::Accounts | Page::Downloads | Page::Settings | Page::About => t!("hints-other"),
         };
         row![
             left.size(13).color(DIM),
@@ -1058,17 +1054,19 @@ trait Fallback {
 }
 
 /// What the window says when work hit a bug.
-const PANICKED: &str = "Zendo hit a bug doing that; the terminal has the details";
+fn panicked_note() -> String {
+    t!("panicked")
+}
 
 impl<T> Fallback for Result<T, String> {
     fn panicked() -> Self {
-        Err(PANICKED.to_owned())
+        Err(panicked_note())
     }
 }
 
 impl<T> Fallback for anyhow::Result<T> {
     fn panicked() -> Self {
-        Err(anyhow::anyhow!(PANICKED))
+        Err(anyhow::anyhow!(panicked_note()))
     }
 }
 
@@ -1083,10 +1081,10 @@ impl<T> Fallback for Vec<T> {
 impl Fallback for (Library, Sort, Result<Config, String>) {
     fn panicked() -> Self {
         let library = Library {
-            problems: vec![PANICKED.to_owned()],
+            problems: vec![panicked_note()],
             ..Library::default()
         };
-        (library, Sort::default(), Err(PANICKED.to_owned()))
+        (library, Sort::default(), Err(panicked_note()))
     }
 }
 
@@ -1238,7 +1236,7 @@ mod tests {
         assert_eq!(done, Ok(7));
         let failed: Result<u32, String> =
             iced::futures::executor::block_on(blocking(|| panic!("a bug in the work")));
-        assert_eq!(failed, Err(PANICKED.to_owned()));
+        assert_eq!(failed, Err(panicked_note()));
         let none: Vec<u8> = iced::futures::executor::block_on(blocking(|| panic!("again")));
         assert_eq!(none, Vec::<u8>::new());
     }

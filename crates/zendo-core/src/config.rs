@@ -14,6 +14,8 @@
 //! # The Proton Windows games run with unless their launch options choose
 //! # one: a folder name. Left out, the newest GE-Proton found, then others.
 //! default_proton = "GE-Proton11-12-x86_64"
+//! # The window's language: "en" or "pt-PT". Left out, the system's.
+//! language = "pt-PT"
 //! ```
 //!
 //! The API keys are kept in the system keyring ([`secrets`]) when one
@@ -56,6 +58,10 @@ pub struct Config {
     /// The Proton games run with unless their launch options choose one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_proton: Option<String>,
+    /// The window's language as a tag (`en`, `pt-PT`); the system's when
+    /// unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
     held: [Held; 2],
@@ -91,6 +97,7 @@ impl std::fmt::Debug for Config {
             .field("download_covers", &self.download_covers)
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
+            .field("language", &self.language)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
             .finish_non_exhaustive()
@@ -105,6 +112,7 @@ impl Default for Config {
             download_covers: true,
             install_dir: None,
             default_proton: None,
+            language: None,
             held: Default::default(),
         }
     }

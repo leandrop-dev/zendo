@@ -1,20 +1,34 @@
-//! Numbers and times as people read them.
+//! Numbers and times as people read them, in the window's language.
 
-/// "1 game", "12 games".
-pub fn count(n: usize, one: &str, many: &str) -> String {
-    if n == 1 {
-        format!("1 {one}")
-    } else {
-        format!("{n} {many}")
+use zendo_core::{Sort, Source};
+
+use crate::i18n::t;
+
+/// Where a game came from, as the window names it: the stores by their
+/// names, the rest in the window's language.
+pub fn source(source: Source) -> String {
+    match source {
+        Source::Desktop => t!("source-desktop"),
+        Source::Local => t!("source-added"),
+        other => other.label().to_owned(),
+    }
+}
+
+/// A library order's name.
+pub fn sort(sort: Sort) -> String {
+    match sort {
+        Sort::Recent => t!("sort-recent"),
+        Sort::MostPlayed => t!("sort-most-played"),
+        Sort::Title => t!("sort-title"),
     }
 }
 
 /// "45 min", "3 h", "18 h 10 min".
 pub fn play_time(minutes: u64) -> String {
     match (minutes / 60, minutes % 60) {
-        (0, minutes) => format!("{minutes} min"),
-        (hours, 0) => format!("{hours} h"),
-        (hours, minutes) => format!("{hours} h {minutes} min"),
+        (0, minutes) => t!("time-minutes", minutes = minutes),
+        (hours, 0) => t!("time-hours", hours = hours),
+        (hours, minutes) => t!("time-hours-minutes", hours = hours, minutes = minutes),
     }
 }
 
@@ -22,12 +36,12 @@ pub fn play_time(minutes: u64) -> String {
 pub fn ago(then: u64, now: u64) -> String {
     let days = now.saturating_sub(then) / 86_400;
     match days {
-        0 => "today".to_owned(),
-        1 => "yesterday".to_owned(),
-        2..=13 => format!("{days} days ago"),
-        14..=59 => format!("{} weeks ago", days / 7),
-        60..=729 => format!("{} months ago", days / 30),
-        _ => format!("{} years ago", days / 365),
+        0 => t!("ago-today"),
+        1 => t!("ago-yesterday"),
+        2..=13 => t!("ago-days", count = days),
+        14..=59 => t!("ago-weeks", count = days / 7),
+        60..=729 => t!("ago-months", count = days / 30),
+        _ => t!("ago-years", count = days / 365),
     }
 }
 
@@ -37,8 +51,6 @@ mod tests {
 
     #[test]
     fn reads_like_people_write() {
-        assert_eq!(count(1, "game", "games"), "1 game");
-        assert_eq!(count(0, "game", "games"), "0 games");
         assert_eq!(play_time(45), "45 min");
         assert_eq!(play_time(180), "3 h");
         assert_eq!(play_time(1090), "18 h 10 min");

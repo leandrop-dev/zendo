@@ -14,6 +14,7 @@ use zendo_core::mods::{self, Pending};
 use super::launch_options::overlay;
 use super::style::{self, BAD, BOLD, DIM};
 use super::{Message, Zendo};
+use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct InstallerState {
@@ -58,13 +59,13 @@ impl Zendo {
             .visible_steps(&selection, &pending.present)
             .first()
         else {
-            let name = pending.name.clone();
-            return self.change_mods(game, "Installing…", move |game| {
+            let note = t!("installer-installed", name = pending.name.as_str());
+            return self.change_mods(game, t!("installer-installing"), move |game| {
                 let overview = mods::install(game, &pending, &selection)?;
-                Ok((overview, format!("Installed {name}")))
+                Ok((overview, note))
             });
         };
-        self.status = Some(format!("Choose the options of {}", pending.name));
+        self.status = Some(t!("installer-choose", name = pending.name.as_str()));
         self.installer.open = Some(Sheet {
             game,
             pending,
@@ -117,16 +118,20 @@ impl Zendo {
                     selection,
                     ..
                 } = sheet;
-                let name = pending.name.clone();
-                let task = self.change_mods(game.clone(), "Installing…", move |game| {
-                    let overview = mods::install(game, &pending, &selection)?;
-                    Ok((overview, format!("Installed {name}")))
-                });
+                let note = t!("installer-installed", name = pending.name.as_str());
+                let task =
+                    self.change_mods(game.clone(), t!("installer-installing"), move |game| {
+                        let overview = mods::install(game, &pending, &selection)?;
+                        Ok((overview, note))
+                    });
                 Task::batch([task, self.next_installer()])
             }
             InstallerMessage::Cancel => {
                 if let Some(sheet) = self.installer.open.take() {
-                    self.status = Some(format!("{} was not installed", sheet.pending.name));
+                    self.status = Some(t!(
+                        "installer-cancelled",
+                        name = sheet.pending.name.as_str()
+                    ));
                     if self.persist {
                         std::thread::spawn(move || mods::cancel_install(&sheet.pending));
                     }
@@ -192,22 +197,22 @@ impl Sheet {
     }
 }
 
-fn hint(kind: GroupKind) -> &'static str {
+fn hint(kind: GroupKind) -> String {
     match kind {
-        GroupKind::ExactlyOne => "choose one",
-        GroupKind::AtMostOne => "choose one or none",
-        GroupKind::AtLeastOne => "choose at least one",
-        GroupKind::All => "all of these",
-        GroupKind::Any => "choose any",
+        GroupKind::ExactlyOne => t!("installer-exactly-one"),
+        GroupKind::AtMostOne => t!("installer-at-most-one"),
+        GroupKind::AtLeastOne => t!("installer-at-least-one"),
+        GroupKind::All => t!("installer-all"),
+        GroupKind::Any => t!("installer-any"),
     }
 }
 
 fn label(name: &str, kind: OptionType) -> String {
     match kind {
-        OptionType::Required => format!("{name} (required)"),
-        OptionType::Recommended => format!("{name} (recommended)"),
-        OptionType::NotUsable => format!("{name} (not usable)"),
-        OptionType::CouldBeUsable => format!("{name} (may not work)"),
+        OptionType::Required => t!("installer-required", name = name),
+        OptionType::Recommended => t!("installer-recommended", name = name),
+        OptionType::NotUsable => t!("installer-not-usable", name = name),
+        OptionType::CouldBeUsable => t!("installer-may-not-work", name = name),
         OptionType::Optional => name.to_owned(),
     }
 }
@@ -230,11 +235,11 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     };
     let mut header = column![
         text(title).size(20).font(BOLD),
-        text(format!(
-            "Step {} of {} · {}",
-            at + 1,
-            shown.len(),
-            step.name
+        text(t!(
+            "installer-step",
+            at = at + 1,
+            steps = shown.len(),
+            name = step.name.as_str()
         ))
         .size(13)
         .color(DIM),
@@ -245,29 +250,29 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         .as_ref()
         .is_some_and(|needs| !needs.holds(&std::collections::HashMap::new(), present))
     {
-        header = header.push(
-            text("The mod says it needs files Zendo did not find; it may not work.")
-                .size(13)
-                .color(BAD),
-        );
+        header = header.push(text(t!("installer-needs")).size(13).color(BAD));
     }
 
     let list = option_list(sheet);
     let about = about_panel(sheet);
     let footer = row![
-        button(text("Cancel").size(14))
+        button(text(t!("cancel")).size(14))
             .padding([8, 16])
             .style(style::secondary)
             .on_press(Message::Installer(InstallerMessage::Cancel)),
         space::horizontal(),
-        button(text("Back").size(14))
+        button(text(t!("installer-back")).size(14))
             .padding([8, 16])
             .style(style::secondary)
             .on_press_maybe((at > 0).then_some(Message::Installer(InstallerMessage::Back))),
         button(
-            text(if final_step { "Install" } else { "Next" })
-                .size(14)
-                .font(BOLD)
+            text(if final_step {
+                t!("installer-install")
+            } else {
+                t!("installer-next")
+            })
+            .size(14)
+            .font(BOLD)
         )
         .padding([8, 22])
         .style(style::primary)
@@ -375,9 +380,9 @@ fn about_panel(sheet: &Sheet) -> Element<'_, Message> {
         about = about.push(text(&option.name).size(15).font(BOLD));
         about = about.push(
             text(if option.description.is_empty() {
-                "No description."
+                t!("installer-no-description")
             } else {
-                option.description.as_str()
+                option.description.clone()
             })
             .size(13)
             .color(DIM),

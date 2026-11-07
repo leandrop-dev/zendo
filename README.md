@@ -39,6 +39,8 @@ install it and give it its colours, but it runs on any Linux desktop.
 
 ## What it does
 
+- Speaks English or Portuguese (Portugal): the system's language, or the
+  one chosen in Settings.
 - Finds your games without changing anything of the launchers':
   - **Steam**: every library folder in `libraryfolders.vdf`, native or
     Flatpak, and the installed games in them (Proton and Steam's runtimes
@@ -257,6 +259,8 @@ install_dir = "~/Games"
 # The Proton Windows games run with unless their launch options choose one
 # (a folder name; Settings sets it). Left out: the newest GE-Proton found.
 default_proton = "GE-Proton11-12-x86_64"
+# The window's language: "en" or "pt-PT". Left out: the system's.
+language = "pt-PT"
 ```
 
 The two keys go in the system keyring when one answers (the Secret
@@ -324,7 +328,7 @@ count their own.
 |------|------|
 | `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
@@ -370,7 +374,10 @@ Ideas, no code, from:
 Built on [Iced](https://iced.rs) (MIT), [gilrs](https://gitlab.com/gilrs-project/gilrs)
 (MIT or Apache-2.0), [keyvalues-parser](https://codeberg.org/CosmicHarper/vdf-rs)
 (MIT or Apache-2.0), [ureq](https://github.com/algesten/ureq) (MIT or
-Apache-2.0) and [toml](https://github.com/toml-rs/toml) (MIT or Apache-2.0).
+Apache-2.0), [toml](https://github.com/toml-rs/toml) (MIT or Apache-2.0),
+[Fluent](https://projectfluent.org) through fluent-bundle and unic-langid
+(MIT or Apache-2.0) and [sys-locale](https://github.com/1Password/sys-locale)
+(MIT or Apache-2.0).
 Covers of games no store has art for come from
 [SteamGridDB](https://www.steamgriddb.com) when you give Zendo a key.
 

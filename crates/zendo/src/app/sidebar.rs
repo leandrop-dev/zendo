@@ -7,6 +7,7 @@ use iced::{Element, Length};
 
 use super::style::{self, ACCENT, BOLD, DIM};
 use super::{Message, Page, Zendo, format};
+use crate::i18n::t;
 use zendo_core::Game;
 
 pub const WIDTH: f32 = 224.0;
@@ -21,7 +22,7 @@ impl Zendo {
             .collect();
         let in_library = matches!(self.page, Page::Library | Page::Game(_));
 
-        let entry = |label: &'static str, detail: String, page: Page, current: bool| {
+        let entry = |label: String, detail: String, page: Page, current: bool| {
             button(
                 row![
                     text(label).size(14),
@@ -35,9 +36,8 @@ impl Zendo {
             .style(style::nav(current))
             .on_press(Message::Navigate(page))
         };
-        let heading = |label: &'static str| {
-            container(text(label).size(11).font(BOLD).color(DIM)).padding([12, 12])
-        };
+        let heading =
+            |label: String| container(text(label).size(11).font(BOLD).color(DIM)).padding([12, 12]);
 
         let summary = summary(&games);
 
@@ -50,15 +50,15 @@ impl Zendo {
         container(
             column![
                 container(brand).padding([8, 12]),
-                heading("BROWSE"),
+                heading(t!("sidebar-browse")),
                 entry(
-                    "Library",
+                    t!("page-library"),
                     games.len().to_string(),
                     Page::Library,
                     in_library
                 ),
                 entry(
-                    "Store",
+                    t!("page-store"),
                     match self.owned_count() {
                         0 => String::new(),
                         n => n.to_string(),
@@ -67,7 +67,7 @@ impl Zendo {
                     matches!(self.page, Page::Store | Page::Owned(_))
                 ),
                 entry(
-                    "Downloads",
+                    t!("page-downloads"),
                     match self.downloads.queue.len() {
                         0 => String::new(),
                         n => n.to_string(),
@@ -75,24 +75,24 @@ impl Zendo {
                     Page::Downloads,
                     self.page == Page::Downloads
                 ),
-                heading("SYSTEM"),
+                heading(t!("sidebar-system")),
                 entry(
-                    "Accounts",
+                    t!("page-accounts"),
                     match self.accounts.signed_in() {
                         0 => String::new(),
-                        n => format!("{n} of 3"),
+                        n => t!("sidebar-signed-in", count = n, stores = 3),
                     },
                     Page::Accounts,
                     self.page == Page::Accounts
                 ),
                 entry(
-                    "Settings",
+                    t!("page-settings"),
                     String::new(),
                     Page::Settings,
                     self.page == Page::Settings
                 ),
                 entry(
-                    "About",
+                    t!("page-about"),
                     String::new(),
                     Page::About,
                     self.page == Page::About
@@ -120,14 +120,17 @@ fn summary<'a>(games: &[&Game]) -> Element<'a, Message> {
         .len();
     container(
         column![
-            text("YOUR LIBRARY").size(11).font(BOLD).color(DIM),
-            text(format::count(games.len(), "game", "games"))
+            text(t!("sidebar-your-library"))
+                .size(11)
+                .font(BOLD)
+                .color(DIM),
+            text(t!("count-games", count = games.len()))
                 .size(20)
                 .font(BOLD),
-            text(format!(
-                "{} · {}",
-                format::count(stores, "source", "sources"),
-                format::play_time(minutes)
+            text(t!(
+                "sidebar-summary",
+                sources = t!("count-sources", count = stores),
+                time = format::play_time(minutes)
             ))
             .size(12)
             .color(DIM),

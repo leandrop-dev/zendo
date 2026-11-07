@@ -17,13 +17,33 @@ use std::thread;
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, container, progress_bar, row, scrollable, space, text};
-use iced::{Alignment, Element, Length, Task};
+use iced::{Alignment, Color, Element, Length, Task};
 use zendo_core::Game;
 use zendo_core::downloads::{self, Action, Ended, Event, Job, Progress, Stop};
 use zendo_core::info::{self, Update};
 
 use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
 use super::{Message, Page, Zendo, blocking, centered};
+use crate::i18n::t;
+
+/// The action's name, as its button says it: Install.
+fn action_label(action: Action) -> String {
+    t!("action-label", action = action_tag(action))
+}
+
+/// The action as it goes on: Installing.
+fn action_doing(action: Action) -> String {
+    t!("action-doing", action = action_tag(action))
+}
+
+fn action_tag(action: Action) -> &'static str {
+    match action {
+        Action::Install => "install",
+        Action::Update => "update",
+        Action::Repair => "repair",
+        Action::Uninstall => "uninstall",
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct DownloadsState {
@@ -116,18 +136,24 @@ impl DownloadsState {
         let Some(running) = &self.running else {
             return match self.paused() {
                 0 => None,
-                1 => Some("1 download paused".to_owned()),
-                n => Some(format!("{n} downloads paused")),
+                count => Some(t!("downloads-paused-count", count = count)),
             };
         };
         let job = self.queue.first()?;
         Some(match (running.then, running.progress.percent) {
-            (Some(Then::Pause), _) => format!("Pausing {}…", job.title),
-            (Some(Then::Cancel), _) => format!("Cancelling {}…", job.title),
-            (None, Some(percent)) => {
-                format!("{} {}, {percent:.0}%", job.action.doing(), job.title)
-            }
-            (None, None) => format!("{} {}…", job.action.doing(), job.title),
+            (Some(Then::Pause), _) => t!("downloads-pausing", title = job.title.as_str()),
+            (Some(Then::Cancel), _) => t!("downloads-cancelling", title = job.title.as_str()),
+            (None, Some(percent)) => t!(
+                "downloads-doing-percent",
+                doing = action_doing(job.action),
+                title = job.title.as_str(),
+                percent = format!("{percent:.0}")
+            ),
+            (None, None) => t!(
+                "downloads-doing-dots",
+                doing = action_doing(job.action),
+                title = job.title.as_str()
+            ),
         })
     }
 
@@ -199,8 +225,8 @@ impl Zendo {
             }
             DownloadMessage::Discarded(title, result) => {
                 self.status = Some(match result {
-                    Ok(()) => format!("Cancelled {title}; its files are gone"),
-                    Err(err) => format!("Cancelled {title}, but {err}"),
+                    Ok(()) => t!("downloads-cancelled-gone", title = title),
+                    Err(err) => t!("downloads-cancelled-but", title = title, error = err),
                 });
                 Task::none()
             }
@@ -215,7 +241,7 @@ impl Zendo {
                     Some(running) => {
                         self.downloads.closing = true;
                         running.stop.stop();
-                        self.status = Some("Pausing the download, then closing…".to_owned());
+                        self.status = Some(t!("downloads-pausing-closing"));
                         Task::none()
                     }
                     None => iced::exit(),
@@ -291,10 +317,14 @@ impl Zendo {
     /// on a thread.
     fn cancelled(&mut self, job: Job) -> Task<Message> {
         self.downloads.errors.remove(&job.id());
-        self.status = Some(format!("Cancelled: {} {}", job.action.doing(), job.title));
+        self.status = Some(t!(
+            "downloads-cancelled-job",
+            doing = action_doing(job.action),
+            title = job.title.as_str()
+        ));
         self.downloads
             .finished
-            .push((job.clone(), Err("Cancelled".to_owned())));
+            .push((job.clone(), Err(t!("downloads-cancelled"))));
         if job.action != Action::Install || !self.persist {
             return Task::none();
         }
@@ -308,7 +338,7 @@ impl Zendo {
     fn queue_job(&mut self, job: Job) {
         let id = job.id();
         if self.downloads.queue.iter().any(|queued| queued.id() == id) {
-            self.status = Some(format!("{} is in the queue already", job.title));
+            self.status = Some(t!("downloads-already-queued", title = job.title.as_str()));
             return;
         }
         let ahead = self
@@ -318,8 +348,17 @@ impl Zendo {
             .filter(|queued| !queued.paused)
             .count();
         self.status = Some(match ahead {
-            0 => format!("{} {}", job.action.doing(), job.title),
-            n => format!("{} {}: {} ahead of it", job.action.label(), job.title, n),
+            0 => t!(
+                "downloads-doing",
+                doing = action_doing(job.action),
+                title = job.title.as_str()
+            ),
+            count => t!(
+                "downloads-ahead",
+                action = action_label(job.action),
+                title = job.title.as_str(),
+                count = count
+            ),
         });
         self.downloads.queue.push(job);
     }
@@ -381,14 +420,22 @@ impl Zendo {
             (Ok(Ended::Stopped), _) => {
                 let job = &mut self.downloads.queue[0];
                 job.paused = true;
-                self.status = Some(format!("Paused: {} {}", job.action.doing(), job.title));
+                self.status = Some(t!(
+                    "downloads-paused-job",
+                    doing = action_doing(job.action),
+                    title = job.title.as_str()
+                ));
                 self.save_queue();
                 self.next_job()
             }
             (Ok(Ended::Done), _) => {
                 let job = self.downloads.queue.remove(0);
                 self.save_queue();
-                self.status = Some(format!("{} {}: done", job.action.label(), job.title));
+                self.status = Some(t!(
+                    "downloads-done-job",
+                    action = action_label(job.action),
+                    title = job.title.as_str()
+                ));
                 // Asked again once the library has it back.
                 self.downloads.updates.remove(&job.id());
                 self.downloads.finished.push((job, Ok(())));
@@ -396,10 +443,11 @@ impl Zendo {
                 Task::batch([rescan, self.next_job()])
             }
             (Err(err), _) => {
-                self.status = Some(format!(
-                    "{} {} failed: {err}",
-                    self.downloads.queue[0].action.label(),
-                    self.downloads.queue[0].title
+                self.status = Some(t!(
+                    "downloads-failed-job",
+                    action = action_label(self.downloads.queue[0].action),
+                    title = self.downloads.queue[0].title.as_str(),
+                    error = err.as_str()
                 ));
                 // An uninstall has nothing to carry on; the rest wait to be
                 // tried again.
@@ -474,9 +522,16 @@ impl Zendo {
                 (false, false) => "queued",
             };
             actions = actions
-                .push(text(format!("{}: {state}", job.action.doing())).size(14))
                 .push(
-                    button(text("See downloads").size(14))
+                    text(t!(
+                        "downloads-job-state",
+                        doing = action_doing(job.action),
+                        state = state
+                    ))
+                    .size(14),
+                )
+                .push(
+                    button(text(t!("see-downloads")).size(14))
                         .padding([8, 14])
                         .style(style::secondary)
                         .on_press(Message::Navigate(Page::Downloads)),
@@ -488,11 +543,11 @@ impl Zendo {
             };
             let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
             let uninstall = if confirming {
-                button(text("Press again to delete its files").size(14).font(BOLD))
+                button(text(t!("downloads-press-again")).size(14).font(BOLD))
                     .style(style::danger)
                     .on_press_maybe(queue(Action::Uninstall))
             } else {
-                button(text("Uninstall").size(14))
+                button(text(action_label(Action::Uninstall)).size(14))
                     .style(style::secondary)
                     .on_press(Message::Download(DownloadMessage::AskUninstall(
                         game.id.clone(),
@@ -501,11 +556,11 @@ impl Zendo {
             let waiting = matches!(update, Some(UpdateState::Available(_)));
             actions = actions
                 .push(
-                    button(text("Update").size(14).font(if waiting {
-                        BOLD
-                    } else {
-                        iced::Font::default()
-                    }))
+                    button(
+                        text(action_label(Action::Update))
+                            .size(14)
+                            .font(if waiting { BOLD } else { iced::Font::default() }),
+                    )
                     .padding([8, 14])
                     .style(if waiting {
                         style::primary
@@ -515,7 +570,7 @@ impl Zendo {
                     .on_press_maybe(queue(Action::Update)),
                 )
                 .push(
-                    button(text("Repair").size(14))
+                    button(text(action_label(Action::Repair)).size(14))
                         .padding([8, 14])
                         .style(style::secondary)
                         .on_press_maybe(queue(Action::Repair)),
@@ -523,7 +578,7 @@ impl Zendo {
                 .push(uninstall.padding([8, 14]))
                 .push(space::horizontal())
                 .push(
-                    button(text("Check for updates").size(13))
+                    button(text(t!("downloads-check-updates")).size(13))
                         .padding([6, 12])
                         .style(style::secondary)
                         .on_press_maybe((update != Some(&UpdateState::Checking)).then(|| {
@@ -531,24 +586,12 @@ impl Zendo {
                         })),
                 );
         }
-        let (line, color) = match update {
-            None => (String::new(), DIM),
-            Some(UpdateState::Checking) => ("Checking for updates…".to_owned(), DIM),
-            Some(UpdateState::UpToDate) => ("Up to date".to_owned(), GOOD),
-            Some(UpdateState::Available(Some(version))) => {
-                (format!("Update available: {version}"), ACCENT)
-            }
-            Some(UpdateState::Available(None)) => ("Update available".to_owned(), ACCENT),
-            Some(UpdateState::Failed(err)) => (format!("Could not check for updates: {err}"), BAD),
-        };
+        let (line, color) = update_line(update);
         let mut card = column![
-            text("Installed by Zendo").size(18).font(BOLD),
-            text(format!(
-                "Through {}, which Zendo starts it with too.",
-                game.launcher()
-            ))
-            .size(13)
-            .color(DIM),
+            text(t!("downloads-installed-by-zendo")).size(18).font(BOLD),
+            text(t!("downloads-through", launcher = game.launcher()))
+                .size(13)
+                .color(DIM),
         ]
         .spacing(10);
         if !line.is_empty() {
@@ -565,12 +608,12 @@ impl Zendo {
         let state = &self.downloads;
         let paused = state.paused();
         let subtitle = match (state.queue.len(), paused) {
-            (0, _) => "Nothing to download".to_owned(),
-            (n, 0) => format!("{n} in the queue"),
-            (n, p) => format!("{n} in the queue, {p} paused"),
+            (0, _) => t!("downloads-nothing"),
+            (count, 0) => t!("downloads-in-queue", count = count),
+            (count, paused) => t!("downloads-in-queue-paused", count = count, paused = paused),
         };
         let header = column![
-            text("Downloads").size(28).font(BOLD),
+            text(t!("page-downloads")).size(28).font(BOLD),
             text(subtitle).size(13).color(DIM),
         ]
         .spacing(2);
@@ -590,8 +633,8 @@ impl Zendo {
                 body,
                 centered(
                     column![
-                        text("Install games from the Store and they show up here").size(18),
-                        button(text("Go to the Store").size(14))
+                        text(t!("downloads-empty")).size(18),
+                        button(text(t!("downloads-go-store")).size(14))
                             .padding([8, 14])
                             .style(style::secondary)
                             .on_press(Message::Navigate(Page::Store)),
@@ -609,13 +652,13 @@ impl Zendo {
         let start = usize::from(state.running.is_some());
         let rest = || state.queue.iter().skip(start);
         if rest().any(|job| !job.paused) {
-            body = body.push(text("UP NEXT").size(11).font(BOLD).color(DIM));
+            body = body.push(text(t!("downloads-up-next")).size(11).font(BOLD).color(DIM));
             for job in rest().filter(|job| !job.paused) {
                 body = body.push(queued_row(job, None));
             }
         }
         if rest().any(|job| job.paused) {
-            body = body.push(text("PAUSED").size(11).font(BOLD).color(DIM));
+            body = body.push(text(t!("downloads-paused")).size(11).font(BOLD).color(DIM));
             for job in rest().filter(|job| job.paused) {
                 body = body.push(queued_row(job, state.errors.get(&job.id())));
             }
@@ -623,9 +666,12 @@ impl Zendo {
         if !state.finished.is_empty() {
             body = body.push(
                 row![
-                    text("FINISHED").size(11).font(BOLD).color(DIM),
+                    text(t!("downloads-finished"))
+                        .size(11)
+                        .font(BOLD)
+                        .color(DIM),
                     space::horizontal(),
-                    button(text("Clear").size(13))
+                    button(text(t!("downloads-clear")).size(13))
                         .padding([4, 10])
                         .style(style::secondary)
                         .on_press(Message::Download(DownloadMessage::ClearFinished)),
@@ -640,19 +686,34 @@ impl Zendo {
     }
 }
 
+/// What the last look for an update found, and its colour.
+fn update_line(update: Option<&UpdateState>) -> (String, Color) {
+    match update {
+        None => (String::new(), DIM),
+        Some(UpdateState::Checking) => (t!("downloads-checking-updates"), DIM),
+        Some(UpdateState::UpToDate) => (t!("downloads-up-to-date"), GOOD),
+        Some(UpdateState::Available(Some(version))) => (
+            t!("downloads-update-version", version = version.as_str()),
+            ACCENT,
+        ),
+        Some(UpdateState::Available(None)) => (t!("downloads-update-available"), ACCENT),
+        Some(UpdateState::Failed(err)) => {
+            (t!("downloads-update-failed", error = err.as_str()), BAD)
+        }
+    }
+}
+
 fn close_banner<'a>() -> Element<'a, Message> {
     container(
         column![
-            text("A download is running").size(15).font(BOLD),
-            text("Closing pauses it, with what it has so far; resume it from here next time")
-                .size(13)
-                .color(DIM),
+            text(t!("downloads-running-title")).size(15).font(BOLD),
+            text(t!("downloads-running-about")).size(13).color(DIM),
             row![
-                button(text("Close anyway").size(14).font(BOLD))
+                button(text(t!("downloads-close-anyway")).size(14).font(BOLD))
                     .padding([8, 14])
                     .style(style::primary)
                     .on_press(Message::Download(DownloadMessage::CloseAnyway)),
-                button(text("Keep downloading").size(14))
+                button(text(t!("downloads-keep")).size(14))
                     .padding([8, 14])
                     .style(style::secondary)
                     .on_press(Message::Download(DownloadMessage::StayOpen)),
@@ -678,17 +739,21 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
             row![
                 column![
                     text(&job.title).size(18).font(BOLD),
-                    text(format!("{} · {}", job.action.doing(), job.store().label()))
-                        .size(13)
-                        .color(ACCENT),
+                    text(format!(
+                        "{} · {}",
+                        action_doing(job.action),
+                        job.store().label()
+                    ))
+                    .size(13)
+                    .color(ACCENT),
                 ]
                 .spacing(2),
                 space::horizontal(),
                 button(
                     text(if running.then == Some(Then::Pause) {
-                        "Pausing…"
+                        t!("pausing")
                     } else {
-                        "Pause"
+                        t!("pause")
                     })
                     .size(14)
                 )
@@ -702,9 +767,9 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
                 ),
                 button(
                     text(if running.then == Some(Then::Cancel) {
-                        "Cancelling…"
+                        t!("cancelling")
                     } else {
-                        "Cancel"
+                        t!("cancel")
                     })
                     .size(14)
                 )
@@ -737,16 +802,16 @@ fn progress_line(job: &Job, progress: &Progress) -> String {
         parts.push(format!("{percent:.1}%"));
     }
     if let Some(mib) = progress.downloaded_mib {
-        parts.push(format!("{} downloaded", mebibytes(mib)));
+        parts.push(t!("downloads-downloaded", size = mebibytes(mib)));
     }
     if let Some(speed) = progress.speed_mib {
         parts.push(format!("{}/s", mebibytes(speed)));
     }
     if let Some(eta) = &progress.eta {
-        parts.push(format!("{eta} left"));
+        parts.push(t!("downloads-left", time = eta.as_str()));
     }
     if parts.is_empty() {
-        format!("Starting {}…", job.store().engine_name())
+        t!("downloads-starting", engine = job.store().engine_name())
     } else {
         parts.join(" · ")
     }
@@ -757,25 +822,33 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
     let id = job.id();
     let mut about = column![
         text(&job.title).size(15),
-        text(format!("{} · {}", job.action.label(), job.store().label()))
-            .size(12)
-            .color(DIM),
+        text(format!(
+            "{} · {}",
+            action_label(job.action),
+            job.store().label()
+        ))
+        .size(12)
+        .color(DIM),
     ]
     .spacing(2);
     if let Some(error) = error {
-        about = about.push(text(format!("Failed: {error}")).size(12).color(BAD));
+        about = about.push(
+            text(t!("downloads-failed", error = error.as_str()))
+                .size(12)
+                .color(BAD),
+        );
     }
     let (first, message) = if job.paused {
         (
             if error.is_some() {
-                "Try again"
+                t!("try-again")
             } else {
-                "Resume"
+                t!("resume")
             },
             DownloadMessage::Resume(id.clone()),
         )
     } else {
-        ("Pause", DownloadMessage::Pause(id.clone()))
+        (t!("pause"), DownloadMessage::Pause(id.clone()))
     };
     container(
         row![
@@ -788,7 +861,7 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
                     style::secondary
                 })
                 .on_press(Message::Download(message)),
-            button(text("Cancel").size(13))
+            button(text(t!("cancel")).size(13))
                 .padding([6, 12])
                 .style(style::secondary)
                 .on_press(Message::Download(DownloadMessage::Cancel(id))),
@@ -804,11 +877,11 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
 
 fn finished_row<'a>(job: &'a Job, outcome: &'a Result<(), String>) -> Element<'a, Message> {
     let (verdict, color) = match outcome {
-        Ok(()) => ("Done".to_owned(), GOOD),
+        Ok(()) => (t!("downloads-done"), GOOD),
         Err(err) => (err.clone(), BAD),
     };
     let open = (outcome.is_ok() && job.action != Action::Uninstall).then(|| {
-        button(text("Open").size(13))
+        button(text(t!("open")).size(13))
             .padding([6, 12])
             .style(style::secondary)
             .on_press(Message::Navigate(Page::Game(job.id())))
@@ -817,9 +890,13 @@ fn finished_row<'a>(job: &'a Job, outcome: &'a Result<(), String>) -> Element<'a
         row![
             column![
                 text(&job.title).size(15),
-                text(format!("{} · {}", job.action.label(), job.store().label()))
-                    .size(12)
-                    .color(DIM),
+                text(format!(
+                    "{} · {}",
+                    action_label(job.action),
+                    job.store().label()
+                ))
+                .size(12)
+                .color(DIM),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),

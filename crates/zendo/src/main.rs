@@ -4,6 +4,7 @@
 mod app;
 mod file_dialog;
 mod gamepad;
+mod i18n;
 mod links;
 mod sign_in_window;
 

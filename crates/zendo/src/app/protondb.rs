@@ -7,6 +7,7 @@ use zendo_core::protondb::{self, Rating};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
+use crate::i18n::t;
 
 #[derive(Debug, Clone)]
 pub enum RatingState {
@@ -75,9 +76,8 @@ impl Zendo {
 /// What the reports say, for the tooltip.
 fn reports(rating: &Rating) -> String {
     match (&rating.tier, rating.reports) {
-        (None, _) => "No Proton reports yet".to_owned(),
-        (Some(tier), 1) => format!("Proton: {} from 1 report", title_case(tier)),
-        (Some(tier), n) => format!("Proton: {} from {n} reports", title_case(tier)),
+        (None, _) => t!("protondb-no-reports-yet"),
+        (Some(tier), count) => t!("protondb-reports", tier = title_case(tier), count = count),
     }
 }
 
@@ -93,20 +93,16 @@ fn title_case(word: &str) -> String {
 fn pill(rating: &Rating) -> Element<'_, Message> {
     let (label, color, about) = match &rating.tier {
         _ if rating.native => (
-            "PROTONDB NATIVE".to_owned(),
+            t!("protondb-native"),
             GOOD,
-            format!("Has a Linux version · {} · opens ProtonDB", reports(rating)),
+            t!("protondb-native-about", reports = reports(rating)),
         ),
         Some(tier) => (
             format!("PROTONDB {}", tier.to_uppercase()),
             tier_color(tier),
-            format!("{} · opens ProtonDB", reports(rating)),
+            t!("protondb-tier-about", reports = reports(rating)),
         ),
-        None => (
-            "PROTONDB: NO REPORTS".to_owned(),
-            DIM,
-            "No one has reported on it yet · opens ProtonDB".to_owned(),
-        ),
+        None => (t!("protondb-none"), DIM, t!("protondb-none-about")),
     };
     let link = button(text(label).size(11).font(BOLD))
         .padding([2, 7])

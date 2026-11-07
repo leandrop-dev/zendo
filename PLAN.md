@@ -1126,6 +1126,24 @@ Groundwork before more screens:
 5. Languages: English and Portuguese (Portugal) to start. Early,
    because every screen built after adds text; the window has some 130
    `text("…")` calls and many `format!` messages to move now.
+   Decided by the user 2026-11-07 [firm]: Fluent (`.ftl` files built
+   into the binary, `fluent-bundle`); the window's own words first,
+   the core's error messages (about 150, with paths and tool output)
+   later, and the command line stays English for scripts; the language
+   follows the system's (`sys-locale`, already in the build), with a
+   Settings choice: System, English, Português (Portugal).
+   Built 2026-11-07: `crates/zendo/src/i18n.rs` and `i18n/en.ftl`,
+   `i18n/pt-PT.ftl`; every page, the footer, the sheets, the file
+   dialog and the sign-in window speak the chosen language, saved as
+   `language` in `config.toml` (`en` or `pt-PT`; none follows the
+   system). Tests check both files parse, have the same messages with
+   the same values, format cleanly, and that every `t!` names a message
+   and every message is used. Not checked on screen yet (opening the
+   window would move the keys before the user's own test).
+   Left as they are [tentative]: sizes and speeds keep the decimal point
+   and MiB/GiB (`Size`'s Display lives in the core); the core's error
+   messages, store and tool names stay English; Brazilian Portuguese
+   gets Portugal's.
 6. Themes: a setting in Settings for Zendo's own theme or hyprmonk's
    (read from `tone.json`, Zendo's own when it is missing), built so
    more themes can be added. With it, a note in the hyprmonk project
@@ -1183,8 +1201,8 @@ Later:
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
   and checked by the user the same day. Item 2, the Rust review, fixed
   the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
-  API keys in the keyring, and item 4, diagnostics, built the same day;
-  next, item 5, languages.
+  API keys in the keyring, item 4, diagnostics, and item 5, languages,
+  built the same day; next, item 6, themes.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"
@@ -1192,7 +1210,12 @@ Later:
   --all application zendo | grep "^label"` list both items (without
   printing the keys); covers and Nexus should still work. Then item 3
   is [firm]. Item 4 the same visit: Settings' Diagnostics section, Copy
-  report and paste it somewhere to read; Open launch logs.
+  report and paste it somewhere to read; Open launch logs. Item 5 the
+  same visit: Settings' Language section, choose Português (Portugal)
+  and go through each page (Library, a game, Store, Downloads,
+  Accounts, Settings, About, launch options, Change art, Add game, the
+  mods page) for text that is cut off, still English or reads wrong;
+  then System, and English again.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made
