@@ -850,8 +850,11 @@ impl Zendo {
     }
 
     fn rows_on_screen(&self) -> usize {
-        // A whole number of rows, at least one; heights are never negative.
-        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a whole number of rows; heights are never negative"
+        )]
         let rows = ((self.viewport_height + library::SPACING)
             / (library::CARD_HEIGHT + library::SPACING)) as usize;
         rows.max(1)
@@ -1029,15 +1032,60 @@ fn scan() -> Task<Message> {
     )
 }
 
-/// Runs blocking work (file reads, HTTP) on a thread of its own.
-async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+/// Runs blocking work (file reads, HTTP) on a thread of its own. When the
+/// work panics (a bug), the window carries on with [`Fallback::panicked`]
+/// in its place; the panic itself is printed on the terminal.
+async fn blocking<T: Fallback + Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     let (sender, receiver) = oneshot::channel();
     thread::spawn(move || {
         let _ = sender.send(work());
     });
-    receiver
-        .await
-        .expect("the worker thread sends before it ends")
+    receiver.await.unwrap_or_else(|_| T::panicked())
+}
+
+/// What work on a thread gives when it panicked instead of finishing.
+trait Fallback {
+    fn panicked() -> Self;
+}
+
+/// What the window says when work hit a bug.
+const PANICKED: &str = "Zendo hit a bug doing that; the terminal has the details";
+
+impl<T> Fallback for Result<T, String> {
+    fn panicked() -> Self {
+        Err(PANICKED.to_owned())
+    }
+}
+
+impl<T> Fallback for anyhow::Result<T> {
+    fn panicked() -> Self {
+        Err(anyhow::anyhow!(PANICKED))
+    }
+}
+
+/// A list nothing came of.
+impl<T> Fallback for Vec<T> {
+    fn panicked() -> Self {
+        Vec::new()
+    }
+}
+
+/// The library read at start: none, saying why, and the settings unread.
+impl Fallback for (Library, Sort, Result<Config, String>) {
+    fn panicked() -> Self {
+        let library = Library {
+            problems: vec![PANICKED.to_owned()],
+            ..Library::default()
+        };
+        (library, Sort::default(), Err(PANICKED.to_owned()))
+    }
+}
+
+/// Not known to open `nxm://` links.
+impl Fallback for zendo_core::nexus::Handler {
+    fn panicked() -> Self {
+        Self::Nothing
+    }
 }
 
 /// Fetches each image on a thread (the requests block) and reports each one
@@ -1162,6 +1210,17 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn work_that_panics_gives_its_fallback_not_a_crash() {
+        let done: Result<u32, String> = iced::futures::executor::block_on(blocking(|| Ok(7)));
+        assert_eq!(done, Ok(7));
+        let failed: Result<u32, String> =
+            iced::futures::executor::block_on(blocking(|| panic!("a bug in the work")));
+        assert_eq!(failed, Err(PANICKED.to_owned()));
+        let none: Vec<u8> = iced::futures::executor::block_on(blocking(|| panic!("again")));
+        assert_eq!(none, Vec::<u8>::new());
+    }
 
     fn zendo_with(count: usize, columns: usize) -> Zendo {
         let games = (0..count)

@@ -114,20 +114,23 @@ impl State {
         }
     }
 
-    /// Reads the state, changes it and writes it back, so two writers lose
-    /// nothing unless they write in the same instant.
+    /// Reads the state, changes it and writes it back, holding the file's
+    /// lock, so the window's threads and the `zendo` command lose nothing
+    /// of each other's.
     ///
     /// # Errors
     ///
-    /// When the file cannot be read, parsed or written.
+    /// When the file cannot be locked, read, parsed or written.
     pub fn update(change: impl FnOnce(&mut Self)) -> anyhow::Result<Self> {
-        let mut state = Self::load()?;
-        change(&mut state);
         let path = Self::path().context("no home folder to keep Zendo's state in")?;
-        let json = serde_json::to_vec_pretty(&state)?;
-        paths::write_atomic(&path, &json)
-            .with_context(|| format!("could not write {}", path.display()))?;
-        Ok(state)
+        paths::locked(&path, || {
+            let mut state = Self::load()?;
+            change(&mut state);
+            let json = serde_json::to_vec_pretty(&state)?;
+            paths::write_atomic(&path, &json)
+                .with_context(|| format!("could not write {}", path.display()))?;
+            Ok(state)
+        })
     }
 
     pub fn launched(&mut self, id: &str) {

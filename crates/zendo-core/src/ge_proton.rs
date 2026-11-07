@@ -8,12 +8,11 @@
 //! `tar` into a folder beside the others that is renamed into place only
 //! when complete, and deleted.
 
-use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::fs::{self};
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -43,16 +42,7 @@ pub fn tools_dir() -> Option<PathBuf> {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(15)))
-        .timeout_recv_response(Some(Duration::from_secs(30)))
-        .user_agent(concat!(
-            "zendo/",
-            env!("CARGO_PKG_VERSION"),
-            " (+https://github.com/leandrop-dev/zendo)"
-        ))
-        .build()
-        .into()
+    crate::http::download_agent()
 }
 
 /// How many releases a page of GitHub's list holds.
@@ -180,43 +170,15 @@ fn download(
     stop: &AtomicBool,
     progress: &mut dyn FnMut(u64, u64),
 ) -> anyhow::Result<()> {
-    let mut response = agent()
-        .get(&release.tarball)
-        .call()
-        .with_context(|| format!("could not download {}", release.name))?;
-    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
-    let mut file = File::create(to).with_context(|| format!("could not write {}", to.display()))?;
-    let mut buffer = vec![0_u8; 256 * 1024];
-    let mut done = 0_u64;
-    let mut told = 0_u64;
-    loop {
-        if stop.load(Ordering::Relaxed) {
-            bail!("stopped");
-        }
-        let read = body
-            .read(&mut buffer)
-            .with_context(|| format!("the download of {} broke off", release.name))?;
-        if read == 0 {
-            break;
-        }
-        file.write_all(&buffer[..read])?;
-        done += read as u64;
-        // A word every 4 MiB is plenty for a bar.
-        if done - told >= 4 * 1024 * 1024 {
-            told = done;
-            progress(done, release.size);
-        }
-    }
-    file.flush()?;
-    if release.size > 0 && done != release.size {
-        bail!(
-            "the download of {} ended at {done} of {} bytes",
-            release.name,
-            release.size
-        );
-    }
-    progress(done, release.size.max(done));
-    Ok(())
+    let size = Some(release.size).filter(|&size| size > 0);
+    crate::http::download(
+        &release.tarball,
+        to,
+        &release.name,
+        size,
+        stop,
+        &mut |done, total| progress(done, total.unwrap_or(done)),
+    )
 }
 
 /// Compares the tarball with the release's `.sha512sum`, through

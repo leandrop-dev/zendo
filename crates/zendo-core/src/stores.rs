@@ -349,10 +349,7 @@ fn gog_username(credentials: &GogCredentials) -> anyhow::Result<String> {
     struct User {
         username: String,
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(15)))
-        .build()
-        .into();
+    let agent = crate::http::agent(Duration::from_secs(15));
     let text = agent
         .get(format!(
             "https://users.gog.com/users/{}",
@@ -425,36 +422,9 @@ fn query_param(url: &str, name: &str) -> Option<String> {
     query
         .split('&')
         .filter_map(|pair| pair.split_once('='))
-        .find(|(key, _)| percent_decode(key) == name)
-        .map(|(_, value)| percent_decode(value))
+        .find(|(key, _)| crate::http::percent_decode(key) == name)
+        .map(|(_, value)| crate::http::percent_decode(value))
         .filter(|value| !value.is_empty())
-}
-
-fn percent_decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = bytes
-            .get(i + 1..i + 3)
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match (bytes[i], hex) {
-            (b'%', Some(byte)) => {
-                out.push(byte);
-                i += 3;
-            }
-            (b'+', _) => {
-                out.push(b' ');
-                i += 1;
-            }
-            (byte, _) => {
-                out.push(byte);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// A folder only its owner can enter.
@@ -570,7 +540,6 @@ mod tests {
 
     #[test]
     fn decodes_queries() {
-        assert_eq!(percent_decode("a%20b+c%2"), "a b c%2");
         assert_eq!(
             query_param("x://h/p?a=1&b=two%26#frag", "b").as_deref(),
             Some("two&")

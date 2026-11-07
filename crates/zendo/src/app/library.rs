@@ -37,8 +37,11 @@ const SOURCES: [Source; 7] = [
 /// How many cards fit across a window this wide, beside the sidebar.
 pub fn columns_for(window_width: f32) -> usize {
     let room = window_width - sidebar::WIDTH - 2.0 * GRID_PADDING - SCROLLBAR + SPACING;
-    // Widths are positive and far below usize's range.
-    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "widths are positive and far below usize's range"
+    )]
     let columns = (room / (CARD_WIDTH + SPACING)).floor().max(1.0) as usize;
     columns
 }

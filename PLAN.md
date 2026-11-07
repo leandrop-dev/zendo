@@ -1018,6 +1018,45 @@ Quick and fresh first:
    (2026-11-07): it works.
 2. A review of the Rust code with the `rust-review` skill, then fixing
    what it finds, before more code is built on the same patterns.
+   Reviewed and fixed 2026-11-07; the user chose to fix findings 1–10
+   and leave 11:
+   1. Zendo's own files lost a change when two writers overlapped (the
+      window's threads, a `zendo hide` from a keybind). Each change to
+      `state.json`, `local.toml` and `games.toml` now holds a file lock
+      (`<file>.lock`, `File::lock`), and the mods' lock is a file lock
+      too (`$XDG_DATA_HOME/zendo/mods.lock`), so two Zendos wait for
+      each other.
+   2. Writes did not reach the disk before the rename: `applied.json`,
+      made new on each Apply, could be empty after a crash (btrfs keeps
+      a rename that replaces a file, not one that makes a new one). Each
+      write now syncs the file and its folder, and removes the
+      temporary when it fails.
+   3. A stalled download hung and Stop did nothing: downloads now give
+      up when no bytes come for a minute.
+   4. A panic in background work closed the window: it now ends as that
+      work's error.
+   5. `Config`'s debug output showed the API keys: written by hand now,
+      it shows `…`.
+   6. The download loop, URL decoding and HTTP agents were copied in
+      several files: one `http.rs` now, with one user agent.
+   7. `paths.rs` had no tests and `safe_name("..")` gave `..`: names
+      of dots alone become underscores; tests for names, writes, private
+      writes and the lock.
+   8. Lint exceptions got their reasons; `allow_attributes` and
+      `allow_attributes_without_reason` are on, so new ones need one.
+   9. FOMOD's choices are a `Selection` type, which answers for places
+      its installer lacks instead of panicking.
+   10. `mods.rs` (3,177 lines) split into `mods/`: `known`, `add`,
+       `order`, `apply`, `files` and `tests`.
+   To fix, later [firm]: 11, a game's process group id could be
+   reused by another program after the game ends, and Stop would then
+   signal it. The minimum Rust is 1.98 [firm]: no older than the
+   systems Zendo is for, checked 2026-11-07 (Arch 1.99.1, Fedora 44
+   1.99.1, Fedora 45 1.98.1; Fedora updates Rust in its released
+   versions); `File::lock` needs 1.89. Clippy then asked for
+   `Duration::from_mins` and `from_hours` where they read better.
+   Checked: fmt, clippy (pedantic) and the tests, new ones for each
+   fix.
 3. API keys (SteamGridDB, Nexus) in the system keyring (Secret Service:
    gnome-keyring runs here, KWallet is installed), the 0600 file as
    fallback. What it gains: the keys encrypted at rest with the login
@@ -1089,7 +1128,9 @@ Later:
 ## Next session
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
-  and checked by the user the same day; next, item 2, the Rust review.
+  and checked by the user the same day. Item 2, the Rust review, fixed
+  the same day (findings 1–10; 11 to fix later [firm]); next, item 3,
+  API keys in the keyring.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

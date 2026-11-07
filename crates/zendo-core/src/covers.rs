@@ -122,17 +122,8 @@ pub fn cached(id: &str, kind: Kind) -> Option<PathBuf> {
 }
 
 pub(crate) fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(20)))
-        .user_agent(concat!(
-            "zendo/",
-            env!("CARGO_PKG_VERSION"),
-            " (+https://github.com/leandrop-dev/zendo)"
-        ))
-        // A refused key is an answer here, not a failure.
-        .http_status_as_error(false)
-        .build()
-        .into()
+    // A refused key is an answer here, not a failure.
+    crate::http::answering_agent(Duration::from_secs(20))
 }
 
 /// What `SteamGridDB` says of a key.

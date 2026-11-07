@@ -9,10 +9,10 @@
 //! 500 an hour; Zendo makes three per download and one per mod when it
 //! checks for updates.
 
-use std::fs::{self, File};
-use std::io::{ErrorKind, Read, Write};
+use std::fs::{self};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, bail};
@@ -26,7 +26,7 @@ const API: &str = "https://api.nexusmods.com/v1";
 /// Where the user finds their personal key ("API Access").
 pub const KEY_PAGE: &str = "https://www.nexusmods.com/users/myaccount?tab=api";
 /// How long the list of games Nexus has is kept before it is asked again.
-const GAMES_KEPT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const GAMES_KEPT: Duration = Duration::from_hours(7 * 24);
 
 /// Who a key belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -97,7 +97,7 @@ impl Link {
         };
         for pair in query.split('&') {
             let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
-            let value = percent_decode(value);
+            let value = crate::http::percent_decode(value);
             match name {
                 "key" if !value.is_empty() => link.key = Some(value),
                 "expires" => link.expires = value.parse().ok(),
@@ -127,33 +127,6 @@ pub fn mod_page_url(domain: &str, mod_id: u64, file_id: Option<u64>) -> String {
 #[must_use]
 pub fn game_url(domain: &str) -> String {
     format!("{SITE}/{domain}/mods/")
-}
-
-fn percent_decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let hex = bytes
-            .get(at + 1..at + 3)
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match (bytes[at], hex) {
-            (b'%', Some(byte)) => {
-                out.push(byte);
-                at += 3;
-            }
-            (b'+', _) => {
-                out.push(b' ');
-                at += 1;
-            }
-            (byte, _) => {
-                out.push(byte);
-                at += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// A mod, as its page says.
@@ -258,29 +231,7 @@ struct DownloadUrl {
 }
 
 fn api_agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(30)))
-        .user_agent(concat!(
-            "zendo/",
-            env!("CARGO_PKG_VERSION"),
-            " (+https://github.com/leandrop-dev/zendo)"
-        ))
-        .http_status_as_error(false)
-        .build()
-        .into()
-}
-
-fn download_agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(15)))
-        .timeout_recv_response(Some(Duration::from_secs(30)))
-        .user_agent(concat!(
-            "zendo/",
-            env!("CARGO_PKG_VERSION"),
-            " (+https://github.com/leandrop-dev/zendo)"
-        ))
-        .build()
-        .into()
+    crate::http::answering_agent(Duration::from_secs(30))
 }
 
 /// One call to the API, its reply read as `T`.
@@ -404,42 +355,7 @@ fn download_into(
     stop: &AtomicBool,
     progress: &mut dyn FnMut(u64, Option<u64>),
 ) -> anyhow::Result<()> {
-    let mut response = download_agent()
-        .get(url)
-        .call()
-        .context("could not download from Nexus")?;
-    let total = response.body().content_length();
-    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
-    let mut file = File::create(to).with_context(|| format!("could not write {}", to.display()))?;
-    let mut buffer = vec![0_u8; 256 * 1024];
-    let mut done = 0_u64;
-    let mut told = 0_u64;
-    progress(0, total);
-    loop {
-        if stop.load(Ordering::Relaxed) {
-            bail!("stopped");
-        }
-        let read = body
-            .read(&mut buffer)
-            .context("the download from Nexus broke off")?;
-        if read == 0 {
-            break;
-        }
-        file.write_all(&buffer[..read])?;
-        done += read as u64;
-        if done - told >= 4 * 1024 * 1024 {
-            told = done;
-            progress(done, total);
-        }
-    }
-    file.flush()?;
-    if let Some(total) = total
-        && done != total
-    {
-        bail!("the download ended at {done} of {total} bytes");
-    }
-    progress(done, Some(done));
-    Ok(())
+    crate::http::download(url, to, "the file from Nexus", None, stop, progress)
 }
 
 /// A file downloaded from Nexus, ready to add as a mod.

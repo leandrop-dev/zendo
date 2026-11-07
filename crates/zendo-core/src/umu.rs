@@ -99,10 +99,7 @@ struct Entry {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(5)))
-        .build()
-        .into()
+    crate::http::agent(Duration::from_secs(5))
 }
 
 fn entries(agent: &ureq::Agent, query: &[(&str, &str)]) -> anyhow::Result<Vec<Entry>> {

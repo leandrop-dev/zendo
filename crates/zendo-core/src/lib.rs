@@ -16,6 +16,7 @@ pub mod downloads;
 pub mod fomod;
 pub mod ge_proton;
 mod heroic;
+mod http;
 pub mod info;
 pub mod launch;
 pub mod launch_options;
@@ -140,8 +141,10 @@ impl std::fmt::Display for Size {
         match self {
             Self::Label(label) => f.write_str(label),
             Self::Bytes(bytes) => {
-                // Shown to two decimals; the precision lost is far below that.
-                #[expect(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "shown to two decimals; the precision lost is far below that"
+                )]
                 let mut value = *bytes as f64;
                 let mut unit = 0;
                 while value >= 1024.0 && unit < UNITS.len() - 1 {

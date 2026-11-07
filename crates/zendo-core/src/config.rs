@@ -33,7 +33,9 @@ const HEADER: &str = "\
 
 ";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Zendo's settings. Its `Debug` leaves the keys out, so a log or a
+/// report never shows them.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,6 +50,19 @@ pub struct Config {
     /// The Proton games run with unless their launch options choose one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_proton: Option<String>,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let hidden = |key: &Option<String>| key.as_ref().map(|_| "…");
+        f.debug_struct("Config")
+            .field("steamgriddb_key", &hidden(&self.steamgriddb_key))
+            .field("nexus_key", &hidden(&self.nexus_key))
+            .field("download_covers", &self.download_covers)
+            .field("install_dir", &self.install_dir)
+            .field("default_proton", &self.default_proton)
+            .finish()
+    }
 }
 
 impl Default for Config {
@@ -130,6 +145,19 @@ fn normalise_key(key: Option<String>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_never_shows_a_key() {
+        let config = Config {
+            steamgriddb_key: Some("sgdb-secret".into()),
+            nexus_key: Some("nexus-secret".into()),
+            ..Config::default()
+        };
+        let shown = format!("{config:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("nexus_key: Some(\"…\")"), "{shown}");
+        assert!(format!("{:?}", Config::default()).contains("nexus_key: None"));
+    }
 
     #[test]
     fn reads_the_key_and_defaults_the_rest() {

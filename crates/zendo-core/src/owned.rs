@@ -324,11 +324,7 @@ fn parse_nile(json: &[u8]) -> anyhow::Result<Vec<Owned>> {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(20)))
-        .http_status_as_error(false)
-        .build()
-        .into()
+    crate::http::answering_agent(Duration::from_secs(20))
 }
 
 /// GOG: the Galaxy library's GOG releases, each looked up in GOG's games

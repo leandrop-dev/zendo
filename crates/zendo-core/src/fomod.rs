@@ -154,7 +154,33 @@ impl Present {
 }
 
 /// What is chosen: for each step, group and option, whether it is on.
-pub type Selection = Vec<Vec<Vec<bool>>>;
+/// Only an installer makes one ([`Installer::default_selection`],
+/// [`Installer::selection_from`]), so it always has that installer's shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection(Vec<Vec<Vec<bool>>>);
+
+impl Selection {
+    /// Whether an option is on; `false` for one the installer lacks.
+    #[must_use]
+    pub fn is_on(&self, step: usize, group: usize, option: usize) -> bool {
+        self.group(step, group)
+            .get(option)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Each option of a group, on or not; empty for a group it lacks.
+    #[must_use]
+    pub fn group(&self, step: usize, group: usize) -> &[bool] {
+        self.step(step).get(group).map_or(&[], Vec::as_slice)
+    }
+
+    /// Each group of a step; empty for a step it lacks.
+    #[must_use]
+    pub fn step(&self, step: usize) -> &[Vec<bool>] {
+        self.0.get(step).map_or(&[], Vec::as_slice)
+    }
+}
 
 impl Condition {
     #[must_use]
@@ -243,16 +269,17 @@ impl Installer {
     /// options on, and the first usable one where one must be.
     #[must_use]
     pub fn default_selection(&self, present: &Present) -> Selection {
-        let mut selection: Selection = self
-            .steps
-            .iter()
-            .map(|step| {
-                step.groups
-                    .iter()
-                    .map(|group| vec![false; group.options.len()])
-                    .collect()
-            })
-            .collect();
+        let mut selection = Selection(
+            self.steps
+                .iter()
+                .map(|step| {
+                    step.groups
+                        .iter()
+                        .map(|group| vec![false; group.options.len()])
+                        .collect()
+                })
+                .collect(),
+        );
         for at in 0..self.steps.len() {
             for (g, group) in self.steps[at].groups.iter().enumerate() {
                 // The steps before, and the groups before in this one.
@@ -263,7 +290,7 @@ impl Installer {
                     .iter()
                     .map(|option| option.kind.at(&flags, present))
                     .collect();
-                let picks = &mut selection[at][g];
+                let picks = &mut selection.0[at][g];
                 for (o, kind) in types.iter().enumerate() {
                     picks[o] = match group.kind {
                         GroupKind::All => *kind != OptionType::NotUsable,
@@ -282,7 +309,7 @@ impl Installer {
     fn settle_step(&self, selection: &mut Selection, at: usize, present: &Present) {
         let types = self.types(selection, at, present);
         for (g, group) in self.steps[at].groups.iter().enumerate() {
-            settle(group.kind, &mut selection[at][g], &types[g], None);
+            settle(group.kind, &mut selection.0[at][g], &types[g], None);
         }
     }
 
@@ -295,10 +322,12 @@ impl Installer {
         at: usize,
         present: &Present,
     ) -> Vec<Vec<OptionType>> {
+        let Some(step) = self.steps.get(at) else {
+            return Vec::new();
+        };
         let mut flags = self.flags_before(selection, at, present);
         self.set_flags(selection, at, &mut flags);
-        self.steps[at]
-            .groups
+        step.groups
             .iter()
             .map(|group| {
                 group
@@ -312,6 +341,7 @@ impl Installer {
 
     /// Turns an option on or off, keeping its group's rule (one at most,
     /// at least one…) and required and unusable options as they must be.
+    /// An option the installer lacks is left alone.
     pub fn toggle(
         &self,
         selection: &mut Selection,
@@ -322,12 +352,19 @@ impl Installer {
         present: &Present,
     ) {
         let types = self.types(selection, at, present);
-        let kind = self.steps[at].groups[group].kind;
-        let picks = &mut selection[at][group];
-        let types = &types[group];
-        match types[option] {
-            OptionType::Required | OptionType::NotUsable => return,
-            _ => {}
+        let (Some(kind), Some(types), Some(picks)) = (
+            self.steps
+                .get(at)
+                .and_then(|step| step.groups.get(group))
+                .map(|group| group.kind),
+            types.get(group),
+            selection.0.get_mut(at).and_then(|step| step.get_mut(group)),
+        ) else {
+            return;
+        };
+        match types.get(option) {
+            None | Some(OptionType::Required | OptionType::NotUsable) => return,
+            Some(_) => {}
         }
         if kind.single() && types.contains(&OptionType::Required) {
             return;
@@ -385,7 +422,7 @@ impl Installer {
     fn set_flags(&self, selection: &Selection, at: usize, flags: &mut HashMap<String, String>) {
         for (g, group) in self.steps[at].groups.iter().enumerate() {
             for (o, option) in group.options.iter().enumerate() {
-                if selection[at][g][o] {
+                if selection.0[at][g][o] {
                     for (name, value) in &option.flags {
                         flags.insert(name.clone(), value.clone());
                     }
@@ -404,7 +441,7 @@ impl Installer {
             let types = self.types(selection, at, present);
             for (g, group) in self.steps[at].groups.iter().enumerate() {
                 for (o, option) in group.options.iter().enumerate() {
-                    if selection[at][g][o] && types[g][o] != OptionType::NotUsable {
+                    if selection.0[at][g][o] && types[g][o] != OptionType::NotUsable {
                         files.extend(option.files.iter().cloned());
                     }
                 }
@@ -429,7 +466,7 @@ impl Installer {
             let step = &self.steps[at];
             for (g, group) in step.groups.iter().enumerate() {
                 for (o, option) in group.options.iter().enumerate() {
-                    if selection[at][g][o] {
+                    if selection.0[at][g][o] {
                         chosen.push(format!("{}/{}/{}", step.name, group.name, option.name));
                     }
                 }
@@ -458,7 +495,7 @@ impl Installer {
                 }
                 for (o, name) in names.iter().enumerate() {
                     let on = chosen.contains(name);
-                    if selection[at][g][o] != on {
+                    if selection.0[at][g][o] != on {
                         self.toggle(&mut selection, at, g, o, on, present);
                     }
                 }
@@ -926,15 +963,15 @@ mod tests {
         let present = Present::default();
         let mut selection = installer.default_selection(&present);
         // Strong is recommended, so on; the unusable extra stays off.
-        assert_eq!(selection[0][0], [false, true]);
-        assert_eq!(selection[0][1], [false, false]);
+        assert_eq!(selection.group(0, 0), [false, true]);
+        assert_eq!(selection.group(0, 1), [false, false]);
         assert_eq!(installer.visible_steps(&selection, &present), [0, 1]);
         // Required in the second step, because body is strong.
         assert_eq!(
             installer.types(&selection, 1, &present)[0],
             [OptionType::Required]
         );
-        assert_eq!(selection[1][0], [true]);
+        assert_eq!(selection.group(1, 0), [true]);
         assert_eq!(
             targets(&installer.files(&selection, &present)),
             ["", "meshes/body", "big.txt"],
@@ -943,14 +980,14 @@ mod tests {
 
         // Exactly one: choosing Slim turns Strong off and hides step two.
         installer.toggle(&mut selection, 0, 0, 0, true, &present);
-        assert_eq!(selection[0][0], [true, false]);
+        assert_eq!(selection.group(0, 0), [true, false]);
         installer.toggle(&mut selection, 0, 0, 0, false, &present);
-        assert_eq!(selection[0][0], [true, false], "one must stay on");
+        assert_eq!(selection.group(0, 0), [true, false], "one must stay on");
         assert_eq!(installer.visible_steps(&selection, &present), [0]);
         // Not usable never turns on; any other extra does.
         installer.toggle(&mut selection, 0, 1, 0, true, &present);
         installer.toggle(&mut selection, 0, 1, 1, true, &present);
-        assert_eq!(selection[0][1], [false, true]);
+        assert_eq!(selection.group(0, 1), [false, true]);
         let files = installer.files(&selection, &present);
         assert_eq!(
             targets(&files),
@@ -964,7 +1001,7 @@ mod tests {
             ["Body/Choose a body/Slim", "Body/Extras/Zz last by name"]
         );
         let again = installer.selection_from(&chosen, &present);
-        assert_eq!(again[0], selection[0]);
+        assert_eq!(again.step(0), selection.step(0));
 
         // The patch needs Missing.esp to be missing.
         let present = Present {
@@ -979,6 +1016,32 @@ mod tests {
                 .as_ref()
                 .is_some_and(|needs| !needs.holds(&HashMap::new(), &present))
         );
+    }
+
+    #[test]
+    fn a_selection_ignores_places_its_installer_lacks() {
+        let installer = Installer::parse(
+            br#"<config><installSteps><installStep name="One"><optionalFileGroups>
+                <group name="Pick" type="SelectAny"><plugins>
+                  <plugin name="A"><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+                </plugins></group></optionalFileGroups></installStep></installSteps></config>"#,
+        )
+        .unwrap();
+        let present = Present::default();
+        let mut selection = installer.default_selection(&present);
+        let before = selection.clone();
+        installer.toggle(&mut selection, 0, 0, 5, true, &present);
+        installer.toggle(&mut selection, 0, 3, 0, true, &present);
+        installer.toggle(&mut selection, 9, 0, 0, true, &present);
+        assert_eq!(selection, before);
+        assert_eq!(
+            installer.types(&selection, 9, &present),
+            Vec::<Vec<OptionType>>::new()
+        );
+        assert!(!selection.is_on(4, 4, 4));
+        assert_eq!(selection.group(0, 7), [] as [bool; 0]);
+        installer.toggle(&mut selection, 0, 0, 0, true, &present);
+        assert!(selection.is_on(0, 0, 0));
     }
 
     #[test]
@@ -1030,10 +1093,10 @@ mod tests {
         .unwrap();
         let present = Present::default();
         let mut selection = installer.default_selection(&present);
-        assert_eq!(selection[0], [vec![true, false], vec![true, false]]);
+        assert_eq!(selection.step(0), [vec![true, false], vec![true, false]]);
         assert_eq!(targets(&installer.files(&selection, &present)), ["a.txt"]);
         installer.toggle(&mut selection, 0, 0, 1, true, &present);
-        assert_eq!(selection[0], [vec![false, true], vec![false, true]]);
+        assert_eq!(selection.step(0), [vec![false, true], vec![false, true]]);
         assert_eq!(targets(&installer.files(&selection, &present)), ["b.txt"]);
     }
 

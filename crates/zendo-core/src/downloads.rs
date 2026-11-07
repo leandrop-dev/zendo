@@ -614,10 +614,15 @@ fn overall(event: Event, whole: u64) -> Event {
         && whole > 0
         && left <= whole
     {
-        // Two decimals of a percentage; the precision lost is far below.
-        #[expect(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "two decimals of a percentage; the precision lost is far below"
+        )]
         let share = (whole - left + done.min(left)) as f64 / whole as f64;
-        #[expect(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a share of 0 to 100 fits an f32"
+        )]
         let percent = (share * 100.0) as f32;
         progress.percent = Some(percent.clamp(0.0, 100.0));
     }

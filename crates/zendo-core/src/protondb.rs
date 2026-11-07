@@ -85,12 +85,8 @@ pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
     {
         return Ok(entry.rating.clone());
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(10)))
-        // ProtonDB answers a missing game with a 404, not an error.
-        .http_status_as_error(false)
-        .build()
-        .into();
+    // ProtonDB answers a missing game with a 404, not an error.
+    let agent = crate::http::answering_agent(Duration::from_secs(10));
     let rating = match steam_app(&agent, id, title)? {
         Some(app) => Some(Rating {
             native: on_linux(&agent, app)?,

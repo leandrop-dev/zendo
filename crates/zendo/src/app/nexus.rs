@@ -89,6 +89,8 @@ pub enum NexusMessage {
     /// The games a link's game matched, the installed ones, and Nexus's
     /// name for it.
     Matched(Link, Vec<(String, String)>, Vec<(String, String)>, String),
+    /// Something to say on the status line.
+    Note(String),
     Choose(String),
     CancelChoose,
     Progress(u64, u64, Option<u64>),
@@ -133,6 +135,10 @@ impl Zendo {
     pub(super) fn update_nexus(&mut self, message: NexusMessage) -> Task<Message> {
         match message {
             NexusMessage::Link(text) => self.link_arrived(text),
+            NexusMessage::Note(note) => {
+                self.status = Some(note);
+                Task::none()
+            }
             NexusMessage::Matched(link, matched, installed, name) => {
                 if let [(id, _)] = matched.as_slice() {
                     return self.download_mod(id, link, false);
@@ -363,21 +369,30 @@ impl Zendo {
             .collect();
         self.status = Some("A mod came from Nexus…".to_owned());
         Task::perform(
-            blocking(move || {
-                // Nexus's list of games, to match titles, at most weekly.
-                let _ = nexus::refresh_games(&key);
-                let name = nexus::game_name(&link.domain, &nexus::cached_games());
-                let pair = |game: &Game| (game.id.clone(), game.title.clone());
-                let matched = games
-                    .iter()
-                    .filter(|game| mods::nexus_domain(game).as_deref() == Some(&link.domain))
-                    .map(pair)
-                    .collect();
-                let installed = games.iter().map(pair).collect();
-                (link, matched, installed, name)
+            blocking({
+                let domain = link.domain.clone();
+                move || {
+                    // Nexus's list of games, to match titles, at most weekly.
+                    let _ = nexus::refresh_games(&key);
+                    let name = nexus::game_name(&domain, &nexus::cached_games());
+                    let pair = |game: &Game| (game.id.clone(), game.title.clone());
+                    let matched = games
+                        .iter()
+                        .filter(|game| mods::nexus_domain(game).as_deref() == Some(&domain))
+                        .map(pair)
+                        .collect();
+                    let installed = games.iter().map(pair).collect();
+                    Ok((matched, installed, name))
+                }
             }),
-            |(link, matched, installed, name)| {
-                Message::Nexus(NexusMessage::Matched(link, matched, installed, name))
+            move |found: Result<_, String>| match found {
+                Ok((matched, installed, name)) => Message::Nexus(NexusMessage::Matched(
+                    link.clone(),
+                    matched,
+                    installed,
+                    name,
+                )),
+                Err(err) => Message::Nexus(NexusMessage::Note(err)),
             },
         )
     }
@@ -708,7 +723,10 @@ fn signed_in(user: &User) -> String {
 /// One download's row, for the Mods card and the Downloads page.
 pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
     let mib = |bytes: u64| {
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "shown to one decimal; the precision lost is far below"
+        )]
         let mib = bytes as f32 / (1024.0 * 1024.0);
         mib
     };

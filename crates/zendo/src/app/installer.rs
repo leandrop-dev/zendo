@@ -84,7 +84,7 @@ impl Zendo {
                 let installer = &sheet.pending.installer;
                 let present = &sheet.pending.present;
                 let kind = installer.steps[sheet.step].groups[group].kind;
-                let was = sheet.selection[sheet.step][group][option];
+                let was = sheet.selection.is_on(sheet.step, group, option);
                 // A radio clicked again clears a group that may have none.
                 let on = if kind == GroupKind::AtMostOne && was && on {
                     false
@@ -307,7 +307,7 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
     let types = installer.types(&sheet.selection, sheet.step, &sheet.pending.present);
     let mut list = column![].spacing(16);
     for (g, group) in step.groups.iter().enumerate() {
-        let picks = &sheet.selection[sheet.step][g];
+        let picks = sheet.selection.group(sheet.step, g);
         let mut options = column![
             text(format!("{} · {}", group.name, hint(group.kind)))
                 .size(14)
@@ -418,7 +418,15 @@ mod tests {
 
         let pick = |on| Message::Installer(InstallerMessage::Pick(0, 0, on));
         let _ = zendo.update(pick(true));
-        let picks = |zendo: &Zendo| zendo.installer.open.as_ref().unwrap().selection[0][0][0];
+        let picks = |zendo: &Zendo| {
+            zendo
+                .installer
+                .open
+                .as_ref()
+                .unwrap()
+                .selection
+                .is_on(0, 0, 0)
+        };
         assert!(picks(&zendo));
         let _ = zendo.update(pick(true));
         assert!(!picks(&zendo), "clicked again, it clears");

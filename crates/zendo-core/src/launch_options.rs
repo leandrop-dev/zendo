@@ -116,15 +116,17 @@ impl LaunchOptions {
     pub fn save(&self, id: &str) -> anyhow::Result<()> {
         self.check()?;
         let path = Self::path().context("no home folder to keep the launch options in")?;
-        let mut all = Self::load_all()?;
-        if *self == Self::default() {
-            all.remove(id);
-        } else {
-            all.insert(id.to_owned(), self.clone());
-        }
-        let text = format!("{HEADER}{}", toml::to_string(&all)?);
-        paths::write_private(&path, text.as_bytes())
-            .with_context(|| format!("could not write {}", path.display()))
+        paths::locked(&path, || {
+            let mut all = Self::load_all()?;
+            if *self == Self::default() {
+                all.remove(id);
+            } else {
+                all.insert(id.to_owned(), self.clone());
+            }
+            let text = format!("{HEADER}{}", toml::to_string(&all)?);
+            paths::write_private(&path, text.as_bytes())
+                .with_context(|| format!("could not write {}", path.display()))
+        })
     }
 
     /// Whether the arguments and environment can be read.

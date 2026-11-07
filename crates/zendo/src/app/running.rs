@@ -22,7 +22,7 @@ const POLL: Duration = Duration::from_secs(2);
 
 /// How long Steam or Heroic may take to start a game (an update first, a
 /// launcher's window) before Zendo stops waiting for it.
-const WAIT: Duration = Duration::from_secs(5 * 60);
+const WAIT: Duration = Duration::from_mins(5);
 
 /// How many looks in a row must find none of a game's processes before it
 /// counts as closed: a game's own launcher may hand over to the game with a

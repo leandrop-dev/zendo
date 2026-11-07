@@ -141,11 +141,17 @@ pub fn load() -> anyhow::Result<Vec<LocalGame>> {
     }
 }
 
-fn save(games: Vec<LocalGame>) -> anyhow::Result<()> {
+/// Reads the games, changes them and writes them back, holding the file's
+/// lock.
+fn change(edit: impl FnOnce(&mut Vec<LocalGame>)) -> anyhow::Result<()> {
     let path = path().context("no home folder to keep the games added by hand in")?;
-    let text = format!("{HEADER}{}", toml::to_string(&File { games })?);
-    paths::write_atomic(&path, text.as_bytes())
-        .with_context(|| format!("could not write {}", path.display()))
+    paths::locked(&path, || {
+        let mut games = load()?;
+        edit(&mut games);
+        let text = format!("{HEADER}{}", toml::to_string(&File { games })?);
+        paths::write_atomic(&path, text.as_bytes())
+            .with_context(|| format!("could not write {}", path.display()))
+    })
 }
 
 /// An id for a new game, from its title, unlike any taken.
@@ -179,14 +185,14 @@ fn new_id(title: &str, taken: &[LocalGame]) -> String {
 pub fn put(mut game: LocalGame) -> anyhow::Result<String> {
     game.title = game.title.trim().to_owned();
     game.check()?;
-    let mut games = load()?;
-    if let Some(kept) = games.iter_mut().find(|kept| kept.id == game.id) {
-        *kept = game.clone();
-    } else {
-        game.id = new_id(&game.title, &games);
-        games.push(game.clone());
-    }
-    save(games)?;
+    change(|games| {
+        if let Some(kept) = games.iter_mut().find(|kept| kept.id == game.id) {
+            *kept = game.clone();
+        } else {
+            game.id = new_id(&game.title, games);
+            games.push(game.clone());
+        }
+    })?;
     Ok(game.id)
 }
 
@@ -196,9 +202,7 @@ pub fn put(mut game: LocalGame) -> anyhow::Result<String> {
 ///
 /// When the file cannot be read or written.
 pub fn remove(id: &str) -> anyhow::Result<()> {
-    let mut games = load()?;
-    games.retain(|game| game.id != id);
-    save(games)
+    change(|games| games.retain(|game| game.id != id))
 }
 
 /// One game's record, for editing it.
