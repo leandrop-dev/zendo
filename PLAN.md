@@ -975,6 +975,80 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      order matters there. The user tried it in the window on Fallout 3
      GOTY (2026-11-07): it works.
 
+## After phase 7: the list [firm order]
+
+The user's list of 2026-11-07, in the order proposed the same day; the
+user confirmed the order, and the findings noted in the items (DLC
+skipped today, what the keyring gains, Nexus downloads for free
+accounts, Steam's install link, Quiver's licence), the same day [firm].
+Each item is planned in detail when it starts.
+
+Quick and fresh first:
+
+1. Phase 7's gaps: FOMOD's plugin conditions (active, inactive) from the
+   plugin list; Starfield and Oblivion plugin rules; Skyrim SE's
+   Creation Club plugins (`Skyrim.ccc`) as implicit.
+2. A review of the Rust code with the `rust-review` skill, then fixing
+   what it finds, before more code is built on the same patterns.
+3. API keys (SteamGridDB, Nexus) in the system keyring (Secret Service:
+   gnome-keyring runs here, KWallet is installed), the 0600 file as
+   fallback. What it gains: the keys encrypted at rest with the login
+   password (backups, a copied dotfiles folder, a stolen disk). What it
+   does not: any program running as the user can still ask an unlocked
+   keyring, as it can read the file.
+4. Diagnostics: `zendo logs` and `zendo report`, and a Settings section
+   with Copy report (tools and engines found, versions, Protons,
+   prefixes, recent launch logs), as Hikari has. It helps with every
+   real-world check after.
+
+Groundwork before more screens:
+
+5. Languages: English and Portuguese (Portugal) to start. Early,
+   because every screen built after adds text; the window has some 130
+   `text("…")` calls and many `format!` messages to move now.
+6. Themes: a setting in Settings for Zendo's own theme or hyprmonk's
+   (read from `tone.json`, Zendo's own when it is missing), built so
+   more themes can be added. With it, a note in the hyprmonk project
+   (the user asked for it) saying what `tone.json` should hold and when
+   to write it.
+7. An Arch package (PKGBUILD for the AUR: binary, `.desktop` file, icon).
+   It also gives the `nxm://` handler a fixed path instead of a build
+   folder.
+
+Features:
+
+8. A survey of Heroic (first) and Hikari for settings and automations
+   Zendo lacks; what it finds joins this list.
+9. The game page made clearer and friendlier, with DLC on it: which are
+   owned and installed, and install or uninstall each. Today Zendo
+   installs Epic and GOG games with `--skip-dlcs` (`downloads.rs`), so no
+   DLC comes with them, and Heroic's DLC is left out of the library.
+   Amazon (nile) is to check.
+10. EAC and BattlEye runtimes for the Windows games Zendo starts (Proton
+    reads them from `PROTON_EAC_RUNTIME` and `PROTON_BATTLEYE_RUNTIME`);
+    how umu gets them is to check.
+11. Steam: the games owned but not installed (Steam's Web API needs the
+    user's own key and SteamID; what local files hold is to check), and
+    installing them through Steam (`steam://install/<app>` opens Steam's
+    install dialog).
+12. Searching Nexus Mods in Zendo instead of the browser. Nexus's v1 API
+    has no search; its GraphQL v2 API is to check. Downloading still
+    needs the site's Mod manager download for accounts without Premium:
+    the API gives free accounts a link only with the key in an `nxm://`
+    link.
+
+Later:
+
+13. Recompiled games (N64 recomps and the like) and their mods, with
+    ideas from Quiver Launcher. Checked 2026-11-07: Quiver installs and
+    runs apps from GitHub and GitLab releases with community catalogs
+    (recomps ship that way); TypeScript; Business Source License 1.1 from
+    version 4 (MIT after a year, version 3 and before MIT): ideas only,
+    no code.
+14. A Fedora package (a native RPM, as the user prefers, through COPR
+    [tentative]), after the Arch one.
+15. OptiScaler, last: niche.
+
 ## On hyprmonk's side
 
 - Install it (package list or the installer) and bind a key (Super+G).
@@ -986,6 +1060,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
+- The list after phase 7 (above), confirmed 2026-11-07: start with item
+  1, Phase 7's gaps.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made
