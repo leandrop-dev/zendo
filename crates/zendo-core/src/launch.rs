@@ -309,7 +309,13 @@ pub fn log_path(id: &str) -> Option<PathBuf> {
             }
         })
         .collect();
-    paths::state_home().map(|dir| dir.join(format!("zendo/logs/{name}.log")))
+    logs_dir().map(|dir| dir.join(format!("{name}.log")))
+}
+
+/// Where each game's last launch is logged.
+#[must_use]
+pub fn logs_dir() -> Option<PathBuf> {
+    paths::state_home().map(|dir| dir.join("zendo/logs"))
 }
 
 /// The Wine prefix a Windows game Zendo starts runs in.

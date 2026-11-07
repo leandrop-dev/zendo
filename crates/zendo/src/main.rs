@@ -12,7 +12,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use zendo_core::config::Config;
 use zendo_core::covers::{Fetcher, Kind};
-use zendo_core::{Game, Library, State};
+use zendo_core::{Game, Library, Size, State, launch, report};
 
 const HELP: &str = "\
 zendo: every game in one library
@@ -28,6 +28,11 @@ Usage:
   zendo pin <id>               put a game first in every order
   zendo unpin <id>             stop
   zendo covers                 download the covers and wide images missing
+  zendo logs                   list the games' last launch logs, latest first
+  zendo logs <id>              print a game's last launch log
+  zendo report                 print what Zendo found (tools, Protons,
+                               settings without the keys, latest logs), to
+                               paste into a bug report
   zendo nxm://…                download a mod from a Nexus Mods link, in the
                                open window or a new one
 ";
@@ -64,6 +69,15 @@ fn main() -> ExitCode {
         ["pin", id] => set_pinned(id, true),
         ["unpin", id] => set_pinned(id, false),
         ["covers"] => covers(),
+        ["logs"] => {
+            list_logs();
+            Ok(())
+        }
+        ["logs", id] => print_log(id),
+        ["report"] => {
+            report();
+            Ok(())
+        }
         ["-h" | "--help"] => {
             print!("{HELP}");
             Ok(())
@@ -179,4 +193,41 @@ fn covers() -> anyhow::Result<()> {
         anyhow::bail!("{failed} image(s) could not be downloaded");
     }
     Ok(())
+}
+
+fn list_logs() {
+    let logs = report::logs();
+    if logs.is_empty() {
+        println!("No launches logged yet.");
+        return;
+    }
+    let library = Library::scan();
+    for log in logs {
+        let (id, title) = log.game(&library).map_or_else(
+            || (String::new(), log.path.display().to_string()),
+            |game| (game.id.clone(), game.title.clone()),
+        );
+        println!("{}\t{}\t{id}\t{title}", log.when(), Size::Bytes(log.size));
+    }
+}
+
+fn print_log(id: &str) -> anyhow::Result<()> {
+    let path = launch::log_path(id).context("no home folder to keep logs in")?;
+    let mut file = match std::fs::File::open(&path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("no launch of {id:?} logged; `zendo logs` lists the ones there are")
+        }
+        Err(err) => return Err(err).with_context(|| format!("could not read {}", path.display())),
+    };
+    std::io::copy(&mut file, &mut std::io::stdout().lock())?;
+    Ok(())
+}
+
+fn report() {
+    let config = Config::load_as_is().unwrap_or_else(|err| {
+        eprintln!("zendo: {err:#}");
+        Config::load_file().unwrap_or_default()
+    });
+    println!("{}", report::gather(&config, &Library::scan()));
 }

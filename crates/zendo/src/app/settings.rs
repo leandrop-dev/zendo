@@ -11,7 +11,7 @@ use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::config::{Config, Kept};
 use zendo_core::covers::{self, KeyCheck};
 use zendo_core::secrets::Key;
-use zendo_core::{Source, State};
+use zendo_core::{Source, State, launch, report};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking, format, key_id};
@@ -59,6 +59,38 @@ impl Zendo {
                     self.download_images()
                 } else {
                     Task::none()
+                }
+            }
+            Message::CopyReport => {
+                if self.diagnostics.gathering {
+                    return Task::none();
+                }
+                self.diagnostics.gathering = true;
+                self.diagnostics.note = None;
+                let config = self.config.clone();
+                let library = self.library.clone().unwrap_or_default();
+                Task::perform(
+                    blocking(move || Ok(report::gather(&config, &library))),
+                    Message::ReportReady,
+                )
+            }
+            Message::ReportReady(result) => {
+                self.diagnostics.gathering = false;
+                match result {
+                    Ok(text) => {
+                        let lines = text.lines().count();
+                        self.diagnostics.note =
+                            Some((format!("Copied the report: {lines} lines."), true));
+                        if self.persist {
+                            iced::clipboard::write(text)
+                        } else {
+                            Task::none()
+                        }
+                    }
+                    Err(err) => {
+                        self.diagnostics.note = Some((err, false));
+                        Task::none()
+                    }
                 }
             }
             Message::DownloadNow => {
@@ -184,6 +216,7 @@ impl Zendo {
                 self.protons_section(),
                 self.sources_section(),
                 files_section(self.config.install_dir()),
+                self.diagnostics_section(),
             ]
             .spacing(20)
             .padding(24)
@@ -253,6 +286,48 @@ impl Zendo {
             "Covers and wide images for games whose store has none. The key is \
              kept in the system keyring, or in your settings file, readable only \
              by you, when there is none.",
+            body,
+        )
+    }
+
+    fn diagnostics_section(&self) -> Element<'_, Message> {
+        let logs = launch::logs_dir().filter(|dir| dir.is_dir());
+        let mut body = column![
+            row![
+                button(
+                    text(if self.diagnostics.gathering {
+                        "Gathering…"
+                    } else {
+                        "Copy report"
+                    })
+                    .size(14)
+                    .font(BOLD)
+                )
+                .padding([8, 18])
+                .style(style::primary)
+                .on_press_maybe((!self.diagnostics.gathering).then_some(Message::CopyReport)),
+                button(text("Open launch logs").size(14))
+                    .padding([8, 14])
+                    .style(style::secondary)
+                    .on_press_maybe(
+                        logs.map(|dir| Message::Open(dir.to_string_lossy().into_owned()))
+                    ),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center)
+        ]
+        .spacing(10);
+        if let Some((note, good)) = &self.diagnostics.note {
+            body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
+        }
+        section(
+            "Diagnostics",
+            "A report of what Zendo found, to paste into a bug report: the system, the \
+             tools and their versions, the Protons, the settings (never the keys), \
+             whether each store is signed in (never the account), the library's \
+             counts, the Wine prefixes and the last three launches' logs. Your home \
+             folder shows as ~. Read it before you share it: a game's log can name \
+             more. `zendo report` prints the same, `zendo logs` lists the logs.",
             body,
         )
     }
@@ -390,6 +465,21 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
         ]
         .spacing(10),
     )
+}
+
+/// Settings' Diagnostics section.
+#[derive(Debug, Default)]
+pub(super) struct Diagnostics {
+    gathering: bool,
+    /// What happened to the last report, and whether it went well.
+    note: Option<(String, bool)>,
+}
+
+#[cfg(test)]
+impl Diagnostics {
+    pub(super) fn note(&self) -> Option<&(String, bool)> {
+        self.note.as_ref()
+    }
 }
 
 /// Where a key is kept, or why the keyring could not be used; nothing

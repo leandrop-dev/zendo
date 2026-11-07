@@ -1093,6 +1093,33 @@ Quick and fresh first:
    with Copy report (tools and engines found, versions, Protons,
    prefixes, recent launch logs), as Hikari has. It helps with every
    real-world check after.
+   Built 2026-11-07 [tentative until the user tries it]:
+   - `report.rs` gathers the report as text to paste: Zendo's version,
+     the system, desktop and each GPU's driver and PCI ids; Steam and
+     Heroic found; legendary, gogdl, nile, umu-run, gamescope, mangohud,
+     gamemoderun, 7-Zip, bsdtar, xdg-utils with their path and version
+     (`--version` where it is safe, five seconds at most, colours taken
+     out); the Protons and the default; the settings, each key only
+     "set" and where it is kept; each store signed in or not, from the
+     engine's files (nile's status for Amazon), never the account; the
+     library's counts per source and its problems; the Wine prefixes of
+     the Windows games Zendo starts, made or not; and the last 40 lines
+     of the last three launch logs. The home folder shows as `~`, and a
+     key's value is hidden should it be anywhere in the text.
+   - `zendo report` prints it and changes nothing: it reads the keys
+     as they are (`Config::load_as_is`), without moving one from the
+     file into the keyring. `zendo logs` lists the launch logs, latest
+     first (when, size, id, title); `zendo logs <id>` prints one.
+   - Settings' Diagnostics section: Copy report (gathered on a thread,
+     then on the clipboard, with how many lines) and Open launch logs.
+   Not in it [tentative]: mods (what each game has on and applied),
+   and Vulkan details (`vulkaninfo` is not always installed). Checked:
+   clippy and tests (dates, the home folder and keys hidden, a log's
+   last lines, colours out, versions asked, the copied note); the
+   report run here, without D-Bus so the keys stayed where they are,
+   and checked to hold no key and no home path. Not checked: the
+   section on screen, as opening the window would move the keys
+   before the user's own test.
 
 Groundwork before more screens:
 
@@ -1156,15 +1183,16 @@ Later:
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
   and checked by the user the same day. Item 2, the Rust review, fixed
   the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
-  API keys in the keyring, built the same day; next, item 4,
-  diagnostics.
+  API keys in the keyring, and item 4, diagnostics, built the same day;
+  next, item 5, languages.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"
   ~/.config/zendo/config.toml` should print 0, and `secret-tool search
   --all application zendo | grep "^label"` list both items (without
   printing the keys); covers and Nexus should still work. Then item 3
-  is [firm].
+  is [firm]. Item 4 the same visit: Settings' Diagnostics section, Copy
+  report and paste it somewhere to read; Open launch logs.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

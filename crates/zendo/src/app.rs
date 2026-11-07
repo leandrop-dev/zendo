@@ -52,6 +52,7 @@ use nexus::{NexusMessage, NexusState};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
+use settings::Diagnostics;
 use store::{StoreMessage, StoreState};
 use style::DIM;
 
@@ -181,6 +182,9 @@ enum Message {
     KeyChecked(Result<KeyCheck, String>),
     SetDownloadCovers(bool),
     DownloadNow,
+    /// Settings' Copy report: gathered on a thread, then copied.
+    CopyReport,
+    ReportReady(Result<String, String>),
     Account(AccountMessage),
     Download(DownloadMessage),
     Run(RunMessage),
@@ -262,6 +266,8 @@ struct Zendo {
     ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
     key: KeyForm,
+    /// Settings' Diagnostics section.
+    diagnostics: Diagnostics,
     accounts: Accounts,
     store: StoreState,
     /// Off in tests, so they never touch the user's files or the network.
@@ -299,6 +305,7 @@ impl Zendo {
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
             key: KeyForm::default(),
+            diagnostics: Diagnostics::default(),
             accounts: Accounts::default(),
             store: StoreState::default(),
             persist: true,
@@ -496,7 +503,9 @@ impl Zendo {
             | Message::CheckKey
             | Message::KeyChecked(_)
             | Message::SetDownloadCovers(_)
-            | Message::DownloadNow => self.update_settings(message),
+            | Message::DownloadNow
+            | Message::CopyReport
+            | Message::ReportReady(_) => self.update_settings(message),
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
@@ -1210,6 +1219,18 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_report_says_it_was_copied_or_why_not() {
+        let mut zendo = zendo_with(1, 1);
+        let _ = zendo.update(Message::ReportReady(Ok("# Zendo report\n\nline".into())));
+        assert_eq!(
+            zendo.diagnostics.note(),
+            Some(&("Copied the report: 3 lines.".to_owned(), true))
+        );
+        let _ = zendo.update(Message::ReportReady(Err("broke".into())));
+        assert_eq!(zendo.diagnostics.note(), Some(&("broke".to_owned(), false)));
+    }
 
     #[test]
     fn work_that_panics_gives_its_fallback_not_a_crash() {

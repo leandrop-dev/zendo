@@ -161,7 +161,17 @@ impl Config {
     /// When the file exists but cannot be read or is not valid, or a key
     /// moved into the keyring cannot be taken out of the file.
     pub fn load() -> anyhow::Result<Self> {
-        Self::load_from(Self::path().as_deref(), &secrets::System)
+        Self::load_with(Self::path().as_deref(), &secrets::System, true)
+    }
+
+    /// As [`Config::load`], but a key found in the file stays there: for a
+    /// report, which changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// When the file exists but cannot be read or is not valid.
+    pub fn load_as_is() -> anyhow::Result<Self> {
+        Self::load_with(Self::path().as_deref(), &secrets::System, false)
     }
 
     /// The settings file alone, without asking the keyring: for work that
@@ -188,7 +198,18 @@ impl Config {
         self.save_to(&path, &secrets::System)
     }
 
+    #[cfg(test)]
     fn load_from(path: Option<&Path>, keyring: &dyn Keyring) -> anyhow::Result<Self> {
+        Self::load_with(path, keyring, true)
+    }
+
+    /// The settings and the keys; `move_keys` moves those in the file into
+    /// the keyring.
+    fn load_with(
+        path: Option<&Path>,
+        keyring: &dyn Keyring,
+        move_keys: bool,
+    ) -> anyhow::Result<Self> {
         let Some(path) = path else {
             return Ok(Self::default());
         };
@@ -198,6 +219,10 @@ impl Config {
             let value = config.key(key).map(str::to_owned);
             let held = &mut config.held[key as usize];
             if let Kept::File(_) = held.kept {
+                if !move_keys {
+                    held.saved = value;
+                    continue;
+                }
                 // Out of the file and into the keyring, when it takes it.
                 match keyring.set(key, value.as_deref()) {
                     Ok(()) => {
@@ -399,6 +424,23 @@ mod tests {
         assert_eq!(keyring.keys.borrow()["nexus"], "nx");
         assert!(!scratch.text().contains("nexus_key"), "{}", scratch.text());
         assert!(scratch.text().contains("download_covers = false"));
+    }
+
+    #[test]
+    fn reading_as_is_moves_nothing() {
+        let scratch = Scratch::new("as-is");
+        fs::write(&scratch.0, "nexus_key = \"nx\"\n").unwrap();
+        let keyring = Memory::default();
+        keyring
+            .keys
+            .borrow_mut()
+            .insert("steamgriddb", "sgdb".into());
+        let config = Config::load_with(Some(&scratch.0), &keyring, false).unwrap();
+        assert_eq!(config.key(Key::Nexus), Some("nx"));
+        assert_eq!(config.kept(Key::Nexus), &Kept::File(None));
+        assert_eq!(config.key(Key::SteamGridDb), Some("sgdb"));
+        assert!(!keyring.keys.borrow().contains_key("nexus"));
+        assert_eq!(scratch.text(), "nexus_key = \"nx\"\n");
     }
 
     #[test]

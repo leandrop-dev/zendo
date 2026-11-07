@@ -217,6 +217,21 @@ impl Store {
         }
     }
 
+    /// Whether someone is signed in, from the engine's own files (nile's
+    /// status for Amazon), without asking the store or naming the account.
+    ///
+    /// # Errors
+    ///
+    /// When nile is missing or fails.
+    pub fn signed_in(self) -> anyhow::Result<bool> {
+        let file = match self {
+            Self::Epic => "user.json",
+            Self::Gog => "auth.json",
+            Self::Amazon => return Ok(self.account()?.is_some()),
+        };
+        Ok(self.dir().is_some_and(|dir| dir.join(file).is_file()))
+    }
+
     /// gogdl's current tokens, refreshed when they ran out; `None` when no
     /// one is signed in.
     pub(crate) fn gog_token(self) -> anyhow::Result<Option<GogCredentials>> {

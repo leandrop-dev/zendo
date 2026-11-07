@@ -31,17 +31,40 @@ pub fn parse_utc(text: &str) -> Option<u64> {
     u64::try_from(seconds).ok()
 }
 
-/// The year (UTC) of a moment in Unix seconds (Howard Hinnant's
-/// `civil_from_days`).
+/// The year (UTC) of a moment in Unix seconds.
 pub fn year_of(seconds: i64) -> i64 {
-    let days = seconds.div_euclid(86_400) + 719_468;
+    civil_from_days(seconds.div_euclid(86_400)).0
+}
+
+/// A moment in Unix seconds as `2026-11-07 14:05 UTC`.
+pub fn utc(seconds: u64) -> String {
+    let seconds = i64::try_from(seconds).unwrap_or(i64::MAX);
+    let (year, month, day) = civil_from_days(seconds.div_euclid(86_400));
+    let minutes = seconds.rem_euclid(86_400) / 60;
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02} UTC",
+        minutes / 60,
+        minutes % 60
+    )
+}
+
+/// The date of a day counted from 1970-01-01, in the proleptic Gregorian
+/// calendar (Howard Hinnant's `civil_from_days`).
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let days = days + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days - era * 146_097;
     let year_of_era =
         (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_from_march = (5 * day_of_year + 2) / 153;
-    era * 400 + year_of_era + i64::from(month_from_march >= 10)
+    let day = day_of_year - (153 * month_from_march + 2) / 5 + 1;
+    let month = if month_from_march < 10 {
+        month_from_march + 3
+    } else {
+        month_from_march - 9
+    };
+    (era * 400 + year_of_era + i64::from(month <= 2), month, day)
 }
 
 /// Days since 1970-01-01 in the proleptic Gregorian calendar (Howard
@@ -78,5 +101,14 @@ mod tests {
         assert_eq!(year_of(915_148_800), 1999);
         assert_eq!(year_of(946_684_799), 1999);
         assert_eq!(year_of(-1), 1969);
+    }
+
+    #[test]
+    fn writes_dates_for_people() {
+        assert_eq!(utc(0), "1970-01-01 00:00 UTC");
+        assert_eq!(utc(951_868_800), "2000-03-01 00:00 UTC");
+        assert_eq!(utc(1_793_927_320), "2026-11-06 01:08 UTC");
+        assert_eq!(utc(946_684_799), "1999-12-31 23:59 UTC");
+        assert_eq!(utc(951_782_400), "2000-02-29 00:00 UTC");
     }
 }
