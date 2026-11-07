@@ -6408,6 +6408,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "keyvalues-parser",
+ "roxmltree",
  "serde",
  "serde_json",
  "shlex",

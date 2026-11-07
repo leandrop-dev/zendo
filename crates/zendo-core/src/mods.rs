@@ -10,6 +10,8 @@
 //!   orders and the mods on in each;
 //! - `downloads/`: files from Nexus while they download, deleted once
 //!   unpacked;
+//! - `installers/<mod>/`: a mod's archive as unpacked when it has a FOMOD
+//!   installer, to choose its options again;
 //! - `files/<mod>/`: each mod as its archive held it;
 //! - `applied.json`: every file and folder Apply placed, so Back to vanilla
 //!   removes exactly those;
@@ -38,6 +40,7 @@ use std::time::SystemTime;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::fomod::{self, Installer, Present, Selection};
 use crate::nexus::{self, Files};
 use crate::{Game, Source, launch, paths, protondb};
 
@@ -338,14 +341,110 @@ struct Entry {
     /// The file on Nexus it came from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     nexus: Option<NexusSource>,
+    /// Built by its FOMOD installer, kept in `installers/<id>/`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    installer: bool,
+    /// The installer's options chosen, as `step/group/option`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    chosen: Vec<String>,
 }
 
 impl Entry {
     /// What Apply put in, to tell when the mod's files changed since.
     fn stamp(&self) -> String {
         let file = self.nexus.as_ref().map_or(0, |nexus| nexus.file_id);
-        format!("{}#{}#{file}", self.id, self.source)
+        let mut stamp = format!("{}#{}#{file}", self.id, self.source);
+        if !self.chosen.is_empty() {
+            stamp.push('#');
+            stamp.push_str(&self.chosen.join("|"));
+        }
+        stamp
     }
+}
+
+/// A mod whose archive has a FOMOD installer, waiting for the options the
+/// user chooses.
+#[derive(Debug, Clone)]
+pub struct Pending {
+    /// The mod's name.
+    pub name: String,
+    pub installer: Installer,
+    /// What file conditions see.
+    pub present: Present,
+    /// The options chosen last time, for an update or Options….
+    pub chosen: Vec<String>,
+    /// The folder holding `fomod/`, where the installer's paths start.
+    root: PathBuf,
+    what: PendingKind,
+}
+
+#[derive(Debug, Clone)]
+enum PendingKind {
+    /// A new mod, unpacked in `raw` (`files/.adding-<id>`).
+    New {
+        id: String,
+        raw: PathBuf,
+        source: String,
+        nexus: Option<NexusSource>,
+    },
+    /// A newer archive for a mod, unpacked in `raw`.
+    Update {
+        id: String,
+        raw: PathBuf,
+        source: String,
+        nexus: Option<NexusSource>,
+    },
+    /// The mod's kept installer, run again.
+    Options { id: String },
+}
+
+impl Pending {
+    /// A picture the installer names, found whatever its case.
+    #[must_use]
+    pub fn image(&self, path: &str) -> Option<PathBuf> {
+        let path = fomod::normalise(path);
+        if path.is_empty() || !fomod::safe(&path) {
+            return None;
+        }
+        let found = self.root.join(case_in(&self.root, Path::new(&path)));
+        found.is_file().then_some(found)
+    }
+
+    /// Whether it replaces a mod (an update or Options…) rather than adds.
+    #[must_use]
+    pub fn replaces(&self) -> bool {
+        !matches!(self.what, PendingKind::New { .. })
+    }
+
+    fn id(&self) -> &str {
+        match &self.what {
+            PendingKind::New { id, .. }
+            | PendingKind::Update { id, .. }
+            | PendingKind::Options { id } => id,
+        }
+    }
+}
+
+/// A mod waiting for an installer, with nothing on disk, for the window's
+/// tests.
+#[doc(hidden)]
+#[must_use]
+pub fn test_pending(name: &str, installer: Installer) -> Pending {
+    Pending {
+        name: name.to_owned(),
+        installer,
+        present: Present::default(),
+        chosen: Vec::new(),
+        root: PathBuf::new(),
+        what: PendingKind::Options { id: String::new() },
+    }
+}
+
+/// What adding an archive came to: the mod in, or its installer to run.
+#[derive(Debug, Clone)]
+pub enum Added {
+    Done(Overview),
+    Choose(Box<Pending>),
 }
 
 /// The file on Nexus Mods a mod came from.
@@ -412,6 +511,8 @@ pub struct ModInfo {
     pub enabled: bool,
     pub files: usize,
     pub nexus: Option<NexusSource>,
+    /// Built by a FOMOD installer, whose options can be chosen again.
+    pub installer: bool,
     /// Mods before it whose files it replaces, and how many.
     pub wins: Vec<(String, usize)>,
     /// Mods after it that replace its files, and how many.
@@ -480,11 +581,62 @@ pub fn overview(game: &Game) -> anyhow::Result<Option<Overview>> {
 /// # Errors
 ///
 /// When it cannot be unpacked, is empty, holds links, or cannot be kept.
-pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Overview> {
+pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Added> {
     let _lock = lock();
     let place = place(game)?;
-    place.add(archive, None, None)?;
+    match place.take_in(archive, None, None, None)? {
+        Some(pending) => Ok(Added::Choose(Box::new(pending))),
+        None => Ok(Added::Done(place.overview()?)),
+    }
+}
+
+/// Builds a mod from its installer with the options chosen.
+///
+/// # Errors
+///
+/// When the options install nothing, a path leaves the mod, or the files
+/// cannot be copied or kept.
+pub fn install(game: &Game, pending: &Pending, selection: &Selection) -> anyhow::Result<Overview> {
+    let _lock = lock();
+    let place = place(game)?;
+    place.install(pending, selection)?;
     place.overview()
+}
+
+/// Drops a mod waiting for its installer's options.
+pub fn cancel_install(pending: &Pending) {
+    match &pending.what {
+        PendingKind::New { raw, .. } | PendingKind::Update { raw, .. } => {
+            let _ = fs::remove_dir_all(raw);
+        }
+        PendingKind::Options { .. } => {}
+    }
+}
+
+/// A mod's installer again, to choose other options.
+///
+/// # Errors
+///
+/// When the mod has no installer kept or it cannot be read.
+pub fn reinstall(game: &Game, id: &str) -> anyhow::Result<Pending> {
+    let _lock = lock();
+    let place = place(game)?;
+    let list = place.list()?;
+    let entry = list
+        .mods
+        .iter()
+        .find(|entry| entry.id == id)
+        .context("the mod is no longer in the list")?;
+    let raw = place.installers().join(id);
+    let root = find_installer(&raw).context("Zendo no longer has this mod's installer")?;
+    Ok(Pending {
+        name: entry.name.clone(),
+        installer: read_installer(&root)?,
+        present: place.present(&list),
+        chosen: entry.chosen.clone(),
+        root,
+        what: PendingKind::Options { id: id.to_owned() },
+    })
 }
 
 /// Adds a file downloaded from Nexus: in place of the mod it updates (kept
@@ -499,11 +651,15 @@ pub fn add_from_nexus(
     fetched: &nexus::Fetched,
     domain: &str,
     mod_id: u64,
-) -> anyhow::Result<(Overview, bool)> {
+) -> anyhow::Result<(Added, bool)> {
     let _lock = lock();
     let place = place(game)?;
-    let updated = place.add_fetched(fetched, domain, mod_id)?;
-    Ok((place.overview()?, updated))
+    let (pending, updated) = place.add_fetched(fetched, domain, mod_id)?;
+    let added = match pending {
+        Some(pending) => Added::Choose(Box::new(pending)),
+        None => Added::Done(place.overview()?),
+    };
+    Ok((added, updated))
 }
 
 /// The mod this file updates: the same mod on Nexus, from a file this one
@@ -608,10 +764,11 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
         }
         Ok(())
     })?;
-    let files = place.files().join(id);
-    if !id.is_empty() && files.is_dir() {
-        fs::remove_dir_all(&files)
-            .with_context(|| format!("could not delete {}", files.display()))?;
+    for kept in [place.files().join(id), place.installers().join(id)] {
+        if !id.is_empty() && kept.is_dir() {
+            fs::remove_dir_all(&kept)
+                .with_context(|| format!("could not delete {}", kept.display()))?;
+        }
     }
     place.overview()
 }
@@ -726,6 +883,9 @@ impl Place {
     fn backup(&self) -> PathBuf {
         self.data.join("backup")
     }
+    fn installers(&self) -> PathBuf {
+        self.data.join("installers")
+    }
     fn overwrite(&self) -> PathBuf {
         self.data.join("overwrite")
     }
@@ -789,6 +949,7 @@ impl Place {
                 enabled: entry.enabled,
                 files: files.len(),
                 nexus: entry.nexus.clone(),
+                installer: entry.installer,
                 wins: Vec::new(),
                 loses: Vec::new(),
             });
@@ -885,40 +1046,136 @@ impl Place {
         }
     }
 
-    fn add(
+    /// Unpacks an archive as a new mod, or in place of `updates`. With a
+    /// FOMOD installer it waits for the options, unpacked; otherwise it is in.
+    fn take_in(
         &self,
         archive: &Path,
         name: Option<String>,
         nexus: Option<NexusSource>,
-    ) -> anyhow::Result<String> {
+        updates: Option<&Entry>,
+    ) -> anyhow::Result<Option<Pending>> {
         let list = self.list()?;
         let name = name.unwrap_or_else(|| archive_name(archive));
-        let id = new_id(&name, &list.mods);
+        let id = match updates {
+            Some(entry) => entry.id.clone(),
+            None => self.free_id(&name, &list),
+        };
+        let source = file_name(archive);
         let (unpacked, root) = self.unpack_new(archive, &id)?;
-        let kept = self.files().join(&id);
-        fs::rename(&unpacked, &kept)
-            .with_context(|| format!("could not keep the mod in {}", kept.display()))?;
+        if let Some(installer_root) = find_installer(&unpacked) {
+            let installer = match read_installer(&installer_root) {
+                Ok(installer) => installer,
+                Err(err) => {
+                    let _ = fs::remove_dir_all(&unpacked);
+                    return Err(err);
+                }
+            };
+            let what = match updates {
+                Some(_) => PendingKind::Update {
+                    id,
+                    raw: unpacked,
+                    source,
+                    nexus,
+                },
+                None => PendingKind::New {
+                    id,
+                    raw: unpacked,
+                    source,
+                    nexus,
+                },
+            };
+            return Ok(Some(Pending {
+                name: updates.map_or(name, |entry| entry.name.clone()),
+                installer,
+                present: self.present(&list),
+                chosen: updates
+                    .map(|entry| entry.chosen.clone())
+                    .unwrap_or_default(),
+                root: installer_root,
+                what,
+            }));
+        }
+        self.put_in(&id, &unpacked)?;
+        let _ = fs::remove_dir_all(self.installers().join(&id));
         self.change(|list| {
-            list.mods.push(Entry {
-                id: id.clone(),
-                name,
-                enabled: true,
-                root,
-                source: file_name(archive),
-                nexus,
-            });
+            match list.mods.iter_mut().find(|entry| entry.id == id) {
+                Some(entry) => {
+                    entry.root = root;
+                    entry.source = source;
+                    entry.nexus = nexus;
+                    entry.installer = false;
+                    entry.chosen.clear();
+                }
+                None => list.mods.push(Entry {
+                    id: id.clone(),
+                    name,
+                    enabled: true,
+                    root,
+                    source,
+                    nexus,
+                    installer: false,
+                    chosen: Vec::new(),
+                }),
+            }
             Ok(())
         })?;
-        Ok(id)
+        Ok(None)
     }
 
-    /// [`add_from_nexus`]'s work; says whether it was an update.
+    /// An id for a new mod, not in the list nor waiting in `files/`.
+    fn free_id(&self, name: &str, list: &List) -> String {
+        let mut taken = list.mods.clone();
+        loop {
+            let id = new_id(name, &taken);
+            let files = self.files();
+            if !files.join(&id).exists() && !files.join(format!(".adding-{id}")).exists() {
+                return id;
+            }
+            taken.push(Entry {
+                id,
+                name: String::new(),
+                enabled: false,
+                root: String::new(),
+                source: String::new(),
+                nexus: None,
+                installer: false,
+                chosen: Vec::new(),
+            });
+        }
+    }
+
+    /// Puts a folder in as `files/<id>`, the mod's files kept before
+    /// deleted once it is in.
+    fn put_in(&self, id: &str, folder: &Path) -> anyhow::Result<()> {
+        let kept = self.files().join(id);
+        let old = self.files().join(format!(".old-{id}"));
+        if old.exists() {
+            fs::remove_dir_all(&old)
+                .with_context(|| format!("could not clear {}", old.display()))?;
+        }
+        if kept.exists() {
+            fs::rename(&kept, &old)
+                .with_context(|| format!("could not move {} aside", kept.display()))?;
+        }
+        if let Err(err) = fs::rename(folder, &kept) {
+            let _ = fs::rename(&old, &kept);
+            let _ = fs::remove_dir_all(folder);
+            return Err(err)
+                .with_context(|| format!("could not keep the mod in {}", kept.display()));
+        }
+        let _ = fs::remove_dir_all(&old);
+        Ok(())
+    }
+
+    /// [`add_from_nexus`]'s work: the installer to run, if any, and whether
+    /// it updates a mod.
     fn add_fetched(
         &self,
         fetched: &nexus::Fetched,
         domain: &str,
         mod_id: u64,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<(Option<Pending>, bool)> {
         let source = NexusSource {
             domain: domain.to_owned(),
             mod_id,
@@ -926,19 +1183,185 @@ impl Place {
             version: fetched.file.version.clone().unwrap_or_default(),
         };
         let list = self.list()?;
-        let updates = updated_entry(&list, &source, &fetched.files).map(|entry| entry.id.clone());
-        let result = match &updates {
-            Some(id) => self.replace(id, &fetched.archive, source),
-            None => self
-                .add(
-                    &fetched.archive,
-                    Some(fetched.mod_name.clone()),
-                    Some(source),
-                )
-                .map(|_| ()),
-        };
+        let updates = updated_entry(&list, &source, &fetched.files).cloned();
+        let result = self.take_in(
+            &fetched.archive,
+            Some(fetched.mod_name.clone()),
+            Some(source),
+            updates.as_ref(),
+        );
         let _ = fs::remove_file(&fetched.archive);
-        result.map(|()| updates.is_some())
+        Ok((result?, updates.is_some()))
+    }
+
+    /// What file conditions see: the mod folder's files (a few levels deep)
+    /// and those of the mods that are on.
+    fn present(&self, list: &List) -> Present {
+        let (folder, _) = self.folder(list);
+        let mut files = HashSet::new();
+        listed(&self.game_dir.join(&folder), Path::new(""), 4, &mut files);
+        for entry in list.mods.iter().filter(|entry| entry.enabled) {
+            for file in walk(&self.mod_root(entry)).unwrap_or_default() {
+                files.insert(fomod::normalise(&file.to_string_lossy()).to_lowercase());
+            }
+        }
+        Present { files }
+    }
+
+    /// [`install`]'s work.
+    fn install(&self, pending: &Pending, selection: &Selection) -> anyhow::Result<()> {
+        let id = pending.id().to_owned();
+        let installs = pending.installer.files(selection, &pending.present);
+        let chosen = pending.installer.chosen(selection, &pending.present);
+        let built = self.files().join(format!(".built-{id}"));
+        if built.exists() {
+            fs::remove_dir_all(&built)
+                .with_context(|| format!("could not clear {}", built.display()))?;
+        }
+        if let Err(err) = self.build(&pending.root, &installs, &built) {
+            let _ = fs::remove_dir_all(&built);
+            return Err(err);
+        }
+        self.put_in(&id, &built)?;
+        let (source, nexus) = match &pending.what {
+            PendingKind::New {
+                raw, source, nexus, ..
+            }
+            | PendingKind::Update {
+                raw, source, nexus, ..
+            } => {
+                let kept = self.installers().join(&id);
+                if kept.exists() {
+                    fs::remove_dir_all(&kept)
+                        .with_context(|| format!("could not clear {}", kept.display()))?;
+                }
+                fs::create_dir_all(self.installers())?;
+                fs::rename(raw, &kept).with_context(|| {
+                    format!("could not keep the installer in {}", kept.display())
+                })?;
+                (Some(source.clone()), Some(nexus.clone()))
+            }
+            PendingKind::Options { .. } => (None, None),
+        };
+        self.change(|list| {
+            match list.mods.iter_mut().find(|entry| entry.id == id) {
+                Some(entry) => {
+                    entry.root = String::new();
+                    entry.installer = true;
+                    entry.chosen = chosen;
+                    if let Some(source) = source {
+                        entry.source = source;
+                    }
+                    if let Some(nexus) = nexus {
+                        entry.nexus = nexus;
+                    }
+                }
+                None => list.mods.push(Entry {
+                    id: id.clone(),
+                    name: pending.name.clone(),
+                    enabled: true,
+                    root: String::new(),
+                    source: source.unwrap_or_default(),
+                    nexus: nexus.flatten(),
+                    installer: true,
+                    chosen,
+                }),
+            }
+            Ok(())
+        })
+    }
+
+    /// Copies what an installer's options install from `root` into `into`,
+    /// lowest priority first. Sources are found whatever their case.
+    fn build(&self, root: &Path, installs: &[fomod::Install], into: &Path) -> anyhow::Result<()> {
+        let all = walk(root).context("could not read the unpacked archive")?;
+        let index: Vec<(String, &PathBuf)> = all
+            .iter()
+            .map(|path| {
+                (
+                    fomod::normalise(&path.to_string_lossy()).to_lowercase(),
+                    path,
+                )
+            })
+            .collect();
+        fs::create_dir_all(into).with_context(|| format!("could not make {}", into.display()))?;
+        let mut placed = 0;
+        let mut missing = Vec::new();
+        for install in installs {
+            let Some(target) = install.target().filter(|_| fomod::safe(&install.source)) else {
+                bail!(
+                    "the installer puts {} outside the mod, which Zendo does not allow",
+                    install.source
+                );
+            };
+            let source = install.source.to_lowercase();
+            let copies: Vec<(PathBuf, PathBuf)> = if install.folder {
+                let depth = if source.is_empty() {
+                    0
+                } else {
+                    source.split('/').count()
+                };
+                let prefix = if source.is_empty() {
+                    String::new()
+                } else {
+                    format!("{source}/")
+                };
+                index
+                    .iter()
+                    .filter(|(lower, _)| {
+                        lower.starts_with(&prefix)
+                            && !(source.is_empty() && lower.starts_with("fomod/"))
+                    })
+                    .map(|(_, path)| {
+                        let rest: PathBuf = path.components().skip(depth).collect();
+                        (root.join(path), Path::new(&target).join(rest))
+                    })
+                    .collect()
+            } else {
+                index
+                    .iter()
+                    .filter(|(lower, _)| *lower == source)
+                    .map(|(_, path)| (root.join(path), PathBuf::from(&target)))
+                    .take(1)
+                    .collect()
+            };
+            if copies.is_empty() {
+                missing.push(install.source.clone());
+            }
+            for (from, to) in copies {
+                let to = if self.any_case {
+                    into.join(case_in(into, &to))
+                } else {
+                    into.join(to)
+                };
+                if let Some(parent) = to.parent() {
+                    fs::create_dir_all(parent)
+                        .with_context(|| format!("could not make {}", parent.display()))?;
+                }
+                if to.is_dir() {
+                    bail!(
+                        "the installer puts a file where a folder is: {}",
+                        to.display()
+                    );
+                }
+                if to.exists() {
+                    fs::remove_file(&to)?;
+                }
+                fs::copy(&from, &to)
+                    .with_context(|| format!("could not copy {}", from.display()))?;
+                placed += 1;
+            }
+        }
+        if placed == 0 {
+            if missing.is_empty() {
+                bail!("the options chosen install no files");
+            }
+            bail!(
+                "the installer names files its archive does not have: {}",
+                missing.join(", ")
+            );
+        }
+        Ok(())
     }
 
     fn change_profiles(&self, change: &ProfileChange, apply: bool) -> anyhow::Result<()> {
@@ -957,36 +1380,6 @@ impl Place {
             self.apply()?;
         }
         Ok(())
-    }
-
-    /// Puts a newer archive's files in place of a mod's.
-    fn replace(&self, id: &str, archive: &Path, nexus: NexusSource) -> anyhow::Result<()> {
-        let (unpacked, root) = self.unpack_new(archive, id)?;
-        let kept = self.files().join(id);
-        let old = self.files().join(format!(".old-{id}"));
-        if old.exists() {
-            fs::remove_dir_all(&old)
-                .with_context(|| format!("could not clear {}", old.display()))?;
-        }
-        if kept.exists() {
-            fs::rename(&kept, &old)
-                .with_context(|| format!("could not move {} aside", kept.display()))?;
-        }
-        if let Err(err) = fs::rename(&unpacked, &kept) {
-            let _ = fs::rename(&old, &kept);
-            let _ = fs::remove_dir_all(&unpacked);
-            return Err(err)
-                .with_context(|| format!("could not keep the mod in {}", kept.display()));
-        }
-        let _ = fs::remove_dir_all(&old);
-        self.change(|list| {
-            if let Some(entry) = list.mods.iter_mut().find(|entry| entry.id == id) {
-                entry.root = root;
-                entry.source = file_name(archive);
-                entry.nexus = Some(nexus);
-            }
-            Ok(())
-        })
     }
 
     /// The folder inside an unpacked archive whose contents are the mod.
@@ -1124,27 +1517,11 @@ impl Place {
     /// For a Windows game, the path as the folders and files already there
     /// spell it, case aside.
     fn resolve_case(&self, path: &Path) -> PathBuf {
-        if !self.any_case {
-            return path.to_path_buf();
+        if self.any_case {
+            case_in(&self.game_dir, path)
+        } else {
+            path.to_path_buf()
         }
-        let mut resolved = PathBuf::new();
-        for part in path.components() {
-            let name = part.as_os_str();
-            let found = fs::read_dir(self.game_dir.join(&resolved))
-                .ok()
-                .and_then(|entries| {
-                    entries
-                        .flatten()
-                        .map(|entry| entry.file_name())
-                        .find(|entry| {
-                            entry
-                                .to_string_lossy()
-                                .eq_ignore_ascii_case(&name.to_string_lossy())
-                        })
-                });
-            resolved.push(found.as_deref().unwrap_or(name));
-        }
-        resolved
     }
 
     fn save_manifest(&self, manifest: &Manifest) -> anyhow::Result<()> {
@@ -1257,6 +1634,85 @@ fn walk(root: &Path) -> io::Result<Vec<PathBuf>> {
     }
     found.sort();
     Ok(found)
+}
+
+/// A path under `base` as the folders and files already there spell it,
+/// case aside; the parts not there yet as given.
+fn case_in(base: &Path, path: &Path) -> PathBuf {
+    let mut resolved = PathBuf::new();
+    for part in path.components() {
+        let name = part.as_os_str();
+        let found = fs::read_dir(base.join(&resolved)).ok().and_then(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name())
+                .find(|entry| {
+                    entry
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case(&name.to_string_lossy())
+                })
+        });
+        resolved.push(found.as_deref().unwrap_or(name));
+    }
+    resolved
+}
+
+/// The files under a folder, lowercase, `depth` levels down at most, links
+/// left out: for file conditions, so a game's own folder may be large.
+fn listed(root: &Path, at: &Path, depth: usize, found: &mut HashSet<String>) {
+    let Ok(entries) = fs::read_dir(root.join(at)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        let path = at.join(entry.file_name());
+        if kind.is_dir() && depth > 0 {
+            listed(root, &path, depth - 1, found);
+        } else if kind.is_file() {
+            found.insert(fomod::normalise(&path.to_string_lossy()).to_lowercase());
+        }
+    }
+}
+
+/// The folder holding `fomod/ModuleConfig.xml`, any case, at most three
+/// folders down.
+fn find_installer(unpacked: &Path) -> Option<PathBuf> {
+    fn look(dir: &Path, depth: usize) -> Option<PathBuf> {
+        let (dirs, _) = entries(dir);
+        if let Some(fomod) = dirs.iter().find(|name| name.eq_ignore_ascii_case("fomod")) {
+            let (_, files) = entries(&dir.join(fomod));
+            if files
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("ModuleConfig.xml"))
+            {
+                return Some(dir.to_path_buf());
+            }
+        }
+        if depth == 0 {
+            return None;
+        }
+        dirs.iter()
+            .find_map(|name| look(&dir.join(name), depth - 1))
+    }
+    look(unpacked, 3)
+}
+
+fn read_installer(root: &Path) -> anyhow::Result<Installer> {
+    let (dirs, _) = entries(root);
+    let fomod = dirs
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case("fomod"))
+        .context("the installer's folder is gone")?;
+    let (_, files) = entries(&root.join(fomod));
+    let config = files
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case("ModuleConfig.xml"))
+        .context("the installer's ModuleConfig.xml is gone")?;
+    let bytes = fs::read(root.join(fomod).join(config))
+        .context("could not read the installer's ModuleConfig.xml")?;
+    Installer::parse(&bytes).context("its FOMOD installer could not be read")
 }
 
 /// A folder's subfolders and files, by name.
@@ -1417,10 +1873,18 @@ mod tests {
                     root: String::new(),
                     source: String::new(),
                     nexus: None,
+                    installer: false,
+                    chosen: Vec::new(),
                 });
                 Ok(())
             })
             .unwrap();
+    }
+
+    /// Adds an archive with no installer; its mod's id.
+    fn add_archive(place: &Place, archive: &Path) -> String {
+        assert!(place.take_in(archive, None, None, None).unwrap().is_none());
+        place.list().unwrap().mods.last().unwrap().id.clone()
     }
 
     fn read(path: &Path) -> Option<String> {
@@ -1583,7 +2047,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let id = place.add(&archive, None, None).unwrap();
+        let id = add_archive(&place, &archive);
         assert_eq!(id, "bepinex-win-x64-5-4-23-2");
         let overview = place.overview().unwrap();
         assert_eq!(overview.mods[0].name, "BepInEx_win_x64_5.4.23.2");
@@ -1600,7 +2064,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let err = place.add(&linked, None, None).unwrap_err();
+        let err = place.take_in(&linked, None, None, None).unwrap_err();
         assert!(format!("{err:#}").contains("links"), "{err:#}");
         assert_eq!(place.overview().unwrap().mods.len(), 1);
         assert_eq!(entries(&place.files()).0, vec![id]);
@@ -1738,6 +2202,195 @@ mod tests {
         assert_eq!(read(&file), None);
     }
 
+    /// A tar of `files` (path, text) in a folder made for it.
+    fn tar(scratch: &Scratch, name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let source = scratch.0.join(format!("source-{name}"));
+        for (path, text) in files {
+            write(&source.join(path), text);
+        }
+        let archive = scratch.0.join(format!("{name}.tar"));
+        let status = Command::new("bsdtar")
+            .arg("-cf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&source)
+            .arg(".")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        archive
+    }
+
+    const INSTALLER: &str = r#"<config>
+      <moduleName>Body Mod</moduleName>
+      <requiredInstallFiles><folder source="core" destination=""/></requiredInstallFiles>
+      <installSteps><installStep name="Body"><optionalFileGroups>
+        <group name="Pick" type="SelectExactlyOne"><plugins order="Explicit">
+          <plugin name="Slim"><files><folder source="Slim" destination="Meshes"/></files>
+            <typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+          <plugin name="Strong"><files><folder source="Strong" destination="meshes"/></files>
+            <typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+        </plugins></group>
+      </optionalFileGroups></installStep></installSteps>
+    </config>"#;
+
+    #[test]
+    fn an_installer_builds_the_mod_from_the_options_chosen() {
+        if launch::which("bsdtar").is_none() {
+            return;
+        }
+        let scratch = Scratch::new("fomod");
+        let place = scratch.place(None, true);
+        write(&place.game_dir.join("Meshes/game.nif"), "game");
+        let files = [
+            ("Body Mod 1.0/FOMOD/moduleconfig.xml", INSTALLER),
+            ("Body Mod 1.0/Core/body.esp", "plugin"),
+            ("Body Mod 1.0/slim/body.nif", "slim"),
+            ("Body Mod 1.0/Strong/body.nif", "strong"),
+        ];
+        let archive = tar(&scratch, "body", &files);
+        let pending = place.take_in(&archive, None, None, None).unwrap().unwrap();
+        assert_eq!(pending.installer.name, "Body Mod");
+        assert!(pending.present.files.contains("meshes/game.nif"));
+        assert!(!pending.replaces());
+        assert!(
+            place.list().unwrap().mods.is_empty(),
+            "not in until installed"
+        );
+
+        // Cancel leaves nothing.
+        cancel_install(&pending);
+        assert_eq!(entries(&place.files()), (Vec::new(), Vec::new()));
+
+        let pending = place.take_in(&archive, None, None, None).unwrap().unwrap();
+        let mut selection = pending.installer.default_selection(&pending.present);
+        assert_eq!(selection[0][0], [true, false], "the first must be on");
+        place.install(&pending, &selection).unwrap();
+        let id = place.list().unwrap().mods[0].id.clone();
+        let built = place.files().join(&id);
+        assert_eq!(read(&built.join("body.esp")).as_deref(), Some("plugin"));
+        assert_eq!(
+            read(&built.join("Meshes/body.nif")).as_deref(),
+            Some("slim")
+        );
+        assert!(find_installer(&place.installers().join(&id)).is_some());
+        let overview = place.overview().unwrap();
+        assert!(overview.mods[0].installer);
+        assert_eq!(overview.mods[0].files, 2);
+        place.apply().unwrap();
+        assert_eq!(
+            read(&place.game_dir.join("Meshes/body.nif")).as_deref(),
+            Some("slim")
+        );
+
+        // Options…: Strong now, whose folder the installer spells
+        // `meshes`; Apply puts it in the game's `Meshes`, a Windows game.
+        let again = reinstall_at(&place, &id);
+        assert!(again.replaces());
+        let mut chosen = again
+            .installer
+            .selection_from(&again.chosen, &again.present);
+        assert_eq!(chosen[0][0], [true, false], "last time's options");
+        again
+            .installer
+            .toggle(&mut chosen, 0, 0, 1, true, &again.present);
+        place.install(&again, &chosen).unwrap();
+        assert_eq!(
+            read(&built.join("meshes/body.nif")).as_deref(),
+            Some("strong")
+        );
+        assert_eq!(entries(&built).0, ["meshes"], "the slim files are gone");
+        assert_eq!(place.overview().unwrap().applied, Applied::Changed);
+        place.apply().unwrap();
+        assert_eq!(
+            read(&place.game_dir.join("Meshes/body.nif")).as_deref(),
+            Some("strong")
+        );
+        assert!(place.installers().join(&id).is_dir(), "kept for next time");
+
+        // An installer that climbs out of the mod is refused.
+        selection = again.installer.default_selection(&again.present);
+        let evil = INSTALLER.replace(r#"destination="Meshes""#, r#"destination="..\..\evil""#);
+        let evil_archive = tar(
+            &scratch,
+            "evil",
+            &[
+                ("fomod/ModuleConfig.xml", evil.as_str()),
+                ("Slim/body.nif", "x"),
+                ("core/a.esp", "a"),
+            ],
+        );
+        let pending = place
+            .take_in(&evil_archive, None, None, None)
+            .unwrap()
+            .unwrap();
+        let err = place.install(&pending, &selection).unwrap_err();
+        assert!(err.to_string().contains("outside"), "{err}");
+        assert!(!scratch.0.join("evil").exists());
+        cancel_install(&pending);
+        assert_eq!(place.list().unwrap().mods.len(), 1);
+        place.restore().unwrap();
+        assert_eq!(
+            read(&place.game_dir.join("Meshes/game.nif")).as_deref(),
+            Some("game")
+        );
+        assert_eq!(entries(&place.game_dir.join("Meshes")).1, ["game.nif"]);
+    }
+
+    /// A real archive with a FOMOD installer, installed with its default
+    /// options and every checkbox on, as in `ZENDO_TEST_FOMOD_ARCHIVE=<archive>
+    /// cargo test -p zendo-core real_installer -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs an archive with a FOMOD installer in ZENDO_TEST_FOMOD_ARCHIVE"]
+    fn a_real_installer_archive_builds() {
+        let archive = std::env::var("ZENDO_TEST_FOMOD_ARCHIVE").expect("ZENDO_TEST_FOMOD_ARCHIVE");
+        let scratch = Scratch::new("real-fomod");
+        let place = scratch.place(None, true);
+        let pending = place
+            .take_in(Path::new(&archive), None, None, None)
+            .unwrap()
+            .expect("an installer");
+        let installer = &pending.installer;
+        let mut selection = installer.default_selection(&pending.present);
+        for at in installer.visible_steps(&selection, &pending.present) {
+            for (g, group) in installer.steps[at].groups.iter().enumerate() {
+                if !group.kind.single() {
+                    for o in 0..group.options.len() {
+                        installer.toggle(&mut selection, at, g, o, true, &pending.present);
+                    }
+                }
+            }
+        }
+        println!(
+            "{:?}: {:?}",
+            installer.name,
+            installer.chosen(&selection, &pending.present)
+        );
+        place.install(&pending, &selection).unwrap();
+        let id = place.list().unwrap().mods[0].id.clone();
+        for file in walk(&place.files().join(&id)).unwrap() {
+            println!("  {}", file.display());
+        }
+        place.apply().unwrap();
+        place.restore().unwrap();
+        assert_eq!(entries(&place.game_dir), (Vec::new(), Vec::new()));
+    }
+
+    /// [`reinstall`] on a scratch place.
+    fn reinstall_at(place: &Place, id: &str) -> Pending {
+        let list = place.list().unwrap();
+        let entry = list.mods.iter().find(|entry| entry.id == id).unwrap();
+        let root = find_installer(&place.installers().join(id)).unwrap();
+        Pending {
+            name: entry.name.clone(),
+            installer: read_installer(&root).unwrap(),
+            present: place.present(&list),
+            chosen: entry.chosen.clone(),
+            root,
+            what: PendingKind::Options { id: id.to_owned() },
+        }
+    }
+
     #[test]
     fn a_nexus_update_takes_the_mods_place_and_shows_as_a_change() {
         if launch::which("bsdtar").is_none() {
@@ -1775,7 +2428,7 @@ mod tests {
         };
 
         let old = fetched(10, "old");
-        assert!(!place.add_fetched(&old, "catquest", 7).unwrap());
+        assert!(!place.add_fetched(&old, "catquest", 7).unwrap().1);
         assert!(
             !old.archive.exists(),
             "the download is deleted once unpacked"
@@ -1790,6 +2443,7 @@ mod tests {
             place
                 .add_fetched(&fetched(11, "new"), "catquest", 7)
                 .unwrap()
+                .1
         );
         let overview = place.overview().unwrap();
         let names: Vec<&str> = overview
@@ -1810,6 +2464,7 @@ mod tests {
             !place
                 .add_fetched(&fetched(20, "extra"), "catquest", 7)
                 .unwrap()
+                .1
         );
         assert_eq!(place.overview().unwrap().mods.len(), 4);
         place.restore().unwrap();
@@ -1829,7 +2484,7 @@ mod tests {
         let place = scratch.place(None, true);
         write(&place.game_dir.join("Game.exe"), "game");
         write(&place.game_dir.join("Game_Data/level0"), "level");
-        place.add(Path::new(&archive), None, None).unwrap();
+        add_archive(&place, Path::new(&archive));
         let overview = place.overview().unwrap();
         assert!(overview.mods[0].files > 0);
         place.apply().unwrap();

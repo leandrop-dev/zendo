@@ -10,6 +10,7 @@ mod artwork;
 mod downloads;
 mod format;
 mod game;
+mod installer;
 mod launch_options;
 mod library;
 mod local;
@@ -43,6 +44,7 @@ use crate::gamepad::{self, Pad};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
+use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
 use mods::{ModsMessage, ModsState};
@@ -187,6 +189,7 @@ enum Message {
     Art(ArtMessage),
     Mods(ModsMessage),
     Nexus(NexusMessage),
+    Installer(InstallerMessage),
     Proton(ProtonMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
@@ -251,6 +254,8 @@ struct Zendo {
     mods: ModsState,
     /// Nexus Mods: the key, links coming in and mods downloading.
     nexus: NexusState,
+    /// A mod's FOMOD installer, open over the page.
+    installer: InstallerState,
     /// The Proton section of Settings.
     protons: Protons,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -289,6 +294,7 @@ impl Zendo {
             picker: None,
             mods: ModsState::default(),
             nexus: NexusState::default(),
+            installer: InstallerState::default(),
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
@@ -407,6 +413,7 @@ impl Zendo {
             .or_else(|| self.form_takes(message))
             .or_else(|| self.picker_takes(message))
             .or_else(|| self.chooser_takes(message))
+            .or_else(|| self.installer_takes(message))
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -498,6 +505,7 @@ impl Zendo {
             Message::Art(message) => self.update_art(message),
             Message::Mods(message) => self.update_mods(message),
             Message::Nexus(message) => self.update_nexus(message),
+            Message::Installer(message) => self.update_installer(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
@@ -955,7 +963,7 @@ impl Zendo {
         };
         let main = column![page, self.footer()].width(Length::Fill);
         let page = self.with_sheet(row![self.sidebar(), main].into());
-        self.with_chooser(self.with_picker(self.with_form(page)))
+        self.with_installer(self.with_chooser(self.with_picker(self.with_form(page))))
     }
 
     fn footer(&self) -> Element<'_, Message> {

@@ -897,7 +897,43 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      file in, with the game running only the list changes, not applied
      nothing is applied; the name field, Delete asking first and the
      notes). The user tried it in the window (2026-11-06): it works.
-   - 7d FOMOD installers and per-game knowledge (Bethesda plugin order).
+   - 7d FOMOD installers, built 2026-11-07: an archive (added or from
+     Nexus) with `fomod/ModuleConfig.xml`, any case, up to three folders
+     down, opens an installer sheet instead of going straight in. Read
+     with `roxmltree` (MIT or Apache-2.0, already in the tree through
+     Iced), UTF-8 or UTF-16, element names in any case. Steps, groups and
+     options in the order the file says (`Ascending` by default), steps
+     shown or hidden by the flags the options chosen before set, groups'
+     rules (exactly one and at most one as radios, at least one, all,
+     any), option types (required, recommended, not usable, may not work)
+     fixed or depending on flags (those of the same step too, as Vortex's
+     test installer expects) and files present; conditional installs;
+     priorities. The option last touched is described beside the list
+     with its picture. Install copies the chosen files and folders,
+     sources found whatever their case, into the mod; a destination
+     outside the mod is refused. The unpacked archive is kept in
+     `installers/<mod>/` with the choices (`installer`, `chosen` in
+     `mods.toml`): Options… on the mod runs it again, and a Nexus update
+     of the mod runs the new one with them chosen. A file condition sees
+     the mod folder (four levels) and the mods on; "inactive" never
+     matches until Zendo keeps a plugin list. An installer with nothing
+     to show installs at once; mods coming while one is open wait. Not
+     handled: C# script installers (`script.cs`), BAIN.
+     Checked: clippy and tests (an installer in UTF-16 and UTF-8 read the
+     same, orders, flags hiding a step, a choice making an option of the
+     same step required, not usable never on, conditional files, paths
+     kept inside; a tar with the installer inside a wrapper built, case
+     found, Options… with the choices of last time, then applied, an
+     installer climbing out refused, Cancel leaving nothing; the sheet's
+     steps, a radio clearing, Escape and the next waiting). Five real
+     `ModuleConfig.xml` from GitHub (SmoothCam, IntelEngine, Anomaly
+     Magazines Redux, S1DedicatedServers, Vortex's test installer) read
+     in an ignored test; a test archive made here (two steps, a picture,
+     a conditional file in another case) installed through the real
+     path. The user tried it in the window with that archive on Cat
+     Quest (2026-11-07): it works.
+   - 7e Bethesda plugin order (`plugins.txt` in the game's prefix), left
+     until there is a Bethesda game to try it on: the library has none.
 
 ## On hyprmonk's side
 
@@ -910,7 +946,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 7d, FOMOD installers and Bethesda plugin order.
+- 7e, Bethesda plugin order: the user installed Fallout 3 GOTY
+  (2026-11-07) to try it on.
 
 ## Conventions
 

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use iced::widget::{button, checkbox, column, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Game;
-use zendo_core::mods::{self, Applied, ModInfo, Overview, ProfileChange};
+use zendo_core::mods::{self, Added, Applied, ModInfo, Overview, ProfileChange};
 use zendo_core::nexus;
 
 use super::nexus::{NexusMessage, download_row};
@@ -69,6 +69,11 @@ pub enum ModsMessage {
     ClearOverwrite(String),
     Apply(String),
     Restore(String),
+    /// Run a mod's installer again.
+    Options(String, String),
+    /// An archive added or an installer read: the mod in, or the
+    /// installer's options to choose.
+    Added(String, Result<(Added, String), String>),
     /// Switch to the profile with this name.
     Profile(String, String),
     NewProfile(String),
@@ -207,24 +212,16 @@ impl Zendo {
             | ModsMessage::SaveProfile(_)
             | ModsMessage::CancelProfile
             | ModsMessage::DeleteProfile(_) => self.update_profiles(message),
+            ModsMessage::Options(id, mod_id) => {
+                self.add_mods(id, "Reading the installer…", move |game| {
+                    let pending = mods::reinstall(game, &mod_id)?;
+                    Ok((Added::Choose(Box::new(pending)), String::new()))
+                })
+            }
+            ModsMessage::Added(id, result) => self.mods_added(id, result),
             ModsMessage::Apply(id) => self.change_game_files(id, "Applying…", true),
             ModsMessage::Restore(id) => self.change_game_files(id, "Going back to vanilla…", false),
-            ModsMessage::Done(id, result) => {
-                self.mods.busy = None;
-                self.mods.confirm = None;
-                match result {
-                    Ok((overview, note)) => {
-                        if !note.is_empty() {
-                            self.status = Some(note);
-                        }
-                        self.mods_ready(id, overview)
-                    }
-                    Err(err) => {
-                        self.status = Some(err);
-                        Task::none()
-                    }
-                }
-            }
+            ModsMessage::Done(id, result) => self.mods_done(id, result),
         }
     }
 
@@ -252,8 +249,8 @@ impl Zendo {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                self.change_mods(id, "Unpacking…", move |game| {
-                    mods::add(game, &archive).map(|overview| (overview, format!("Added {name}")))
+                self.add_mods(id, "Unpacking…", move |game| {
+                    mods::add(game, &archive).map(|added| (added, format!("Added {name}")))
                 })
             }
             Ok(None) => Task::none(),
@@ -372,8 +369,70 @@ impl Zendo {
         })
     }
 
+    /// Adds a mod, or reads an installer, on a thread; one change at a time.
+    fn add_mods(
+        &mut self,
+        id: String,
+        busy: &'static str,
+        work: impl FnOnce(&Game) -> anyhow::Result<(Added, String)> + Send + 'static,
+    ) -> Task<Message> {
+        if self.mods.busy.is_some() {
+            return Task::none();
+        }
+        let Some(game) = self.game(&id).cloned() else {
+            return Task::none();
+        };
+        if !self.persist {
+            return Task::none();
+        }
+        self.mods.busy = Some((id.clone(), busy));
+        Task::perform(
+            blocking(move || work(&game).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Mods(ModsMessage::Added(id.clone(), result)),
+        )
+    }
+
+    /// A change done: the mods as they now stand, and what it says.
+    fn mods_done(
+        &mut self,
+        id: String,
+        result: Result<(Overview, String), String>,
+    ) -> Task<Message> {
+        self.mods.busy = None;
+        self.mods.confirm = None;
+        match result {
+            Ok((overview, note)) => {
+                if !note.is_empty() {
+                    self.status = Some(note);
+                }
+                self.mods_ready(id, overview)
+            }
+            Err(err) => {
+                self.status = Some(err);
+                Task::none()
+            }
+        }
+    }
+
+    /// A mod in, or its installer to open.
+    fn mods_added(&mut self, id: String, result: Result<(Added, String), String>) -> Task<Message> {
+        self.mods.busy = None;
+        self.mods.confirm = None;
+        match result {
+            Ok((Added::Done(overview), note)) => {
+                self.status = Some(note);
+                self.mods_ready(id, overview)
+            }
+            Ok((Added::Choose(pending), _)) => self.open_installer(id, pending),
+            Err(err) => {
+                self.status = Some(err);
+                Task::none()
+            }
+        }
+    }
+
     /// Runs a change on a thread, one at a time.
-    fn change_mods(
+    pub(super) fn change_mods(
         &mut self,
         id: String,
         busy: &'static str,
@@ -556,6 +615,14 @@ impl Zendo {
                         Message::Mods(ModsMessage::Move(game.clone(), mod_id.clone(), up))
                     }))
             };
+        let options = info.installer.then(|| {
+            button(text("Options…").size(13))
+                .padding([4, 10])
+                .style(style::secondary)
+                .on_press_maybe(
+                    free.then(|| Message::Mods(ModsMessage::Options(game.clone(), mod_id.clone()))),
+                )
+        });
         let update = self.mod_update(id, &info.id).map(|file| {
             let label = match file
                 .version
@@ -585,6 +652,7 @@ impl Zendo {
             .width(Length::Fill),
         ]
         .push(update)
+        .push(options)
         .push(
             row![
                 step("↑", true, !first),
@@ -812,6 +880,7 @@ mod tests {
                 enabled: true,
                 files: 22,
                 nexus: None,
+                installer: false,
                 wins: Vec::new(),
                 loses: Vec::new(),
             }],

@@ -15,7 +15,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
-use zendo_core::mods::{self, Overview};
+use zendo_core::mods::{self, Added, Overview};
 use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
 
 use super::launch_options::overlay;
@@ -92,7 +92,7 @@ pub enum NexusMessage {
     Choose(String),
     CancelChoose,
     Progress(u64, u64, Option<u64>),
-    Finished(u64, String, Result<(Overview, String), String>),
+    Finished(u64, String, Result<(Added, String), String>),
     Stop(u64),
     Updates(String, Result<Vec<(String, FileInfo)>, String>),
     Update(String, String),
@@ -423,7 +423,7 @@ impl Zendo {
         &mut self,
         id: u64,
         game: String,
-        result: Result<(Overview, String), String>,
+        result: Result<(Added, String), String>,
     ) -> Task<Message> {
         let stopped = self
             .nexus
@@ -433,7 +433,8 @@ impl Zendo {
             .is_some_and(|download| download.stop.load(Ordering::Relaxed));
         self.nexus.downloads.retain(|download| download.id != id);
         match result {
-            Ok((overview, note)) => {
+            Ok((Added::Choose(pending), _)) => self.open_installer(game, pending),
+            Ok((Added::Done(overview), note)) => {
                 // An update found before is done once its file is in.
                 if let Some(updates) = self.nexus.updates.get_mut(&game) {
                     updates.retain(|mod_id, file| {
@@ -806,7 +807,7 @@ fn fetch_mod(
                 }
                 let folder = mods::downloads_dir(&game)?;
                 let fetched = nexus::fetch(&key, &link, &folder, &stop, &mut progress)?;
-                let (overview, updated) =
+                let (added, updated) =
                     mods::add_from_nexus(&game, &fetched, &link.domain, link.mod_id)?;
                 let version = fetched
                     .file
@@ -820,7 +821,7 @@ fn fetch_mod(
                 } else {
                     format!("Added {}{version} to {}", fetched.mod_name, game.title)
                 };
-                anyhow::Ok((overview, note))
+                anyhow::Ok((added, note))
             })()
             .map_err(|err| format!("{err:#}"));
             let _ = sender.unbounded_send(NexusMessage::Finished(id, game_id, result));
