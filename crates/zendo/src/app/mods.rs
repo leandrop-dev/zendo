@@ -902,10 +902,10 @@ fn plugins_section<'a>(
 ) -> Element<'a, Message> {
     let note = match (&plugins.file, style) {
         (Some(_), Some(Style::Timestamps)) => {
-            "Apply writes this order to plugins.txt in the game's prefix, and dates the \
-             plugins in it, which is how this game reads it."
+            "Apply writes this order to the game's plugin list below, and dates the plugins \
+             in it, which is how this game reads the order."
         }
-        (Some(_), _) => "Apply writes this order to the game's plugin list in its prefix.",
+        (Some(_), _) => "Apply writes this order to the game's plugin list below.",
         (None, _) => {
             "Start the game once, so its prefix is made; Apply writes this order there after."
         }

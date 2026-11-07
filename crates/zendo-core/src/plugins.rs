@@ -1,11 +1,15 @@
 //! Bethesda games' plugins (`.esm`, `.esp`, `.esl` in `Data`): which load
-//! and in what order. The game reads that from `plugins.txt` in its folder
+//! and in what order. The game reads that from `Plugins.txt` in its folder
 //! of the prefix's `AppData/Local`, in one of three ways ([`Style`]); a
 //! plugin's header names the masters it needs loaded before it.
 //!
 //! Each game's own plugins ([`Rules::base`]) load first in the order
 //! Bethesda released them; the first `implicit` of them always load, and
-//! are not the user's to turn off.
+//! are not the user's to turn off, nor are Creation Club plugins the game
+//! lists or, for New Vegas, plugins a `.nam` file names.
+//!
+//! The games' folders, files and plugin names were checked against LOOT's
+//! libloadorder (GPL-3.0, read for facts only).
 
 #[cfg(test)]
 use std::fs;
@@ -33,18 +37,57 @@ pub enum Style {
 /// Where and how a game keeps its plugin list.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Rules {
-    /// Its folder in `AppData/Local`.
+    /// Its folder in `AppData/Local`, the copy from Steam's.
     pub appdata: &'static str,
+    /// Other stores' copies: a file only that store installs in the game's
+    /// folder, and the copy's folder in `AppData/Local`.
+    pub stores: &'static [(&'static str, &'static str)],
     pub style: Style,
     /// Its own plugins, in the order they load.
     pub base: &'static [&'static str],
     /// How many of `base` always load.
     pub implicit: usize,
+    /// The length of a record's header: 20 for Oblivion, 24 after.
+    pub header: usize,
+    /// The header flag of a light plugin (`0x200`, `0x100` for Starfield).
+    pub light: u32,
+    /// The file in the game's folder listing Creation Club plugins, which
+    /// load when there, after the game's own.
+    pub ccc: Option<&'static str>,
+    /// The game's folder in `Documents/My Games`, where its own `ccc` file
+    /// wins over the game folder's (Starfield).
+    pub my_games: Option<&'static str>,
+    /// A `.nam` file loads the plugin of its name (New Vegas).
+    pub nam: bool,
+    /// The game's `.ini`, whose `bUseMyGamesDirectory=0` puts the list in
+    /// the game's folder instead (Oblivion).
+    pub ini: Option<&'static str>,
 }
+
+const RULES: Rules = Rules {
+    appdata: "",
+    stores: &[],
+    style: Style::Timestamps,
+    base: &[],
+    implicit: 1,
+    header: 24,
+    light: 0x200,
+    ccc: None,
+    my_games: None,
+    nam: false,
+    ini: None,
+};
+
+pub const OBLIVION: Rules = Rules {
+    appdata: "Oblivion",
+    base: &["Oblivion.esm"],
+    header: 20,
+    ini: Some("Oblivion.ini"),
+    ..RULES
+};
 
 pub const FALLOUT3: Rules = Rules {
     appdata: "Fallout3",
-    style: Style::Timestamps,
     base: &[
         "Fallout3.esm",
         "Anchorage.esm",
@@ -53,12 +96,12 @@ pub const FALLOUT3: Rules = Rules {
         "PointLookout.esm",
         "Zeta.esm",
     ],
-    implicit: 1,
+    ..RULES
 };
 
 pub const NEW_VEGAS: Rules = Rules {
     appdata: "FalloutNV",
-    style: Style::Timestamps,
+    stores: &[("EOSSDK-Win32-Shipping.dll", "FalloutNV_Epic")],
     base: &[
         "FalloutNV.esm",
         "DeadMoney.esm",
@@ -71,7 +114,8 @@ pub const NEW_VEGAS: Rules = Rules {
         "TribalPack.esm",
         "CaravanPack.esm",
     ],
-    implicit: 1,
+    nam: true,
+    ..RULES
 };
 
 const SKYRIM_BASE: &[&str] = &[
@@ -86,18 +130,27 @@ pub const SKYRIM: Rules = Rules {
     appdata: "Skyrim",
     style: Style::TextFile,
     base: SKYRIM_BASE,
+    // `Update.esm` always loads too.
     implicit: 2,
+    ..RULES
 };
 
 pub const SKYRIM_SE: Rules = Rules {
     appdata: "Skyrim Special Edition",
+    stores: &[
+        ("Galaxy64.dll", "Skyrim Special Edition GOG"),
+        ("EOSSDK-Win64-Shipping.dll", "Skyrim Special Edition EPIC"),
+    ],
     style: Style::Asterisk,
     base: SKYRIM_BASE,
     implicit: 5,
+    ccc: Some("Skyrim.ccc"),
+    ..RULES
 };
 
 pub const FALLOUT4: Rules = Rules {
     appdata: "Fallout4",
+    stores: &[("EOSSDK-Win64-Shipping.dll", "Fallout4 EPIC")],
     style: Style::Asterisk,
     base: &[
         "Fallout4.esm",
@@ -110,7 +163,140 @@ pub const FALLOUT4: Rules = Rules {
         "DLCUltraHighResolution.esm",
     ],
     implicit: 8,
+    ccc: Some("Fallout4.ccc"),
+    ..RULES
 };
+
+const STARFIELD_BASE: &[&str] = &[
+    "Starfield.esm",
+    "Constellation.esm",
+    "OldMars.esm",
+    "ShatteredSpace.esm",
+    "SFBGS003.esm",
+    "SFBGS004.esm",
+    "SFBGS006.esm",
+    "SFBGS007.esm",
+    "SFBGS008.esm",
+    "SFBGS00D.esm",
+    "SFBGS047.esm",
+    "SFBGS050.esm",
+];
+
+pub const STARFIELD: Rules = Rules {
+    appdata: "Starfield",
+    style: Style::Asterisk,
+    base: STARFIELD_BASE,
+    implicit: STARFIELD_BASE.len(),
+    light: 0x100,
+    ccc: Some("Starfield.ccc"),
+    my_games: Some("Starfield"),
+    ..RULES
+};
+
+/// The names the game's list files go by: it reads `Plugins.txt`, its
+/// launcher writes `plugins.txt`; one already there keeps its spelling.
+pub const PLUGINS_TXT: &str = "Plugins.txt";
+pub const LOADORDER_TXT: &str = "loadorder.txt";
+
+impl Rules {
+    /// The game's folder in `AppData/Local`, for the store its copy came
+    /// from.
+    #[must_use]
+    pub fn appdata_for(&self, game_dir: &Path) -> &'static str {
+        self.stores
+            .iter()
+            .find(|(file, _)| game_dir.join(file).exists())
+            .map_or(self.appdata, |(_, folder)| folder)
+    }
+
+    /// Whether the game keeps its list in its own folder (its `.ini` says
+    /// `bUseMyGamesDirectory=0`).
+    #[must_use]
+    pub fn list_in_game(&self, game_dir: &Path) -> bool {
+        let Some(ini) = self.ini else {
+            return false;
+        };
+        let Ok(bytes) = std::fs::read(game_dir.join(ini)) else {
+            return false;
+        };
+        ini_value(
+            &String::from_utf8_lossy(&bytes),
+            "General",
+            "bUseMyGamesDirectory",
+        )
+        .is_some_and(|value| value == "0")
+    }
+
+    /// Plugins that load whenever they are there, besides the game's own:
+    /// those its Creation Club file lists (the one in `my_games` first,
+    /// when given), and for New Vegas those a `.nam` file names.
+    #[must_use]
+    pub fn also_implicit(
+        &self,
+        data: &Path,
+        game_dir: &Path,
+        my_games: Option<&Path>,
+    ) -> Vec<String> {
+        let mut names = Vec::new();
+        if let Some(ccc) = self.ccc {
+            let files = my_games
+                .into_iter()
+                .map(|dir| dir.join(ccc))
+                .chain([game_dir.join(ccc)]);
+            for file in files {
+                if let Ok(bytes) = std::fs::read(&file) {
+                    names.extend(
+                        String::from_utf8_lossy(&bytes)
+                            .lines()
+                            .map(str::trim)
+                            .filter(|line| !line.is_empty())
+                            .map(str::to_owned),
+                    );
+                    break;
+                }
+            }
+        }
+        if self.nam {
+            let mut stems: Vec<String> = std::fs::read_dir(data)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|entry| {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    let stem = name
+                        .strip_suffix(".nam")
+                        .or_else(|| name.strip_suffix(".NAM"))?;
+                    Some(stem.to_owned())
+                })
+                .collect();
+            stems.sort();
+            for stem in stems {
+                names.push(format!("{stem}.esm"));
+                names.push(format!("{stem}.esp"));
+            }
+        }
+        names
+    }
+}
+
+/// A value in an `.ini` file's section, names in any case.
+fn ini_value(text: &str, section: &str, key: &str) -> Option<String> {
+    let mut inside = false;
+    for line in text.lines().map(str::trim) {
+        if let Some(name) = line
+            .strip_prefix('[')
+            .and_then(|line| line.strip_suffix(']'))
+        {
+            inside = name.trim().eq_ignore_ascii_case(section);
+        } else if inside
+            && let Some((name, value)) = line.split_once('=')
+            && name.trim().eq_ignore_ascii_case(key)
+        {
+            return Some(value.trim().to_owned());
+        }
+    }
+    None
+}
 
 /// Whether a file name is a plugin's.
 #[must_use]
@@ -129,22 +315,21 @@ fn extension(name: &str) -> Option<String> {
 pub struct Header {
     /// Flagged a master (it loads with the `.esm` files).
     pub master: bool,
-    /// Flagged light (`.esl`-like, Skyrim SE and Fallout 4).
+    /// Flagged light (`.esl`-like, Skyrim SE, Fallout 4 and Starfield).
     pub light: bool,
     /// The plugins it needs loaded before it.
     pub masters: Vec<String>,
 }
 
-/// Reads a plugin's `TES4` record, with the 24-byte record header of every
-/// game here.
+/// Reads a plugin's `TES4` record, as the game's rules say records go.
 ///
 /// # Errors
 ///
 /// When the file cannot be read or is not a plugin.
-pub fn read_header(path: &Path) -> io::Result<Header> {
+pub fn read_header(path: &Path, rules: &Rules) -> io::Result<Header> {
     let mut start = [0_u8; 24];
     let mut file = File::open(path)?;
-    file.read_exact(&mut start)?;
+    file.read_exact(&mut start[..rules.header])?;
     let bad = || io::Error::new(io::ErrorKind::InvalidData, "not a plugin");
     if &start[..4] != b"TES4" {
         return Err(bad());
@@ -158,7 +343,7 @@ pub fn read_header(path: &Path) -> io::Result<Header> {
     file.read_exact(&mut data)?;
     let mut header = Header {
         master: flags & 0x1 != 0,
-        light: flags & 0x200 != 0,
+        light: flags & rules.light != 0,
         masters: Vec::new(),
     };
     let mut at = 0;
@@ -227,13 +412,15 @@ pub enum Rank {
 }
 
 /// Puts the plugins found in order: the game's own first as Bethesda
-/// released them, then the masters and then the rest, each in the order
-/// `stored` keeps, new ones last. A plugin `stored` does not name is on
-/// when `default_on` says.
+/// released them, then those that also always load (`also`, from
+/// [`Rules::also_implicit`]), then the masters and then the rest, each in
+/// the order `stored` keeps, new ones last. A plugin `stored` does not
+/// name is on when `default_on` says.
 #[must_use]
 pub fn arrange(
     rules: &Rules,
     found: Vec<Found>,
+    also: &[String],
     stored: &[(String, bool)],
     default_on: impl Fn(&Found) -> bool,
 ) -> Vec<Plugin> {
@@ -259,6 +446,11 @@ pub fn arrange(
                 Rank::Base
             };
             ordered.push((found, rank));
+        }
+    }
+    for name in also {
+        if let Some(found) = take(name) {
+            ordered.push((found, Rank::Implicit));
         }
     }
     let mut rest: Vec<Found> = stored.iter().filter_map(|(name, _)| take(name)).collect();
@@ -344,14 +536,19 @@ fn neighbour(plugins: &[Plugin], at: usize, up: bool) -> Option<usize> {
     (one.rank == Rank::Free && other.rank == Rank::Free && one.master == other.master).then_some(to)
 }
 
-/// The files the game reads, with what they should hold for this order:
-/// each plugin's name and whether it is on.
+/// The files the game reads, with what they should hold for this order
+/// (each plugin's name and whether it is on); `implicit` are the plugins
+/// that always load, which some lists leave out.
 #[must_use]
-pub fn files_for(rules: &Rules, order: &[(String, bool)]) -> Vec<(&'static str, String)> {
+pub fn files_for(
+    style: Style,
+    order: &[(String, bool)],
+    implicit: &[String],
+) -> Vec<(&'static str, String)> {
     let implicit = |name: &str| {
-        rules.base[..rules.implicit]
+        implicit
             .iter()
-            .any(|base| base.eq_ignore_ascii_case(name))
+            .any(|other| other.eq_ignore_ascii_case(name))
     };
     let lines = |lines: Vec<String>| {
         let mut text = lines.join("\r\n");
@@ -363,20 +560,20 @@ pub fn files_for(rules: &Rules, order: &[(String, bool)]) -> Vec<(&'static str, 
         .filter(|(_, enabled)| *enabled)
         .map(|(name, _)| name.clone())
         .collect();
-    match rules.style {
-        Style::Timestamps => vec![("plugins.txt", lines(on))],
+    match style {
+        Style::Timestamps => vec![(PLUGINS_TXT, lines(on))],
         Style::TextFile => vec![
             (
-                "plugins.txt",
+                PLUGINS_TXT,
                 lines(on.into_iter().filter(|name| !implicit(name)).collect()),
             ),
             (
-                "loadorder.txt",
+                LOADORDER_TXT,
                 lines(order.iter().map(|(name, _)| name.clone()).collect()),
             ),
         ],
         Style::Asterisk => vec![(
-            "plugins.txt",
+            PLUGINS_TXT,
             lines(
                 order
                     .iter()
@@ -466,7 +663,7 @@ pub(crate) mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("Mod.esp");
         fs::write(&path, plugin(0x201, &["Fallout3.esm", "Anchorage.esm"])).unwrap();
-        let header = read_header(&path).unwrap();
+        let header = read_header(&path, &FALLOUT4).unwrap();
         assert_eq!(
             header,
             Header {
@@ -476,10 +673,148 @@ pub(crate) mod tests {
             }
         );
         fs::write(&path, b"TES3 an old one").unwrap();
-        assert!(read_header(&path).is_err());
+        assert!(read_header(&path, &FALLOUT4).is_err());
         let _ = fs::remove_dir_all(&dir);
         assert!(is_plugin("Mod.ESP") && is_plugin("a.esl") && !is_plugin(".esp"));
         assert!(!is_plugin("readme.txt"));
+    }
+
+    fn implicit(rules: &Rules) -> Vec<String> {
+        rules.base[..rules.implicit]
+            .iter()
+            .map(|&name| name.to_owned())
+            .collect()
+    }
+
+    /// A scratch folder, removed after.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("zendo-plugins-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn reads_oblivions_shorter_record_header() {
+        let scratch = Scratch::new("oblivion");
+        // Oblivion's records have no version fields: 20 bytes, not 24.
+        let mut bytes = plugin(1, &["Oblivion.esm"]);
+        bytes.drain(20..24);
+        let path = scratch.0.join("Mod.esp");
+        fs::write(&path, bytes).unwrap();
+        let header = read_header(&path, &OBLIVION).unwrap();
+        assert!(header.master);
+        assert_eq!(header.masters, ["Oblivion.esm"]);
+        // Starfield's light flag is another bit.
+        fs::write(&path, plugin(0x100, &[])).unwrap();
+        assert!(read_header(&path, &STARFIELD).unwrap().light);
+        assert!(!read_header(&path, &FALLOUT4).unwrap().light);
+    }
+
+    #[test]
+    fn finds_each_stores_folder_and_what_always_loads() {
+        let scratch = Scratch::new("stores");
+        let game = scratch.0.join("game");
+        let data = game.join("Data");
+        fs::create_dir_all(&data).unwrap();
+        assert_eq!(SKYRIM_SE.appdata_for(&game), "Skyrim Special Edition");
+        fs::write(game.join("EOSSDK-Win64-Shipping.dll"), "").unwrap();
+        assert_eq!(SKYRIM_SE.appdata_for(&game), "Skyrim Special Edition EPIC");
+        fs::write(game.join("Galaxy64.dll"), "").unwrap();
+        assert_eq!(SKYRIM_SE.appdata_for(&game), "Skyrim Special Edition GOG");
+        assert_eq!(FALLOUT4.appdata_for(&game), "Fallout4 EPIC");
+        assert_eq!(NEW_VEGAS.appdata_for(&game), "FalloutNV");
+
+        // Oblivion keeps its list in the game's folder when its ini says so.
+        assert!(!OBLIVION.list_in_game(&game));
+        fs::write(
+            game.join("Oblivion.ini"),
+            "[Display]\nbUseMyGamesDirectory=0\n",
+        )
+        .unwrap();
+        assert!(!OBLIVION.list_in_game(&game), "another section");
+        fs::write(
+            game.join("Oblivion.ini"),
+            "[General]\r\nSLocalSavePath=Saves\\\r\n busemygamesdirectory = 0\r\n",
+        )
+        .unwrap();
+        assert!(OBLIVION.list_in_game(&game));
+        assert!(!FALLOUT3.list_in_game(&game));
+
+        fs::write(
+            game.join("Skyrim.ccc"),
+            "ccBGSSSE001-Fish.esm\r\n\r\nccQDRSSE001-SurvivalMode.esl\r\n",
+        )
+        .unwrap();
+        assert_eq!(
+            SKYRIM_SE.also_implicit(&data, &game, None),
+            ["ccBGSSSE001-Fish.esm", "ccQDRSSE001-SurvivalMode.esl"]
+        );
+        // Starfield's own in My Games wins, even empty.
+        let my_games = scratch.0.join("My Games/Starfield");
+        fs::create_dir_all(&my_games).unwrap();
+        fs::write(game.join("Starfield.ccc"), "SFBGS00A.esm\n").unwrap();
+        assert_eq!(
+            STARFIELD.also_implicit(&data, &game, Some(&my_games)),
+            ["SFBGS00A.esm"]
+        );
+        fs::write(my_games.join("Starfield.ccc"), "").unwrap();
+        assert_eq!(
+            STARFIELD.also_implicit(&data, &game, Some(&my_games)),
+            Vec::<String>::new()
+        );
+
+        fs::write(data.join("TribalPack.nam"), "").unwrap();
+        assert_eq!(
+            NEW_VEGAS.also_implicit(&data, &game, None),
+            ["TribalPack.esm", "TribalPack.esp"]
+        );
+
+        // Those found load after the game's own, always on.
+        let found = vec![
+            found("Mod.esp", Some("Mod"), false, &[]),
+            found("ccBGSSSE001-Fish.esm", None, true, &["Skyrim.esm"]),
+            found("Skyrim.esm", None, true, &[]),
+        ];
+        let also = SKYRIM_SE.also_implicit(&data, &game, None);
+        let plugins = arrange(
+            &SKYRIM_SE,
+            found,
+            &also,
+            &[("ccBGSSSE001-Fish.esm".into(), false)],
+            |_| true,
+        );
+        assert_eq!(plugins[1].name, "ccBGSSSE001-Fish.esm");
+        assert_eq!(plugins[1].rank, Rank::Implicit);
+        assert!(plugins[1].enabled);
+        let order = order(&plugins);
+        let names: Vec<String> = plugins
+            .iter()
+            .filter(|plugin| plugin.rank == Rank::Implicit)
+            .map(|plugin| plugin.name.clone())
+            .collect();
+        assert_eq!(
+            files_for(Style::Asterisk, &order, &names),
+            [(PLUGINS_TXT, "*Mod.esp\r\n".to_owned())]
+        );
+    }
+
+    fn order(plugins: &[Plugin]) -> Vec<(String, bool)> {
+        plugins
+            .iter()
+            .map(|plugin| (plugin.name.clone(), plugin.enabled))
+            .collect()
     }
 
     #[test]
@@ -495,13 +830,13 @@ pub(crate) mod tests {
         .map(|(name, on)| ((*name).to_owned(), *on))
         .collect();
         assert_eq!(
-            files_for(&SKYRIM_SE, &order),
-            [("plugins.txt", "Mod.esp\r\n*Other.esp\r\n".to_owned())]
+            files_for(SKYRIM_SE.style, &order, &implicit(&SKYRIM_SE)),
+            [("Plugins.txt", "Mod.esp\r\n*Other.esp\r\n".to_owned())]
         );
         assert_eq!(
-            files_for(&SKYRIM, &order),
+            files_for(SKYRIM.style, &order, &implicit(&SKYRIM)),
             [
-                ("plugins.txt", "Dawnguard.esm\r\nOther.esp\r\n".to_owned()),
+                ("Plugins.txt", "Dawnguard.esm\r\nOther.esp\r\n".to_owned()),
                 (
                     "loadorder.txt",
                     "Skyrim.esm\r\nUpdate.esm\r\nDawnguard.esm\r\nMod.esp\r\nOther.esp\r\n"
@@ -515,8 +850,8 @@ pub(crate) mod tests {
             ("Mod.esp".into(), true),
         ];
         assert_eq!(
-            files_for(&FALLOUT3, &fallout),
-            [("plugins.txt", "Fallout3.esm\r\nMod.esp\r\n".to_owned())]
+            files_for(FALLOUT3.style, &fallout, &implicit(&FALLOUT3)),
+            [("Plugins.txt", "Fallout3.esm\r\nMod.esp\r\n".to_owned())]
         );
         assert_eq!(
             read_list("# a comment\r\n*A.esp\r\nB.esp\r\n", Style::Asterisk),
@@ -572,7 +907,7 @@ pub(crate) mod tests {
             ("Patch.esp".to_owned(), true),
             ("Lib.esp".to_owned(), true),
         ];
-        let plugins = arrange(&FALLOUT3, found, &stored, |found| found.from.is_some());
+        let plugins = arrange(&FALLOUT3, found, &[], &stored, |found| found.from.is_some());
         let names: Vec<&str> = plugins.iter().map(|plugin| plugin.name.as_str()).collect();
         assert_eq!(
             names,
@@ -613,19 +948,26 @@ pub(crate) mod tests {
         assert!(moved(&plugins, "Broken.esp", false).is_none());
     }
 
-    /// Reads the headers of a real game's plugins, as in
+    /// Reads the headers of a real game's plugins (`ZENDO_TEST_OBLIVION=1`
+    /// for Oblivion's), as in
     /// `ZENDO_TEST_DATA=<game>/Data cargo test -p zendo-core plugins -- --ignored --nocapture`.
     #[test]
     #[ignore = "reads the plugins in the folder in ZENDO_TEST_DATA"]
     fn reads_a_real_games_plugins() {
         let data = std::env::var("ZENDO_TEST_DATA").expect("ZENDO_TEST_DATA");
+        // Every game but Oblivion has the same record header.
+        let rules = if std::env::var_os("ZENDO_TEST_OBLIVION").is_some() {
+            &OBLIVION
+        } else {
+            &FALLOUT3
+        };
         let mut read = 0;
         for entry in fs::read_dir(data).unwrap().flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             if !is_plugin(&name) {
                 continue;
             }
-            let header = read_header(&entry.path()).unwrap();
+            let header = read_header(&entry.path(), rules).unwrap();
             println!(
                 "{name}: master {}, needs {:?}",
                 header.master, header.masters

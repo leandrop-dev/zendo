@@ -118,14 +118,13 @@ install it and give it its colours, but it runs on any Linux desktop.
   says which), then Apply copies them into the game. Back to vanilla
   takes out exactly what went in and puts back the files mods replaced;
   what the game wrote meanwhile is kept for next time. Zendo knows where
-  mods go for Stardew Valley, Skyrim, Fallout 3, 4 and New Vegas, Starfield
-  and Cyberpunk 2077; for any other game they go in its folder, or one
+  mods go for Stardew Valley, Oblivion, Skyrim, Fallout 3, 4 and New Vegas,
+  Starfield and Cyberpunk 2077; for any other game they go in its folder, or one
   you set. Profiles keep different sets of mods on and in order for the
   same game; switching while mods are applied puts the other set in.
   Mods with a FOMOD installer ask their options in steps, with their
   descriptions and pictures, and Options… asks them again later. For
-  Fallout 3, New Vegas, Skyrim and Fallout 4, the card also lists the
-  plugins in load order, each on or off, and says when one needs a
+  Bethesda's games, the card also lists the plugins in load order, each on or off, and says when one needs a
   master that is off or loads after it; Apply writes the order where the
   game reads it, in its Proton prefix.
 - Mods from [Nexus Mods](https://www.nexusmods.com), with your personal

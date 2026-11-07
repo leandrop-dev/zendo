@@ -135,15 +135,21 @@ pub enum FileState {
 }
 
 /// What file conditions look at: the files in the game's mod folder and in
-/// the mods that are on, lowercase, from the mod folder.
+/// the mods that are on, and of those the plugins that are off (a Bethesda
+/// game's), lowercase, from the mod folder.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Present {
     pub files: HashSet<String>,
+    pub inactive: HashSet<String>,
 }
 
 impl Present {
     fn has(&self, file: &str) -> bool {
         self.files.contains(&normalise(file).to_lowercase())
+    }
+
+    fn off(&self, file: &str) -> bool {
+        self.inactive.contains(&normalise(file).to_lowercase())
     }
 }
 
@@ -158,10 +164,11 @@ impl Condition {
             Self::Any(any) => any.iter().any(|one| one.holds(flags, present)),
             // An unset flag reads as empty.
             Self::Flag { name, value } => flags.get(name).map_or("", String::as_str) == value,
+            // A file there is active unless it is a plugin that is off.
             Self::File { file, state } => match state {
-                FileState::Active => present.has(file),
+                FileState::Active => present.has(file) && !present.off(file),
+                FileState::Inactive => present.has(file) && present.off(file),
                 FileState::Missing => !present.has(file),
-                FileState::Inactive => false,
             },
             Self::Holds => true,
         }
@@ -962,6 +969,7 @@ mod tests {
         // The patch needs Missing.esp to be missing.
         let present = Present {
             files: ["missing.esp".to_owned()].into(),
+            ..Present::default()
         };
         let files = installer.files(&selection, &present);
         assert!(!targets(&files).contains(&"Slim Patch.esp".to_owned()));
@@ -971,6 +979,30 @@ mod tests {
                 .as_ref()
                 .is_some_and(|needs| !needs.holds(&HashMap::new(), &present))
         );
+    }
+
+    #[test]
+    fn a_plugin_that_is_off_is_inactive_not_active() {
+        let file = |file: &str, state| Condition::File {
+            file: file.into(),
+            state,
+        };
+        let present = Present {
+            files: ["on.esp", "off.esp", "textures/a.dds"]
+                .map(str::to_owned)
+                .into(),
+            inactive: ["off.esp".to_owned()].into(),
+        };
+        let flags = HashMap::new();
+        let holds = |condition: Condition| condition.holds(&flags, &present);
+        assert!(holds(file("On.esp", FileState::Active)));
+        assert!(!holds(file("On.esp", FileState::Inactive)));
+        assert!(holds(file("Off.esp", FileState::Inactive)));
+        assert!(!holds(file("Off.esp", FileState::Active)));
+        assert!(!holds(file("Off.esp", FileState::Missing)));
+        assert!(holds(file("textures\\a.dds", FileState::Active)));
+        assert!(holds(file("Gone.esp", FileState::Missing)));
+        assert!(!holds(file("Gone.esp", FileState::Inactive)));
     }
 
     #[test]

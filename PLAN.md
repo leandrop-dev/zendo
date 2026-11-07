@@ -807,7 +807,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      shows its file count and whose files it replaces or loses to
      (later ones win); ↑ ↓ to reorder, Delete asks once. Known games
      [tentative, a start]: Stardew Valley (`Mods`), Skyrim SE and LE,
-     Fallout 3 (added 2026-11-07, Steam 22300 and 22370), 4 and New Vegas, Starfield (`Data`, a wrapping `Data`
+     Oblivion and Fallout 3 (added 2026-11-07; Steam 22330, 900883, 22300 and 22370), 4 and New Vegas, Starfield (`Data`, a wrapping `Data`
      folder taken off), Cyberpunk 2077 (its folder; wrappers taken off
      until `archive`, `bin`, `r6`, `red4ext`, `engine` or `mods` shows);
      each with its Nexus name for 7b. Mod folder editable per game, not
@@ -958,10 +958,9 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      Back to vanilla puts them back. A plugin change shows as changed
      since applied. With no prefix yet (the game never started), the
      card says to start it once and Apply writes no list. Not handled
-     [tentative]: Starfield and Oblivion; Skyrim SE's Creation Club
-     plugins (`Skyrim.ccc`) not taken as implicit; the game's launcher
-     changing the list while applied is undone by Back to vanilla;
-     FOMOD's "inactive" plugin condition still never matches.
+     [tentative]: the game's launcher changing the list while applied is
+     undone by Back to vanilla. Oblivion, Starfield, Creation Club
+     plugins and FOMOD's plugin conditions came after (list item 1).
      Checked: clippy and tests (headers with flags and masters, each
      game's list format, the order with the game's own first and red
      masters, moves only among a kind; on a scratch Fallout 3: Apply
@@ -985,9 +984,38 @@ Each item is planned in detail when it starts.
 
 Quick and fresh first:
 
-1. Phase 7's gaps: FOMOD's plugin conditions (active, inactive) from the
-   plugin list; Starfield and Oblivion plugin rules; Skyrim SE's
-   Creation Club plugins (`Skyrim.ccc`) as implicit.
+1. Phase 7's gaps, built 2026-11-07. Checked against LOOT's
+   libloadorder (GPL-3.0, read for facts only: folders, file names,
+   plugin lists), which showed more than the three listed:
+   - FOMOD's file conditions follow the plugin list: a plugin there and
+     on is active, there and off inactive (before, inactive never
+     matched and an off plugin counted as active).
+   - Oblivion known (Steam 22330 and 900883, `oblivion` on Nexus): its
+     records' 20-byte header, `Oblivion.esm` its only plugin first, the
+     list by file date in `AppData/Local/Oblivion`, or in the game's
+     folder when `Oblivion.ini` says `bUseMyGamesDirectory=0`.
+   - Starfield's plugin order: twelve plugins always loaded (from
+     libloadorder's list), the asterisk list, its light flag (`0x100`).
+   - Creation Club plugins always load after the game's own, from
+     `Skyrim.ccc` or `Fallout4.ccc` in the game's folder, or for
+     Starfield `Starfield.ccc` in `Documents/My Games/Starfield` before
+     the game folder's; New Vegas loads a plugin a `.nam` file names.
+   - The list is `Plugins.txt` as the games read it; one already there
+     keeps its spelling (launchers write `plugins.txt`), so no second
+     list appears beside it on Linux, where case counts.
+   - Each store's copy has its own `AppData/Local` folder: Skyrim SE's
+     `… GOG` (`Galaxy64.dll` in the game) and `… EPIC`
+     (`EOSSDK-Win64-Shipping.dll`), `Fallout4 EPIC`, `FalloutNV_Epic`
+     (`EOSSDK-Win32-Shipping.dll`).
+   Not handled [tentative]: Oblivion Remastered (Steam 2623190, another
+   layout); Fallout 4's and Starfield's `sTestFile` settings, which make
+   those games ignore the list; Enderal. Checked: clippy and tests
+   (Oblivion's header, Starfield's light flag, each store's folder,
+   Oblivion's ini, CCC files and Starfield's own winning even empty,
+   `.nam` files, CCC plugins out of the asterisk list, an existing
+   `plugins.txt` keeping its spelling, FOMOD's three states); the real
+   Fallout 3's plugins read again. The user tried it on Fallout 3
+   (2026-11-07): it works.
 2. A review of the Rust code with the `rust-review` skill, then fixing
    what it finds, before more code is built on the same patterns.
 3. API keys (SteamGridDB, Nexus) in the system keyring (Secret Service:
@@ -1060,8 +1088,8 @@ Later:
 
 ## Next session
 
-- The list after phase 7 (above), confirmed 2026-11-07: start with item
-  1, Phase 7's gaps.
+- The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
+  and checked by the user the same day; next, item 2, the Rust review.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made
