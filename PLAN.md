@@ -1229,6 +1229,53 @@ Features:
    installs Epic and GOG games with `--skip-dlcs` (`downloads.rs`), so no
    DLC comes with them, and Heroic's DLC is left out of the library.
    Amazon (nile) is to check.
+   Planned 2026-11-07; the user chose the layout and the install
+   question the same day [firm]:
+   - The page in two columns (one on a narrow window): under the hero,
+     one action bar, Play (or Running and Stop), Update when one waits,
+     Launch options, Pin and More; More opens a row with Hide, Check
+     for updates, Repair, Uninstall, and Edit and Remove for a game
+     added by hand. Then About, DLC and Mods on the left; a short
+     Details panel on the right (store, platform, version, size, played,
+     publisher, released, genres, the install folder) and a Technical
+     section folded under it (launch command, Zendo id, Wine prefix,
+     last log). The "Installed by Zendo" and launch cards go; what they
+     said goes into the bar, the status line and those panels.
+   - The Store's install asks "Also install its DLC" (ticked when the
+     game has some to install); the game page's DLC card installs or
+     uninstalls each, or all.
+   - What the engines do, from their sources (facts only; legendary
+     and gogdl are GPL-3.0): legendary's `info --json` lists the owned
+     DLC under `game.owned_dlc` (`app_name`, `title`, `installable`; one
+     that is not installable comes with the game), `install <dlc>`
+     installs one into its base game's folder, which must be installed,
+     `uninstall <dlc>` removes it, and its `installed.json` keeps DLC
+     as entries with `is_dlc` and the base game's `install_path`.
+     gogdl's `info` lists the owned DLC (`dlcs`: `title`, `id`, and for
+     Windows builds `size` per language as for the game); `download`
+     and `update` take `--with-dlcs --dlcs <ids>` or `--skip-dlcs`, and
+     `update` deletes what its new file list leaves out, so it adds and
+     removes DLC, and every update and repair must name the installed
+     DLC or it deletes them (Heroic does the same, its
+     `installedDLCs`). nile has no DLC: Amazon's stay out.
+   - Zendo's GOG record keeps `installedDLCs`; an Epic update updates
+     the installed DLC too (`install <dlc> --update-only`). Heroic's
+     games show their DLC (from Heroic's records, and the store's list
+     when signed in) with no buttons: Heroic installs those. Not done:
+     DLC updates in the update check (it compares the game only), and
+     GOG's DLC uninstallers in the prefix (Zendo runs none of GOG's
+     installer scripts).
+   Built 2026-11-07: `info.rs` reads the owned DLC (`Dlc`), `heroic.rs`
+   the installed ones into `Details::dlc` (legendary's by the folder
+   they share with their game, GOG's from `installedDLCs`), and
+   `downloads.rs` has `Action::AddDlc` and `RemoveDlc` with the DLC in
+   `Job::dlc` (also the ones an install takes). The window: `game.rs`
+   (the bar, More, Details, Technical), `dlc.rs` (the card), the
+   Store's "Also install its DLC" (`store.rs`). Checked on screen in a
+   throwaway home with a stand-in gogdl: the two columns, the DLC card
+   (one of two installed, sizes from GOG) and the Store's tick box. Not
+   checked: the jobs against the real engines (the window's buttons
+   could not be pressed from here; their arguments are tested).
 10. EAC and BattlEye runtimes for the Windows games Zendo starts (Proton
     reads them from `PROTON_EAC_RUNTIME` and `PROTON_BATTLEYE_RUNTIME`);
     how umu gets them is to check.
@@ -1318,8 +1365,8 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
   API keys in the keyring, item 4, diagnostics, item 5, languages, and
   item 6, themes, and item 7, the AUR package, built the same day; item
   8, the survey of Heroic and Hikari, done the same day, added items 16
-  to 23 (their order confirmed). Next, item 9, the game
-  page with DLC.
+  to 23 (their order confirmed). Item 9, the game page with DLC, built
+  the same day. Next, item 10, the EAC and BattlEye runtimes.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"
@@ -1336,7 +1383,12 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
   section should offer Zendo and hyprmonk (this computer has hyprmonk);
   choosing hyprmonk should say "Following hyprmonk's tone" with its
   name, paint the window in it, and repaint within 2 seconds when the
-  tone is changed in hyprmonk's Settings.
+  tone is changed in hyprmonk's Settings. Item 9 the same visit: a
+  game's page in two columns (More, the folded Technical section); on
+  an Epic or GOG game Zendo installed that has DLC, install one from its
+  DLC card, check it plays, then uninstall it; update and repair the
+  game and check the DLC stay; install a game with DLC from the Store
+  with "Also install its DLC" ticked.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

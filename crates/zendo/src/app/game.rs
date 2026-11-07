@@ -1,28 +1,64 @@
-//! A game's page: its wide art with the title over it, the actions, and
-//! what its store records about the install.
+//! A game's page: its wide art with the title over it, one bar of actions,
+//! then what it is about, its DLC and mods beside a short panel of details,
+//! with the technical ones folded under it.
 
 use std::f32::consts::{FRAC_PI_2, PI};
 use std::path::Path;
 
 use iced::gradient::Linear;
 use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
-use iced::{Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians};
+use iced::{
+    Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians, Task,
+};
+use zendo_core::downloads::{Action, Job};
+use zendo_core::launch;
 use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source};
 
-use super::downloads::UpdateState;
+use super::downloads::{DownloadMessage, UpdateState, action_doing_alone, update_line};
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
-use super::{Message, Page, Zendo, format, game_scroll_id, now};
+use super::{Message, Page, Zendo, format, game_scroll_id, now, sidebar};
 use crate::i18n::t;
 
 const HERO_HEIGHT: f32 = 340.0;
 const COVER_WIDTH: f32 = 140.0;
 const COVER_HEIGHT: f32 = 210.0;
 const RADIUS: f32 = 14.0;
-const LABEL_WIDTH: f32 = 170.0;
+const LABEL_WIDTH: f32 = 130.0;
+/// The page's width from which the details go beside the rest.
+const TWO_COLUMNS: f32 = 960.0;
+
+/// What is open on a game's page; it starts folded on each game.
+#[derive(Debug, Default)]
+pub struct GameView {
+    /// The More row of less used actions.
+    more: bool,
+    /// The Technical section under the details.
+    technical: bool,
+    /// The DLC whose Uninstall was pressed once.
+    pub(super) confirm_dlc: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum GameViewMessage {
+    ToggleMore,
+    ToggleTechnical,
+    /// Uninstall pressed once on a DLC: pressed again, it goes.
+    AskRemoveDlc(String),
+}
 
 impl Zendo {
+    pub(super) fn update_game_view(&mut self, message: GameViewMessage) -> Task<Message> {
+        let view = &mut self.game_view;
+        match message {
+            GameViewMessage::ToggleMore => view.more = !view.more,
+            GameViewMessage::ToggleTechnical => view.technical = !view.technical,
+            GameViewMessage::AskRemoveDlc(id) => view.confirm_dlc = Some(id),
+        }
+        Task::none()
+    }
+
     pub(super) fn game_page<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
         let trail = row![
             button(text(t!("game-back")).size(14))
@@ -34,22 +70,135 @@ impl Zendo {
         ]
         .spacing(8);
 
-        let status = self.status.clone().unwrap_or_else(|| t!("game-ready"));
-        let actions = row![
-            self.play_buttons(game),
-            launch_options_button(game),
-            self.local_buttons(game),
-            button(
-                text(if game.pinned {
-                    t!("game-unpin")
-                } else {
-                    t!("game-pin")
-                })
-                .size(14)
+        let update = matches!(
+            self.downloads.updates.get(&game.id),
+            Some(UpdateState::Available(_))
+        );
+        let mut page = column![
+            trail,
+            game_hero(game, update, self.rating_pill(&game.id)),
+            self.action_bar(game, update),
+        ]
+        .spacing(20)
+        .padding(24);
+        if self.game_view.more {
+            page = page.push(self.more_row(game));
+        }
+
+        let owned = self.store.owned(&game.id);
+        let mut main: Vec<Element<'a, Message>> = Vec::new();
+        if let Some(summary) = owned.and_then(|owned| owned.summary.as_deref()) {
+            main.push(about_card(summary));
+        }
+        if let Some(dlc) = self.dlc_card(game) {
+            main.push(dlc);
+        }
+        if let Some(mods) = self.mods_card(game) {
+            main.push(mods);
+        }
+        let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
+
+        let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;
+        page = if main.is_empty() {
+            page.push(side)
+        } else if two {
+            page.push(
+                row![
+                    column(main).spacing(20).width(Length::FillPortion(3)),
+                    side.width(Length::FillPortion(2)),
+                ]
+                .spacing(20),
             )
-            .padding([10, 18])
-            .style(style::secondary)
-            .on_press(Message::TogglePinned),
+        } else {
+            page.extend(main).push(side)
+        };
+        scrollable(page)
+            .id(game_scroll_id())
+            .height(Length::Fill)
+            .into()
+    }
+
+    /// Play, Update when one waits, Launch options, Pin and More, then the
+    /// job queued for the game or the last thing said.
+    fn action_bar<'a>(&'a self, game: &'a Game, update: bool) -> Element<'a, Message> {
+        let job = self.downloads.job_for(&game.id);
+        let mut bar = row![self.play_buttons(game)]
+            .spacing(10)
+            .align_y(Alignment::Center);
+        if update && game.installed_by_zendo() {
+            bar = bar.push(
+                button(
+                    text(t!("action-label", action = "update"))
+                        .size(14)
+                        .font(BOLD),
+                )
+                .padding([10, 18])
+                .style(style::secondary)
+                .on_press_maybe(job.is_none().then(|| queue(game, Action::Update)).flatten()),
+            );
+        }
+        bar = bar
+            .push(launch_options_button(game))
+            .push(
+                button(
+                    text(if game.pinned {
+                        t!("game-unpin")
+                    } else {
+                        t!("game-pin")
+                    })
+                    .size(14),
+                )
+                .padding([10, 18])
+                .style(style::secondary)
+                .on_press(Message::TogglePinned),
+            )
+            .push(
+                button(
+                    text(if self.game_view.more {
+                        t!("game-less")
+                    } else {
+                        t!("game-more")
+                    })
+                    .size(14),
+                )
+                .padding([10, 18])
+                .style(style::secondary)
+                .on_press(Message::GameView(GameViewMessage::ToggleMore)),
+            )
+            .push(space::horizontal());
+        if let Some((job, running)) = job {
+            let state = match (running, job.paused) {
+                (true, _) => "now",
+                (false, true) => "paused",
+                (false, false) => "queued",
+            };
+            bar = bar
+                .push(
+                    text(t!(
+                        "downloads-job-state",
+                        doing = action_doing_alone(job.action),
+                        state = state
+                    ))
+                    .size(14)
+                    .color(colors().dim),
+                )
+                .push(
+                    button(text(t!("see-downloads")).size(13))
+                        .padding([6, 12])
+                        .style(style::secondary)
+                        .on_press(Message::Navigate(Page::Downloads)),
+                );
+        } else {
+            let status = self.status.clone().unwrap_or_else(|| t!("game-ready"));
+            bar = bar.push(text(status).size(14).color(colors().dim));
+        }
+        bar.into()
+    }
+
+    /// The less used actions: Hide, and for a game Zendo installed Check for
+    /// updates, Repair and Uninstall; for one added by hand Edit and Remove.
+    fn more_row<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
+        let mut more = row![
             button(
                 text(if game.hidden {
                     t!("game-unhide")
@@ -58,51 +207,219 @@ impl Zendo {
                 })
                 .size(14)
             )
-            .padding([10, 18])
+            .padding([8, 14])
             .style(style::secondary)
             .on_press(Message::ToggleHidden),
-            space::horizontal(),
-            text(status).size(14).color(colors().dim),
         ]
         .spacing(10)
         .align_y(Alignment::Center);
-
-        let owned = self.store.owned(&game.id);
-        let update = matches!(
-            self.downloads.updates.get(&game.id),
-            Some(UpdateState::Available(_))
-        );
-        let mut page = column![
-            trail,
-            game_hero(game, update, self.rating_pill(&game.id)),
-            actions
-        ]
-        .spacing(20)
-        .padding(24);
         if game.installed_by_zendo() {
-            page = page.push(self.store_actions(game));
-            page = page.push(self.launch_card(game));
+            let free = self.downloads.job_for(&game.id).is_none();
+            let checking = self.downloads.updates.get(&game.id) == Some(&UpdateState::Checking);
+            more =
+                more.push(
+                    button(text(t!("downloads-check-updates")).size(14))
+                        .padding([8, 14])
+                        .style(style::secondary)
+                        .on_press_maybe((!checking).then(|| {
+                            Message::Download(DownloadMessage::CheckUpdate(game.id.clone()))
+                        })),
+                );
+            more = more.push(
+                button(text(t!("action-label", action = "repair")).size(14))
+                    .padding([8, 14])
+                    .style(style::secondary)
+                    .on_press_maybe(free.then(|| queue(game, Action::Repair)).flatten()),
+            );
+            let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
+            more =
+                more.push(if confirming {
+                    button(text(t!("downloads-press-again")).size(14).font(BOLD))
+                        .padding([8, 14])
+                        .style(style::danger)
+                        .on_press_maybe(free.then(|| queue(game, Action::Uninstall)).flatten())
+                } else {
+                    button(text(t!("action-label", action = "uninstall")).size(14))
+                        .padding([8, 14])
+                        .style(style::secondary)
+                        .on_press_maybe(free.then(|| {
+                            Message::Download(DownloadMessage::AskUninstall(game.id.clone()))
+                        }))
+                });
         }
-        if game.source == Source::Local {
-            page = page.push(self.launch_card(game));
+        more = more.push(self.local_buttons(game));
+        container(more)
+            .padding([12, 16])
+            .width(Length::Fill)
+            .style(style::card)
+            .into()
+    }
+
+    /// The details worth a look: the store and install, the latest from
+    /// the store, and the time played.
+    fn details_card<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
+        let mut rows: Vec<Element<'a, Message>> = Vec::new();
+        let mut add = |label: String, value: Element<'a, Message>| {
+            rows.push(label_row(label, value));
+        };
+        add(t!("fact-store"), plain(format::source(game.source)));
+        add(t!("fact-started-by"), plain(game.launcher()));
+        if let Some(platform) = &game.details.platform {
+            add(t!("fact-platform"), plain(platform_label(platform)));
         }
-        if let Some(mods) = self.mods_card(game) {
-            page = page.push(mods);
+        if let Some(version) = &game.details.version {
+            add(t!("fact-version"), plain(version.clone()));
+        }
+        if let Some(size) = &game.details.size {
+            add(t!("fact-install-size"), plain(size.to_string()));
+        }
+        if game.installed_by_zendo() {
+            let (line, color) = update_line(self.downloads.updates.get(&game.id));
+            if !line.is_empty() {
+                add(t!("fact-updates"), text(line).size(14).color(color).into());
+            }
         }
         let facts = store_facts(
-            owned,
+            self.store.owned(&game.id),
             self.store.info.get(&game.id),
             game.details.size.is_some(),
         );
-        page = page.push(details(game, facts));
-        if let Some(summary) = owned.and_then(|owned| owned.summary.as_deref()) {
-            page = page.push(about_card(summary));
+        for (label, value) in facts {
+            add(label, plain(value));
         }
-        scrollable(page)
-            .id(game_scroll_id())
-            .height(Length::Fill)
+        if let Some(path) = &game.details.install_path {
+            add(
+                t!("fact-install-path"),
+                column![
+                    text(path.display().to_string())
+                        .size(12)
+                        .font(Font::MONOSPACE),
+                    open_button(t!("files-open-folder"), path),
+                ]
+                .spacing(6)
+                .into(),
+            );
+        }
+        add(
+            t!("fact-last-played"),
+            plain(
+                game.played
+                    .last
+                    .map_or_else(|| t!("fact-never"), |last| format::ago(last, now())),
+            ),
+        );
+        if game.played.minutes > 0 {
+            add(
+                t!("fact-play-time"),
+                plain(format::play_time(game.played.minutes)),
+            );
+        }
+        add(
+            t!("fact-started-from-zendo"),
+            plain(t!("count-times", count = game.played.launches)),
+        );
+        card(t!("game-details"), column(rows).spacing(12).into())
+    }
+
+    /// The launch command, Zendo's id, and for a game Zendo starts its Wine
+    /// prefix and last log; folded until asked for.
+    fn technical_card<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
+        let open = self.game_view.technical;
+        let header = button(
+            row![
+                text(t!("game-technical")).size(18).font(BOLD),
+                space::horizontal(),
+                text(if open { "−" } else { "+" })
+                    .size(18)
+                    .color(colors().dim),
+            ]
+            .align_y(Alignment::Center),
+        )
+        .padding(0)
+        .style(style::link)
+        .on_press(Message::GameView(GameViewMessage::ToggleTechnical));
+        let mut body = column![header].spacing(16);
+        if open {
+            let code = |value: String| -> Element<'a, Message> {
+                text(value).size(12).font(Font::MONOSPACE).into()
+            };
+            let mut rows = column![
+                label_row(t!("fact-launch-command"), code(game.command_line())),
+                label_row(t!("fact-zendo-id"), code(game.id.clone())),
+            ]
+            .spacing(12);
+            let starts_itself = game.installed_by_zendo() || game.source == Source::Local;
+            if starts_itself
+                && launch::needs_proton(game)
+                && let Some(dir) = self.config.install_dir()
+            {
+                let prefix = launch::prefix_in(&dir, game);
+                rows = rows.push(path_row(t!("run-wine-prefix"), &prefix));
+            }
+            if starts_itself && let Some(log) = launch::log_path(&game.id) {
+                rows = rows.push(path_row(t!("run-last-log"), &log));
+            }
+            body = body.push(rows);
+        }
+        container(body)
+            .padding(20)
+            .width(Length::Fill)
+            .style(style::card)
             .into()
     }
+}
+
+/// The job for an action on a game Zendo installed, as a message.
+fn queue(game: &Game, action: Action) -> Option<Message> {
+    Job::for_game(game, action).map(|job| Message::Download(DownloadMessage::Queue(job)))
+}
+
+/// A card with a heading.
+pub(super) fn card(heading: String, body: Element<'_, Message>) -> Element<'_, Message> {
+    container(column![text(heading).size(18).font(BOLD), body].spacing(16))
+        .padding(20)
+        .width(Length::Fill)
+        .style(style::card)
+        .into()
+}
+
+fn label_row(label: String, value: Element<'_, Message>) -> Element<'_, Message> {
+    row![
+        text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
+        container(value).width(Length::Fill),
+    ]
+    .spacing(8)
+    .into()
+}
+
+fn plain<'a>(value: String) -> Element<'a, Message> {
+    text(value).size(14).into()
+}
+
+fn open_button<'a>(label: String, path: &Path) -> Element<'a, Message> {
+    button(text(label).size(13))
+        .padding([4, 10])
+        .style(style::secondary)
+        .on_press_maybe(
+            path.exists()
+                .then(|| Message::Open(path.to_string_lossy().into_owned())),
+        )
+        .into()
+}
+
+/// A folder or file with Open under it.
+fn path_row<'a>(label: String, path: &Path) -> Element<'a, Message> {
+    label_row(
+        label,
+        column![
+            text(path.display().to_string())
+                .size(12)
+                .font(Font::MONOSPACE),
+            open_button(t!("run-open"), path),
+        ]
+        .spacing(6)
+        .into(),
+    )
 }
 
 /// What the wide art at the top of a game's page shows.
@@ -367,88 +684,6 @@ pub fn about_card(summary: &str) -> Element<'_, Message> {
             text(summary).size(14).line_height(1.5),
         ]
         .spacing(12),
-    )
-    .padding(20)
-    .width(Length::Fill)
-    .style(style::card)
-    .into()
-}
-
-fn details(game: &Game, facts: Vec<(String, String)>) -> Element<'_, Message> {
-    let mut rows: Vec<Element<'_, Message>> = Vec::new();
-    let mut add = |label: String, value: Element<'static, Message>| {
-        rows.push(
-            row![
-                text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
-                container(value).width(Length::Fill),
-            ]
-            .align_y(Alignment::Center)
-            .into(),
-        );
-    };
-    let plain = |value: String| -> Element<'static, Message> { text(value).size(14).into() };
-    let code = |value: String| -> Element<'static, Message> {
-        text(value).size(13).font(Font::MONOSPACE).into()
-    };
-
-    add(t!("fact-store"), plain(format::source(game.source)));
-    add(t!("fact-started-by"), plain(game.launcher()));
-    if let Some(platform) = &game.details.platform {
-        add(t!("fact-platform"), plain(platform_label(platform)));
-    }
-    if let Some(version) = &game.details.version {
-        add(t!("fact-version"), plain(version.clone()));
-    }
-    if let Some(size) = &game.details.size {
-        add(t!("fact-install-size"), plain(size.to_string()));
-    }
-    for (label, value) in facts {
-        add(label, plain(value));
-    }
-    if let Some(path) = &game.details.install_path {
-        let shown = path.display().to_string();
-        let open = button(text(t!("files-open-folder")).size(13))
-            .padding([4, 10])
-            .style(style::secondary)
-            .on_press_maybe(
-                path.is_dir()
-                    .then(|| Message::Open(path.to_string_lossy().into_owned())),
-            );
-        add(
-            t!("fact-install-path"),
-            row![text(shown).size(13).font(Font::MONOSPACE), open]
-                .spacing(12)
-                .align_y(Alignment::Center)
-                .into(),
-        );
-    }
-    add(
-        t!("fact-last-played"),
-        plain(
-            game.played
-                .last
-                .map_or_else(|| t!("fact-never"), |last| format::ago(last, now())),
-        ),
-    );
-    if game.played.minutes > 0 {
-        add(
-            t!("fact-play-time"),
-            plain(format::play_time(game.played.minutes)),
-        );
-    }
-    add(
-        t!("fact-started-from-zendo"),
-        plain(t!("count-times", count = game.played.launches)),
-    );
-    add(t!("fact-launch-command"), code(game.command_line()));
-    add(t!("fact-zendo-id"), code(game.id.clone()));
-
-    container(
-        column![
-            text(t!("game-details")).size(18).font(BOLD),
-            column(rows).spacing(12)
-        ]
-        .spacing(16),
     )
     .padding(20)
     .width(Length::Fill)

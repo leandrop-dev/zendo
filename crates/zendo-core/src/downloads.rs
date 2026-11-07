@@ -51,6 +51,12 @@ pub enum Action {
     Update,
     Repair,
     Uninstall,
+    /// Installing DLC into a game Zendo installed.
+    #[serde(rename = "add-dlc")]
+    AddDlc,
+    /// Uninstalling DLC from a game Zendo installed.
+    #[serde(rename = "remove-dlc")]
+    RemoveDlc,
 }
 
 impl Action {
@@ -61,6 +67,8 @@ impl Action {
             Self::Update => "Update",
             Self::Repair => "Repair",
             Self::Uninstall => "Uninstall",
+            Self::AddDlc => "Install DLC",
+            Self::RemoveDlc => "Uninstall DLC",
         }
     }
 
@@ -71,6 +79,8 @@ impl Action {
             Self::Update => "Updating",
             Self::Repair => "Repairing",
             Self::Uninstall => "Uninstalling",
+            Self::AddDlc => "Installing DLC",
+            Self::RemoveDlc => "Uninstalling DLC",
         }
     }
 }
@@ -95,6 +105,11 @@ pub struct Job {
     /// Held in the queue until resumed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub paused: bool,
+    /// Store ids of DLC: for an install, the ones that come with the game;
+    /// for [`Action::AddDlc`] and [`Action::RemoveDlc`], the ones added or
+    /// removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dlc: Vec<String>,
 }
 
 /// The build Zendo installs from a store: GOG's Linux build when there is
@@ -121,9 +136,9 @@ impl Job {
     }
 
     /// Installing a store game into a folder of its own in `dir`, for the
-    /// platform [`install_platform`] picks.
+    /// platform [`install_platform`] picks, with the DLC in `dlc`.
     #[must_use]
-    pub fn install(game: &Owned, dir: PathBuf) -> Option<Self> {
+    pub fn install(game: &Owned, dir: PathBuf, dlc: Vec<String>) -> Option<Self> {
         let (_, app) = game.id.split_once(':')?;
         Some(Self {
             store: game.store().into(),
@@ -134,7 +149,23 @@ impl Job {
             path: dir,
             folder: None,
             paused: false,
+            dlc,
         })
+    }
+
+    /// Installing or uninstalling DLC of a game Zendo installed from Epic
+    /// or GOG.
+    #[must_use]
+    pub fn for_dlc(game: &Game, action: Action, dlc: Vec<String>) -> Option<Self> {
+        if !matches!(action, Action::AddDlc | Action::RemoveDlc)
+            || !matches!(game.source, Source::Epic | Source::Gog)
+            || dlc.is_empty()
+        {
+            return None;
+        }
+        let mut job = Self::for_game(game, action)?;
+        job.dlc = dlc;
+        Some(job)
     }
 
     /// Updating, repairing or uninstalling a game Zendo installed.
@@ -162,6 +193,7 @@ impl Job {
             path: game.details.install_path.clone()?,
             folder: None,
             paused: false,
+            dlc: Vec::new(),
         })
     }
 }
@@ -301,11 +333,33 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
     let store = job.store();
     let ended = match (store, job.action) {
         (Store::Gog, Action::Install) => gog_install(job, stop, report)?,
-        (Store::Gog, Action::Update | Action::Repair) => gog_refresh(job, stop, report)?,
+        (Store::Gog, Action::Update | Action::Repair | Action::AddDlc | Action::RemoveDlc) => {
+            gog_refresh(job, stop, report)?
+        }
         (Store::Gog, Action::Uninstall) => {
             report(Event::Step("Removing the game's files…".to_owned()));
             gog_uninstall(job)?;
             Ended::Done
+        }
+        (Store::Amazon, Action::AddDlc | Action::RemoveDlc) => {
+            bail!("nile installs no DLC")
+        }
+        (Store::Epic, Action::AddDlc | Action::RemoveDlc) => epic_dlc(job, &job.dlc, stop, report)?,
+        (Store::Epic, Action::Update) => {
+            let ended = engine(store, &engine_args(job, &job.path), stop, report)?;
+            if ended == Ended::Done {
+                // legendary updates the game alone; its DLC have versions
+                // of their own.
+                let dlc = installed_dlc(store, &job.app);
+                if dlc.is_empty() {
+                    ended
+                } else {
+                    report(Event::Step("Updating its DLC…".to_owned()));
+                    epic_dlc(job, &dlc, stop, report)?
+                }
+            } else {
+                ended
+            }
         }
         (Store::Epic | Store::Amazon, Action::Install) => {
             fs::create_dir_all(&job.path)
@@ -325,17 +379,71 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
     };
     if ended == Ended::Done {
         let installed = installs(store).iter().any(|game| game.app == job.app);
-        match (job.action, installed) {
-            (Action::Uninstall, true) => bail!("{} is still installed", job.title),
-            (Action::Install | Action::Update | Action::Repair, false) => bail!(
+        let uninstalling = job.action == Action::Uninstall;
+        if uninstalling && installed {
+            bail!("{} is still installed", job.title);
+        }
+        if !uninstalling && !installed {
+            bail!(
                 "{} ended without installing {}",
                 store.engine_name(),
                 job.title
-            ),
+            );
+        }
+        let dlc = installed_dlc(store, &job.app);
+        match job.action {
+            Action::AddDlc if job.dlc.iter().any(|id| !dlc.contains(id)) => {
+                bail!("{} ended without installing the DLC", store.engine_name())
+            }
+            Action::RemoveDlc if job.dlc.iter().any(|id| dlc.contains(id)) => {
+                bail!("the DLC is still installed")
+            }
             _ => {}
         }
     }
     Ok(ended)
+}
+
+/// The store ids of the DLC installed with a game Zendo installed.
+fn installed_dlc(store: Store, app: &str) -> Vec<String> {
+    installs(store)
+        .into_iter()
+        .find(|game| game.app == app)
+        .map(|game| game.install.dlc.into_iter().map(|dlc| dlc.id).collect())
+        .unwrap_or_default()
+}
+
+/// Installs or uninstalls Epic DLC, one at a time: legendary takes one app
+/// per command, and puts a DLC in its game's folder by itself. For an
+/// update, installing with `--update-only` updates them.
+fn epic_dlc(
+    job: &Job,
+    dlc: &[String],
+    stop: &Stop,
+    report: &mut dyn FnMut(Event),
+) -> anyhow::Result<Ended> {
+    for (index, id) in dlc.iter().enumerate() {
+        if dlc.len() > 1 {
+            report(Event::Step(format!("DLC {} of {}…", index + 1, dlc.len())));
+        }
+        let words: &[&str] = match job.action {
+            Action::RemoveDlc => &["uninstall", id, "-y"],
+            Action::Update => &[
+                "install",
+                id,
+                "--update-only",
+                "--platform",
+                &job.platform,
+                "-y",
+            ],
+            _ => &["install", id, "--platform", &job.platform, "-y"],
+        };
+        let args: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        if engine(Store::Epic, &args, stop, report)? == Ended::Stopped {
+            return Ok(Ended::Stopped);
+        }
+    }
+    Ok(Ended::Done)
 }
 
 /// legendary's and nile's arguments for a job; `folder` is the game's own
@@ -363,7 +471,11 @@ fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
             "--platform",
             &job.platform,
             "--skip-sdl",
-            "--skip-dlcs",
+            if job.dlc.is_empty() {
+                "--skip-dlcs"
+            } else {
+                "--with-dlcs"
+            },
             "-y",
         ],
         (Store::Epic, Action::Update) => vec!["install", &app, "--update-only", "--skip-sdl", "-y"],
@@ -373,7 +485,9 @@ fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
         (Store::Amazon, Action::Update) => vec!["update", &app],
         (Store::Amazon, Action::Repair) => vec!["verify", &app],
         (Store::Amazon, Action::Uninstall) => vec!["uninstall", &app],
-        (Store::Gog, _) => unreachable!("gogdl's jobs have their own steps"),
+        (Store::Gog, _) | (_, Action::AddDlc | Action::RemoveDlc) => {
+            unreachable!("gogdl's jobs and DLC jobs have their own steps")
+        }
     };
     words.into_iter().map(str::to_owned).collect()
 }
@@ -512,13 +626,14 @@ fn reason(tail: &VecDeque<String>, status: &str) -> String {
     line.chars().take(240).collect()
 }
 
-fn gog_args(job: &Job, verb: &str, path: &Path) -> anyhow::Result<Vec<String>> {
+/// gogdl's arguments, with the DLC to have installed afterwards.
+fn gog_args(job: &Job, verb: &str, path: &Path, dlc: &[String]) -> anyhow::Result<Vec<String>> {
     let support = Store::Gog
         .dir()
         .context("no home folder for gogdl's files")?
         .join("support")
         .join(&job.app);
-    Ok([
+    let mut args: Vec<String> = [
         verb,
         &job.app,
         "--platform",
@@ -527,13 +642,18 @@ fn gog_args(job: &Job, verb: &str, path: &Path) -> anyhow::Result<Vec<String>> {
         &path.to_string_lossy(),
         "--support",
         &support.to_string_lossy(),
-        "--skip-dlcs",
         "--lang",
         GOG_LANGUAGE,
     ]
     .into_iter()
     .map(str::to_owned)
-    .collect())
+    .collect();
+    if dlc.is_empty() {
+        args.push("--skip-dlcs".to_owned());
+    } else {
+        args.extend(["--with-dlcs".to_owned(), "--dlcs".to_owned(), dlc.join(",")]);
+    }
+    Ok(args)
 }
 
 fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
@@ -569,7 +689,7 @@ fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
     let whole = info.disk_size();
     let ended = engine(
         Store::Gog,
-        &gog_args(job, "download", &job.path)?,
+        &gog_args(job, "download", &job.path, &job.dlc)?,
         stop,
         &mut |event| report(overall(event, whole)),
     )?;
@@ -586,7 +706,7 @@ fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
                 .find(|path| !before.contains(path))
         })
         .context("gogdl ended, but the game's folder is not there")?;
-    record_gog(job, &folder, &info)?;
+    record_gog(job, &folder, &info, &job.dlc)?;
     Ok(Ended::Done)
 }
 
@@ -598,9 +718,29 @@ fn gog_refresh(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
     } else {
         "update"
     };
-    let ended = engine(Store::Gog, &gog_args(job, verb, &job.path)?, stop, report)?;
+    // gogdl deletes what its new list of files leaves out, so the DLC to
+    // keep are named every time; adding or removing DLC is an update with
+    // a new list.
+    let mut dlc = gog_installed_dlc(&job.app)?;
+    match job.action {
+        Action::AddDlc => {
+            for id in &job.dlc {
+                if !dlc.contains(id) {
+                    dlc.push(id.clone());
+                }
+            }
+        }
+        Action::RemoveDlc => dlc.retain(|id| !job.dlc.contains(id)),
+        _ => {}
+    }
+    let ended = engine(
+        Store::Gog,
+        &gog_args(job, verb, &job.path, &dlc)?,
+        stop,
+        report,
+    )?;
     if ended == Ended::Done {
-        record_gog(job, &job.path, &info)?;
+        record_gog(job, &job.path, &info, &dlc)?;
     }
     Ok(ended)
 }
@@ -696,10 +836,22 @@ fn is_record_of(record: &serde_json::Value, app: &str) -> bool {
     record.get("appName").and_then(serde_json::Value::as_str) == Some(app)
 }
 
-fn record_gog(job: &Job, folder: &Path, info: &info::GogInfo) -> anyhow::Result<()> {
+/// Writes the game's record; `dlc` are the DLC now installed with it.
+fn record_gog(
+    job: &Job,
+    folder: &Path,
+    info: &info::GogInfo,
+    dlc: &[String],
+) -> anyhow::Result<()> {
     let (file, mut records) = read_gog_records()?;
     records.retain(|record| !is_record_of(record, &job.app));
-    let size = info.disk_size();
+    let size = info.disk_size()
+        + info
+            .dlc()
+            .iter()
+            .filter(|item| dlc.contains(&item.id))
+            .filter_map(|item| item.install_size)
+            .sum::<u64>();
     records.push(serde_json::json!({
         "appName": job.app,
         "platform": job.platform,
@@ -709,9 +861,26 @@ fn record_gog(job: &Job, folder: &Path, info: &info::GogInfo) -> anyhow::Result<
         "buildId": info.build_id,
         "language": GOG_LANGUAGE,
         "is_dlc": false,
-        "installedDLCs": [],
+        "installedDLCs": dlc,
     }));
     write_gog_records(&file, &records)
+}
+
+/// The DLC Zendo's record says are installed with a GOG game.
+fn gog_installed_dlc(app: &str) -> anyhow::Result<Vec<String>> {
+    Ok(read_gog_records()?
+        .1
+        .iter()
+        .find(|record| is_record_of(record, app))
+        .and_then(|record| record.get("installedDLCs"))
+        .and_then(serde_json::Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// gogdl has no uninstall: Zendo deletes the folder it recorded, after
@@ -884,6 +1053,7 @@ fn zendo_game(store: Store, id: String, game: Installed, known: &HashMap<String,
         version: game.install.version.filter(|version| !version.is_empty()),
         install_path: game.install.path,
         size: game.install.size,
+        dlc: game.install.dlc,
     };
     found
 }
@@ -1016,6 +1186,7 @@ mod tests {
             path: "/home/me/Games".into(),
             folder: None,
             paused: false,
+            dlc: Vec::new(),
         };
         let folder = Path::new("/home/me/Games/Sugar Rush");
         assert_eq!(
@@ -1039,17 +1210,78 @@ mod tests {
     }
 
     #[test]
+    fn names_the_dlc_to_install_or_keep() {
+        let job = Job {
+            store: StoreKey::Epic,
+            app: "Sugar".into(),
+            title: "Sugar".into(),
+            action: Action::Install,
+            platform: "Windows".into(),
+            path: "/home/me/Games".into(),
+            folder: None,
+            paused: false,
+            dlc: vec!["Wings".into()],
+        };
+        assert!(
+            engine_args(&job, Path::new("/home/me/Games/Sugar"))
+                .contains(&"--with-dlcs".to_owned())
+        );
+        let job = Job {
+            store: StoreKey::Gog,
+            app: "1207658924".into(),
+            action: Action::Update,
+            ..job
+        };
+        let args = gog_args(&job, "update", &job.path, &["17".into(), "18".into()]).unwrap();
+        assert!(
+            args.join(" ").ends_with("--with-dlcs --dlcs 17,18"),
+            "{args:?}"
+        );
+        let args = gog_args(&job, "update", &job.path, &[]).unwrap();
+        assert_eq!(args.last().map(String::as_str), Some("--skip-dlcs"));
+    }
+
+    #[test]
+    fn keeps_a_dlc_job_in_the_queue() {
+        let job = Job {
+            store: StoreKey::Gog,
+            app: "1207658924".into(),
+            title: "UT".into(),
+            action: Action::AddDlc,
+            platform: "windows".into(),
+            path: "/home/me/Games/UT".into(),
+            folder: None,
+            paused: false,
+            dlc: vec!["17".into()],
+        };
+        let json = serde_json::to_string(&job).unwrap();
+        assert!(
+            json.contains(r#""action":"add-dlc""#) && json.contains(r#""dlc":["17"]"#),
+            "{json}"
+        );
+        assert_eq!(serde_json::from_str::<Job>(&json).unwrap(), job);
+        // A queue written before DLC has none.
+        let old = r#"{"store":"gog","app":"1","title":"T","action":"update","platform":"windows","path":"/g"}"#;
+        assert_eq!(
+            serde_json::from_str::<Job>(old).unwrap().dlc,
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
     fn picks_gogs_linux_build_when_there_is_one() {
         let mut game = Owned::new(Store::Gog, "1207658924", "Game".into());
         game.platforms = vec!["Windows".into(), "Linux".into()];
-        let job = Job::install(&game, "/home/me/Games".into()).unwrap();
+        let job = Job::install(&game, "/home/me/Games".into(), Vec::new()).unwrap();
         assert_eq!(
             (job.app.as_str(), job.platform.as_str()),
             ("1207658924", "linux")
         );
         game.platforms = vec!["Windows".into()];
         assert_eq!(
-            Job::install(&game, "/g".into()).unwrap().platform,
+            Job::install(&game, "/g".into(), Vec::new())
+                .unwrap()
+                .platform,
             "windows"
         );
     }
@@ -1074,7 +1306,7 @@ mod tests {
     fn keeps_where_a_paused_install_goes() {
         let mut game = Owned::new(Store::Epic, "Sugar", "Sugar".into());
         game.platforms = vec!["Windows".into()];
-        let mut job = Job::install(&game, "/home/me/Games".into()).unwrap();
+        let mut job = Job::install(&game, "/home/me/Games".into(), Vec::new()).unwrap();
         let json = serde_json::to_string(&job).unwrap();
         assert!(
             !json.contains("paused") && !json.contains("folder"),

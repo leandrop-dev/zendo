@@ -9,12 +9,12 @@ use std::time::{Duration, Instant};
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{button, column, container, row, text};
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::widget::{button, row, text};
+use iced::{Alignment, Element, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
 
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD};
 use super::{Message, Zendo};
 use crate::i18n::t;
 
@@ -242,54 +242,6 @@ impl Zendo {
         .into()
     }
 }
-
-impl Zendo {
-    /// Where a game Zendo installed keeps its Wine prefix and its last
-    /// launch's log.
-    pub(super) fn launch_card<'a>(&self, game: &'a Game) -> Element<'a, Message> {
-        let mut rows = column![].spacing(12);
-        if launch::needs_proton(game)
-            && let Some(dir) = self.config.install_dir()
-        {
-            let prefix = launch::prefix_in(&dir, game);
-            rows = rows.push(path_row(t!("run-wine-prefix"), &prefix));
-        }
-        if let Some(log) = launch::log_path(&game.id) {
-            rows = rows.push(path_row(t!("run-last-log"), &log));
-        }
-        container(
-            column![
-                text(t!("run-launch-title")).size(18).font(BOLD),
-                text(t!("run-launch-about")).size(13).color(colors().dim),
-                rows,
-            ]
-            .spacing(10),
-        )
-        .padding(20)
-        .width(Length::Fill)
-        .style(style::card)
-        .into()
-    }
-}
-
-fn path_row<'a>(label: String, path: &std::path::Path) -> Element<'a, Message> {
-    let exists = path.exists();
-    row![
-        text(label).size(14).color(colors().dim).width(170),
-        text(path.display().to_string())
-            .size(13)
-            .font(Font::MONOSPACE)
-            .width(Length::Fill),
-        button(text(t!("run-open")).size(13))
-            .padding([4, 10])
-            .style(style::secondary)
-            .on_press_maybe(exists.then(|| Message::Open(path.to_string_lossy().into_owned()))),
-    ]
-    .spacing(12)
-    .align_y(Alignment::Center)
-    .into()
-}
-
 /// Starts the game, says how, and then says when its process group is
 /// gone.
 fn follow(game: Game) -> impl Stream<Item = RunMessage> {

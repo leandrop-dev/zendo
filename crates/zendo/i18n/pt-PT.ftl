@@ -347,6 +347,9 @@ game-pin = Fixar
 game-unpin = Desafixar
 game-hide = Ocultar
 game-unhide = Mostrar
+game-more = Mais
+game-less = Menos
+game-technical = Técnico
 game-change-art = Mudar imagens
 game-last-played = Jogado pela última vez { $when }
 game-about = Sobre
@@ -374,6 +377,7 @@ fact-platform = Plataforma
 fact-version = Versão
 fact-install-size = Tamanho instalado
 fact-install-path = Caminho de instalação
+fact-updates = Atualizações
 fact-last-played = Jogado pela última vez
 fact-never = Nunca
 fact-play-time = Tempo de jogo
@@ -403,8 +407,6 @@ run-stop = Parar
 run-force-stop = Forçar paragem
 run-wine-prefix = Prefixo Wine
 run-last-log = Registo do último lançamento
-run-launch-title = Lançamento
-run-launch-about = Os jogos de Windows correm através do umu-launcher com o Proton, cada um no seu próprio prefixo.
 run-open = Abrir
 
 ## ProtonDB
@@ -602,6 +604,19 @@ store-open-in-library = Abrir na biblioteca
 store-into = Em { $path }
 store-installs-into = Instala em { $path }
 store-installs-into-needs = Instala em { $path } · precisa de { $size }
+store-with-dlc = Instalar também os DLC ({ $count })
+store-with-dlc-size = Instalar também os DLC ({ $count }, { $size })
+
+## The DLC card on a game's page
+
+dlc-title = DLC
+dlc-count = { $installed } de { $total } instalados
+dlc-install-all = Instalar todos
+dlc-comes-with = Vem com o jogo
+dlc-not-installed = Não instalado
+dlc-in-heroic = O Heroic instala e remove estes.
+dlc-sign-in = Inicie sessão na { $store } em Contas para ver todos os DLC que tem.
+dlc-asking = A perguntar à loja pelos DLC que tem…
 store-no-home = Não há pasta pessoal onde instalar
 store-back = ← Loja
 
@@ -614,12 +629,18 @@ action-label = { $action ->
     [install] Instalar
     [update] Atualizar
     [repair] Reparar
+    [add-dlc] Instalar DLC
+    [remove-dlc] Desinstalar DLC
    *[uninstall] Desinstalar
 }
 action-doing = { $action ->
     [install] A instalar
     [update] A atualizar
     [repair] A reparar
+    [add-dlc] A instalar DLC de
+    [remove-dlc] A desinstalar DLC de
+    [add-dlc-alone] A instalar DLC
+    [remove-dlc-alone] A desinstalar DLC
    *[uninstall] A desinstalar
 }
 downloads-paused-count = { $count ->
@@ -656,8 +677,6 @@ downloads-up-to-date = Atualizado
 downloads-update-version = Atualização disponível: { $version }
 downloads-update-available = Atualização disponível
 downloads-update-failed = Não foi possível procurar atualizações: { $error }
-downloads-installed-by-zendo = Instalado pelo Zendo
-downloads-through = Através de { $launcher }, com o qual o Zendo também o inicia.
 downloads-nothing = Nada para transferir
 downloads-in-queue = { $count } na fila
 downloads-in-queue-paused = { $count } na fila, { $paused } em pausa

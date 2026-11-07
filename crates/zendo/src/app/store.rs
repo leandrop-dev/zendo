@@ -3,10 +3,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use iced::widget::{button, column, container, row, scrollable, space, text, text_input};
+use iced::widget::{button, checkbox, column, container, row, scrollable, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::downloads::{self, Job};
-use zendo_core::info::{self, GameInfo};
+use zendo_core::info::{self, Dlc, GameInfo};
 use zendo_core::owned::{self, Owned};
 use zendo_core::stores::Store;
 
@@ -30,6 +30,8 @@ pub struct StoreState {
     pub scroll_top: f32,
     /// Sizes and versions asked of the stores, by game id; once a session.
     pub info: HashMap<String, InfoState>,
+    /// The games whose "Also install its DLC" was unticked.
+    skip_dlc: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +49,8 @@ pub enum StoreMessage {
     Search(String),
     Source(Option<Store>),
     ToggleInstalled,
+    /// "Also install its DLC" ticked or unticked for a game.
+    ToggleDlc(String),
     Clicked(usize),
     Info(String, Result<GameInfo, String>),
 }
@@ -132,6 +136,12 @@ impl Zendo {
             StoreMessage::Source(source) => {
                 self.store.source = source;
                 self.store_filter_changed()
+            }
+            StoreMessage::ToggleDlc(id) => {
+                if !self.store.skip_dlc.remove(&id) {
+                    self.store.skip_dlc.insert(id);
+                }
+                Task::none()
             }
             StoreMessage::ToggleInstalled => {
                 self.store.hide_installed = !self.store.hide_installed;
@@ -416,12 +426,57 @@ impl Zendo {
             .into()
     }
 
-    /// Installing this store game where Settings says, unless it is queued.
+    /// Installing this store game where Settings says, unless it is queued,
+    /// with its DLC unless "Also install its DLC" was unticked.
     pub(super) fn install_job(&self, id: &str) -> Option<Job> {
         if self.downloads.job_for(id).is_some() {
             return None;
         }
-        Job::install(self.store.owned(id)?, self.config.install_dir()?)
+        let dlc = if self.store.skip_dlc.contains(id) {
+            Vec::new()
+        } else {
+            self.installable_dlc(id)
+                .into_iter()
+                .map(|dlc| dlc.id.clone())
+                .collect()
+        };
+        Job::install(self.store.owned(id)?, self.config.install_dir()?, dlc)
+    }
+
+    /// The DLC the store says the user owns and can install for a game.
+    pub(super) fn installable_dlc(&self, id: &str) -> Vec<&Dlc> {
+        match self.store.info.get(id) {
+            Some(InfoState::Got(info)) => info.dlc.iter().filter(|dlc| dlc.installable).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// "Also install its DLC", with how many and how big when the store
+    /// says, for a game with DLC to install.
+    fn dlc_box(&self, id: &str) -> Option<Element<'_, Message>> {
+        let dlc = self.installable_dlc(id);
+        if dlc.is_empty() {
+            return None;
+        }
+        let bytes: u64 = dlc.iter().filter_map(|dlc| dlc.install_size).sum();
+        let label = if bytes > 0 {
+            t!(
+                "store-with-dlc-size",
+                count = dlc.len(),
+                size = zendo_core::Size::Bytes(bytes).to_string()
+            )
+        } else {
+            t!("store-with-dlc", count = dlc.len())
+        };
+        let id = id.to_owned();
+        Some(
+            checkbox(!self.store.skip_dlc.contains(&id))
+                .label(label)
+                .text_size(14)
+                .size(16)
+                .on_toggle(move |_| Message::Store(StoreMessage::ToggleDlc(id.clone())))
+                .into(),
+        )
     }
 
     /// Open in library, the queued job, or Install.
@@ -477,7 +532,7 @@ impl Zendo {
                 }
                 (None, _) => t!("store-no-home"),
             };
-            row![
+            let install = row![
                 button(text(t!("install")).size(16).font(BOLD))
                     .padding([10, 32])
                     .style(style::primary)
@@ -485,6 +540,12 @@ impl Zendo {
                 space::horizontal(),
                 text(note).size(14).color(colors().dim),
             ]
+            .spacing(10)
+            .align_y(Alignment::Center);
+            return match self.dlc_box(&game.id) {
+                Some(dlc) => column![install, dlc].spacing(12).into(),
+                None => install.into(),
+            };
         }
         .spacing(10)
         .align_y(Alignment::Center)

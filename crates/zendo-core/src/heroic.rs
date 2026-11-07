@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use crate::{Details, Game, Launch, Played, Scan, Size, Source, paths, time};
+use crate::{Details, Game, InstalledDlc, Launch, Played, Scan, Size, Source, paths, time};
 
 /// Where Heroic keeps its config: native and Flatpak.
 pub fn roots() -> Vec<PathBuf> {
@@ -78,6 +78,7 @@ pub(crate) struct Install {
     pub size: Option<Size>,
     pub platform: Option<String>,
     pub version: Option<String>,
+    pub dlc: Vec<InstalledDlc>,
 }
 
 /// One game in an engine's installed-games file. The files are the same
@@ -119,7 +120,9 @@ fn library(file: &Path, scan: &mut Scan) -> HashMap<String, LibraryGame> {
         .unwrap_or_default()
 }
 
-/// legendary's `installed.json`: app name to installed game, DLC left out.
+/// legendary's `installed.json`: app name to installed game. A DLC is an
+/// entry of its own, installed into its game's folder, so it goes with the
+/// game whose `install_path` it shares.
 pub(crate) fn legendary_installs(file: &Path, scan: &mut Scan) -> Vec<Installed> {
     #[derive(Deserialize)]
     struct Entry {
@@ -135,9 +138,9 @@ pub(crate) fn legendary_installs(file: &Path, scan: &mut Scan) -> Vec<Installed>
     let Some(installed) = read_json::<HashMap<String, Entry>>(file, scan) else {
         return Vec::new();
     };
-    installed
+    let (dlc, games): (Vec<_>, Vec<_>) = installed.into_iter().partition(|(_, game)| game.is_dlc);
+    let mut games: Vec<Installed> = games
         .into_iter()
-        .filter(|(_, game)| !game.is_dlc)
         .map(|(app, game)| Installed {
             app,
             title: game.title,
@@ -146,9 +149,28 @@ pub(crate) fn legendary_installs(file: &Path, scan: &mut Scan) -> Vec<Installed>
                 size: size(game.install_size),
                 platform: game.platform,
                 version: game.version,
+                dlc: Vec::new(),
             },
         })
-        .collect()
+        .collect();
+    for (app, entry) in dlc {
+        let Some(path) = entry.install_path else {
+            continue;
+        };
+        if let Some(game) = games
+            .iter_mut()
+            .find(|game| game.install.path.as_ref() == Some(&path))
+        {
+            game.install.dlc.push(InstalledDlc {
+                id: app,
+                title: entry.title,
+            });
+        }
+    }
+    for game in &mut games {
+        game.install.dlc.sort_by(|a, b| a.id.cmp(&b.id));
+    }
+    games
 }
 
 /// `legendaryConfig/legendary/installed.json`.
@@ -189,6 +211,10 @@ pub(crate) fn gog_installs(file: &Path, scan: &mut Scan) -> Vec<Installed> {
         install_size: Option<serde_json::Value>,
         platform: Option<String>,
         version: Option<String>,
+        /// Product ids; read loosely, as an older Heroic may have written
+        /// something else here.
+        #[serde(default, rename = "installedDLCs")]
+        installed_dlcs: Vec<serde_json::Value>,
     }
 
     let Some(installed) = read_json::<InstalledFile>(file, scan) else {
@@ -206,6 +232,16 @@ pub(crate) fn gog_installs(file: &Path, scan: &mut Scan) -> Vec<Installed> {
                 size: size(game.install_size),
                 platform: game.platform,
                 version: game.version,
+                dlc: game
+                    .installed_dlcs
+                    .iter()
+                    .filter_map(|id| match id {
+                        serde_json::Value::String(id) => Some(id.clone()),
+                        serde_json::Value::Number(id) => Some(id.to_string()),
+                        _ => None,
+                    })
+                    .map(|id| InstalledDlc { id, title: None })
+                    .collect(),
             },
         })
         .collect()
@@ -270,6 +306,8 @@ pub(crate) fn nile_installs(dir: &Path, scan: &mut Scan) -> Vec<Installed> {
                 // Amazon Games has Windows games only.
                 platform: Some("Windows".to_owned()),
                 version: game.version,
+                // nile has no DLC.
+                dlc: Vec::new(),
             },
             app: game.id,
         })
@@ -419,6 +457,7 @@ fn heroic_game(
         version: install.version.filter(|version| !version.is_empty()),
         install_path: install.path,
         size: install.size,
+        dlc: install.dlc,
     };
     game
 }
@@ -503,6 +542,28 @@ mod tests {
                 ("heroic:abc123", "Hand-added Game"),
             ]
         );
+    }
+
+    #[test]
+    fn puts_the_dlc_with_its_game() {
+        let scan = scan(&[fixture()]);
+        let fortnite = by_id(&scan, "epic:Fortnite");
+        assert_eq!(
+            fortnite.details.dlc,
+            [InstalledDlc {
+                id: "SomeDlc".into(),
+                title: Some("Some DLC".into())
+            }]
+        );
+        let ut = by_id(&scan, "gog:1207658924");
+        assert_eq!(
+            ut.details.dlc,
+            [InstalledDlc {
+                id: "1300000000".into(),
+                title: None
+            }]
+        );
+        assert_eq!(by_id(&scan, "gog:1500000000").details.dlc, Vec::new());
     }
 
     #[test]

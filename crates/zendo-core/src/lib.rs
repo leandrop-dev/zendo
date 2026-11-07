@@ -174,6 +174,17 @@ pub struct Details {
     pub version: Option<String>,
     pub install_path: Option<PathBuf>,
     pub size: Option<Size>,
+    /// The DLC installed with it, as its engine records them.
+    pub dlc: Vec<InstalledDlc>,
+}
+
+/// A DLC installed with a game.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InstalledDlc {
+    /// The store's id for it: legendary's app name, GOG's product id.
+    pub id: String,
+    /// legendary records it; Heroic's and Zendo's GOG records do not.
+    pub title: Option<String>,
 }
 
 /// One game in the library.

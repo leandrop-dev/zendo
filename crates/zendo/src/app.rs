@@ -7,6 +7,7 @@
 mod about;
 mod accounts;
 mod artwork;
+mod dlc;
 mod downloads;
 mod format;
 mod game;
@@ -46,6 +47,7 @@ use crate::i18n::{self, Language, t};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
+use game::{GameView, GameViewMessage};
 use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
@@ -211,6 +213,7 @@ enum Message {
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
     Store(StoreMessage),
+    GameView(GameViewMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
     /// page is for.
     PasteClipboard,
@@ -250,6 +253,8 @@ struct Zendo {
     /// Index into the games the filters let through.
     selected: usize,
     columns: usize,
+    /// The window's width, for the game page's columns.
+    window_width: f32,
     window: Option<window::Id>,
     focused: bool,
     fullscreen: bool,
@@ -285,6 +290,8 @@ struct Zendo {
     diagnostics: Diagnostics,
     accounts: Accounts,
     store: StoreState,
+    /// What is open on the game page.
+    game_view: GameView,
     /// Off in tests, so they never touch the user's files or the network.
     persist: bool,
 }
@@ -299,6 +306,7 @@ impl Zendo {
             source: None,
             selected: 0,
             columns: library::columns_for(START_SIZE.width),
+            window_width: START_SIZE.width,
             window: None,
             focused: true,
             fullscreen: false,
@@ -324,6 +332,7 @@ impl Zendo {
             diagnostics: Diagnostics::default(),
             accounts: Accounts::default(),
             store: StoreState::default(),
+            game_view: GameView::default(),
             persist: true,
         };
         // The window's id, so F11 works before the first resize event.
@@ -454,6 +463,7 @@ impl Zendo {
             Message::Resized(id, size) => {
                 self.window = Some(id);
                 self.columns = library::columns_for(size.width);
+                self.window_width = size.width;
                 self.reveal()
             }
             Message::Focused(id, focused) => {
@@ -483,6 +493,7 @@ impl Zendo {
             Message::Back => self.back(),
             Message::Activate => self.activate(),
             Message::Store(message) => self.update_store(message),
+            Message::GameView(message) => self.update_game_view(message),
             Message::Clicked(index) => {
                 self.selected = index;
                 self.open_selected()
@@ -682,6 +693,7 @@ impl Zendo {
         self.page = page;
         self.status = None;
         self.downloads.confirm_uninstall = None;
+        self.game_view = GameView::default();
         match &self.page {
             Page::Game(id) | Page::Owned(id) => {
                 let id = id.clone();

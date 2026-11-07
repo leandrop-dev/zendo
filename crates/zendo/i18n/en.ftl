@@ -333,6 +333,9 @@ game-pin = Pin
 game-unpin = Unpin
 game-hide = Hide
 game-unhide = Unhide
+game-more = More
+game-less = Less
+game-technical = Technical
 game-change-art = Change art
 game-last-played = Last played { $when }
 game-about = About
@@ -360,6 +363,7 @@ fact-platform = Platform
 fact-version = Version
 fact-install-size = Install size
 fact-install-path = Install path
+fact-updates = Updates
 fact-last-played = Last played
 fact-never = Never
 fact-play-time = Play time
@@ -389,8 +393,6 @@ run-stop = Stop
 run-force-stop = Force stop
 run-wine-prefix = Wine prefix
 run-last-log = Last launch's log
-run-launch-title = Launch
-run-launch-about = Windows games run through umu-launcher with Proton, each in a prefix of its own.
 run-open = Open
 
 ## ProtonDB
@@ -588,6 +590,19 @@ store-open-in-library = Open in library
 store-into = Into { $path }
 store-installs-into = Installs into { $path }
 store-installs-into-needs = Installs into { $path } · needs { $size }
+store-with-dlc = Also install its DLC ({ $count })
+store-with-dlc-size = Also install its DLC ({ $count }, { $size })
+
+## The DLC card on a game's page
+
+dlc-title = DLC
+dlc-count = { $installed } of { $total } installed
+dlc-install-all = Install all
+dlc-comes-with = Comes with the game
+dlc-not-installed = Not installed
+dlc-in-heroic = Heroic installs and removes these.
+dlc-sign-in = Sign in to { $store } in Accounts to see all the DLC you own.
+dlc-asking = Asking the store about the DLC you own…
 store-no-home = No home folder to install into
 store-back = ← Store
 
@@ -600,12 +615,18 @@ action-label = { $action ->
     [install] Install
     [update] Update
     [repair] Repair
+    [add-dlc] Install DLC
+    [remove-dlc] Uninstall DLC
    *[uninstall] Uninstall
 }
 action-doing = { $action ->
     [install] Installing
     [update] Updating
     [repair] Repairing
+    [add-dlc] Installing DLC for
+    [remove-dlc] Uninstalling DLC from
+    [add-dlc-alone] Installing DLC
+    [remove-dlc-alone] Uninstalling DLC
    *[uninstall] Uninstalling
 }
 downloads-paused-count = { $count ->
@@ -642,8 +663,6 @@ downloads-up-to-date = Up to date
 downloads-update-version = Update available: { $version }
 downloads-update-available = Update available
 downloads-update-failed = Could not check for updates: { $error }
-downloads-installed-by-zendo = Installed by Zendo
-downloads-through = Through { $launcher }, which Zendo starts it with too.
 downloads-nothing = Nothing to download
 downloads-in-queue = { $count } in the queue
 downloads-in-queue-paused = { $count } in the queue, { $paused } paused

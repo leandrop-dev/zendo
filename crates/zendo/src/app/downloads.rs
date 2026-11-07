@@ -36,12 +36,25 @@ fn action_doing(action: Action) -> String {
     t!("action-doing", action = action_tag(action))
 }
 
+/// The action as it goes on, said without the game's title after it, as
+/// on the game's own page.
+pub(super) fn action_doing_alone(action: Action) -> String {
+    let tag = match action {
+        Action::AddDlc => "add-dlc-alone",
+        Action::RemoveDlc => "remove-dlc-alone",
+        other => action_tag(other),
+    };
+    t!("action-doing", action = tag)
+}
+
 fn action_tag(action: Action) -> &'static str {
     match action {
         Action::Install => "install",
         Action::Update => "update",
         Action::Repair => "repair",
         Action::Uninstall => "uninstall",
+        Action::AddDlc => "add-dlc",
+        Action::RemoveDlc => "remove-dlc",
     }
 }
 
@@ -509,101 +522,6 @@ impl Zendo {
         self.check_updates(&ids)
     }
 
-    /// Update, Repair and Uninstall, for a game Zendo installed, with
-    /// whether an update waits.
-    pub(super) fn store_actions<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
-        let queued = self.downloads.job_for(&game.id);
-        let update = self.downloads.updates.get(&game.id);
-        let mut actions = row![].spacing(10).align_y(Alignment::Center);
-        if let Some((job, running)) = queued {
-            let state = match (running, job.paused) {
-                (true, _) => "now",
-                (false, true) => "paused",
-                (false, false) => "queued",
-            };
-            actions = actions
-                .push(
-                    text(t!(
-                        "downloads-job-state",
-                        doing = action_doing(job.action),
-                        state = state
-                    ))
-                    .size(14),
-                )
-                .push(
-                    button(text(t!("see-downloads")).size(14))
-                        .padding([8, 14])
-                        .style(style::secondary)
-                        .on_press(Message::Navigate(Page::Downloads)),
-                );
-        } else {
-            let queue = |action| {
-                Job::for_game(game, action)
-                    .map(|job| Message::Download(DownloadMessage::Queue(job)))
-            };
-            let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
-            let uninstall = if confirming {
-                button(text(t!("downloads-press-again")).size(14).font(BOLD))
-                    .style(style::danger)
-                    .on_press_maybe(queue(Action::Uninstall))
-            } else {
-                button(text(action_label(Action::Uninstall)).size(14))
-                    .style(style::secondary)
-                    .on_press(Message::Download(DownloadMessage::AskUninstall(
-                        game.id.clone(),
-                    )))
-            };
-            let waiting = matches!(update, Some(UpdateState::Available(_)));
-            actions = actions
-                .push(
-                    button(
-                        text(action_label(Action::Update))
-                            .size(14)
-                            .font(if waiting { BOLD } else { iced::Font::default() }),
-                    )
-                    .padding([8, 14])
-                    .style(if waiting {
-                        style::primary
-                    } else {
-                        style::secondary
-                    })
-                    .on_press_maybe(queue(Action::Update)),
-                )
-                .push(
-                    button(text(action_label(Action::Repair)).size(14))
-                        .padding([8, 14])
-                        .style(style::secondary)
-                        .on_press_maybe(queue(Action::Repair)),
-                )
-                .push(uninstall.padding([8, 14]))
-                .push(space::horizontal())
-                .push(
-                    button(text(t!("downloads-check-updates")).size(13))
-                        .padding([6, 12])
-                        .style(style::secondary)
-                        .on_press_maybe((update != Some(&UpdateState::Checking)).then(|| {
-                            Message::Download(DownloadMessage::CheckUpdate(game.id.clone()))
-                        })),
-                );
-        }
-        let (line, color) = update_line(update);
-        let mut card = column![
-            text(t!("downloads-installed-by-zendo")).size(18).font(BOLD),
-            text(t!("downloads-through", launcher = game.launcher()))
-                .size(13)
-                .color(colors().dim),
-        ]
-        .spacing(10);
-        if !line.is_empty() {
-            card = card.push(text(line).size(14).color(color));
-        }
-        container(card.push(actions))
-            .padding(20)
-            .width(Length::Fill)
-            .style(style::card)
-            .into()
-    }
-
     pub(super) fn downloads_page(&self) -> Element<'_, Message> {
         let state = &self.downloads;
         let paused = state.paused();
@@ -697,7 +615,7 @@ impl Zendo {
 }
 
 /// What the last look for an update found, and its colour.
-fn update_line(update: Option<&UpdateState>) -> (String, Color) {
+pub(super) fn update_line(update: Option<&UpdateState>) -> (String, Color) {
     match update {
         None => (String::new(), colors().dim),
         Some(UpdateState::Checking) => (t!("downloads-checking-updates"), colors().dim),
@@ -972,6 +890,7 @@ mod tests {
             path: "/home/me/Games".into(),
             folder: None,
             paused: false,
+            dlc: Vec::new(),
         }
     }
 
