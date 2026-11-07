@@ -12,7 +12,7 @@ use zendo_core::{Game, Size, Source};
 
 use super::downloads::UpdateState;
 use super::store::InfoState;
-use super::style::{self, ACCENT, BACKGROUND, BOLD, DIM, LINE, SURFACE};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
 use crate::i18n::t;
 
@@ -29,8 +29,8 @@ impl Zendo {
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Navigate(Page::Library)),
-            text("/").size(14).color(DIM),
-            text(&game.title).size(14).color(DIM),
+            text("/").size(14).color(colors().dim),
+            text(&game.title).size(14).color(colors().dim),
         ]
         .spacing(8);
 
@@ -62,7 +62,7 @@ impl Zendo {
             .style(style::secondary)
             .on_press(Message::ToggleHidden),
             space::horizontal(),
-            text(status).size(14).color(DIM),
+            text(status).size(14).color(colors().dim),
         ]
         .spacing(10)
         .align_y(Alignment::Center);
@@ -127,16 +127,16 @@ fn game_hero<'a>(
 ) -> Element<'a, Message> {
     let mut badges = Vec::new();
     if update {
-        badges.push((t!("badge-update"), ACCENT));
+        badges.push((t!("badge-update"), colors().accent));
     }
     if let Some(platform) = &game.details.platform {
-        badges.push((platform_label(platform), DIM));
+        badges.push((platform_label(platform), colors().dim));
     }
     if game.pinned {
-        badges.push((t!("badge-pinned"), ACCENT));
+        badges.push((t!("badge-pinned"), colors().accent));
     }
     if game.hidden {
-        badges.push((t!("badge-hidden"), DIM));
+        badges.push((t!("badge-hidden"), colors().dim));
     }
     hero(Hero {
         title: &game.title,
@@ -163,7 +163,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
         let tint = style::source_color(hero.source);
         shade(
             Linear::new(Radians(FRAC_PI_2))
-                .add_stop(0.0, SURFACE)
+                .add_stop(0.0, colors().surface)
                 .add_stop(1.0, Color { a: 0.25, ..tint }),
         )
     };
@@ -175,14 +175,14 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
                 0.45,
                 Color {
                     a: 0.2,
-                    ..BACKGROUND
+                    ..colors().background
                 },
             )
             .add_stop(
                 1.0,
                 Color {
                     a: 0.95,
-                    ..BACKGROUND
+                    ..colors().background
                 },
             ),
     );
@@ -192,7 +192,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
                 0.0,
                 Color {
                     a: 0.7,
-                    ..BACKGROUND
+                    ..colors().background
                 },
             )
             .add_stop(0.6, Color::TRANSPARENT),
@@ -211,7 +211,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
     }
     let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
     if let Some(developer) = hero.developer {
-        info = info.push(text(developer).size(15).color(DIM));
+        info = info.push(text(developer).size(15).color(colors().dim));
     }
     let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
     if !facts.is_empty() {
@@ -288,9 +288,12 @@ fn fact_chip<'a>(fact: String) -> Element<'a, Message> {
     container(text(fact).size(13))
         .padding([4, 10])
         .style(|_| container::Style {
-            background: Some(Background::Color(Color { a: 0.7, ..SURFACE })),
+            background: Some(Background::Color(Color {
+                a: 0.7,
+                ..colors().surface
+            })),
             border: Border {
-                color: LINE,
+                color: colors().line,
                 width: 1.0,
                 radius: 14.0.into(),
             },
@@ -376,7 +379,7 @@ fn details(game: &Game, facts: Vec<(String, String)>) -> Element<'_, Message> {
     let mut add = |label: String, value: Element<'static, Message>| {
         rows.push(
             row![
-                text(label).size(14).color(DIM).width(LABEL_WIDTH),
+                text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
                 container(value).width(Length::Fill),
             ]
             .align_y(Alignment::Center)

@@ -34,7 +34,9 @@ pub mod state;
 mod steam;
 pub mod steamgriddb;
 pub mod stores;
+pub mod theme;
 mod time;
+pub mod tone;
 mod umu;
 mod windows;
 

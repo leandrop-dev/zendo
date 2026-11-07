@@ -5,7 +5,7 @@ use iced::widget::{button, container, text, tooltip};
 use iced::{Color, Element, Task};
 use zendo_core::protondb::{self, Rating};
 
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -22,8 +22,8 @@ fn tier_color(tier: &str) -> Color {
         "gold" => Color::from_rgb8(0xcf, 0xb5, 0x3b),
         "silver" => Color::from_rgb8(0xa6, 0xa6, 0xa6),
         "bronze" => Color::from_rgb8(0xcd, 0x7f, 0x32),
-        "borked" => BAD,
-        _ => DIM,
+        "borked" => colors().bad,
+        _ => colors().dim,
     }
 }
 
@@ -66,7 +66,7 @@ impl Zendo {
     /// game, or could not be asked.
     pub(super) fn rating_pill(&self, id: &str) -> Option<Element<'_, Message>> {
         match self.ratings.get(id)? {
-            RatingState::Asking => Some(style::badge("PROTONDB …", DIM)),
+            RatingState::Asking => Some(style::badge("PROTONDB …", colors().dim)),
             RatingState::Got(Some(rating)) => Some(pill(rating)),
             RatingState::Got(None) => None,
         }
@@ -94,7 +94,7 @@ fn pill(rating: &Rating) -> Element<'_, Message> {
     let (label, color, about) = match &rating.tier {
         _ if rating.native => (
             t!("protondb-native"),
-            GOOD,
+            colors().good,
             t!("protondb-native-about", reports = reports(rating)),
         ),
         Some(tier) => (
@@ -102,7 +102,7 @@ fn pill(rating: &Rating) -> Element<'_, Message> {
             tier_color(tier),
             t!("protondb-tier-about", reports = reports(rating)),
         ),
-        None => (t!("protondb-none"), DIM, t!("protondb-none-about")),
+        None => (t!("protondb-none"), colors().dim, t!("protondb-none-about")),
     };
     let link = button(text(label).size(11).font(BOLD))
         .padding([2, 7])

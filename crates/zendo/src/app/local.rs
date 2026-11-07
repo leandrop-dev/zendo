@@ -9,7 +9,7 @@ use iced::{Alignment, Element, Length, Task};
 use zendo_core::local::{self, LocalGame};
 
 use super::launch_options::overlay;
-use super::style::{self, BAD, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking};
 use crate::i18n::t;
 
@@ -290,7 +290,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
     };
     let mut body = column![
         text(heading).size(20).font(BOLD),
-        text(about).size(13).color(DIM),
+        text(about).size(13).color(colors().dim),
         field(
             t!("local-program"),
             row![
@@ -333,11 +333,11 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                 .padding([8, 12])
                 .style(style::input),
         ),
-        text(t!("local-cover-note")).size(13).color(DIM),
+        text(t!("local-cover-note")).size(13).color(colors().dim),
     ]
     .spacing(18);
     if let Some(error) = &form.error {
-        body = body.push(text(error).size(13).color(BAD));
+        body = body.push(text(error).size(13).color(colors().bad));
     }
     body = body.push(
         row![

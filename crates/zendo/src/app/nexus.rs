@@ -21,7 +21,7 @@ use zendo_core::secrets::Key;
 
 use super::launch_options::overlay;
 use super::settings::{kept_note, section};
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -662,13 +662,17 @@ impl Zendo {
         let mut body = column![field].spacing(10);
         match (&key.note, &self.nexus.user) {
             (Some((note, good)), _) => {
-                body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
+                body = body.push(text(note).size(13).color(if *good {
+                    colors().good
+                } else {
+                    colors().bad
+                }));
             }
             (None, _) if saved.is_empty() => {
-                body = body.push(text(t!("key-none")).size(13).color(DIM));
+                body = body.push(text(t!("key-none")).size(13).color(colors().dim));
             }
             (None, Some(user)) => {
-                body = body.push(text(signed_in(user)).size(13).color(GOOD));
+                body = body.push(text(signed_in(user)).size(13).color(colors().good));
             }
             (None, None) => {}
         }
@@ -691,7 +695,11 @@ impl Zendo {
             row![
                 text(handler)
                     .size(13)
-                    .color(if is_zendo { GOOD } else { DIM })
+                    .color(if is_zendo {
+                        colors().good
+                    } else {
+                        colors().dim
+                    })
                     .width(Length::Fill),
                 button(text(t!("nexus-become-handler")).size(13))
                     .padding([6, 12])
@@ -748,7 +756,7 @@ pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
         column![
             text(&download.name).size(14),
             progress_bar(0.0..=1.0, bar).girth(6).style(style::progress),
-            text(words).size(12).color(DIM),
+            text(words).size(12).color(colors().dim),
         ]
         .spacing(4)
         .width(Length::Fill),
@@ -788,7 +796,7 @@ fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
     container(
         column![
             text(t!("nexus-choose-title")).size(20).font(BOLD),
-            text(about).size(13).color(DIM),
+            text(about).size(13).color(colors().dim),
             scrollable(games).height(Length::Shrink),
             row![
                 space::horizontal(),

@@ -10,7 +10,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::stores::{self, AmazonLogin, Store};
 
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking, code_id, open};
 use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
@@ -378,7 +378,7 @@ impl Zendo {
     pub(super) fn accounts_page(&self) -> Element<'_, Message> {
         let header = column![
             text(t!("page-accounts")).size(28).font(BOLD),
-            text(t!("accounts-about")).size(13).color(DIM),
+            text(t!("accounts-about")).size(13).color(colors().dim),
         ]
         .spacing(2);
         scrollable(
@@ -400,10 +400,13 @@ impl Zendo {
             .as_ref()
             .filter(|sign_in| sign_in.store == store);
         let (status, color) = match self.accounts.get(store) {
-            Account::Checking => (t!("key-checking"), DIM),
-            Account::SignedOut => (t!("accounts-signed-out"), DIM),
-            Account::SignedIn(name) => (t!("accounts-signed-in-as", name = name.as_str()), GOOD),
-            Account::Failed(err) => (err.clone(), BAD),
+            Account::Checking => (t!("key-checking"), colors().dim),
+            Account::SignedOut => (t!("accounts-signed-out"), colors().dim),
+            Account::SignedIn(name) => (
+                t!("accounts-signed-in-as", name = name.as_str()),
+                colors().good,
+            ),
+            Account::Failed(err) => (err.clone(), colors().bad),
         };
         let action: Element<'_, Message> = match self.accounts.get(store) {
             Account::SignedIn(_) => button(text(t!("accounts-sign-out")).size(14))
@@ -437,10 +440,10 @@ impl Zendo {
             Some(path) => text(t!("accounts-through", path = path.display().to_string()))
                 .size(12)
                 .font(Font::MONOSPACE)
-                .color(DIM),
+                .color(colors().dim),
             None => text(t!("accounts-engine-missing", engine = store.engine_name()))
                 .size(13)
-                .color(BAD),
+                .color(colors().bad),
         };
 
         let mut body = column![title, text(status).size(14).color(color), engine_line].spacing(8);
@@ -501,7 +504,7 @@ fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
         steps = steps.push(text(line).size(14));
     }
     if let Some(note) = &sign_in.note {
-        steps = steps.push(text(note).size(13).color(BAD));
+        steps = steps.push(text(note).size(13).color(colors().bad));
     }
     container(steps.push(buttons)).padding([12, 0]).into()
 }
@@ -567,7 +570,7 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
     ]
     .spacing(10);
     if let Some(note) = &sign_in.note {
-        steps = steps.push(text(note).size(13).color(BAD));
+        steps = steps.push(text(note).size(13).color(colors().bad));
     }
     container(steps).padding([12, 0]).into()
 }

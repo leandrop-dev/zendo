@@ -18,7 +18,7 @@ use zendo_core::covers::{self, Kind};
 use zendo_core::steamgriddb::{self, Found, Page as ImagePage};
 
 use super::launch_options::overlay;
-use super::style::{self, BAD, BOLD, DIM, SURFACE};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking};
 use crate::i18n::t;
 
@@ -547,9 +547,9 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
 fn picker_footer(picker: &Picker) -> Element<'_, Message> {
     let mut footer = row![].spacing(10).align_y(Alignment::Center);
     if let Some(busy) = &picker.busy {
-        footer = footer.push(text(busy).size(13).color(DIM));
+        footer = footer.push(text(busy).size(13).color(colors().dim));
     } else if let Some(note) = &picker.note {
-        footer = footer.push(text(note).size(13).color(BAD));
+        footer = footer.push(text(note).size(13).color(colors().bad));
     }
     footer = footer.push(space::horizontal());
     if picker
@@ -599,7 +599,7 @@ fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, M
             .width(width)
             .height(height)
             .style(|_| container::Style {
-                background: Some(SURFACE.into()),
+                background: Some(colors().surface.into()),
                 border: iced::Border {
                     radius: 8.0.into(),
                     ..iced::Border::default()

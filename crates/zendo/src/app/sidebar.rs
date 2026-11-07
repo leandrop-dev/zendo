@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use iced::widget::{button, column, container, row, space, text};
 use iced::{Element, Length};
 
-use super::style::{self, ACCENT, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, format};
 use crate::i18n::t;
 use zendo_core::Game;
@@ -27,7 +27,7 @@ impl Zendo {
                 row![
                     text(label).size(14),
                     space::horizontal(),
-                    text(detail).size(12).color(DIM)
+                    text(detail).size(12).color(colors().dim)
                 ]
                 .align_y(iced::Alignment::Center),
             )
@@ -36,14 +36,15 @@ impl Zendo {
             .style(style::nav(current))
             .on_press(Message::Navigate(page))
         };
-        let heading =
-            |label: String| container(text(label).size(11).font(BOLD).color(DIM)).padding([12, 12]);
+        let heading = |label: String| {
+            container(text(label).size(11).font(BOLD).color(colors().dim)).padding([12, 12])
+        };
 
         let summary = summary(&games);
 
         let brand = row![
             text("Zendo").size(22).font(BOLD),
-            text("•").size(22).color(ACCENT)
+            text("•").size(22).color(colors().accent)
         ]
         .spacing(2);
 
@@ -123,7 +124,7 @@ fn summary<'a>(games: &[&Game]) -> Element<'a, Message> {
             text(t!("sidebar-your-library"))
                 .size(11)
                 .font(BOLD)
-                .color(DIM),
+                .color(colors().dim),
             text(t!("count-games", count = games.len()))
                 .size(20)
                 .font(BOLD),
@@ -133,7 +134,7 @@ fn summary<'a>(games: &[&Game]) -> Element<'a, Message> {
                 time = format::play_time(minutes)
             ))
             .size(12)
-            .color(DIM),
+            .color(colors().dim),
         ]
         .spacing(4),
     )

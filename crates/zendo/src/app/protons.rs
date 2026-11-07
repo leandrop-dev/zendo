@@ -18,7 +18,7 @@ use zendo_core::launch_options::LaunchOptions;
 use zendo_core::proton::{self, Proton};
 
 use super::settings::section;
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -287,7 +287,9 @@ impl Zendo {
             .cloned();
         let mut body = column![
             text(t!("protons-default")).size(15).font(BOLD),
-            text(t!("protons-default-about")).size(13).color(DIM),
+            text(t!("protons-default-about"))
+                .size(13)
+                .color(colors().dim),
             pick_list(choices, selected, |choice| {
                 Message::Proton(ProtonMessage::SetDefault(choice))
             })
@@ -298,7 +300,7 @@ impl Zendo {
         ]
         .spacing(10);
         if protons.installed.is_empty() {
-            body = body.push(text(t!("protons-none")).size(14).color(DIM));
+            body = body.push(text(t!("protons-none")).size(14).color(colors().dim));
         }
         for found in &protons.installed {
             body = body.push(self.installed_row(found));
@@ -321,9 +323,9 @@ impl Zendo {
             body = body.push(self.release_row(release));
         }
         if protons.asking {
-            body = body.push(text(t!("protons-asking")).size(14).color(DIM));
+            body = body.push(text(t!("protons-asking")).size(14).color(colors().dim));
         } else if let Some(err) = &protons.error {
-            body = body.push(text(err).size(13).color(BAD));
+            body = body.push(text(err).size(13).color(colors().bad));
         } else if protons.releases.len() > protons.shown || protons.more {
             body = body.push(
                 button(text(t!("protons-show-older")).size(13))
@@ -336,7 +338,11 @@ impl Zendo {
             body = body.push(download_bar(download));
         }
         if let Some((note, good)) = &protons.note {
-            body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
+            body = body.push(text(note).size(13).color(if *good {
+                colors().good
+            } else {
+                colors().bad
+            }));
         }
         section("Proton", t!("protons-about"), body)
     }
@@ -349,7 +355,7 @@ impl Zendo {
             text(found.path.display().to_string())
                 .size(12)
                 .font(Font::MONOSPACE)
-                .color(DIM),
+                .color(colors().dim),
         );
         let users = if confirming {
             games_using(&found.name)
@@ -360,7 +366,7 @@ impl Zendo {
             label = label.push(
                 text(t!("protons-chosen-by", count = users))
                     .size(12)
-                    .color(BAD),
+                    .color(colors().bad),
             );
         }
         let mut line = row![label.width(Length::Fill)]
@@ -395,7 +401,7 @@ impl Zendo {
             .iter()
             .any(|found| ge_proton::is_release(found, release));
         let action: Element<'a, Message> = if installed {
-            text(t!("installed")).size(13).color(GOOD).into()
+            text(t!("installed")).size(13).color(colors().good).into()
         } else {
             button(text(t!("download")).size(13))
                 .padding([6, 12])
@@ -410,10 +416,13 @@ impl Zendo {
         };
         row![
             text(&release.name).size(14).width(200),
-            text(&release.published).size(13).color(DIM).width(110),
+            text(&release.published)
+                .size(13)
+                .color(colors().dim)
+                .width(110),
             text(Size::Bytes(release.size).to_string())
                 .size(13)
-                .color(DIM)
+                .color(colors().dim)
                 .width(Length::Fill),
             action,
         ]
@@ -451,7 +460,7 @@ fn download_bar(download: &Download) -> Element<'_, Message> {
                 total = Size::Bytes(download.total).to_string()
             ))
             .size(13)
-            .color(DIM),
+            .color(colors().dim),
             button(text(if stopping { t!("stopping") } else { t!("stop") }).size(13))
                 .padding([6, 12])
                 .style(style::secondary)

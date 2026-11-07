@@ -13,7 +13,7 @@ use iced::{Alignment, Background, Color, Element, Length, Task};
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::{Game, Launch, launch, proton};
 
-use super::style::{self, BAD, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo};
 use crate::i18n::t;
 
@@ -346,7 +346,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     }
     body = body.push(text_fields(options));
     if let Some(error) = &sheet.error {
-        body = body.push(text(error).size(13).color(BAD));
+        body = body.push(text(error).size(13).color(colors().bad));
     }
     body = body.push(
         row![
@@ -372,11 +372,14 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
 /// Full screen and the size, under gamescope's switch.
 fn gamescope_options(sheet: &Sheet) -> Element<'_, Message> {
     let size = row![
-        text(t!("options-size")).size(14).color(DIM).width(60),
+        text(t!("options-size"))
+            .size(14)
+            .color(colors().dim)
+            .width(60),
         size_input(&t!("options-width"), &sheet.width, SheetMessage::Width),
-        text("×").size(14).color(DIM),
+        text("×").size(14).color(colors().dim),
         size_input(&t!("options-height"), &sheet.height, SheetMessage::Height),
-        text(t!("options-size-empty")).size(13).color(DIM),
+        text(t!("options-size-empty")).size(13).color(colors().dim),
     ]
     .spacing(10)
     .align_y(Alignment::Center);
@@ -427,7 +430,7 @@ fn field<'a>(
 ) -> Element<'a, Message> {
     column![
         text(label).size(15).font(BOLD),
-        text(about).size(13).color(DIM),
+        text(about).size(13).color(colors().dim),
         input.into(),
     ]
     .spacing(6)
@@ -454,7 +457,7 @@ fn switch<'a>(
     } else {
         toggle
     };
-    column![toggle, text(about).size(13).color(DIM)]
+    column![toggle, text(about).size(13).color(colors().dim)]
         .spacing(4)
         .into()
 }

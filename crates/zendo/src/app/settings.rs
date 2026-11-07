@@ -13,7 +13,7 @@ use zendo_core::covers::{self, KeyCheck};
 use zendo_core::secrets::Key;
 use zendo_core::{Source, State, launch, report};
 
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking, key_id};
 use crate::i18n::{self, Language, t};
 
@@ -175,7 +175,7 @@ impl Zendo {
     }
 
     /// Writes the settings, saying so on the page when it fails.
-    fn save_config(&mut self) -> bool {
+    pub(super) fn save_config(&mut self) -> bool {
         if !self.persist {
             return true;
         }
@@ -208,13 +208,14 @@ impl Zendo {
     pub(super) fn settings_page(&self) -> Element<'_, Message> {
         let header = column![
             text(t!("page-settings")).size(28).font(BOLD),
-            text(t!("settings-subtitle")).size(13).color(DIM),
+            text(t!("settings-subtitle")).size(13).color(colors().dim),
         ]
         .spacing(2);
         scrollable(
             column![
                 header,
                 self.language_section(),
+                self.theme_section(),
                 self.key_section(),
                 self.nexus_section(),
                 self.covers_section(),
@@ -279,10 +280,14 @@ impl Zendo {
         let mut body = column![field].spacing(10);
         match &self.key.note {
             Some((note, good)) => {
-                body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
+                body = body.push(text(note).size(13).color(if *good {
+                    colors().good
+                } else {
+                    colors().bad
+                }));
             }
             None if saved.is_empty() => {
-                body = body.push(text(t!("key-none")).size(13).color(DIM));
+                body = body.push(text(t!("key-none")).size(13).color(colors().dim));
             }
             None => {}
         }
@@ -324,7 +329,11 @@ impl Zendo {
         ]
         .spacing(10);
         if let Some((note, good)) = &self.diagnostics.note {
-            body = body.push(text(note).size(13).color(if *good { GOOD } else { BAD }));
+            body = body.push(text(note).size(13).color(if *good {
+                colors().good
+            } else {
+                colors().bad
+            }));
         }
         section(t!("report-title"), t!("report-about"), body)
     }
@@ -367,7 +376,7 @@ impl Zendo {
                     .on_press_maybe(
                         (self.config.download_covers && !busy).then_some(Message::DownloadNow)
                     ),
-                text(progress).size(13).color(DIM),
+                text(progress).size(13).color(colors().dim),
             ]
             .spacing(12)
             .align_y(Alignment::Center),
@@ -393,7 +402,7 @@ impl Zendo {
             row![
                 text(label).size(14).width(320),
                 if count == 0 {
-                    text(t!("sources-none-found")).size(14).color(DIM)
+                    text(t!("sources-none-found")).size(14).color(colors().dim)
                 } else {
                     text(t!("count-games", count = count)).size(14)
                 },
@@ -405,7 +414,7 @@ impl Zendo {
             rows.push(
                 text(t!("sources-unreadable", problem = problem.as_str()))
                     .size(13)
-                    .color(BAD)
+                    .color(colors().bad)
                     .into(),
             );
         }
@@ -435,7 +444,7 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
             .filter(|folder| folder.is_dir())
             .map(Path::to_path_buf);
         row![
-            text(label).size(14).color(DIM).width(160),
+            text(label).size(14).color(colors().dim).width(160),
             text(shown)
                 .size(13)
                 .font(Font::MONOSPACE)
@@ -494,10 +503,10 @@ impl Diagnostics {
 pub(super) fn kept_note<'a>(kept: &Kept) -> Option<Element<'a, Message>> {
     let (note, color) = match kept {
         Kept::Nowhere => return None,
-        Kept::Keyring => (t!("kept-keyring"), DIM),
-        Kept::File(None) => (t!("kept-file"), DIM),
-        Kept::File(Some(why)) => (t!("kept-file-why", why = why.as_str()), DIM),
-        Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), BAD),
+        Kept::Keyring => (t!("kept-keyring"), colors().dim),
+        Kept::File(None) => (t!("kept-file"), colors().dim),
+        Kept::File(Some(why)) => (t!("kept-file-why", why = why.as_str()), colors().dim),
+        Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), colors().bad),
     };
     Some(text(note).size(13).color(color).into())
 }
@@ -510,7 +519,7 @@ pub(super) fn section<'a>(
     container(
         column![
             text(title).size(18).font(BOLD),
-            text(about).size(13).color(DIM),
+            text(about).size(13).color(colors().dim),
             body.into(),
         ]
         .spacing(10),

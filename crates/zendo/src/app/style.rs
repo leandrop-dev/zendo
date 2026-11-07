@@ -1,35 +1,148 @@
-//! hyprmonk's colours and the shapes every page shares.
+//! The window's colours and the shapes every page shares. The colours are
+//! one palette for the whole window, made from a theme
+//! ([`Colors::from_theme`]) and changed with [`set_colors`]; the pages read
+//! it with [`colors`].
+
+use std::sync::{PoisonError, RwLock};
 
 use iced::widget::{button, container, progress_bar, text, text_input};
 use iced::{Background, Border, Color, Element, Font, Theme, font};
 use zendo_core::Source;
+use zendo_core::theme::Theme as ThemeFile;
+use zendo_core::tone::Rgb;
 
-pub const BACKGROUND: Color = Color::from_rgb8(0x17, 0x17, 0x17);
-pub const SIDEBAR: Color = Color::from_rgb8(0x12, 0x12, 0x12);
-pub const SURFACE: Color = Color::from_rgb8(0x22, 0x22, 0x22);
-pub const RAISED: Color = Color::from_rgb8(0x2c, 0x2c, 0x2c);
-pub const LINE: Color = Color::from_rgb8(0x30, 0x30, 0x30);
-pub const TEXT: Color = Color::from_rgb8(0xcc, 0xd0, 0xcf);
-pub const DIM: Color = Color::from_rgb8(0x80, 0x84, 0x83);
-pub const ACCENT: Color = Color::from_rgb8(0xf2, 0x56, 0x23);
-pub const GOOD: Color = Color::from_rgb8(0x7f, 0xb0, 0x69);
-pub const BAD: Color = Color::from_rgb8(0xe0, 0x5a, 0x4c);
+/// The window's colours.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Colors {
+    pub background: Color,
+    /// The sidebar, a step away from the background.
+    pub sidebar: Color,
+    /// Cards, inputs, chips.
+    pub surface: Color,
+    /// A surface under the pointer, a track.
+    pub raised: Color,
+    /// The rim of cards and inputs.
+    pub line: Color,
+    pub text: Color,
+    /// Text that matters less.
+    pub dim: Color,
+    pub accent: Color,
+    pub good: Color,
+    pub bad: Color,
+    /// Dark text on a light background.
+    pub light: bool,
+}
+
+impl Colors {
+    /// Zendo's own, as `themes/zendo.toml` gives them: the colours until a
+    /// theme is read, and when none can be.
+    pub const ZENDO: Self = Self {
+        background: Color::from_rgb8(0x17, 0x17, 0x17),
+        sidebar: Color::from_rgb8(0x12, 0x12, 0x12),
+        surface: Color::from_rgb8(0x22, 0x22, 0x22),
+        raised: Color::from_rgb8(0x2c, 0x2c, 0x2c),
+        line: Color::from_rgb8(0x30, 0x30, 0x30),
+        text: Color::from_rgb8(0xcc, 0xd0, 0xcf),
+        dim: Color::from_rgb8(0x80, 0x84, 0x83),
+        accent: Color::from_rgb8(0xf2, 0x56, 0x23),
+        good: Color::from_rgb8(0x7f, 0xb0, 0x69),
+        bad: Color::from_rgb8(0xe0, 0x5a, 0x4c),
+        light: false,
+    };
+
+    /// A palette from a theme: its background, text and accent, with the
+    /// greys it leaves out mixed between the first two as Zendo's own are.
+    /// A light theme gets a darker green and red when it brings none.
+    pub fn from_theme(theme: &ThemeFile) -> Self {
+        let background = color(theme.background);
+        let text = color(theme.foreground);
+        let mix = |amount: f32| blend(background, text, amount);
+        let or_mixed = |given: Option<Rgb>, amount: f32| given.map_or_else(|| mix(amount), color);
+        let (good, bad) = if theme.light {
+            (
+                Color::from_rgb8(0x3f, 0x7a, 0x34),
+                Color::from_rgb8(0xb0, 0x3a, 0x30),
+            )
+        } else {
+            (Self::ZENDO.good, Self::ZENDO.bad)
+        };
+        Self {
+            background,
+            sidebar: theme.sidebar.map_or_else(
+                || {
+                    if theme.light {
+                        mix(0.04)
+                    } else {
+                        blend(background, Color::BLACK, 0.22)
+                    }
+                },
+                color,
+            ),
+            surface: or_mixed(theme.surface, 0.06),
+            raised: or_mixed(theme.raised, 0.115),
+            line: or_mixed(theme.line, 0.14),
+            text,
+            dim: or_mixed(theme.dim, 0.58),
+            accent: color(theme.accent),
+            good: theme.positive.map_or(good, color),
+            bad: theme.negative.map_or(bad, color),
+            light: theme.light,
+        }
+    }
+
+    /// A colour under the pointer: lighter on a dark palette, darker on a
+    /// light one.
+    fn hovered(&self, color: Color) -> Color {
+        if self.light {
+            blend(color, Color::BLACK, 0.12)
+        } else {
+            blend(color, Color::WHITE, 0.15)
+        }
+    }
+}
+
+fn color(Rgb(r, g, b): Rgb) -> Color {
+    Color::from_rgb8(r, g, b)
+}
+
+/// `from` moved `amount` of the way to `to`.
+fn blend(from: Color, to: Color, amount: f32) -> Color {
+    let step = |a: f32, b: f32| a + (b - a) * amount;
+    Color::from_rgb(step(from.r, to.r), step(from.g, to.g), step(from.b, to.b))
+}
+
+static CURRENT: RwLock<Colors> = RwLock::new(Colors::ZENDO);
+
+/// The window's colours now.
+pub fn colors() -> Colors {
+    // A palette is only ever replaced whole, so one left by a panic
+    // elsewhere is still a whole palette.
+    *CURRENT.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Changes the window's colours; the next frame shows them.
+pub fn set_colors(colors: Colors) {
+    *CURRENT.write().unwrap_or_else(PoisonError::into_inner) = colors;
+}
 
 pub const BOLD: Font = Font {
     weight: font::Weight::Bold,
     ..Font::DEFAULT
 };
 
+/// Iced's theme from the window's colours: what the widgets Zendo does
+/// not style itself (scroll bars, pick lists, togglers) are drawn in.
 pub fn theme() -> Theme {
+    let colors = colors();
     Theme::custom(
         "Zendo",
         iced::theme::Palette {
-            background: BACKGROUND,
-            text: TEXT,
-            primary: ACCENT,
-            success: GOOD,
+            background: colors.background,
+            text: colors.text,
+            primary: colors.accent,
+            success: colors.good,
             warning: Color::from_rgb8(0xe0, 0xb0, 0x4c),
-            danger: BAD,
+            danger: colors.bad,
         },
     )
 }
@@ -42,8 +155,8 @@ pub fn source_color(source: Source) -> Color {
         Source::Gog => Color::from_rgb8(0xb3, 0x7f, 0xe0),
         Source::Amazon => Color::from_rgb8(0xf0, 0xa0, 0x30),
         Source::Heroic => Color::from_rgb8(0xe0, 0x6c, 0x75),
-        Source::Desktop => GOOD,
-        Source::Local => ACCENT,
+        Source::Desktop => colors().good,
+        Source::Local => colors().accent,
     }
 }
 
@@ -54,7 +167,7 @@ pub fn badge<'a, M: 'a>(label: impl text::IntoFragment<'a>, color: Color) -> Ele
         .style(move |_| container::Style {
             background: Some(Background::Color(Color {
                 a: 0.82,
-                ..BACKGROUND
+                ..colors().background
             })),
             border: Border {
                 color: Color { a: 0.5, ..color },
@@ -77,7 +190,7 @@ pub fn pill(color: Color) -> impl Fn(&Theme, button::Status) -> button::Style {
             } else {
                 Color {
                     a: 0.82,
-                    ..BACKGROUND
+                    ..colors().background
                 }
             })),
             text_color: color,
@@ -97,9 +210,9 @@ pub fn pill(color: Color) -> impl Fn(&Theme, button::Status) -> button::Style {
 /// A raised panel: the details card, a settings section.
 pub fn card(_: &Theme) -> container::Style {
     container::Style {
-        background: Some(Background::Color(SURFACE)),
+        background: Some(Background::Color(colors().surface)),
         border: Border {
-            color: LINE,
+            color: colors().line,
             width: 1.0,
             radius: 12.0.into(),
         },
@@ -109,9 +222,9 @@ pub fn card(_: &Theme) -> container::Style {
 
 pub fn sidebar(_: &Theme) -> container::Style {
     container::Style {
-        background: Some(Background::Color(SIDEBAR)),
+        background: Some(Background::Color(colors().sidebar)),
         border: Border {
-            color: LINE,
+            color: colors().line,
             width: 1.0,
             radius: 0.0.into(),
         },
@@ -121,14 +234,18 @@ pub fn sidebar(_: &Theme) -> container::Style {
 
 /// The one action that matters on a page: Play, Save.
 pub fn primary(_: &Theme, status: button::Status) -> button::Style {
+    let colors = colors();
     let background = match status {
-        button::Status::Hovered | button::Status::Pressed => Color::from_rgb8(0xff, 0x6d, 0x3d),
-        button::Status::Disabled => Color { a: 0.4, ..ACCENT },
-        button::Status::Active => ACCENT,
+        button::Status::Hovered | button::Status::Pressed => colors.hovered(colors.accent),
+        button::Status::Disabled => Color {
+            a: 0.4,
+            ..colors.accent
+        },
+        button::Status::Active => colors.accent,
     };
     button::Style {
         background: Some(Background::Color(background)),
-        text_color: BACKGROUND,
+        text_color: colors.background,
         border: Border {
             radius: 8.0.into(),
             ..Border::default()
@@ -140,16 +257,16 @@ pub fn primary(_: &Theme, status: button::Status) -> button::Style {
 pub fn secondary(_: &Theme, status: button::Status) -> button::Style {
     button::Style {
         background: Some(Background::Color(match status {
-            button::Status::Hovered | button::Status::Pressed => RAISED,
-            _ => SURFACE,
+            button::Status::Hovered | button::Status::Pressed => colors().raised,
+            _ => colors().surface,
         })),
         text_color: if status == button::Status::Disabled {
-            DIM
+            colors().dim
         } else {
-            TEXT
+            colors().text
         },
         border: Border {
-            color: LINE,
+            color: colors().line,
             width: 1.0,
             radius: 8.0.into(),
         },
@@ -159,14 +276,18 @@ pub fn secondary(_: &Theme, status: button::Status) -> button::Style {
 
 /// A button that deletes something, once it has asked.
 pub fn danger(_: &Theme, status: button::Status) -> button::Style {
+    let colors = colors();
     let background = match status {
-        button::Status::Hovered | button::Status::Pressed => Color::from_rgb8(0xf0, 0x6e, 0x60),
-        button::Status::Disabled => Color { a: 0.4, ..BAD },
-        button::Status::Active => BAD,
+        button::Status::Hovered | button::Status::Pressed => colors.hovered(colors.bad),
+        button::Status::Disabled => Color {
+            a: 0.4,
+            ..colors.bad
+        },
+        button::Status::Active => colors.bad,
     };
     button::Style {
         background: Some(Background::Color(background)),
-        text_color: BACKGROUND,
+        text_color: colors.background,
         border: Border {
             radius: 8.0.into(),
             ..Border::default()
@@ -180,8 +301,8 @@ pub fn link(_: &Theme, status: button::Status) -> button::Style {
     button::Style {
         background: None,
         text_color: match status {
-            button::Status::Hovered | button::Status::Pressed => ACCENT,
-            _ => DIM,
+            button::Status::Hovered | button::Status::Pressed => colors().accent,
+            _ => colors().dim,
         },
         ..button::Style::default()
     }
@@ -193,15 +314,26 @@ pub fn chip(chosen: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
         let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
         button::Style {
             background: Some(Background::Color(if chosen {
-                Color { a: 0.16, ..ACCENT }
+                Color {
+                    a: 0.16,
+                    ..colors().accent
+                }
             } else if hovered {
-                RAISED
+                colors().raised
             } else {
-                SURFACE
+                colors().surface
             })),
-            text_color: if chosen { ACCENT } else { TEXT },
+            text_color: if chosen {
+                colors().accent
+            } else {
+                colors().text
+            },
             border: Border {
-                color: if chosen { ACCENT } else { LINE },
+                color: if chosen {
+                    colors().accent
+                } else {
+                    colors().line
+                },
                 width: 1.0,
                 radius: 16.0.into(),
             },
@@ -216,13 +348,20 @@ pub fn nav(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
         let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
         button::Style {
             background: (current || hovered).then_some(Background::Color(if current {
-                SURFACE
+                colors().surface
             } else {
-                Color { a: 0.5, ..SURFACE }
+                Color {
+                    a: 0.5,
+                    ..colors().surface
+                }
             })),
-            text_color: if current { TEXT } else { DIM },
+            text_color: if current { colors().text } else { colors().dim },
             border: Border {
-                color: if current { LINE } else { Color::TRANSPARENT },
+                color: if current {
+                    colors().line
+                } else {
+                    Color::TRANSPARENT
+                },
                 width: 1.0,
                 radius: 8.0.into(),
             },
@@ -233,28 +372,31 @@ pub fn nav(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
 
 pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
     text_input::Style {
-        background: Background::Color(SURFACE),
+        background: Background::Color(colors().surface),
         border: Border {
             color: if matches!(status, text_input::Status::Focused { .. }) {
-                ACCENT
+                colors().accent
             } else {
-                LINE
+                colors().line
             },
             width: 1.0,
             radius: 8.0.into(),
         },
-        icon: DIM,
-        placeholder: DIM,
-        value: TEXT,
-        selection: Color { a: 0.35, ..ACCENT },
+        icon: colors().dim,
+        placeholder: colors().dim,
+        value: colors().text,
+        selection: Color {
+            a: 0.35,
+            ..colors().accent
+        },
     }
 }
 
 /// A download's bar: the accent on a raised track.
 pub fn progress(_: &Theme) -> progress_bar::Style {
     progress_bar::Style {
-        background: Background::Color(RAISED),
-        bar: Background::Color(ACCENT),
+        background: Background::Color(colors().raised),
+        bar: Background::Color(colors().accent),
         border: Border {
             radius: 4.0.into(),
             ..Border::default()

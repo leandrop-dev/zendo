@@ -9,7 +9,7 @@ use std::path::Path;
 use iced::{Alignment, Background, Border, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
-use super::style::{self, ACCENT, BOLD, DIM, GOOD, SURFACE, TEXT};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
 use crate::i18n::t;
 
@@ -56,22 +56,24 @@ impl Zendo {
     pub(super) fn library_page(&self) -> Element<'_, Message> {
         let visible = self.visible();
         let body: Element<'_, Message> = match &self.library {
-            None => centered(text(t!("library-looking")).color(DIM)),
+            None => centered(text(t!("library-looking")).color(colors().dim)),
             Some(library) if library.games.is_empty() => centered(
                 column![
                     text(t!("library-none-found")).size(20),
-                    text(t!("library-none-found-about")).color(DIM),
+                    text(t!("library-none-found-about")).color(colors().dim),
                 ]
                 .spacing(8)
                 .align_x(Alignment::Center),
             ),
-            Some(_) if visible.is_empty() && !self.search.is_empty() => {
-                centered(text(t!("library-no-match", search = self.search.as_str())).color(DIM))
-            }
+            Some(_) if visible.is_empty() && !self.search.is_empty() => centered(
+                text(t!("library-no-match", search = self.search.as_str())).color(colors().dim),
+            ),
             Some(_) if visible.is_empty() && self.source.is_some() => {
-                centered(text(t!("library-none-here")).color(DIM))
+                centered(text(t!("library-none-here")).color(colors().dim))
             }
-            Some(_) if visible.is_empty() => centered(text(t!("library-all-hidden")).color(DIM)),
+            Some(_) if visible.is_empty() => {
+                centered(text(t!("library-all-hidden")).color(colors().dim))
+            }
             Some(_) => self.grid(&visible),
         };
         column![self.library_header(), self.toolbar(), body]
@@ -118,7 +120,7 @@ impl Zendo {
         row![
             column![
                 text(t!("page-library")).size(28).font(BOLD),
-                text(subtitle).size(13).color(DIM),
+                text(subtitle).size(13).color(colors().dim),
             ]
             .spacing(2),
             space::horizontal(),
@@ -181,7 +183,7 @@ impl Zendo {
         }
         chips.push(space::horizontal().width(16).into());
         chips.push(
-            container(text(t!("library-sort")).size(13).color(DIM))
+            container(text(t!("library-sort")).size(13).color(colors().dim))
                 .padding([6, 0])
                 .into(),
         );
@@ -215,9 +217,9 @@ impl Zendo {
         let now = now();
         let cards = visible.iter().enumerate().map(|(index, game)| {
             let (line, line_color) = if game.hidden {
-                (t!("library-hidden"), ACCENT)
+                (t!("library-hidden"), colors().accent)
             } else {
-                (played_line(game, now), DIM)
+                (played_line(game, now), colors().dim)
             };
             card(Card {
                 title: &game.title,
@@ -225,9 +227,9 @@ impl Zendo {
                 cover: game.cover.as_deref(),
                 faded: game.hidden,
                 badge: if self.running.is_running(&game.id) {
-                    Some((t!("badge-running"), GOOD))
+                    Some((t!("badge-running"), colors().good))
                 } else {
-                    game.pinned.then(|| (t!("badge-pinned"), ACCENT))
+                    game.pinned.then(|| (t!("badge-pinned"), colors().accent))
                 },
                 line,
                 line_color,
@@ -276,12 +278,11 @@ fn chip<'a>(
 ) -> Element<'a, Message> {
     let mut content = row![text(label).size(13)].spacing(6);
     if let Some(count) = count {
-        content =
-            content.push(
-                text(count.to_string())
-                    .size(12)
-                    .color(if chosen { ACCENT } else { DIM }),
-            );
+        content = content.push(text(count.to_string()).size(12).color(if chosen {
+            colors().accent
+        } else {
+            colors().dim
+        }));
     }
     button(content.align_y(Alignment::Center))
         .padding([5, 12])
@@ -339,7 +340,7 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
             .width(COVER_WIDTH)
             .height(COVER_HEIGHT)
             .style(|_| container::Style {
-                background: Some(Background::Color(SURFACE)),
+                background: Some(Background::Color(colors().surface)),
                 border: Border {
                     radius: 8.0.into(),
                     ..Border::default()
@@ -375,12 +376,16 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         .on_press(on_press)
         .style(move |_, status| button::Style {
             background: Some(Background::Color(match status {
-                button::Status::Hovered | button::Status::Pressed => SURFACE,
+                button::Status::Hovered | button::Status::Pressed => colors().surface,
                 _ => Color::TRANSPARENT,
             })),
-            text_color: TEXT,
+            text_color: colors().text,
             border: Border {
-                color: if selected { ACCENT } else { Color::TRANSPARENT },
+                color: if selected {
+                    colors().accent
+                } else {
+                    Color::TRANSPARENT
+                },
                 width: 2.0,
                 radius: 12.0.into(),
             },

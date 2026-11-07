@@ -12,7 +12,7 @@ use zendo_core::fomod::{GroupKind, OptionType, Selection};
 use zendo_core::mods::{self, Pending};
 
 use super::launch_options::overlay;
-use super::style::{self, BAD, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo};
 use crate::i18n::t;
 
@@ -242,7 +242,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
             name = step.name.as_str()
         ))
         .size(13)
-        .color(DIM),
+        .color(colors().dim),
     ]
     .spacing(2);
     if installer
@@ -250,7 +250,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         .as_ref()
         .is_some_and(|needs| !needs.holds(&std::collections::HashMap::new(), present))
     {
-        header = header.push(text(t!("installer-needs")).size(13).color(BAD));
+        header = header.push(text(t!("installer-needs")).size(13).color(colors().bad));
     }
 
     let list = option_list(sheet);
@@ -325,7 +325,7 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
             let option_row: Element<'_, Message> =
                 if group.kind.single() {
                     if kind == OptionType::NotUsable {
-                        text(name).size(14).color(DIM).into()
+                        text(name).size(14).color(colors().dim).into()
                     } else {
                         let chosen = picks.iter().position(|pick| *pick);
                         radio(name, o, chosen, move |o| {
@@ -385,7 +385,7 @@ fn about_panel(sheet: &Sheet) -> Element<'_, Message> {
                 option.description.clone()
             })
             .size(13)
-            .color(DIM),
+            .color(colors().dim),
         );
     }
 

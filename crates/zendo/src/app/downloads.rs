@@ -22,7 +22,7 @@ use zendo_core::Game;
 use zendo_core::downloads::{self, Action, Ended, Event, Job, Progress, Stop};
 use zendo_core::info::{self, Update};
 
-use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking, centered};
 use crate::i18n::t;
 
@@ -591,7 +591,7 @@ impl Zendo {
             text(t!("downloads-installed-by-zendo")).size(18).font(BOLD),
             text(t!("downloads-through", launcher = game.launcher()))
                 .size(13)
-                .color(DIM),
+                .color(colors().dim),
         ]
         .spacing(10);
         if !line.is_empty() {
@@ -614,7 +614,7 @@ impl Zendo {
         };
         let header = column![
             text(t!("page-downloads")).size(28).font(BOLD),
-            text(subtitle).size(13).color(DIM),
+            text(subtitle).size(13).color(colors().dim),
         ]
         .spacing(2);
 
@@ -652,13 +652,23 @@ impl Zendo {
         let start = usize::from(state.running.is_some());
         let rest = || state.queue.iter().skip(start);
         if rest().any(|job| !job.paused) {
-            body = body.push(text(t!("downloads-up-next")).size(11).font(BOLD).color(DIM));
+            body = body.push(
+                text(t!("downloads-up-next"))
+                    .size(11)
+                    .font(BOLD)
+                    .color(colors().dim),
+            );
             for job in rest().filter(|job| !job.paused) {
                 body = body.push(queued_row(job, None));
             }
         }
         if rest().any(|job| job.paused) {
-            body = body.push(text(t!("downloads-paused")).size(11).font(BOLD).color(DIM));
+            body = body.push(
+                text(t!("downloads-paused"))
+                    .size(11)
+                    .font(BOLD)
+                    .color(colors().dim),
+            );
             for job in rest().filter(|job| job.paused) {
                 body = body.push(queued_row(job, state.errors.get(&job.id())));
             }
@@ -669,7 +679,7 @@ impl Zendo {
                     text(t!("downloads-finished"))
                         .size(11)
                         .font(BOLD)
-                        .color(DIM),
+                        .color(colors().dim),
                     space::horizontal(),
                     button(text(t!("downloads-clear")).size(13))
                         .padding([4, 10])
@@ -689,17 +699,18 @@ impl Zendo {
 /// What the last look for an update found, and its colour.
 fn update_line(update: Option<&UpdateState>) -> (String, Color) {
     match update {
-        None => (String::new(), DIM),
-        Some(UpdateState::Checking) => (t!("downloads-checking-updates"), DIM),
-        Some(UpdateState::UpToDate) => (t!("downloads-up-to-date"), GOOD),
+        None => (String::new(), colors().dim),
+        Some(UpdateState::Checking) => (t!("downloads-checking-updates"), colors().dim),
+        Some(UpdateState::UpToDate) => (t!("downloads-up-to-date"), colors().good),
         Some(UpdateState::Available(Some(version))) => (
             t!("downloads-update-version", version = version.as_str()),
-            ACCENT,
+            colors().accent,
         ),
-        Some(UpdateState::Available(None)) => (t!("downloads-update-available"), ACCENT),
-        Some(UpdateState::Failed(err)) => {
-            (t!("downloads-update-failed", error = err.as_str()), BAD)
-        }
+        Some(UpdateState::Available(None)) => (t!("downloads-update-available"), colors().accent),
+        Some(UpdateState::Failed(err)) => (
+            t!("downloads-update-failed", error = err.as_str()),
+            colors().bad,
+        ),
     }
 }
 
@@ -707,7 +718,9 @@ fn close_banner<'a>() -> Element<'a, Message> {
     container(
         column![
             text(t!("downloads-running-title")).size(15).font(BOLD),
-            text(t!("downloads-running-about")).size(13).color(DIM),
+            text(t!("downloads-running-about"))
+                .size(13)
+                .color(colors().dim),
             row![
                 button(text(t!("downloads-close-anyway")).size(14).font(BOLD))
                     .padding([8, 14])
@@ -745,7 +758,7 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
                         job.store().label()
                     ))
                     .size(13)
-                    .color(ACCENT),
+                    .color(colors().accent),
                 ]
                 .spacing(2),
                 space::horizontal(),
@@ -785,7 +798,7 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
             progress_bar(0.0..=100.0, progress.percent.unwrap_or(0.0))
                 .girth(8)
                 .style(style::progress),
-            text(line).size(13).color(DIM),
+            text(line).size(13).color(colors().dim),
         ]
         .spacing(10),
     )
@@ -828,14 +841,14 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
             job.store().label()
         ))
         .size(12)
-        .color(DIM),
+        .color(colors().dim),
     ]
     .spacing(2);
     if let Some(error) = error {
         about = about.push(
             text(t!("downloads-failed", error = error.as_str()))
                 .size(12)
-                .color(BAD),
+                .color(colors().bad),
         );
     }
     let (first, message) = if job.paused {
@@ -877,8 +890,8 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
 
 fn finished_row<'a>(job: &'a Job, outcome: &'a Result<(), String>) -> Element<'a, Message> {
     let (verdict, color) = match outcome {
-        Ok(()) => (t!("downloads-done"), GOOD),
-        Err(err) => (err.clone(), BAD),
+        Ok(()) => (t!("downloads-done"), colors().good),
+        Err(err) => (err.clone(), colors().bad),
     };
     let open = (outcome.is_ok() && job.action != Action::Uninstall).then(|| {
         button(text(t!("open")).size(13))
@@ -896,7 +909,7 @@ fn finished_row<'a>(job: &'a Job, outcome: &'a Result<(), String>) -> Element<'a
                     job.store().label()
                 ))
                 .size(12)
-                .color(DIM),
+                .color(colors().dim),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),

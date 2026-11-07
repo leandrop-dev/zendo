@@ -23,6 +23,7 @@ mod settings;
 mod sidebar;
 mod store;
 mod style;
+mod themes;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -55,7 +56,9 @@ use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
 use settings::Diagnostics;
 use store::{StoreMessage, StoreState};
-use style::DIM;
+use style::colors;
+use themes::{Choice, Themes};
+use zendo_core::theme::Theme;
 
 const START_SIZE: Size = Size::new(1360.0, 860.0);
 
@@ -91,6 +94,8 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     i18n::set_from_settings();
     let boot = move || {
         let (mut zendo, task) = Zendo::boot();
+        let theme = Config::load_file().ok().and_then(|config| config.theme);
+        zendo.themes = Themes::chosen(theme.as_deref(), Theme::dir().as_deref());
         if let Some(link) = link.clone() {
             zendo.nexus_pending(link);
         }
@@ -98,7 +103,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     };
     iced::application(boot, Zendo::update, Zendo::view)
         .title("Zendo")
-        .theme(style::theme())
+        .theme(|_: &Zendo| style::theme())
         .subscription(Zendo::subscription)
         .window(window::Settings {
             size: START_SIZE,
@@ -189,6 +194,10 @@ enum Message {
     ReportReady(Result<String, String>),
     /// The window's language; `None` follows the system's.
     SetLanguage(Option<Language>),
+    /// Settings' Theme section.
+    SetTheme(Choice),
+    /// Time to look whether hyprmonk wrote a new tone.
+    LookAtTone,
     Account(AccountMessage),
     Download(DownloadMessage),
     Run(RunMessage),
@@ -269,6 +278,8 @@ struct Zendo {
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
+    /// The window's colours and where they come from.
+    themes: Themes,
     key: KeyForm,
     /// Settings' Diagnostics section.
     diagnostics: Diagnostics,
@@ -308,6 +319,7 @@ impl Zendo {
             protons: Protons::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
+            themes: Themes::default(),
             key: KeyForm::default(),
             diagnostics: Diagnostics::default(),
             accounts: Accounts::default(),
@@ -506,6 +518,8 @@ impl Zendo {
             | Message::CopyReport
             | Message::ReportReady(_)
             | Message::SetLanguage(_) => self.update_settings(message),
+            Message::SetTheme(choice) => self.set_theme(&choice),
+            Message::LookAtTone => self.look_at_tone(),
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
@@ -565,6 +579,10 @@ impl Zendo {
             match config {
                 Ok(config) => {
                     i18n::set(Language::chosen(config.language.as_deref()));
+                    if self.persist {
+                        self.themes =
+                            Themes::chosen(config.theme.as_deref(), Theme::dir().as_deref());
+                    }
                     self.key.value = config.steamgriddb_key.clone().unwrap_or_default();
                     self.config = config;
                 }
@@ -679,7 +697,12 @@ impl Zendo {
                 let y = *self.cursor().1;
                 operation::scroll_to(grid_id(), AbsoluteOffset { x: 0.0, y })
             }
-            Page::Settings => self.want_protons(),
+            Page::Settings => {
+                if self.persist {
+                    self.themes.reload(Theme::dir().as_deref());
+                }
+                self.want_protons()
+            }
             Page::Downloads | Page::Accounts | Page::About => Task::none(),
         }
     }
@@ -953,8 +976,14 @@ impl Zendo {
         Task::run(fetch_images(fetcher, wanted), |message| message)
     }
 
-    fn subscription(_: &Self) -> Subscription<Message> {
+    fn subscription(&self) -> Subscription<Message> {
+        let tone = if self.themes.watching() {
+            Subscription::run(themes::ticks).map(|()| Message::LookAtTone)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
+            tone,
             event::listen_with(on_event),
             Subscription::run(gamepad::events).map(Message::Pad),
             window::close_requests().map(|_| Message::Download(DownloadMessage::CloseRequested)),
@@ -968,7 +997,7 @@ impl Zendo {
             Page::Library => self.library_page(),
             Page::Game(id) => match self.game(id) {
                 Some(game) => self.game_page(game),
-                None => centered(text(t!("game-gone")).color(DIM)),
+                None => centered(text(t!("game-gone")).color(colors().dim)),
             },
             Page::Settings => self.settings_page(),
             Page::About => about::page(),
@@ -977,7 +1006,7 @@ impl Zendo {
             Page::Store => self.store_page(),
             Page::Owned(id) => match self.store.owned(id) {
                 Some(game) => self.owned_page(game),
-                None => centered(text(t!("owned-gone")).color(DIM)),
+                None => centered(text(t!("owned-gone")).color(colors().dim)),
             },
         };
         let main = column![page, self.footer()].width(Length::Fill);
@@ -1015,9 +1044,9 @@ impl Zendo {
             Page::Accounts | Page::Downloads | Page::Settings | Page::About => t!("hints-other"),
         };
         row![
-            left.size(13).color(DIM),
+            left.size(13).color(colors().dim),
             space::horizontal(),
-            text(hints).size(13).color(DIM),
+            text(hints).size(13).color(colors().dim),
         ]
         .spacing(16)
         .padding([10, 24])

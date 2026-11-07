@@ -15,7 +15,7 @@ use zendo_core::nexus;
 use zendo_core::plugins::{self, Plugin, Rank, Style};
 
 use super::nexus::{NexusMessage, download_row};
-use super::style::{self, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -486,8 +486,8 @@ impl Zendo {
         let free = self.mods.busy.is_none();
         let body: Element<'_, Message> = match self.mods.shown.get(id)? {
             Shown::Nowhere => return None,
-            Shown::Reading => text(t!("mods-reading")).size(13).color(DIM).into(),
-            Shown::Failed(err) => text(err).size(13).color(BAD).into(),
+            Shown::Reading => text(t!("mods-reading")).size(13).color(colors().dim).into(),
+            Shown::Failed(err) => text(err).size(13).color(colors().bad).into(),
             Shown::Ready(overview) => self.mods_body(id, overview, free),
         };
         let add = button(text(t!("mods-add")).size(14))
@@ -517,7 +517,7 @@ impl Zendo {
         }
         card = card.push(body);
         if let Some(busy) = busy {
-            card = card.push(text(busy).size(13).color(DIM));
+            card = card.push(text(busy).size(13).color(colors().dim));
         }
         Some(
             container(card)
@@ -548,7 +548,7 @@ impl Zendo {
         };
         let mut body = column![
             self.profile_row(id, overview, free),
-            text(place).size(13).color(DIM),
+            text(place).size(13).color(colors().dim),
             text(overview.target.display().to_string())
                 .size(13)
                 .font(Font::MONOSPACE),
@@ -556,7 +556,7 @@ impl Zendo {
         .spacing(10);
 
         if overview.mods.is_empty() {
-            body = body.push(text(t!("mods-none")).size(14).color(DIM));
+            body = body.push(text(t!("mods-none")).size(14).color(colors().dim));
         }
         let last = overview.mods.len().saturating_sub(1);
         for (at, info) in overview.mods.iter().enumerate() {
@@ -576,7 +576,7 @@ impl Zendo {
                 row![
                     text(t!("mods-overwrite", count = overview.overwrite))
                         .size(13)
-                        .color(DIM)
+                        .color(colors().dim)
                         .width(Length::Fill),
                     button(text(delete_label(asking)).size(13))
                         .padding([4, 10])
@@ -656,7 +656,7 @@ impl Zendo {
                 Some(version) => t!("mods-update-to", version = version),
                 None => t!("mods-update"),
             };
-            button(text(label).size(13).color(GOOD))
+            button(text(label).size(13).color(colors().good))
                 .padding([4, 10])
                 .style(style::secondary)
                 .on_press(Message::Nexus(NexusMessage::Update(
@@ -670,7 +670,7 @@ impl Zendo {
                 .size(16),
             column![
                 text(&info.name).size(14),
-                text(facts.join(" · ")).size(12).color(DIM),
+                text(facts.join(" · ")).size(12).color(colors().dim),
             ]
             .spacing(2)
             .width(Length::Fill),
@@ -711,7 +711,10 @@ impl Zendo {
         overview: &'a Overview,
         free: bool,
     ) -> Element<'a, Message> {
-        let label = text(t!("mods-profile")).size(14).color(DIM).width(110);
+        let label = text(t!("mods-profile"))
+            .size(14)
+            .color(colors().dim)
+            .width(110);
         let small = |label: String| {
             button(text(label).size(13))
                 .padding([6, 12])
@@ -797,7 +800,10 @@ impl Zendo {
         let value = typed.unwrap_or(&overview.folder);
         let applied = overview.applied != Applied::No;
         let mut folder = row![
-            text(t!("mods-folder")).size(14).color(DIM).width(110),
+            text(t!("mods-folder"))
+                .size(14)
+                .color(colors().dim)
+                .width(110),
             text_input(&t!("mods-folder-placeholder"), value)
                 .on_input_maybe((!applied).then(|| {
                     let id = id.to_owned();
@@ -845,12 +851,13 @@ impl Zendo {
             .as_ref()
             .is_some_and(|plugins| plugins.file.is_some());
         let (state, color) = match overview.applied {
-            Applied::No => (t!("mods-state-no"), DIM),
-            Applied::Current(count) if writes_plugins => {
-                (t!("mods-state-applied-plugins", count = count), GOOD)
-            }
-            Applied::Current(count) => (t!("mods-state-applied", count = count), GOOD),
-            Applied::Changed => (t!("mods-state-changed"), BAD),
+            Applied::No => (t!("mods-state-no"), colors().dim),
+            Applied::Current(count) if writes_plugins => (
+                t!("mods-state-applied-plugins", count = count),
+                colors().good,
+            ),
+            Applied::Current(count) => (t!("mods-state-applied", count = count), colors().good),
+            Applied::Changed => (t!("mods-state-changed"), colors().bad),
         };
         let state = if running {
             t!("mods-state-running")
@@ -908,9 +915,11 @@ fn plugins_section<'a>(
     };
     let mut section = column![
         text(t!("plugins-title")).size(15).font(BOLD),
-        text(note)
-            .size(13)
-            .color(if plugins.file.is_some() { DIM } else { BAD }),
+        text(note).size(13).color(if plugins.file.is_some() {
+            colors().dim
+        } else {
+            colors().bad
+        }),
     ]
     .spacing(8);
     if let Some(file) = &plugins.file {
@@ -918,11 +927,11 @@ fn plugins_section<'a>(
             text(file.display().to_string())
                 .size(12)
                 .font(Font::MONOSPACE)
-                .color(DIM),
+                .color(colors().dim),
         );
     }
     if plugins.list.is_empty() {
-        section = section.push(text(t!("plugins-none")).size(13).color(DIM));
+        section = section.push(text(t!("plugins-none")).size(13).color(colors().dim));
     }
     for (at, plugin) in plugins.list.iter().enumerate() {
         section = section.push(plugin_row(id, &plugins.list, at, plugin, free));
@@ -973,12 +982,12 @@ fn plugin_row<'a>(
         };
     let mut about = column![
         text(&plugin.name).size(14),
-        text(facts.join(" · ")).size(12).color(DIM),
+        text(facts.join(" · ")).size(12).color(colors().dim),
     ]
     .spacing(2)
     .width(Length::Fill);
     if !problems.is_empty() {
-        about = about.push(text(problems.join(" · ")).size(12).color(BAD));
+        about = about.push(text(problems.join(" · ")).size(12).color(colors().bad));
     }
     row![
         checkbox(plugin.enabled)

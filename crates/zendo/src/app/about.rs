@@ -4,7 +4,7 @@ use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 
 use super::Message;
-use super::style::{self, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use crate::i18n::t;
 
 const REPOSITORY: &str = "https://github.com/leandrop-dev/zendo";
@@ -40,7 +40,7 @@ pub fn page<'a>() -> Element<'a, Message> {
                 text("Zendo").size(40).font(BOLD),
                 text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
                     .size(14)
-                    .color(DIM),
+                    .color(colors().dim),
             ]
             .spacing(2),
             text(t!("about-intro")).size(15),

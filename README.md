@@ -41,6 +41,9 @@ install it and give it its colours, but it runs on any Linux desktop.
 
 - Speaks English or Portuguese (Portugal): the system's language, or the
   one chosen in Settings.
+- Its own colours on any desktop, or a theme of your own; on a computer
+  with hyprmonk, Settings can switch it to hyprmonk's tone, which it
+  follows as it changes (read from `~/.local/state/hyprmonk/theme/tone.json`).
 - Finds your games without changing anything of the launchers':
   - **Steam**: every library folder in `libraryfolders.vdf`, native or
     Flatpak, and the installed games in them (Proton and Steam's runtimes
@@ -261,7 +264,32 @@ install_dir = "~/Games"
 default_proton = "GE-Proton11-12-x86_64"
 # The window's language: "en" or "pt-PT". Left out: the system's.
 language = "pt-PT"
+# The window's colours: "zendo", a theme file's name, or "hyprmonk" to
+# follow hyprmonk's tone (Zendo's own while hyprmonk writes none). Left
+# out: "zendo".
+theme = "hyprmonk"
 ```
+
+Your own themes are TOML files in `~/.config/zendo/themes/`, one per
+theme, chosen by the file's name; Settings lists them, reading the folder
+each time it opens. A file named like a built-in one (`zendo.toml`)
+replaces it. Only the background, text and accent are needed; the greys
+are mixed from the first two when left out:
+
+```toml
+# ~/.config/zendo/themes/dusk.toml
+name = "Dusk"
+light = false               # true: dark text on a light background
+background = "#1a1b26"
+foreground = "#c0caf5"      # the text
+accent = "#e0af68"
+positive = "#9ece6a"        # optional green; Zendo's own when left out
+negative = "#f7768e"        # optional red
+# Optional greys: sidebar, surface (cards, inputs), raised (under the
+# pointer), line (rims) and dim (quieter text).
+```
+
+The built-in themes are the files in `crates/zendo/themes/`.
 
 The two keys go in the system keyring when one answers (the Secret
 Service: GNOME Keyring, KDE Wallet), and in this file only when none does;
@@ -326,9 +354,9 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap

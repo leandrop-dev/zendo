@@ -1,0 +1,16 @@
+# Zendo's own colours: charcoal, fog text and orange, as hyprmonk's Noir.
+# Themes built into Zendo are files in this folder; the layout is in
+# crates/zendo-core/src/theme.rs. A file of this name in
+# ~/.config/zendo/themes/ replaces it.
+name = "Zendo"
+light = false
+background = "#171717"
+foreground = "#ccd0cf"
+accent = "#f25623"
+positive = "#7fb069"
+negative = "#e05a4c"
+sidebar = "#121212"
+surface = "#222222"
+raised = "#2c2c2c"
+line = "#303030"
+dim = "#808483"

@@ -14,7 +14,7 @@ use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
 
-use super::style::{self, BOLD, DIM};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo};
 use crate::i18n::t;
 
@@ -260,7 +260,7 @@ impl Zendo {
         container(
             column![
                 text(t!("run-launch-title")).size(18).font(BOLD),
-                text(t!("run-launch-about")).size(13).color(DIM),
+                text(t!("run-launch-about")).size(13).color(colors().dim),
                 rows,
             ]
             .spacing(10),
@@ -275,7 +275,7 @@ impl Zendo {
 fn path_row<'a>(label: String, path: &std::path::Path) -> Element<'a, Message> {
     let exists = path.exists();
     row![
-        text(label).size(14).color(DIM).width(170),
+        text(label).size(14).color(colors().dim).width(170),
         text(path.display().to_string())
             .size(13)
             .font(Font::MONOSPACE)

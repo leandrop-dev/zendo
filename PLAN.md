@@ -1149,6 +1149,33 @@ Groundwork before more screens:
    more themes can be added. With it, a note in the hyprmonk project
    (the user asked for it) saying what `tone.json` should hold and when
    to write it.
+   Built 2026-11-07: Settings' Theme section, Zendo (the default
+   [firm], decided by the user the same day: Zendo may run on any
+   desktop, not only hyprmonk's) or hyprmonk (its tone when
+   `~/.local/state/hyprmonk/theme/tone.json` is there, Zendo's own
+   colours when not), offered only when hyprmonk's state directory is
+   there or it is already chosen; saved as `theme` in `config.toml`.
+   Themes are files (asked by the user the same day): the built-in ones
+   in `crates/zendo/themes/` (`zendo.toml`, built into the binary), the
+   user's in `~/.config/zendo/themes/` (one named as a built-in replaces
+   it), read at start and each time Settings opens; TOML with name,
+   light, background, foreground, accent, optional positive and negative,
+   and optional greys (sidebar, surface, raised, line, dim) mixed from
+   the background and text when left out (`zendo-core/src/theme.rs`).
+   hyprmonk's tone becomes a theme of the same shape. A chosen file that
+   is gone shows Zendo's own and says so; a file that is not a theme is
+   named in the section. Checked on screen with a hand-written
+   `dusk.toml` in the throwaway home. `zendo-core/src/tone.rs` reads the file (version 1:
+   name, label, light, background, foreground, accent, optional positive
+   and negative); `app/themes.rs` follows it, looking at its modification
+   time every 2 seconds; `style.rs` keeps one palette for the window,
+   made from the chosen theme (a test checks Noir mixes within a shade of
+   Zendo's own, and another that `zendo.toml` gives Zendo's own exactly).
+   A new built-in theme is a file in `themes/` and a line in `BUILT_IN`. Checked on screen in a throwaway home (no keyring,
+   no real config) with hand-written files for Noir, Harbor (light) and
+   Kanso: each painted the window and a change repainted it. The note is
+   hyprmonk's `docs/zendo-tone.md` (written, not committed there);
+   hyprmonk does not write the file yet.
 7. An Arch package (PKGBUILD for the AUR: binary, `.desktop` file, icon).
    It also gives the `nxm://` handler a fixed path instead of a build
    folder.
@@ -1190,10 +1217,9 @@ Later:
 ## On hyprmonk's side
 
 - Install it (package list or the installer) and bind a key (Super+G).
-- The tone: hyprmonk writes no file with the active tone's colours yet
-  (`~/.local/state/hyprmonk/theme/colors.json` is matugen's wallpaper palette,
-  `tone.lua` only the border accent). Add a `tone.json` there for Zendo to
-  read into its Iced theme, with its own colours when the file is missing.
+- The tone: Zendo reads `~/.local/state/hyprmonk/theme/tone.json`; what it
+  holds and when to write it is in hyprmonk's `docs/zendo-tone.md`. hyprmonk
+  does not write it yet, so Zendo shows its own colours.
 - hyprmonk's roadmap points here; this file is the plan.
 
 ## Next session
@@ -1201,8 +1227,8 @@ Later:
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
   and checked by the user the same day. Item 2, the Rust review, fixed
   the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
-  API keys in the keyring, item 4, diagnostics, and item 5, languages,
-  built the same day; next, item 6, themes.
+  API keys in the keyring, item 4, diagnostics, item 5, languages, and
+  item 6, themes, built the same day; next, item 7, the AUR package.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"
@@ -1215,7 +1241,10 @@ Later:
   and go through each page (Library, a game, Store, Downloads,
   Accounts, Settings, About, launch options, Change art, Add game, the
   mods page) for text that is cut off, still English or reads wrong;
-  then System, and English again.
+  then System, and English again. Item 6 the same visit: Settings' Theme
+  section should offer Zendo and hyprmonk (this computer has hyprmonk);
+  choosing hyprmonk should say it has written no tone, and keep the
+  colours (the same until hyprmonk writes the file).
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

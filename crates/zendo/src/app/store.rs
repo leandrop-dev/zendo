@@ -14,7 +14,7 @@ use super::accounts::Account;
 use super::downloads::DownloadMessage;
 use super::game::{Hero, about_card, hero, store_facts};
 use super::library::{Card, GRID_PADDING, card, cards_grid};
-use super::style::{self, ACCENT, BAD, BOLD, DIM, GOOD};
+use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking, centered, game_scroll_id, store_search_id};
 use crate::i18n::t;
 
@@ -288,7 +288,7 @@ impl Zendo {
         let header = row![
             column![
                 text(t!("page-store")).size(28).font(BOLD),
-                text(subtitle).size(13).color(DIM),
+                text(subtitle).size(13).color(colors().dim),
             ]
             .spacing(2),
             space::horizontal(),
@@ -331,7 +331,7 @@ impl Zendo {
             problems = problems.push(
                 text(format!("{}: {err}", store.label()))
                     .size(13)
-                    .color(BAD),
+                    .color(colors().bad),
             );
         }
 
@@ -348,9 +348,9 @@ impl Zendo {
                 .align_x(Alignment::Center),
             )
         } else if visible.is_empty() && !self.store.asking.is_empty() {
-            centered(text(t!("store-asking-all")).color(DIM))
+            centered(text(t!("store-asking-all")).color(colors().dim))
         } else if visible.is_empty() {
-            centered(text(t!("store-nothing")).color(DIM))
+            centered(text(t!("store-nothing")).color(colors().dim))
         } else {
             self.store_grid(visible)
         };
@@ -368,12 +368,12 @@ impl Zendo {
                     faded: false,
                     badge: self
                         .is_installed(&game.id)
-                        .then(|| (t!("badge-installed"), GOOD)),
+                        .then(|| (t!("badge-installed"), colors().good)),
                     line: game
                         .developer
                         .clone()
                         .unwrap_or_else(|| game.platforms.join(", ")),
-                    line_color: DIM,
+                    line_color: colors().dim,
                     selected: index == selected,
                     on_press: Message::Store(StoreMessage::Clicked(index)),
                 })
@@ -433,7 +433,7 @@ impl Zendo {
                     .style(style::primary)
                     .on_press(Message::Navigate(Page::Game(game.id.clone()))),
                 space::horizontal(),
-                text(t!("installed")).size(14).color(DIM),
+                text(t!("installed")).size(14).color(colors().dim),
             ]
         } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
             let (label, press) = match (running, job.paused) {
@@ -456,7 +456,7 @@ impl Zendo {
                 space::horizontal(),
                 text(t!("store-into", path = job.path.display().to_string()))
                     .size(14)
-                    .color(DIM),
+                    .color(colors().dim),
             ]
         } else {
             let job = self.install_job(&game.id);
@@ -483,7 +483,7 @@ impl Zendo {
                     .style(style::primary)
                     .on_press_maybe(job.map(|job| Message::Download(DownloadMessage::Queue(job)))),
                 space::horizontal(),
-                text(note).size(14).color(DIM),
+                text(note).size(14).color(colors().dim),
             ]
         }
         .spacing(10)
@@ -498,18 +498,18 @@ impl Zendo {
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Navigate(Page::Store)),
-            text("/").size(14).color(DIM),
-            text(&game.title).size(14).color(DIM),
+            text("/").size(14).color(colors().dim),
+            text(&game.title).size(14).color(colors().dim),
         ]
         .spacing(8);
 
         let mut badges: Vec<(String, iced::Color)> = game
             .platforms
             .iter()
-            .map(|platform| (platform.clone(), DIM))
+            .map(|platform| (platform.clone(), colors().dim))
             .collect();
         if installed {
-            badges.push((t!("badge-installed"), GOOD));
+            badges.push((t!("badge-installed"), colors().good));
         }
         let art = hero(Hero {
             title: &game.title,
@@ -527,7 +527,7 @@ impl Zendo {
 
         let detail = |label: String, value: String, code: bool| {
             row![
-                text(label).size(14).color(DIM).width(170),
+                text(label).size(14).color(colors().dim).width(170),
                 if code {
                     text(value).size(13).font(Font::MONOSPACE)
                 } else {
@@ -593,9 +593,11 @@ fn chip<'a>(label: String, count: usize, chosen: bool, message: Message) -> Elem
     button(
         row![
             text(label).size(13),
-            text(count.to_string())
-                .size(12)
-                .color(if chosen { ACCENT } else { DIM }),
+            text(count.to_string()).size(12).color(if chosen {
+                colors().accent
+            } else {
+                colors().dim
+            }),
         ]
         .spacing(6)
         .align_y(Alignment::Center),

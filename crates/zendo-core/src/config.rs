@@ -16,6 +16,9 @@
 //! default_proton = "GE-Proton11-12-x86_64"
 //! # The window's language: "en" or "pt-PT". Left out, the system's.
 //! language = "pt-PT"
+//! # The window's colours: "zendo", Zendo's own; or, on a computer with
+//! # hyprmonk, "hyprmonk" to follow its tone. Left out, "zendo".
+//! theme = "hyprmonk"
 //! ```
 //!
 //! The API keys are kept in the system keyring ([`secrets`]) when one
@@ -62,6 +65,10 @@ pub struct Config {
     /// unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// The window's colours by name (`zendo`, `hyprmonk`); Zendo's own
+    /// when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
     held: [Held; 2],
@@ -98,6 +105,7 @@ impl std::fmt::Debug for Config {
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
             .field("language", &self.language)
+            .field("theme", &self.theme)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
             .finish_non_exhaustive()
@@ -113,6 +121,7 @@ impl Default for Config {
             install_dir: None,
             default_proton: None,
             language: None,
+            theme: None,
             held: Default::default(),
         }
     }
