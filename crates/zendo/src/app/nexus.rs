@@ -448,7 +448,7 @@ impl Zendo {
                     });
                 }
                 self.status = Some(note);
-                self.mods_ready(game, overview)
+                self.mods_ready(game, *overview)
             }
             Err(_) if stopped => {
                 self.status = Some("Download stopped".to_owned());

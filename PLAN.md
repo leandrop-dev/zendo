@@ -932,8 +932,48 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      a conditional file in another case) installed through the real
      path. The user tried it in the window with that archive on Cat
      Quest (2026-11-07): it works.
-   - 7e Bethesda plugin order (`plugins.txt` in the game's prefix), left
-     until there is a Bethesda game to try it on: the library has none.
+   - 7e Bethesda plugin order, built 2026-11-07 (`plugins.rs`): for
+     Fallout 3, New Vegas, Skyrim LE, Skyrim SE and Fallout 4, the Mods
+     card lists the plugins (`.esm`, `.esp`, `.esl`) straight in `Data`
+     and in the mods on, in load order, each on or off, with ↑ ↓. The
+     game's own load first in Bethesda's order and stay there (the main
+     master, and for SSE and FO4 every implicit one, always on); then
+     masters (`.esm`, `.esl` or flagged in the header), then the rest,
+     in the order kept, new ones last. Each plugin's `TES4` header gives
+     its masters: one not on, or loading after it, shows in red; one
+     that cannot be read says so. The order lives in `mods.toml`
+     (`[[plugin]]`, every plugin seen, so a mod turned off and on keeps
+     its place) and per profile. A plugin new to the list is on when it
+     comes in a mod, and the game's own as the game's `plugins.txt` had
+     them before Zendo, or on when it had none [tentative].
+     Apply writes the list into the prefix's
+     `AppData/Local/<game>/` (Steam's `compatdata/<app>/pfx`, or
+     Zendo's prefix for the games it starts), CRLF lines, in each
+     game's way: `plugins.txt` of the ones on (FO3, NV), plus
+     `loadorder.txt` (Skyrim LE), or every plugin with `*` for on and
+     the implicit ones left out (SSE, FO4). For FO3 and NV, which load
+     by file date, it also dates the plugins a minute apart from
+     2008-01-10, in order [tentative]. `applied.json` keeps the lists as
+     they were, the folders it made and the game's own plugins' dates;
+     Back to vanilla puts them back. A plugin change shows as changed
+     since applied. With no prefix yet (the game never started), the
+     card says to start it once and Apply writes no list. Not handled
+     [tentative]: Starfield and Oblivion; Skyrim SE's Creation Club
+     plugins (`Skyrim.ccc`) not taken as implicit; the game's launcher
+     changing the list while applied is undone by Back to vanilla;
+     FOMOD's "inactive" plugin condition still never matches.
+     Checked: clippy and tests (headers with flags and masters, each
+     game's list format, the order with the game's own first and red
+     masters, moves only among a kind; on a scratch Fallout 3: Apply
+     writes `plugins.txt` and dates the plugins in order, a move shows
+     as changed and back as applied, Back to vanilla removes the list
+     and the folders it made and puts the dates back, a list the game
+     had decides its plugins' first state and comes back as it was;
+     profiles keep their own order). The real Fallout 3 GOTY's six
+     plugins read with their masters (an ignored test, read only). Steam
+     installed them dated with `Fallout3.esm` third, so the game's own
+     order matters there. The user tried it in the window on Fallout 3
+     GOTY (2026-11-07): it works.
 
 ## On hyprmonk's side
 
@@ -946,13 +986,12 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next session
 
-- 7e, Bethesda plugin order: the user installed Fallout 3 GOTY
-  (2026-11-07) to try it on. Its page showed no Find mods on Nexus:
-  Steam's title, "Fallout 3 - Game of the Year Edition", is not Nexus's
-  "Fallout 3", and Zendo did not know the game. Fixed:
-  Fallout 3 known by its Steam ids (`Data`, `fallout3`), and a game
-  matched on Nexus by its title or the part before " - " or ":". The
-  user confirmed the button shows.
+- Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
+  user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
+  Before that, Fallout 3 was made
+  known (Steam ids 22300 and 22370, `Data`, `fallout3`) and games are
+  matched on Nexus by the part of the title before " - " or ":" too;
+  the user confirmed the Nexus button shows.
 
 ## Conventions
 

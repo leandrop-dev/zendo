@@ -6,15 +6,17 @@
 //! - `mods.toml`: the mods in order (a later one wins a file both have),
 //!   whether each is on and the Nexus file it came from, the game's mod
 //!   folder when the user set one, and its name on Nexus when the user
-//!   chose it; with the profile that order is, and the other profiles'
-//!   orders and the mods on in each;
+//!   chose it; a Bethesda game's plugin order ([`plugins`]); with the
+//!   profile that order is, and the other profiles' orders and the mods
+//!   and plugins on in each;
 //! - `downloads/`: files from Nexus while they download, deleted once
 //!   unpacked;
 //! - `installers/<mod>/`: a mod's archive as unpacked when it has a FOMOD
 //!   installer, to choose its options again;
 //! - `files/<mod>/`: each mod as its archive held it;
 //! - `applied.json`: every file and folder Apply placed, so Back to vanilla
-//!   removes exactly those;
+//!   removes exactly those, and the plugin lists it wrote in the game's
+//!   prefix and the plugin dates it set, to put back;
 //! - `backup/`: the game's own files a mod replaced, put back after;
 //! - `overwrite/`: what the game wrote while modded into folders Zendo
 //!   made, or mod files it changed (configs, logs), applied again next time
@@ -35,13 +37,14 @@ use std::io::{self, ErrorKind};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::fomod::{self, Installer, Present, Selection};
 use crate::nexus::{self, Files};
+use crate::plugins::{self, Plugin};
 use crate::{Game, Source, launch, paths, protondb};
 
 /// One change at a time to any game's mods: the window's, and a download
@@ -69,6 +72,8 @@ pub struct Known {
     /// The folders a mod packed right starts with; folders around them are
     /// removed until one shows.
     pub tops: &'static [&'static str],
+    /// How the game keeps its plugin order, for Bethesda's.
+    pub plugins: Option<&'static plugins::Rules>,
 }
 
 /// The games Zendo knows, from where each one's mods go.
@@ -80,6 +85,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Mods",
         strip: &["Mods"],
         tops: &[],
+        plugins: None,
     },
     Known {
         titles: &[
@@ -92,6 +98,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: Some(&plugins::SKYRIM_SE),
     },
     Known {
         titles: &["The Elder Scrolls V: Skyrim"],
@@ -100,6 +107,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: Some(&plugins::SKYRIM),
     },
     Known {
         titles: &["Fallout 4"],
@@ -108,6 +116,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: Some(&plugins::FALLOUT4),
     },
     Known {
         titles: &["Fallout 3", "Fallout 3 - Game of the Year Edition"],
@@ -116,6 +125,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: Some(&plugins::FALLOUT3),
     },
     Known {
         titles: &["Fallout: New Vegas", "Fallout New Vegas"],
@@ -124,6 +134,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: Some(&plugins::NEW_VEGAS),
     },
     Known {
         titles: &["Starfield"],
@@ -132,6 +143,7 @@ pub const KNOWN: &[Known] = &[
         folder: "Data",
         strip: &["Data"],
         tops: &[],
+        plugins: None,
     },
     Known {
         titles: &["Cyberpunk 2077"],
@@ -140,6 +152,7 @@ pub const KNOWN: &[Known] = &[
         folder: "",
         strip: &[],
         tops: &["archive", "bin", "r6", "red4ext", "engine", "mods"],
+        plugins: None,
     },
 ];
 
@@ -175,6 +188,9 @@ struct List {
     active_profile: String,
     #[serde(default, rename = "mod")]
     mods: Vec<Entry>,
+    /// The plugin order, for Bethesda's games: every plugin seen, on or not.
+    #[serde(default, rename = "plugin", skip_serializing_if = "Vec::is_empty")]
+    plugins: Vec<PluginEntry>,
     /// The other profiles.
     #[serde(default, rename = "profile", skip_serializing_if = "Vec::is_empty")]
     profiles: Vec<Profile>,
@@ -192,6 +208,16 @@ struct Profile {
     order: Vec<String>,
     #[serde(default)]
     enabled: Vec<String>,
+    #[serde(default, rename = "plugin", skip_serializing_if = "Vec::is_empty")]
+    plugins: Vec<PluginEntry>,
+}
+
+/// A plugin in the order kept, and whether it is on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PluginEntry {
+    name: String,
+    enabled: bool,
 }
 
 impl List {
@@ -226,7 +252,36 @@ impl List {
                 .filter(|entry| entry.enabled)
                 .map(|entry| entry.id.clone())
                 .collect(),
+            plugins: self.plugins.clone(),
         }
+    }
+
+    fn stored_plugins(&self) -> Vec<(String, bool)> {
+        self.plugins
+            .iter()
+            .map(|entry| (entry.name.clone(), entry.enabled))
+            .collect()
+    }
+
+    /// Keeps this plugin order; plugins kept before that are not there now
+    /// (their mod off) stay after it, for when they come back.
+    fn keep_plugins(&mut self, order: &[(String, bool)]) {
+        let mut kept: Vec<PluginEntry> = order
+            .iter()
+            .map(|(name, enabled)| PluginEntry {
+                name: name.clone(),
+                enabled: *enabled,
+            })
+            .collect();
+        for entry in &self.plugins {
+            if !kept
+                .iter()
+                .any(|other| other.name.eq_ignore_ascii_case(&entry.name))
+            {
+                kept.push(entry.clone());
+            }
+        }
+        self.plugins = kept;
     }
 
     /// A name for a new profile or a rename: trimmed, short, and not
@@ -289,6 +344,7 @@ impl List {
             entry.enabled = false;
             self.mods.push(entry);
         }
+        self.plugins = target.plugins;
         self.active_profile = target.name;
         Ok(())
     }
@@ -452,7 +508,7 @@ pub fn test_pending(name: &str, installer: Installer) -> Pending {
 /// What adding an archive came to: the mod in, or its installer to run.
 #[derive(Debug, Clone)]
 pub enum Added {
-    Done(Overview),
+    Done(Box<Overview>),
     Choose(Box<Pending>),
 }
 
@@ -482,6 +538,27 @@ struct Manifest {
     backups: Vec<PathBuf>,
     /// Folders made, from the game's folder, outermost first.
     created: Vec<PathBuf>,
+    /// The plugin order written, for Bethesda's games.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plugins: Option<Vec<(String, bool)>>,
+    /// The game's plugin lists in the prefix, as they were.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lists: Vec<ListBackup>,
+    /// Folders made in the prefix for them, outermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    made: Vec<PathBuf>,
+    /// The game's own plugins' modified times before Apply set them (the
+    /// order Fallout 3 and New Vegas load in), from the game's folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    times: Vec<(PathBuf, Option<SystemTime>)>,
+}
+
+/// A plugin list file in the prefix, and what it held; `None` when there
+/// was none.
+#[derive(Debug, Serialize, Deserialize)]
+struct ListBackup {
+    path: PathBuf,
+    original: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -511,6 +588,17 @@ pub struct Overview {
     /// Files in `overwrite/`.
     pub overwrite: usize,
     pub applied: Applied,
+    /// The plugins, for Bethesda's games.
+    pub plugins: Option<Box<Plugins>>,
+}
+
+/// A Bethesda game's plugins, in the order they load.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Plugins {
+    pub list: Vec<Plugin>,
+    /// The `plugins.txt` Apply writes; `None` until the game's prefix is
+    /// there (started once).
+    pub file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -547,6 +635,9 @@ struct Place {
     /// A Windows game, which sees `Data` and `data` as one folder: a mod's
     /// paths take the case of the folders and files already there.
     any_case: bool,
+    /// The game's folder in its prefix's `AppData/Local`, where its plugin
+    /// list goes; `None` for games without one, or no prefix yet.
+    appdata: Option<PathBuf>,
 }
 
 fn place(game: &Game) -> anyhow::Result<Place> {
@@ -560,11 +651,16 @@ fn place(game: &Game) -> anyhow::Result<Place> {
         .context("no home folder to keep mods in")?
         .join("zendo/mods")
         .join(paths::safe_name(&game.id));
+    let known = known(game);
+    let appdata = known.and_then(|known| known.plugins).and_then(|rules| {
+        plugins::appdata_local(game, &game_dir).map(|local| local.join(rules.appdata))
+    });
     Ok(Place {
         data,
         game_dir,
-        known: known(game),
+        known,
         any_case: launch::needs_proton(game),
+        appdata,
     })
 }
 
@@ -595,7 +691,7 @@ pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Added> {
     let place = place(game)?;
     match place.take_in(archive, None, None, None)? {
         Some(pending) => Ok(Added::Choose(Box::new(pending))),
-        None => Ok(Added::Done(place.overview()?)),
+        None => Ok(Added::Done(Box::new(place.overview()?))),
     }
 }
 
@@ -666,7 +762,7 @@ pub fn add_from_nexus(
     let (pending, updated) = place.add_fetched(fetched, domain, mod_id)?;
     let added = match pending {
         Some(pending) => Added::Choose(Box::new(pending)),
-        None => Added::Done(place.overview()?),
+        None => Added::Done(Box::new(place.overview()?)),
     };
     Ok((added, updated))
 }
@@ -780,6 +876,45 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
         }
     }
     place.overview()
+}
+
+/// Turns a plugin on or off; Apply makes it so. The game's main masters
+/// stay on.
+///
+/// # Errors
+///
+/// When the game has no plugins, or the list cannot be read or written.
+pub fn set_plugin(game: &Game, name: &str, enabled: bool) -> anyhow::Result<Overview> {
+    let _lock = lock();
+    let place = place(game)?;
+    place.change_plugins(|plugins| {
+        let mut order = order_of(plugins);
+        let at = plugins
+            .iter()
+            .position(|plugin| plugin.name == name && plugin.rank != plugins::Rank::Implicit)?;
+        order[at].1 = enabled;
+        Some(order)
+    })?;
+    place.overview()
+}
+
+/// Moves a plugin one place earlier (`up`) or later, among its kind.
+///
+/// # Errors
+///
+/// When the game has no plugins, or the list cannot be read or written.
+pub fn move_plugin(game: &Game, name: &str, up: bool) -> anyhow::Result<Overview> {
+    let _lock = lock();
+    let place = place(game)?;
+    place.change_plugins(|plugins| plugins::moved(plugins, name, up))?;
+    place.overview()
+}
+
+fn order_of(plugins: &[Plugin]) -> Vec<(String, bool)> {
+    plugins
+        .iter()
+        .map(|plugin| (plugin.name.clone(), plugin.enabled))
+        .collect()
 }
 
 /// What to do with a game's profiles.
@@ -978,14 +1113,20 @@ impl Place {
                 mods[before].loses.push((winner, count));
             }
         }
-        let applied = match self.manifest()? {
+        let manifest = self.manifest()?;
+        let plugin_list = self.plugins(&list, manifest.as_ref());
+        let wanted = self.wanted(plugin_list.as_deref());
+        let applied = match manifest {
             None => Applied::No,
             Some(manifest) => {
                 let enabled: Vec<&Entry> = list.mods.iter().filter(|entry| entry.enabled).collect();
                 let ids: Vec<&String> = enabled.iter().map(|entry| &entry.id).collect();
                 let stamps: Vec<String> = enabled.iter().map(|entry| entry.stamp()).collect();
                 let same_files = manifest.stamps.is_empty() || manifest.stamps == stamps;
-                if manifest.mods.iter().collect::<Vec<_>>() == ids && same_files {
+                if manifest.mods.iter().collect::<Vec<_>>() == ids
+                    && same_files
+                    && manifest.plugins == wanted
+                {
                     Applied::Current(enabled.len())
                 } else {
                     Applied::Changed
@@ -1007,7 +1148,213 @@ impl Place {
             mods,
             overwrite: walk(&self.overwrite()).map_or(0, |files| files.len()),
             applied,
+            plugins: plugin_list.map(|list| {
+                Box::new(Plugins {
+                    list,
+                    file: self.appdata.as_ref().map(|dir| dir.join("plugins.txt")),
+                })
+            }),
         })
+    }
+
+    fn rules(&self) -> Option<&'static plugins::Rules> {
+        self.known.and_then(|known| known.plugins)
+    }
+
+    /// The game's plugins in the order they load: its own in the mod folder
+    /// and those of the mods on (a mod's replacing the game's of the same
+    /// name). `None` for a game without plugins.
+    fn plugins(&self, list: &List, manifest: Option<&Manifest>) -> Option<Vec<Plugin>> {
+        let rules = self.rules()?;
+        let (folder, _) = self.folder(list);
+        let data = self.game_dir.join(self.resolve_case(Path::new(&folder)));
+        // Names straight in the mod folder, of paths from the game's.
+        let top = |paths: &mut dyn Iterator<Item = &PathBuf>| -> HashSet<String> {
+            paths
+                .filter(|path| {
+                    path.parent().is_some_and(|parent| {
+                        parent.to_string_lossy().eq_ignore_ascii_case(&folder)
+                    })
+                })
+                .map(|path| file_name(path).to_lowercase())
+                .collect()
+        };
+        let placed = manifest.map_or_else(HashSet::new, |manifest| {
+            top(&mut manifest.files.iter().map(|placed| &placed.path))
+        });
+        let replaced =
+            manifest.map_or_else(HashSet::new, |manifest| top(&mut manifest.backups.iter()));
+
+        let mut found: Vec<plugins::Found> = Vec::new();
+        for name in entries(&data).1 {
+            let lower = name.to_lowercase();
+            if !plugins::is_plugin(&name) || (placed.contains(&lower) && !replaced.contains(&lower))
+            {
+                continue;
+            }
+            found.push(plugins::Found {
+                header: plugins::read_header(&data.join(&name)).ok(),
+                name,
+                from: None,
+            });
+        }
+        for entry in list.mods.iter().filter(|entry| entry.enabled) {
+            let root = self.mod_root(entry);
+            for name in entries(&root).1 {
+                if !plugins::is_plugin(&name) {
+                    continue;
+                }
+                let header = plugins::read_header(&root.join(&name)).ok();
+                let from = Some(entry.name.clone());
+                match found
+                    .iter_mut()
+                    .find(|other| other.name.eq_ignore_ascii_case(&name))
+                {
+                    Some(other) => {
+                        other.from = from;
+                        other.header = header;
+                    }
+                    None => found.push(plugins::Found { name, from, header }),
+                }
+            }
+        }
+        // The game's own are on as its list had them before Zendo, or all
+        // when it had none; a mod's are on.
+        let original = self.original_list(manifest);
+        Some(plugins::arrange(
+            rules,
+            found,
+            &list.stored_plugins(),
+            |found| {
+                found.from.is_some()
+                    || original.as_ref().is_none_or(|original| {
+                        original
+                            .iter()
+                            .any(|(name, on)| *on && name.eq_ignore_ascii_case(&found.name))
+                    })
+            },
+        ))
+    }
+
+    /// The game's `plugins.txt` as it was before Zendo wrote it.
+    fn original_list(&self, manifest: Option<&Manifest>) -> Option<Vec<(String, bool)>> {
+        let rules = self.rules()?;
+        let path = self.appdata.as_ref()?.join("plugins.txt");
+        let kept =
+            manifest.and_then(|manifest| manifest.lists.iter().find(|backup| backup.path == path));
+        let bytes = match kept {
+            Some(backup) => backup.original.clone()?,
+            None => fs::read(&path).ok()?,
+        };
+        Some(plugins::read_list(
+            &String::from_utf8_lossy(&bytes),
+            rules.style,
+        ))
+    }
+
+    /// The plugin order Apply writes; `None` when it writes none.
+    fn wanted(&self, plugins: Option<&[Plugin]>) -> Option<Vec<(String, bool)>> {
+        self.appdata.as_ref().and(plugins).map(order_of)
+    }
+
+    /// Changes the plugin order kept: `edit` gives the new one, or `None`
+    /// to leave it.
+    fn change_plugins(
+        &self,
+        edit: impl FnOnce(&[Plugin]) -> Option<Vec<(String, bool)>>,
+    ) -> anyhow::Result<()> {
+        let manifest = self.manifest()?;
+        self.change(|list| {
+            let plugins = self
+                .plugins(list, manifest.as_ref())
+                .context("Zendo keeps no plugin order for this game")?;
+            if let Some(order) = edit(&plugins) {
+                list.keep_plugins(&order);
+            }
+            Ok(())
+        })
+    }
+
+    /// Writes the plugin order into the game's lists in its prefix, keeping
+    /// what they held; for Fallout 3 and New Vegas, also dates the plugins
+    /// a minute apart in that order.
+    fn write_plugins(
+        &self,
+        folder: &str,
+        order: Vec<(String, bool)>,
+        manifest: &mut Manifest,
+    ) -> anyhow::Result<()> {
+        let (Some(rules), Some(appdata)) = (self.rules(), &self.appdata) else {
+            return Ok(());
+        };
+        let mut missing: Vec<&Path> = appdata
+            .ancestors()
+            .take_while(|dir| !dir.exists())
+            .collect();
+        missing.reverse();
+        for dir in missing {
+            fs::create_dir(dir).with_context(|| format!("could not make {}", dir.display()))?;
+            manifest.made.push(dir.to_path_buf());
+        }
+        for (name, text) in plugins::files_for(rules, &order) {
+            let path = appdata.join(name);
+            let original = match fs::read(&path) {
+                Ok(bytes) => Some(bytes),
+                Err(err) if err.kind() == ErrorKind::NotFound => None,
+                Err(err) => {
+                    return Err(err).with_context(|| format!("could not read {}", path.display()));
+                }
+            };
+            manifest.lists.push(ListBackup {
+                path: path.clone(),
+                original,
+            });
+            paths::write_atomic(&path, text.as_bytes())
+                .with_context(|| format!("could not write {}", path.display()))?;
+        }
+        if rules.style == plugins::Style::Timestamps {
+            self.date_plugins(folder, &order, manifest)?;
+        }
+        manifest.plugins = Some(order);
+        Ok(())
+    }
+
+    /// Sets the plugins' modified times a minute apart from a fixed day,
+    /// in order, keeping the game's own files' times to put back.
+    fn date_plugins(
+        &self,
+        folder: &str,
+        order: &[(String, bool)],
+        manifest: &mut Manifest,
+    ) -> anyhow::Result<()> {
+        // 2008-01-10, before any of these games' files.
+        let mut time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_200_000_000);
+        for (name, _) in order {
+            let into = self.resolve_case(&Path::new(folder).join(name));
+            let path = self.game_dir.join(&into);
+            let key = self.file_key(&into);
+            let placed = manifest
+                .files
+                .iter()
+                .position(|placed| self.file_key(&placed.path) == key);
+            let file = fs::File::options()
+                .write(true)
+                .open(&path)
+                .with_context(|| format!("could not open {}", path.display()))?;
+            if placed.is_none() {
+                let before = file.metadata().ok().and_then(|meta| meta.modified().ok());
+                manifest.times.push((into.clone(), before));
+            }
+            file.set_modified(time)
+                .with_context(|| format!("could not date {}", path.display()))?;
+            if let Some(at) = placed {
+                manifest.files[at].modified = fs::metadata(&path)
+                    .ok()
+                    .and_then(|meta| meta.modified().ok());
+            }
+            time += Duration::from_secs(60);
+        }
+        Ok(())
     }
 
     fn file_key(&self, path: &Path) -> String {
@@ -1453,13 +1800,17 @@ impl Place {
             stamps: enabled.iter().map(|entry| entry.stamp()).collect(),
             ..Manifest::default()
         };
-        if winners.is_empty() {
+        let wanted = self.wanted(self.plugins(&list, None).as_deref());
+        if winners.is_empty() && wanted.is_none() {
             // Nothing on: the game stays as it is.
             return Ok(());
         }
-        let placed = winners
+        let mut placed = winners
             .into_values()
             .try_for_each(|(from, into)| self.place_file(&from, &into, &mut manifest));
+        if let (Ok(()), Some(order)) = (&placed, wanted) {
+            placed = self.write_plugins(&folder, order, &mut manifest);
+        }
         if let Err(err) = placed.and_then(|()| self.save_manifest(&manifest)) {
             // Take out what went in.
             let _ = self.take_out(&manifest);
@@ -1554,6 +1905,33 @@ impl Place {
     fn take_out(&self, manifest: &Manifest) -> anyhow::Result<()> {
         let game_dir = &manifest.game_dir;
         let overwrite = self.overwrite();
+        for (path, time) in &manifest.times {
+            let path = game_dir.join(path);
+            if let Some(time) = time
+                && let Ok(file) = fs::File::options().write(true).open(&path)
+            {
+                file.set_modified(*time)
+                    .with_context(|| format!("could not date {}", path.display()))?;
+            }
+        }
+        for backup in manifest.lists.iter().rev() {
+            let path = &backup.path;
+            match &backup.original {
+                Some(bytes) => paths::write_atomic(path, bytes)
+                    .with_context(|| format!("could not put back {}", path.display()))?,
+                None => match fs::remove_file(path) {
+                    Err(err) if err.kind() != ErrorKind::NotFound => {
+                        return Err(err)
+                            .with_context(|| format!("could not remove {}", path.display()));
+                    }
+                    _ => {}
+                },
+            }
+        }
+        for dir in manifest.made.iter().rev() {
+            // Left when the game wrote there too.
+            let _ = fs::remove_dir(dir);
+        }
         for placed in &manifest.files {
             let path = game_dir.join(&placed.path);
             let Ok(meta) = fs::symlink_metadata(&path) else {
@@ -1853,6 +2231,7 @@ mod tests {
                 game_dir: self.0.join("game"),
                 known,
                 any_case,
+                appdata: None,
             }
         }
     }
@@ -1973,6 +2352,177 @@ mod tests {
         );
         place.restore().unwrap();
         assert!(!game.join("BepInEx").exists());
+    }
+
+    fn date(path: &Path, time: SystemTime) {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    }
+
+    fn modified(path: &Path) -> SystemTime {
+        fs::metadata(path).unwrap().modified().unwrap()
+    }
+
+    fn plugin_names(place: &Place) -> Vec<(String, bool)> {
+        order_of(&place.overview().unwrap().plugins.unwrap().list)
+    }
+
+    #[test]
+    fn writes_the_plugin_order_on_apply_and_puts_the_game_back() {
+        use crate::plugins::tests::plugin;
+
+        let scratch = Scratch::new("plugins");
+        let fallout = KNOWN.iter().find(|known| known.nexus == "fallout3");
+        let mut place = scratch.place(fallout, true);
+        let user = scratch.0.join("pfx/drive_c/users/steamuser");
+        fs::create_dir_all(&user).unwrap();
+        let appdata = user.join("AppData/Local/Fallout3");
+        place.appdata = Some(appdata.clone());
+        let data = place.game_dir.join("Data");
+        fs::create_dir_all(&data).unwrap();
+        // Dated as Steam installs them: the game's master after its DLC.
+        let installed = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let own = ["Anchorage.esm", "BrokenSteel.esm", "Fallout3.esm"];
+        for (name, seconds) in own.iter().zip(0..) {
+            let masters: &[&str] = if *name == "Fallout3.esm" {
+                &[]
+            } else {
+                &["Fallout3.esm"]
+            };
+            fs::write(data.join(name), plugin(1, masters)).unwrap();
+            date(&data.join(name), installed + Duration::from_secs(seconds));
+        }
+        for (id, name, masters) in [
+            ("lib", "Lib.esp", &["Fallout3.esm"][..]),
+            ("patch", "Patch.esp", &["Fallout3.esm", "Lib.esp"][..]),
+        ] {
+            add_unpacked(&place, id, &[]);
+            fs::create_dir_all(place.files().join(id)).unwrap();
+            fs::write(place.files().join(id).join(name), plugin(0, masters)).unwrap();
+        }
+
+        let plugins = place.overview().unwrap().plugins.unwrap();
+        assert_eq!(plugins.file, Some(appdata.join("plugins.txt")));
+        let on = |names: &[&str]| -> Vec<(String, bool)> {
+            [
+                "Fallout3.esm",
+                "Anchorage.esm",
+                "BrokenSteel.esm",
+                "Lib.esp",
+                "Patch.esp",
+            ]
+            .iter()
+            .map(|name| ((*name).to_owned(), names.contains(name)))
+            .collect()
+        };
+        let all = [
+            "Fallout3.esm",
+            "Anchorage.esm",
+            "BrokenSteel.esm",
+            "Lib.esp",
+            "Patch.esp",
+        ];
+        assert_eq!(order_of(&plugins.list), on(&all));
+        assert_eq!(plugins.list[4].from.as_deref(), Some("patch"));
+
+        // Patch before its master shows; moved back, it does not.
+        place
+            .change_plugins(|plugins| plugins::moved(plugins, "Patch.esp", true))
+            .unwrap();
+        let list = place.overview().unwrap().plugins.unwrap().list;
+        assert_eq!(list[3].after, ["Lib.esp"]);
+        place
+            .change_plugins(|plugins| plugins::moved(plugins, "Patch.esp", false))
+            .unwrap();
+        place
+            .change_plugins(|plugins| {
+                let mut order = order_of(plugins);
+                order[1].1 = false;
+                Some(order)
+            })
+            .unwrap();
+
+        place.apply().unwrap();
+        assert_eq!(
+            read(&appdata.join("plugins.txt")).as_deref(),
+            Some("Fallout3.esm\r\nBrokenSteel.esm\r\nLib.esp\r\nPatch.esp\r\n")
+        );
+        let times: Vec<SystemTime> = all.iter().map(|name| modified(&data.join(name))).collect();
+        assert!(times.is_sorted() && times[0] < times[1], "{times:?}");
+        assert_eq!(place.overview().unwrap().applied, Applied::Current(2));
+        // A move shows as a change; back again, it does not.
+        place
+            .change_plugins(|plugins| plugins::moved(plugins, "Patch.esp", true))
+            .unwrap();
+        assert_eq!(place.overview().unwrap().applied, Applied::Changed);
+        place
+            .change_plugins(|plugins| plugins::moved(plugins, "Patch.esp", false))
+            .unwrap();
+        assert_eq!(place.overview().unwrap().applied, Applied::Current(2));
+
+        place.restore().unwrap();
+        assert!(!user.join("AppData").exists(), "the folders Zendo made go");
+        assert!(!data.join("Lib.esp").exists());
+        for (name, seconds) in own.iter().zip(0..) {
+            assert_eq!(
+                modified(&data.join(name)),
+                installed + Duration::from_secs(seconds)
+            );
+        }
+
+        // A list the game had decides its own plugins' first state, and
+        // comes back as it was.
+        let original = "Fallout3.esm\r\nBrokenSteel.esm\r\n";
+        write(&appdata.join("plugins.txt"), original);
+        place
+            .change(|list| {
+                list.plugins.clear();
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            plugin_names(&place),
+            on(&["Fallout3.esm", "BrokenSteel.esm", "Lib.esp", "Patch.esp"])
+        );
+        place.apply().unwrap();
+        assert_ne!(
+            read(&appdata.join("plugins.txt")).as_deref(),
+            Some(original)
+        );
+        // Applied, the list in the prefix is Zendo's; the game's still counts.
+        assert_eq!(
+            plugin_names(&place),
+            on(&["Fallout3.esm", "BrokenSteel.esm", "Lib.esp", "Patch.esp"])
+        );
+        place.restore().unwrap();
+        assert_eq!(
+            read(&appdata.join("plugins.txt")).as_deref(),
+            Some(original)
+        );
+    }
+
+    #[test]
+    fn each_profile_keeps_its_plugin_order() {
+        let entry = |name: &str, enabled| PluginEntry {
+            name: name.into(),
+            enabled,
+        };
+        let mut list = List {
+            plugins: vec![entry("A.esp", true), entry("B.esp", true)],
+            ..List::default()
+        };
+        list.new_profile("Other").unwrap();
+        list.keep_plugins(&[("B.esp".into(), false), ("A.esp".into(), true)]);
+        assert_eq!(list.plugins, [entry("B.esp", false), entry("A.esp", true)]);
+        list.switch_profile(DEFAULT_PROFILE).unwrap();
+        assert_eq!(list.plugins, [entry("A.esp", true), entry("B.esp", true)]);
+        // Kept, a plugin not there now stays after the order given.
+        list.keep_plugins(&[("B.esp".into(), true)]);
+        assert_eq!(list.plugins, [entry("B.esp", true), entry("A.esp", true)]);
     }
 
     #[test]

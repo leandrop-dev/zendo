@@ -1,7 +1,7 @@
 //! The Mods card on a game's page: the profile in use, the mods Zendo
-//! keeps for the game, in order, each on or off, Add mod, the folder they
-//! go in, Apply and Back to vanilla, with downloads and updates from Nexus
-//! (`nexus.rs`). The work is
+//! keeps for the game, in order, each on or off, Add mod, a Bethesda
+//! game's plugins in load order, the folder they go in, Apply and Back to
+//! vanilla, with downloads and updates from Nexus (`nexus.rs`). The work is
 //! `zendo_core::mods`'; this shows it and runs it on a thread.
 
 use std::collections::HashMap;
@@ -10,8 +10,9 @@ use std::path::PathBuf;
 use iced::widget::{button, checkbox, column, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Game;
-use zendo_core::mods::{self, Added, Applied, ModInfo, Overview, ProfileChange};
+use zendo_core::mods::{self, Added, Applied, ModInfo, Overview, Plugins, ProfileChange};
 use zendo_core::nexus;
+use zendo_core::plugins::{self, Plugin, Rank, Style};
 
 use super::nexus::{NexusMessage, download_row};
 use super::style::{self, BAD, BOLD, DIM, GOOD};
@@ -62,6 +63,9 @@ pub enum ModsMessage {
     Picked(String, Result<Option<PathBuf>, String>),
     Toggle(String, String, bool),
     Move(String, String, bool),
+    /// Turn a plugin on or off: the game, the plugin's name.
+    TogglePlugin(String, String, bool),
+    MovePlugin(String, String, bool),
     Remove(String, String),
     Folder(String, String),
     SaveFolder(String),
@@ -165,6 +169,16 @@ impl Zendo {
             ModsMessage::Move(id, mod_id, up) => self.change_mods(id, "Saving…", move |game| {
                 mods::move_mod(game, &mod_id, up).map(|overview| (overview, String::new()))
             }),
+            ModsMessage::TogglePlugin(id, name, on) => {
+                self.change_mods(id, "Saving…", move |game| {
+                    mods::set_plugin(game, &name, on).map(|overview| (overview, String::new()))
+                })
+            }
+            ModsMessage::MovePlugin(id, name, up) => {
+                self.change_mods(id, "Saving…", move |game| {
+                    mods::move_plugin(game, &name, up).map(|overview| (overview, String::new()))
+                })
+            }
             ModsMessage::Remove(id, mod_id) => {
                 let ask = Confirm::Remove(mod_id.clone());
                 if self.mods.confirm.as_ref() != Some(&(id.clone(), ask.clone())) {
@@ -421,7 +435,7 @@ impl Zendo {
         match result {
             Ok((Added::Done(overview), note)) => {
                 self.status = Some(note);
-                self.mods_ready(id, overview)
+                self.mods_ready(id, *overview)
             }
             Ok((Added::Choose(pending), _)) => self.open_installer(id, pending),
             Err(err) => {
@@ -541,6 +555,13 @@ impl Zendo {
         let last = overview.mods.len().saturating_sub(1);
         for (at, info) in overview.mods.iter().enumerate() {
             body = body.push(self.mod_row(id, info, at == 0, at == last, free));
+        }
+        if let Some(plugins) = &overview.plugins {
+            let style = overview
+                .known
+                .and_then(|known| known.plugins)
+                .map(|rules| rules.style);
+            body = body.push(plugins_section(id, plugins, style, free));
         }
         if overview.overwrite > 0 {
             let asking =
@@ -816,12 +837,21 @@ impl Zendo {
         free: bool,
     ) -> Element<'a, Message> {
         let running = self.running.is_running(id);
+        let writes_plugins = overview
+            .plugins
+            .as_ref()
+            .is_some_and(|plugins| plugins.file.is_some());
         let (state, color) = match overview.applied {
             Applied::No => ("Not applied: the game is as it was".to_owned(), DIM),
             Applied::Current(count) => (
                 format!(
-                    "Applied: {} in the game",
-                    super::format::count(count, "mod", "mods")
+                    "Applied: {}{} in the game",
+                    super::format::count(count, "mod", "mods"),
+                    if writes_plugins {
+                        " and the plugin order"
+                    } else {
+                        ""
+                    }
                 ),
                 GOOD,
             ),
@@ -836,7 +866,9 @@ impl Zendo {
             state
         };
         let can = free && !running;
-        let any_on = overview.mods.iter().any(|info| info.enabled) || overview.overwrite > 0;
+        let any_on = overview.mods.iter().any(|info| info.enabled)
+            || overview.overwrite > 0
+            || writes_plugins;
         row![
             text(state).size(13).color(color).width(Length::Fill),
             button(text("Back to vanilla").size(14))
@@ -858,6 +890,118 @@ impl Zendo {
         .align_y(Alignment::Center)
         .into()
     }
+}
+
+/// A Bethesda game's plugins in load order, each on or off, and where
+/// Apply writes the order.
+fn plugins_section<'a>(
+    id: &'a str,
+    plugins: &'a Plugins,
+    style: Option<Style>,
+    free: bool,
+) -> Element<'a, Message> {
+    let note = match (&plugins.file, style) {
+        (Some(_), Some(Style::Timestamps)) => {
+            "Apply writes this order to plugins.txt in the game's prefix, and dates the \
+             plugins in it, which is how this game reads it."
+        }
+        (Some(_), _) => "Apply writes this order to the game's plugin list in its prefix.",
+        (None, _) => {
+            "Start the game once, so its prefix is made; Apply writes this order there after."
+        }
+    };
+    let mut section = column![
+        text("Plugins").size(15).font(BOLD),
+        text(note)
+            .size(13)
+            .color(if plugins.file.is_some() { DIM } else { BAD }),
+    ]
+    .spacing(8);
+    if let Some(file) = &plugins.file {
+        section = section.push(
+            text(file.display().to_string())
+                .size(12)
+                .font(Font::MONOSPACE)
+                .color(DIM),
+        );
+    }
+    if plugins.list.is_empty() {
+        section = section.push(
+            text("No plugins in the game's Data folder or the mods on.")
+                .size(13)
+                .color(DIM),
+        );
+    }
+    for (at, plugin) in plugins.list.iter().enumerate() {
+        section = section.push(plugin_row(id, &plugins.list, at, plugin, free));
+    }
+    section.into()
+}
+
+fn plugin_row<'a>(
+    id: &'a str,
+    list: &[Plugin],
+    at: usize,
+    plugin: &'a Plugin,
+    free: bool,
+) -> Element<'a, Message> {
+    let mut facts = vec![match &plugin.from {
+        Some(name) => format!("from {name}"),
+        None => "the game's".to_owned(),
+    }];
+    if plugin.master {
+        facts.push("master".to_owned());
+    }
+    if plugin.rank == Rank::Implicit {
+        facts.push("always loads".to_owned());
+    }
+    let mut problems = Vec::new();
+    if !plugin.missing.is_empty() {
+        problems.push(format!("needs {}, not on", plugin.missing.join(", ")));
+    }
+    if !plugin.after.is_empty() {
+        problems.push(format!(
+            "loads before {}, which it needs",
+            plugin.after.join(", ")
+        ));
+    }
+    if plugin.unreadable {
+        problems.push("its header cannot be read".to_owned());
+    }
+    let name = plugin.name.clone();
+    let toggle = {
+        let (game, name) = (id.to_owned(), name.clone());
+        move |on| Message::Mods(ModsMessage::TogglePlugin(game.clone(), name.clone(), on))
+    };
+    let step =
+        |label: &'static str, up: bool| {
+            button(text(label).size(13))
+                .padding([4, 10])
+                .style(style::secondary)
+                .on_press_maybe((free && plugins::can_move(list, at, up)).then(|| {
+                    Message::Mods(ModsMessage::MovePlugin(id.to_owned(), name.clone(), up))
+                }))
+        };
+    let mut about = column![
+        text(&plugin.name).size(14),
+        text(facts.join(" · ")).size(12).color(DIM),
+    ]
+    .spacing(2)
+    .width(Length::Fill);
+    if !problems.is_empty() {
+        about = about.push(text(problems.join(" · ")).size(12).color(BAD));
+    }
+    row![
+        checkbox(plugin.enabled)
+            .on_toggle_maybe((free && plugin.rank != Rank::Implicit).then_some(toggle))
+            .size(16),
+        about,
+        step("↑", true),
+        step("↓", false),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center)
+    .into()
 }
 
 #[cfg(test)]
@@ -886,6 +1030,7 @@ mod tests {
             }],
             overwrite: 0,
             applied,
+            plugins: None,
         }
     }
 

@@ -123,7 +123,11 @@ install it and give it its colours, but it runs on any Linux desktop.
   you set. Profiles keep different sets of mods on and in order for the
   same game; switching while mods are applied puts the other set in.
   Mods with a FOMOD installer ask their options in steps, with their
-  descriptions and pictures, and Options… asks them again later.
+  descriptions and pictures, and Options… asks them again later. For
+  Fallout 3, New Vegas, Skyrim and Fallout 4, the card also lists the
+  plugins in load order, each on or off, and says when one needs a
+  master that is off or loads after it; Apply writes the order where the
+  game reads it, in its Proton prefix.
 - Mods from [Nexus Mods](https://www.nexusmods.com), with your personal
   API key in Settings: once Zendo opens `nxm://` links (one button in
   Settings), a Mod manager download on Nexus goes straight into the
@@ -287,7 +291,7 @@ What Zendo keeps itself:
 | `~/.cache/zendo/umu.json` | umu-launcher's id for each game, which picks the fixes it applies |
 | `~/.local/share/Steam/compatibilitytools.d/` | GE-Proton builds downloaded from Settings (Zendo does not own the folder; Steam reads it) |
 | `~/.cache/zendo/protondb.json` | Each game's Steam app id and ProtonDB rating, asked again after a week |
-| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, the Nexus file each came from, mod folder, the game's name on Nexus when you chose it, the profile in use and the others' order and mods on), `files/` (each mod unpacked, or built by its installer), `installers/` (archives with a FOMOD installer, kept to choose again), `downloads/` (files from Nexus while they download), `applied.json` (what Apply placed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
+| `~/.local/share/zendo/mods/<id>/` | A game's mods: `mods.toml` (order, on or off, the Nexus file each came from, mod folder, the game's name on Nexus when you chose it, the plugin order for Bethesda's games, the profile in use and the others' order, mods and plugins on), `files/` (each mod unpacked, or built by its installer), `installers/` (archives with a FOMOD installer, kept to choose again), `downloads/` (files from Nexus while they download), `applied.json` (what Apply placed, and the plugin lists and dates it changed), `backup/` (game files mods replaced), `overwrite/` (what the game wrote while modded) |
 | `~/.cache/zendo/nexus-games.json` | The games Nexus Mods has, to match yours by title, asked again after a week |
 | `~/.local/share/applications/zendo-nxm.desktop` | Written by Settings' "Open them with Zendo", so `nxm://` links open in Zendo; hidden from menus |
 | `$XDG_RUNTIME_DIR/zendo/links.sock` | Where `zendo nxm://…` hands a link to the open window |
@@ -300,7 +304,7 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` keeps mods and applies them, `fomod.rs` reads FOMOD installers, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` keeps mods and applies them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
 | `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
@@ -325,10 +329,9 @@ count their own.
    page, and GE-Proton downloads.
 6. **Local games** (built): add a game by hand, and pick any game's
    cover or wide image from SteamGridDB.
-7. **Mods** (7a to 7d done): mods from archives with
+7. **Mods** (built): mods from archives with
    Apply and Back to vanilla, from Nexus Mods links with updates,
-   profiles and FOMOD installers; Bethesda plugin order when there is a
-   game to try it on.
+   profiles, FOMOD installers and Bethesda plugin order.
 
 See [PLAN.md](PLAN.md) for the details.
 
