@@ -1279,6 +1279,37 @@ Features:
 10. EAC and BattlEye runtimes for the Windows games Zendo starts (Proton
     reads them from `PROTON_EAC_RUNTIME` and `PROTON_BATTLEYE_RUNTIME`);
     how umu gets them is to check.
+    Built 2026-11-07. What was found: umu does not fetch them
+    (umu-protonfixes installs them only through Steam); Steam keeps them
+    as apps 1826330 (EAC) and 1161040 (BattlEye); Heroic downloads them
+    from Lutris's list (<https://lutris.net/api/runtimes>: a URL and a
+    build time per runtime, no checksums; each tarball holds one folder
+    with `v2` or `v1` inside) into its own tools folder.
+    Decisions [tentative]:
+    - Steam's copy first (its appmanifest says installed), else Zendo's
+      own in `~/.local/share/zendo/runtimes/<key>/` with the build time in
+      `current_version`, as Heroic writes it. Heroic's copies are not
+      used: its folder is Heroic's to change.
+    - Both variables are set for every Windows game whose runtime is on
+      the machine; Proton uses one only for a game that ships it.
+    - A game whose files hold an `EasyAntiCheat`, `EasyAntiCheat_EOS` or
+      `BattlEye` folder (three levels deep) gets the missing runtime
+      downloaded before it starts, in the window (the status line says
+      so) and from `zendo launch`. A failed download is said and the game
+      starts without it.
+    - Settings' Anti-cheat section shows which copy each runtime uses,
+      and offers Download, Update (when Lutris lists a newer build) and
+      Remove for Zendo's own. `zendo report` lists them.
+    - Steam games are left to Steam; Heroic's games started by Zendo go
+      through Heroic, which sets its own.
+    Code: `zendo-core/src/runtimes.rs` (finding, the list, download and
+    unpack in place of the older copy), `steam.rs`'s `app_folder`,
+    `launch.rs`'s `missing_runtimes` and `fetch_runtimes`, the window's
+    `runtimes.rs` (the section) and `running.rs` (the download before a
+    start). Checked: both real runtimes downloaded and unpacked from
+    Lutris's list (an ignored test, `downloads_the_real_runtimes`). Not
+    checked: a game with EAC played online through Zendo (none here);
+    to try at home with one.
 11. Steam: the games owned but not installed (Steam's Web API needs the
     user's own key and SteamID; what local files hold is to check), and
     installing them through Steam (`steam://install/<app>` opens Steam's
@@ -1366,7 +1397,8 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
   item 6, themes, and item 7, the AUR package, built the same day; item
   8, the survey of Heroic and Hikari, done the same day, added items 16
   to 23 (their order confirmed). Item 9, the game page with DLC, built
-  the same day. Next, item 10, the EAC and BattlEye runtimes.
+  the same day. Item 10, the EAC and BattlEye runtimes, built the same
+  day. Next, item 11, Steam's owned games and `steam://install`.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"

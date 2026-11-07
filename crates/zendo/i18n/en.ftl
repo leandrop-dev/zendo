@@ -378,6 +378,8 @@ run-starting-game = Starting { $title }…
 run-handed = Handed { $title } to { $launcher }
 run-running = { $title } is running
 run-waiting = Waiting for { $launcher } to start { $title }…
+run-fetching-runtime = Downloading the { $runtime } runtime for { $title }…
+run-runtime-failed = { $title } is running without its anti-cheat runtime: { $error }
 run-missed = Handed { $title } to { $launcher }; Zendo did not see it start
 run-closed = { $minutes ->
     [0] { $title } closed
@@ -498,6 +500,17 @@ protons-chosen-by = { $count ->
    *[other] { $count } games chose it; they will run with the default
 }
 protons-downloading = Downloading { $name }
+runtimes-title = Anti-cheat
+runtimes-about = Games that ship Easy Anti-Cheat or BattlEye need its runtime to play online under Proton. Zendo uses Steam's when Steam has it, else downloads its own from Lutris the first time such a game starts.
+runtimes-from-steam = From Steam
+runtimes-downloaded-on = Downloaded by Zendo, built { $date }
+runtimes-downloaded-undated = Downloaded by Zendo
+runtimes-not-here = Not on this computer; downloaded when a game needs it
+runtimes-update = Update to { $date }
+runtimes-downloading = Downloading…
+runtimes-asking = Asking Lutris…
+runtimes-downloaded = The { $runtime } runtime is ready
+runtimes-removed = Removed Zendo's copy of the { $runtime } runtime
 
 ## The art picker
 

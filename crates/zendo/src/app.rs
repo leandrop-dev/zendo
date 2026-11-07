@@ -20,6 +20,7 @@ mod nexus;
 mod protondb;
 mod protons;
 mod running;
+mod runtimes;
 mod settings;
 mod sidebar;
 mod store;
@@ -56,6 +57,7 @@ use nexus::{NexusMessage, NexusState};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
+use runtimes::{RuntimeMessage, RuntimesState};
 use settings::Diagnostics;
 use store::{StoreMessage, StoreState};
 use style::colors;
@@ -210,6 +212,7 @@ enum Message {
     Nexus(NexusMessage),
     Installer(InstallerMessage),
     Proton(ProtonMessage),
+    Runtime(RuntimeMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
     Store(StoreMessage),
@@ -280,6 +283,7 @@ struct Zendo {
     installer: InstallerState,
     /// The Proton section of Settings.
     protons: Protons,
+    runtimes: RuntimesState,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
@@ -325,6 +329,7 @@ impl Zendo {
             nexus: NexusState::default(),
             installer: InstallerState::default(),
             protons: Protons::default(),
+            runtimes: RuntimesState::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
             themes: Themes::default(),
@@ -448,6 +453,13 @@ impl Zendo {
             .or_else(|| self.installer_takes(message))
     }
 
+    fn resized(&mut self, id: window::Id, size: Size) -> Task<Message> {
+        self.window = Some(id);
+        self.columns = library::columns_for(size.width);
+        self.window_width = size.width;
+        self.reveal()
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
         if let Some(task) = self.overlay_takes(&message) {
             return task;
@@ -460,12 +472,7 @@ impl Zendo {
                 Task::none()
             }
             Message::ImagesDone => self.images_done(),
-            Message::Resized(id, size) => {
-                self.window = Some(id);
-                self.columns = library::columns_for(size.width);
-                self.window_width = size.width;
-                self.reveal()
-            }
+            Message::Resized(id, size) => self.resized(id, size),
             Message::Focused(id, focused) => {
                 self.window = Some(id);
                 self.focused = focused;
@@ -541,6 +548,7 @@ impl Zendo {
             Message::Nexus(message) => self.update_nexus(message),
             Message::Installer(message) => self.update_installer(message),
             Message::Proton(message) => self.update_protons(message),
+            Message::Runtime(message) => self.update_runtimes(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
                 Task::none()
@@ -713,7 +721,7 @@ impl Zendo {
                 if self.persist {
                     self.themes.reload(Theme::dir().as_deref());
                 }
-                self.want_protons()
+                Task::batch([self.want_protons(), self.want_runtimes()])
             }
             Page::Downloads | Page::Accounts | Page::About => Task::none(),
         }

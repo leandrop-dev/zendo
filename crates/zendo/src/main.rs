@@ -64,7 +64,7 @@ fn main() -> ExitCode {
         ["list", flags @ ..] if flags.iter().all(|flag| ["--all", "--json"].contains(flag)) => {
             list(flags.contains(&"--all"), flags.contains(&"--json"))
         }
-        ["launch", id] => find(id).and_then(|game| zendo_core::launch(&game)),
+        ["launch", id] => find(id).and_then(|game| launch_game(&game)),
         ["hide", id] => set_hidden(id, true),
         ["unhide", id] => set_hidden(id, false),
         ["pin", id] => set_pinned(id, true),
@@ -138,6 +138,18 @@ fn find(id: &str) -> anyhow::Result<Game> {
         .find(id)
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("no game with the id {id:?}; `zendo list --all` shows them"))
+}
+
+/// Starts a game, after downloading the anti-cheat runtimes it needs; one
+/// that cannot be downloaded is said and the game starts without it.
+fn launch_game(game: &Game) -> anyhow::Result<()> {
+    let fetched = launch::fetch_runtimes(game, &mut |runtime| {
+        eprintln!("zendo: downloading the {} runtime…", runtime.label());
+    });
+    if let Err(err) = fetched {
+        eprintln!("zendo: starting without its anti-cheat runtime: {err:#}");
+    }
+    zendo_core::launch(game)
 }
 
 fn set_hidden(id: &str, hidden: bool) -> anyhow::Result<()> {

@@ -25,12 +25,14 @@ use std::io::Write as _;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 
 use anyhow::{Context, bail};
 
 use crate::config::Config;
 use crate::launch_options::LaunchOptions;
+use crate::runtimes::{self, Runtime};
 use crate::stores::Store;
 use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
 
@@ -386,6 +388,9 @@ fn umu_setup(
     if options.xbox_controllers {
         env.push(("PROTON_PREFER_SDL", "1".into()));
     }
+    // umu leaves the anti-cheat runtimes to Steam; outside it, Proton
+    // finds them only through these.
+    env.extend(runtimes::environment());
     Ok(Umu {
         program: umu.to_string_lossy().into_owned(),
         env,
@@ -420,6 +425,48 @@ fn local_command(
         command.current_dir(dir);
     }
     Ok(command)
+}
+
+/// The anti-cheat runtimes a game Zendo starts through Proton ships and
+/// this machine lacks, to download before it starts. Steam's and Heroic's
+/// games get theirs from their launcher.
+#[must_use]
+pub fn missing_runtimes(game: &Game) -> Vec<Runtime> {
+    if !needs_proton(game) {
+        return Vec::new();
+    }
+    let folder = match &game.launch {
+        Launch::Engine { .. } => game.details.install_path.clone(),
+        Launch::Local { program, dir, .. } => dir
+            .clone()
+            .or_else(|| program.parent().map(Path::to_path_buf)),
+        Launch::Uri { .. } | Launch::Command { .. } => None,
+    };
+    folder.map_or_else(Vec::new, |folder| runtimes::missing_for(&folder))
+}
+
+/// Downloads the anti-cheat runtimes [`missing_runtimes`] names, telling
+/// `report` which one it is on. A failure need not stop the launch: the
+/// game may run, without what its anti-cheat guards.
+///
+/// # Errors
+///
+/// When Lutris's list cannot be read or a download fails.
+pub fn fetch_runtimes(game: &Game, report: &mut dyn FnMut(Runtime)) -> anyhow::Result<()> {
+    let missing = missing_runtimes(game);
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let remotes = runtimes::latest()?;
+    for runtime in missing {
+        let remote = remotes
+            .iter()
+            .find(|remote| remote.runtime == runtime)
+            .with_context(|| format!("Lutris lists no {} runtime", runtime.label()))?;
+        report(runtime);
+        runtimes::install(remote, &AtomicBool::new(false), &mut |_, _| {})?;
+    }
+    Ok(())
 }
 
 /// Whether the game needs Proton: a Windows build.

@@ -220,6 +220,7 @@ impl Zendo {
                 self.nexus_section(),
                 self.covers_section(),
                 self.protons_section(),
+                self.runtimes_section(),
                 self.sources_section(),
                 files_section(self.config.install_dir()),
                 self.diagnostics_section(),

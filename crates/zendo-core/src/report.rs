@@ -1,6 +1,6 @@
 //! What Zendo found on this machine, as text to paste into a bug report:
 //! the system, the tools and store engines with their versions, the
-//! Protons, the settings (never the keys), whether each store is signed in
+//! Protons and anti-cheat runtimes, the settings (never the keys), whether each store is signed in
 //! (never the account), the library's counts and problems, the Wine
 //! prefixes of the games Zendo starts, and the end of the latest launches'
 //! logs.
@@ -16,6 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use crate::config::{Config, Kept};
+use crate::runtimes::{self, Found, Runtime};
 use crate::secrets::Key;
 use crate::stores::Store;
 use crate::{Launch, Library, Size, Source, heroic, launch, paths, proton, steam, time};
@@ -109,6 +110,7 @@ pub fn gather(config: &Config, library: &Library) -> String {
     system(&mut lines);
     tools(&mut lines);
     protons(&mut lines, config);
+    anti_cheat(&mut lines);
     settings(&mut lines, config);
     accounts(&mut lines);
     games(&mut lines, library);
@@ -313,6 +315,22 @@ fn protons(lines: &mut Vec<String>, config: &Config) {
         (None, _) => "none: umu-launcher downloads UMU-Proton".to_owned(),
     };
     lines.push(format!("Default: {default}"));
+}
+
+fn anti_cheat(lines: &mut Vec<String>) {
+    heading(lines, "Anti-cheat runtimes");
+    for runtime in Runtime::ALL {
+        let found = match runtimes::find(runtime) {
+            Some(Found::Steam(path)) => format!("Steam's, {}", path.display()),
+            Some(Found::Zendo { path, version }) => format!(
+                "Zendo's, built {}, {}",
+                version.as_deref().unwrap_or("on an unknown day"),
+                path.display()
+            ),
+            None => "none: downloaded when a game needs it".to_owned(),
+        };
+        lines.push(format!("{:<28} {found}", runtime.label()));
+    }
 }
 
 fn settings(lines: &mut Vec<String>, config: &Config) {

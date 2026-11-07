@@ -45,6 +45,8 @@ struct Session {
     started: Instant,
     /// Stop was pressed: the next press kills it.
     stopping: bool,
+    /// An anti-cheat runtime it needs could not be downloaded.
+    warning: Option<String>,
 }
 
 impl Session {
@@ -54,12 +56,17 @@ impl Session {
             seen: false,
             started: Instant::now(),
             stopping: false,
+            warning: None,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum RunMessage {
+    /// An anti-cheat runtime the game needs is downloading, before it starts.
+    Fetching(String, &'static str),
+    /// It could not be; the game starts without it.
+    FetchFailed(String, String),
     Started(String, Result<Started, String>),
     /// The launcher started the game: its processes turned up.
     Seen(String),
@@ -109,35 +116,26 @@ impl Zendo {
 
     pub(super) fn update_running(&mut self, message: RunMessage) -> Task<Message> {
         match message {
-            RunMessage::Started(id, Ok(started)) => {
-                let title = self.title_of(&id);
-                let launcher = launcher(self.game(&id));
-                match started.watch {
-                    Watch::Nothing => {
-                        self.running.games.remove(&id);
-                        self.status = Some(t!("run-handed", title = title, launcher = launcher));
-                    }
-                    watch => {
-                        if let Some(session) = self.running.games.get_mut(&id) {
-                            session.seen = matches!(watch, Watch::Group(_));
-                            session.started = Instant::now();
-                            self.status = Some(if session.seen {
-                                t!("run-running", title = title)
-                            } else {
-                                t!("run-waiting", title = title, launcher = launcher)
-                            });
-                            session.watch = Some(watch);
-                        }
-                    }
-                }
-                // Zendo's state now has the launch; show it in the order
-                // without scanning again.
-                if let Some(played) = self.game_mut(&id).map(|game| &mut game.played) {
-                    played.launches += 1;
-                    played.last = Some(super::now());
-                }
-                self.select(Some(&id))
+            RunMessage::Fetching(id, runtime) => {
+                self.status = Some(t!(
+                    "run-fetching-runtime",
+                    runtime = runtime,
+                    title = self.title_of(&id)
+                ));
+                Task::none()
             }
+            RunMessage::FetchFailed(id, err) => {
+                let warning = t!(
+                    "run-runtime-failed",
+                    title = self.title_of(&id),
+                    error = err.as_str()
+                );
+                if let Some(session) = self.running.games.get_mut(&id) {
+                    session.warning = Some(warning);
+                }
+                Task::none()
+            }
+            RunMessage::Started(id, Ok(started)) => self.started(&id, started),
             RunMessage::Started(id, Err(err)) => {
                 self.running.games.remove(&id);
                 self.status = Some(err);
@@ -200,6 +198,39 @@ impl Zendo {
         }
     }
 
+    /// A game's launcher is up: watch it, count the launch.
+    fn started(&mut self, id: &str, started: Started) -> Task<Message> {
+        let title = self.title_of(id);
+        let launcher = launcher(self.game(id));
+        match started.watch {
+            Watch::Nothing => {
+                self.running.games.remove(id);
+                self.status = Some(t!("run-handed", title = title, launcher = launcher));
+            }
+            watch => {
+                if let Some(session) = self.running.games.get_mut(id) {
+                    session.seen = matches!(watch, Watch::Group(_));
+                    session.started = Instant::now();
+                    self.status = Some(if let Some(warning) = session.warning.take() {
+                        warning
+                    } else if session.seen {
+                        t!("run-running", title = title)
+                    } else {
+                        t!("run-waiting", title = title, launcher = launcher)
+                    });
+                    session.watch = Some(watch);
+                }
+            }
+        }
+        // Zendo's state now has the launch; show it in the order
+        // without scanning again.
+        if let Some(played) = self.game_mut(id).map(|game| &mut game.played) {
+            played.launches += 1;
+            played.last = Some(super::now());
+        }
+        self.select(Some(id))
+    }
+
     fn title_of(&self, id: &str) -> String {
         self.game(id)
             .map_or_else(|| id.to_owned(), |game| game.title.clone())
@@ -249,6 +280,13 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
         let (sender, mut receiver) = mpsc::unbounded();
         thread::spawn(move || {
             let id = game.id.clone();
+            let fetched = launch::fetch_runtimes(&game, &mut |runtime| {
+                let _ = sender.unbounded_send(RunMessage::Fetching(id.clone(), runtime.label()));
+            });
+            if let Err(err) = fetched {
+                let _ =
+                    sender.unbounded_send(RunMessage::FetchFailed(id.clone(), format!("{err:#}")));
+            }
             let result = launch::start(&game).map_err(|err| format!("{err:#}"));
             let watch = result.as_ref().ok().map(|started| started.watch.clone());
             let _ = sender.unbounded_send(RunMessage::Started(id.clone(), result));

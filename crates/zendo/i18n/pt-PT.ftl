@@ -392,6 +392,8 @@ run-starting-game = A iniciar { $title }…
 run-handed = { $title } entregue a { $launcher }
 run-running = { $title } está a correr
 run-waiting = À espera que { $launcher } inicie { $title }…
+run-fetching-runtime = A transferir o runtime { $runtime } para { $title }…
+run-runtime-failed = { $title } está a correr sem o runtime anti-batota: { $error }
 run-missed = { $title } entregue a { $launcher }; o Zendo não o viu iniciar
 run-closed = { $minutes ->
     [0] { $title } fechou
@@ -512,6 +514,17 @@ protons-chosen-by = { $count ->
    *[other] { $count } jogos escolheram-no; vão correr com o predefinido
 }
 protons-downloading = A transferir { $name }
+runtimes-title = Anti-batota
+runtimes-about = Os jogos que trazem Easy Anti-Cheat ou BattlEye precisam do respetivo runtime para jogar online com o Proton. O Zendo usa o do Steam quando o Steam o tem; caso contrário, transfere o seu do Lutris na primeira vez que um desses jogos arranca.
+runtimes-from-steam = Do Steam
+runtimes-downloaded-on = Transferido pelo Zendo, compilado a { $date }
+runtimes-downloaded-undated = Transferido pelo Zendo
+runtimes-not-here = Não está neste computador; é transferido quando um jogo precisar
+runtimes-update = Atualizar para { $date }
+runtimes-downloading = A transferir…
+runtimes-asking = A perguntar ao Lutris…
+runtimes-downloaded = O runtime { $runtime } está pronto
+runtimes-removed = Removida a cópia do Zendo do runtime { $runtime }
 
 ## O seletor de imagens
 

@@ -56,6 +56,51 @@ pub fn scan(roots: &[PathBuf]) -> Scan {
     scan
 }
 
+/// Where Steam installed an app, a tool included, when all its files are
+/// there: `steamapps/common/<installdir>` in the library its manifest is in.
+pub(crate) fn app_folder(roots: &[PathBuf], app: &str) -> Option<PathBuf> {
+    let mut seen = HashSet::new();
+    for root in roots {
+        let Ok(root) = root.canonicalize() else {
+            continue;
+        };
+        if !root.join("steamapps").is_dir() {
+            continue;
+        }
+        for folder in library_folders(&root, &mut Vec::new()) {
+            let steamapps = folder.join("steamapps");
+            if !seen.insert(steamapps.clone()) {
+                continue;
+            }
+            let manifest = steamapps.join(format!("appmanifest_{app}.acf"));
+            let Some(dir) = fs::read_to_string(&manifest)
+                .ok()
+                .and_then(|text| installed_dir(&text))
+            else {
+                continue;
+            };
+            let path = steamapps.join("common").join(dir);
+            if path.is_dir() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// A manifest's `installdir`, when its app is fully installed.
+fn installed_dir(text: &str) -> Option<String> {
+    let vdf = Vdf::from(keyvalues_parser::parse(text).ok()?);
+    let state = vdf.value.get_obj()?;
+    let flags: u32 = get_str(state, "StateFlags")?.parse().ok()?;
+    if flags & FULLY_INSTALLED == 0 {
+        return None;
+    }
+    get_str(state, "installdir")
+        .filter(|dir| !dir.is_empty() && !dir.contains('/') && *dir != "..")
+        .map(str::to_owned)
+}
+
 /// The folders listed in the root's `libraryfolders.vdf`, or the root alone
 /// when the file is missing.
 fn library_folders(root: &Path, problems: &mut Vec<String>) -> Vec<PathBuf> {
