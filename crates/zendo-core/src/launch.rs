@@ -315,7 +315,7 @@ pub fn log_path(id: &str) -> Option<PathBuf> {
 /// The Wine prefix a Windows game Zendo starts runs in.
 #[must_use]
 pub fn prefix(game: &Game) -> Option<PathBuf> {
-    let dir = Config::load()
+    let dir = Config::load_file()
         .ok()
         .and_then(|config| config.install_dir())?;
     Some(prefix_in(&dir, game))

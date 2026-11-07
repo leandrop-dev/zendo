@@ -17,9 +17,10 @@ use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
 use zendo_core::mods::{self, Added, Overview};
 use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
+use zendo_core::secrets::Key;
 
 use super::launch_options::overlay;
-use super::settings::section;
+use super::settings::{kept_note, section};
 use super::style::{self, BAD, BOLD, DIM, GOOD};
 use super::{Message, Zendo, blocking};
 
@@ -662,6 +663,7 @@ impl Zendo {
             }
             (None, None) => {}
         }
+        body = body.push(kept_note(self.config.kept(Key::Nexus)));
         body = body.push(
             button(text("Get your personal API key from API Access on Nexus Mods").size(13))
                 .padding(0)
@@ -701,8 +703,9 @@ impl Zendo {
             "Nexus Mods",
             "Mods from Nexus's Mod manager download buttons go straight into the game's \
              mods, and Zendo tells when they have updates. Without Premium, Nexus gives \
-             files only through that button on its site. The key is kept in your \
-             settings file, readable only by you.",
+             files only through that button on its site. The key is kept in the \
+             system keyring, or in your settings file, readable only by you, when \
+             there is none.",
             body,
         )
     }

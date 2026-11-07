@@ -71,7 +71,7 @@ pub fn installed() -> Vec<Proton> {
 /// itself.
 #[must_use]
 pub fn default() -> Option<Proton> {
-    Config::load()
+    Config::load_file()
         .ok()
         .and_then(|config| config.default_proton)
         .and_then(|name| named(&name))

@@ -1063,6 +1063,32 @@ Quick and fresh first:
    password (backups, a copied dotfiles folder, a stolen disk). What it
    does not: any program running as the user can still ask an unlocked
    keyring, as it can read the file.
+   Built 2026-11-07 [tentative until the user tries it], with the
+   `secret-service` crate (5.2, MIT or Apache-2.0, on the zbus 5 Iced
+   already brings; its 6.0 is a release candidate):
+   - Each key is an item with `application = zendo`, `key = steamgriddb`
+     or `nexus`, in the default collection; the session to the keyring
+     is encrypted (Diffie-Hellman), as libsecret's is.
+   - Reading the settings with the keys (the window's start, `zendo
+     covers`) asks the keyring, and its unlock prompt when locked. A key
+     found in `config.toml` moves into the keyring then and out of the
+     file. Launching, Proton and installing read the file alone and
+     never ask the keyring.
+   - Saving writes a key to the keyring only when it changed, and never
+     prompts: it runs on the window's thread. A locked or missing
+     keyring keeps the key in the file (0600), and the next start
+     moves it. A key removed while the keyring is away is written `""`
+     in the file, so the keyring's old copy is not brought back, and is
+     removed from the keyring once it answers.
+   - Settings says under each key where it is kept, or why the keyring
+     could not be read.
+   Checked: tests with a keyring in memory (moving in, no keyring, a
+   locked one, a key removed while away, other settings leaving a key
+   alone), and the real Secret Service code in a throwaway
+   `gnome-keyring-daemon` on a private D-Bus, never the user's keyring:
+   keeps, replaces, removes, and a locked keyring refuses without a
+   prompt. Not checked: KDE Wallet, and the unlock prompt (it needs
+   the user's desktop).
 4. Diagnostics: `zendo logs` and `zendo report`, and a Settings section
    with Copy report (tools and engines found, versions, Protons,
    prefixes, recent launch logs), as Hikari has. It helps with every
@@ -1129,8 +1155,16 @@ Later:
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
   and checked by the user the same day. Item 2, the Rust review, fixed
-  the same day (findings 1–10; 11 to fix later [firm]); next, item 3,
-  API keys in the keyring.
+  the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
+  API keys in the keyring, built the same day; next, item 4,
+  diagnostics.
+- To try when the user is back home (item 3): start Zendo, which moves
+  both keys from `config.toml` into the keyring; Settings should say
+  "Kept in the system keyring" under each; `grep -c "_key"
+  ~/.config/zendo/config.toml` should print 0, and `secret-tool search
+  --all application zendo | grep "^label"` list both items (without
+  printing the keys); covers and Nexus should still work. Then item 3
+  is [firm].
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

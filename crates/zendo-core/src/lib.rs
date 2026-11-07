@@ -28,6 +28,7 @@ mod paths;
 pub mod plugins;
 pub mod proton;
 pub mod protondb;
+pub mod secrets;
 pub mod state;
 mod steam;
 pub mod steamgriddb;

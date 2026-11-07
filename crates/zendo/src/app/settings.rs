@@ -8,8 +8,9 @@ use iced::widget::{
     button, column, container, operation, row, scrollable, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, Task};
-use zendo_core::config::Config;
+use zendo_core::config::{Config, Kept};
 use zendo_core::covers::{self, KeyCheck};
+use zendo_core::secrets::Key;
 use zendo_core::{Source, State};
 
 use super::style::{self, BAD, BOLD, DIM, GOOD};
@@ -240,6 +241,7 @@ impl Zendo {
             }
             None => {}
         }
+        body = body.push(kept_note(self.config.kept(Key::SteamGridDb)));
         body = body.push(
             button(text("Get a free key from your SteamGridDB preferences").size(13))
                 .padding(0)
@@ -249,7 +251,8 @@ impl Zendo {
         section(
             "SteamGridDB",
             "Covers and wide images for games whose store has none. The key is \
-             kept in your settings file, readable only by you.",
+             kept in the system keyring, or in your settings file, readable only \
+             by you, when there is none.",
             body,
         )
     }
@@ -387,6 +390,22 @@ fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
         ]
         .spacing(10),
     )
+}
+
+/// Where a key is kept, or why the keyring could not be used; nothing
+/// when there is no key.
+pub(super) fn kept_note<'a>(kept: &Kept) -> Option<Element<'a, Message>> {
+    let (note, color) = match kept {
+        Kept::Nowhere => return None,
+        Kept::Keyring => ("Kept in the system keyring.".to_owned(), DIM),
+        Kept::File(None) => ("Kept in config.toml, readable only by you.".to_owned(), DIM),
+        Kept::File(Some(why)) => (
+            format!("Kept in config.toml, readable only by you: {why}."),
+            DIM,
+        ),
+        Kept::Unread(why) => (format!("Could not read the keyring: {why}."), BAD),
+    };
+    Some(text(note).size(13).color(color).into())
 }
 
 pub(super) fn section<'a>(

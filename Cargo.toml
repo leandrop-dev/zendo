@@ -16,6 +16,9 @@ gtk = "0.18"
 iced = { version = "0.14.0", features = ["image"] }
 keyvalues-parser = "0.2.4"
 roxmltree = "0.20.0"
+# The system keyring (Secret Service) for the API keys, on the async-io
+# runtime zbus already runs on for Iced.
+secret-service = { version = "5.2.0", features = ["rt-async-io-crypto-rust"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.2.0"

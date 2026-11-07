@@ -75,7 +75,8 @@ install it and give it its colours, but it runs on any Linux desktop.
   publishes, or SteamGridDB's), the developer, play time, install size,
   version, install path and the exact launch command.
 - Takes the SteamGridDB key in Settings, checks it with SteamGridDB, and
-  keeps it in a settings file only you can read.
+  keeps it in the system keyring (GNOME Keyring, KDE Wallet), or in a
+  settings file only you can read when there is none.
 - Signs in to Epic, GOG and Amazon on the Accounts page, with accounts of
   its own (not Heroic's): it opens the store's login page in a window of
   its own and, once you have signed in there, takes it from there through
@@ -155,6 +156,7 @@ launcher is needed only for its own games:
 | MangoHud, GameMode, gamescope | Only for a game whose launch options turn them on |
 | 7-Zip (`7zip`), or bsdtar | Unpacking mods |
 | xdg-utils | Opening `nxm://` links from Nexus Mods in Zendo (`xdg-mime`) |
+| A keyring (GNOME Keyring, KDE Wallet) | Keeping the API keys encrypted; without one they stay in `config.toml`, readable by you only |
 
 ## Build
 
@@ -249,6 +251,14 @@ install_dir = "~/Games"
 default_proton = "GE-Proton11-12-x86_64"
 ```
 
+The two keys go in the system keyring when one answers (the Secret
+Service: GNOME Keyring, KDE Wallet), and in this file only when none does;
+Settings says where each is. A key written in the file by hand moves into
+the keyring the next time Zendo starts. In the keyring they are items with
+`application` `zendo` and `key` `steamgriddb` or `nexus`, so
+`secret-tool lookup application zendo key nexus` prints one. A key written
+`""` means none, without asking the keyring.
+
 `~/.config/zendo/local.toml` holds the games added by hand; the
 Library's "Add game" and their pages' Edit and Remove write it:
 
@@ -304,7 +314,7 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
 | `crates/zendo/` | The `zendo` command (`main.rs`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |

@@ -730,7 +730,7 @@ fn gog_uninstall(job: &Job) -> anyhow::Result<()> {
         .filter(|record| !is_record_of(record, &job.app))
         .filter_map(|record| record.get("install_path")?.as_str().map(PathBuf::from))
         .collect();
-    let install_dir = crate::config::Config::load()
+    let install_dir = crate::config::Config::load_file()
         .ok()
         .and_then(|config| config.install_dir());
     let holds_others = others.iter().any(|other| other.starts_with(&recorded));
