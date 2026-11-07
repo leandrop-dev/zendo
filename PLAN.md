@@ -1203,7 +1203,27 @@ Groundwork before more screens:
 Features:
 
 8. A survey of Heroic (first) and Hikari for settings and automations
-   Zendo lacks; what it finds joins this list.
+   Zendo lacks; what it finds joins this list. Done 2026-11-07, from
+   facts only (both GPL-3.0): Heroic's setting names (the user's
+   `~/.config/heroic/config.json`, keys only, and `GameSettings` and
+   `AppSettings` in `src/common/types.ts`), its game menu's labels
+   (`GameSubMenu`), its backend folders and the files it keeps
+   (`known_fixes.json`, `areweanticheatyet.json`, `tools/`); Hikari's
+   `internal/config/gamesettings.go` field names, its game settings
+   sheet's labels and its `internal/` packages. Hikari's game settings
+   are nearly Heroic's, so most findings are both's. Zendo already has:
+   install, update (and knows when one is waiting, `info.rs`), repair,
+   uninstall, the game's folder, pins, hiding, sorts, played time, Proton
+   per game with GE-Proton downloads, MangoHud, GameMode, gamescope,
+   arguments and environment, ProtonDB, covers, local games, mods,
+   `zendo launch` for scripts (Heroic's `heroic://launch`). What it
+   lacks became items 16 to 23 (order [firm], confirmed the same day);
+   DLC (9), EAC and BattlEye (10) and OptiScaler (15) were
+   already on the list. Left out: plain Wine with DXVK, VKD3D and
+   DXVK-NVAPI installed into the prefix (Zendo runs Proton, which brings
+   them), CrossOver and macOS settings, Hikari's update check against
+   its source branch (the AUR `-git` package updates Zendo), Heroic's
+   analytics, discounts and affiliate links.
 9. The game page made clearer and friendlier, with DLC on it: which are
    owned and installed, and install or uninstall each. Today Zendo
    installs Epic and GOG games with `--skip-dlcs` (`downloads.rs`), so no
@@ -1234,12 +1254,60 @@ Later:
     [tentative]), after the Arch one.
 15. OptiScaler, last: niche.
 
+From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
+
+16. The launch options sheet, more of what both have: the game's own
+    executable chosen instead of the store's (`targetExe`), the extra
+    launch options a store lists for a game (legendary and GOG's play
+    tasks; Hikari: "This game reports no extra launch options"), a
+    script before and after the game, and switches for what is today
+    typed into the environment: esync and fsync off, Wine's Wayland
+    driver, HDR, FSR with its sharpness, WoW64, NVIDIA offload (PRIME),
+    an FPS counter, DXVK's frame cap. The variable each sets is to check
+    against the Proton builds Zendo lists. gamescope's other settings
+    (Hikari: upscale size and method, window type, FPS limit, more
+    options), running Proton without umu, the game's language (legendary
+    and gogdl take one), and the Steam Runtime for native games.
+17. Epic and GOG while playing: offline mode (Epic games that allow it,
+    legendary's `--offline`), cloud saves (upload and download by hand,
+    and by itself before and after the game: Heroic's `autoSyncSaves`,
+    legendary's `sync-saves`, gogdl's save sync, a save path per game),
+    Epic's EOS overlay on or off, starting a game while its update waits
+    (`ignoreGameUpdates`), and GOG's played time sent back (Heroic's
+    playtime sync).
+18. The prefix's tools: winecfg, winetricks, running an `.exe` in the
+    game's prefix (installers, patches), and opening the prefix's
+    folder.
+19. What happens by itself on install: GOG's redistributables (Visual
+    C++, DirectX) into the prefix (gogdl's `redist`, Heroic's
+    `tools/redist/gog`); known fixes per game (Heroic's
+    `known_fixes.json`: winetricks verbs, environment, a program run in
+    the prefix and a note, for example `vcrun2022` for 29 games; where
+    Heroic gets the file and its licence are to check, and how much
+    umu's own fixes already cover); a desktop entry and a Steam
+    shortcut for the game (Heroic adds both, each a setting).
+20. Managing installs: moving a game to another folder (legendary's
+    `move`), importing a game already on disk (legendary's `import`),
+    updating games by themselves (Heroic's `autoUpdateGames`), the
+    download workers (`maxWorkers`), GOG's changelog.
+21. What the game page tells: anti-cheat status before installing
+    (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
+    pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
+    the store's requirements, achievements. Pairs with 9.
+22. The library: categories of the user's own, beyond pins and hiding.
+23. The window: minimise when a game starts, Discord presence, and
+    rescanning by itself when a launcher's files change (Hikari watches
+    their modification times). Hikari also tracks a prefix's processes
+    by their start time in `/proc`, which bears on finding 11 (a
+    process group id reused).
+
 ## On hyprmonk's side
 
 - Install it (package list or the installer) and bind a key (Super+G).
 - The tone: Zendo reads `~/.local/state/hyprmonk/theme/tone.json`; what it
   holds and when to write it is in hyprmonk's `docs/zendo-tone.md`. hyprmonk
-  does not write it yet, so Zendo shows its own colours.
+  writes it since its commit 9f98c4a (2026-11-07); Zendo follows it when
+  Settings' Theme is hyprmonk, and keeps its own colours by default.
 - hyprmonk's roadmap points here; this file is the plan.
 
 ## Next session
@@ -1248,8 +1316,10 @@ Later:
   and checked by the user the same day. Item 2, the Rust review, fixed
   the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
   API keys in the keyring, item 4, diagnostics, item 5, languages, and
-  item 6, themes, and item 7, the AUR package, built the same day; next,
-  item 8, the survey of Heroic and Hikari.
+  item 6, themes, and item 7, the AUR package, built the same day; item
+  8, the survey of Heroic and Hikari, done the same day, added items 16
+  to 23 (their order confirmed). Next, item 9, the game
+  page with DLC.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"
@@ -1264,8 +1334,9 @@ Later:
   mods page) for text that is cut off, still English or reads wrong;
   then System, and English again. Item 6 the same visit: Settings' Theme
   section should offer Zendo and hyprmonk (this computer has hyprmonk);
-  choosing hyprmonk should say it has written no tone, and keep the
-  colours (the same until hyprmonk writes the file).
+  choosing hyprmonk should say "Following hyprmonk's tone" with its
+  name, paint the window in it, and repaint within 2 seconds when the
+  tone is changed in hyprmonk's Settings.
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made
