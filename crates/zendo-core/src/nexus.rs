@@ -532,14 +532,26 @@ pub fn refresh_games(key: &str) -> anyhow::Result<()> {
     }
 }
 
-/// The game on Nexus with this title.
+/// The game on Nexus with this title, or with the part of it before
+/// " - " or ":" (`Fallout 3 - Game of the Year Edition` is Nexus's
+/// `Fallout 3`).
 #[must_use]
 pub fn domain_for(title: &str, games: &[NexusGame]) -> Option<String> {
-    let title = protondb::plain(title);
-    games
+    let short = [" - ", ":"]
         .iter()
-        .find(|game| protondb::plain(&game.name) == title)
-        .map(|game| game.domain_name.clone())
+        .filter_map(|mark| title.split_once(mark).map(|(before, _)| before))
+        .min_by_key(|before| before.len());
+    [Some(title), short]
+        .into_iter()
+        .flatten()
+        .map(protondb::plain)
+        .filter(|wanted| !wanted.is_empty())
+        .find_map(|wanted| {
+            games
+                .iter()
+                .find(|game| protondb::plain(&game.name) == wanted)
+                .map(|game| game.domain_name.clone())
+        })
 }
 
 /// The name Nexus gives a game, or its domain.
@@ -737,6 +749,25 @@ mod tests {
             Some("catquest")
         );
         assert_eq!(domain_for("Dog Quest", &games), None);
+        let fallout = vec![
+            NexusGame {
+                domain_name: "fallout".into(),
+                name: "Fallout".into(),
+            },
+            NexusGame {
+                domain_name: "fallout3".into(),
+                name: "Fallout 3".into(),
+            },
+        ];
+        assert_eq!(
+            domain_for("Fallout 3 - Game of the Year Edition", &fallout).as_deref(),
+            Some("fallout3")
+        );
+        assert_eq!(
+            domain_for("Fallout 3: Broken Steel", &fallout).as_deref(),
+            Some("fallout3")
+        );
+        assert_eq!(domain_for("Fallout", &fallout).as_deref(), Some("fallout"));
         assert_eq!(game_name("catquest", &games), "Cat Quest");
         assert_eq!(game_name("unknown", &games), "unknown");
     }

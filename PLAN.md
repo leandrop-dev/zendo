@@ -807,7 +807,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
      shows its file count and whose files it replaces or loses to
      (later ones win); ↑ ↓ to reorder, Delete asks once. Known games
      [tentative, a start]: Stardew Valley (`Mods`), Skyrim SE and LE,
-     Fallout 4 and New Vegas, Starfield (`Data`, a wrapping `Data`
+     Fallout 3 (added 2026-11-07, Steam 22300 and 22370), 4 and New Vegas, Starfield (`Data`, a wrapping `Data`
      folder taken off), Cyberpunk 2077 (its folder; wrappers taken off
      until `archive`, `bin`, `r6`, `red4ext`, `engine` or `mods` shows);
      each with its Nexus name for 7b. Mod folder editable per game, not
@@ -947,7 +947,12 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 ## Next session
 
 - 7e, Bethesda plugin order: the user installed Fallout 3 GOTY
-  (2026-11-07) to try it on.
+  (2026-11-07) to try it on. Its page showed no Find mods on Nexus:
+  Steam's title, "Fallout 3 - Game of the Year Edition", is not Nexus's
+  "Fallout 3", and Zendo did not know the game. Fixed:
+  Fallout 3 known by its Steam ids (`Data`, `fallout3`), and a game
+  matched on Nexus by its title or the part before " - " or ":". The
+  user confirmed the button shows.
 
 ## Conventions
 

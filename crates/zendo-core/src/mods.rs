@@ -57,7 +57,8 @@ fn lock() -> MutexGuard<'static, ()> {
 pub struct Known {
     /// Its names in the stores.
     pub titles: &'static [&'static str],
-    pub steam: Option<u32>,
+    /// Its app ids on Steam, editions included.
+    pub steam: &'static [u32],
     /// Its name on Nexus Mods, in links and the API.
     pub nexus: &'static str,
     /// Where mods go, from the game's folder; empty for the folder itself.
@@ -74,7 +75,7 @@ pub struct Known {
 pub const KNOWN: &[Known] = &[
     Known {
         titles: &["Stardew Valley"],
-        steam: Some(413_150),
+        steam: &[413_150],
         nexus: "stardewvalley",
         folder: "Mods",
         strip: &["Mods"],
@@ -86,7 +87,7 @@ pub const KNOWN: &[Known] = &[
             "Skyrim Special Edition",
             "The Elder Scrolls V: Skyrim Anniversary Edition",
         ],
-        steam: Some(489_830),
+        steam: &[489_830],
         nexus: "skyrimspecialedition",
         folder: "Data",
         strip: &["Data"],
@@ -94,7 +95,7 @@ pub const KNOWN: &[Known] = &[
     },
     Known {
         titles: &["The Elder Scrolls V: Skyrim"],
-        steam: Some(72_850),
+        steam: &[72_850],
         nexus: "skyrim",
         folder: "Data",
         strip: &["Data"],
@@ -102,15 +103,23 @@ pub const KNOWN: &[Known] = &[
     },
     Known {
         titles: &["Fallout 4"],
-        steam: Some(377_160),
+        steam: &[377_160],
         nexus: "fallout4",
         folder: "Data",
         strip: &["Data"],
         tops: &[],
     },
     Known {
+        titles: &["Fallout 3", "Fallout 3 - Game of the Year Edition"],
+        steam: &[22_300, 22_370],
+        nexus: "fallout3",
+        folder: "Data",
+        strip: &["Data"],
+        tops: &[],
+    },
+    Known {
         titles: &["Fallout: New Vegas", "Fallout New Vegas"],
-        steam: Some(22_380),
+        steam: &[22_380],
         nexus: "newvegas",
         folder: "Data",
         strip: &["Data"],
@@ -118,7 +127,7 @@ pub const KNOWN: &[Known] = &[
     },
     Known {
         titles: &["Starfield"],
-        steam: Some(1_716_740),
+        steam: &[1_716_740],
         nexus: "starfield",
         folder: "Data",
         strip: &["Data"],
@@ -126,7 +135,7 @@ pub const KNOWN: &[Known] = &[
     },
     Known {
         titles: &["Cyberpunk 2077"],
-        steam: Some(1_091_500),
+        steam: &[1_091_500],
         nexus: "cyberpunk2077",
         folder: "",
         strip: &[],
@@ -144,7 +153,7 @@ pub fn known(game: &Game) -> Option<&'static Known> {
         .and_then(|app| app.parse::<u32>().ok());
     let title = protondb::plain(&game.title);
     KNOWN.iter().find(|known| match steam {
-        Some(app) => known.steam == Some(app),
+        Some(app) => known.steam.contains(&app),
         None => known
             .titles
             .iter()
@@ -2515,6 +2524,13 @@ mod tests {
         assert_eq!(known(&gog).map(|known| known.nexus), Some("cyberpunk2077"));
         let unknown = game("steam:1", "Stardew Valley", Source::Steam);
         assert_eq!(known(&unknown), None);
+        let goty = game(
+            "steam:22370",
+            "Fallout 3 - Game of the Year Edition",
+            Source::Steam,
+        );
+        assert_eq!(known(&goty).map(|known| known.nexus), Some("fallout3"));
+        assert_eq!(known(&goty).map(|known| known.folder), Some("Data"));
     }
 
     #[test]
