@@ -211,6 +211,7 @@ nexus-paste = Cole a sua chave pessoal da API do Nexus Mods
 nexus-get-key = Obtenha a sua chave pessoal da API em API Access no Nexus Mods
 nexus-handler-zendo = O Zendo abre as ligações Mod manager download.
 nexus-handler-other = As ligações Mod manager download abrem em { $other }, não no Zendo.
+nexus-handler-other-zendo = As ligações Mod manager download abrem noutra cópia do Zendo, { $program }; prima Abri-las com o Zendo para usar esta.
 nexus-handler-nothing = Ainda nada abre as ligações Mod manager download.
 nexus-become-handler = Abri-las com o Zendo
 nexus-about = Os mods dos botões Mod manager download do Nexus vão diretamente para os mods do jogo, e o Zendo avisa quando têm atualizações. Sem Premium, o Nexus só dá ficheiros através desse botão no seu site. A chave fica no porta-chaves do sistema ou, quando não há nenhum, no seu ficheiro de definições, legível apenas por si.

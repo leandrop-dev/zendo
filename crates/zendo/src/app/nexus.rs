@@ -614,6 +614,43 @@ impl Zendo {
         }
     }
 
+    /// What opens Mod manager download links, and the button to make it
+    /// this Zendo.
+    fn handler_row(&self) -> Element<'_, Message> {
+        let (handler, is_zendo) = match &self.nexus.handler {
+            Some(Handler::Zendo) => (t!("nexus-handler-zendo"), true),
+            Some(Handler::Other(other)) => {
+                (t!("nexus-handler-other", other = other.as_str()), false)
+            }
+            Some(Handler::OtherZendo(program)) => (
+                t!("nexus-handler-other-zendo", program = program.as_str()),
+                false,
+            ),
+            Some(Handler::Nothing) => (t!("nexus-handler-nothing"), false),
+            None => (String::new(), false),
+        };
+        row![
+            text(handler)
+                .size(13)
+                .color(if is_zendo {
+                    colors().good
+                } else {
+                    colors().dim
+                })
+                .width(Length::Fill),
+            button(text(t!("nexus-become-handler")).size(13))
+                .padding([6, 12])
+                .style(style::secondary)
+                .on_press_maybe(
+                    (!is_zendo && self.nexus.handler.is_some())
+                        .then_some(Message::Nexus(NexusMessage::BecomeHandler)),
+                ),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .into()
+    }
+
     pub(super) fn nexus_section(&self) -> Element<'_, Message> {
         let key = &self.nexus.key;
         let saved = self.config.nexus_key.as_deref().unwrap_or("");
@@ -683,35 +720,7 @@ impl Zendo {
                 .style(style::link)
                 .on_press(Message::Open(nexus::KEY_PAGE.to_owned())),
         );
-        let (handler, is_zendo) = match &self.nexus.handler {
-            Some(Handler::Zendo) => (t!("nexus-handler-zendo"), true),
-            Some(Handler::Other(other)) => {
-                (t!("nexus-handler-other", other = other.as_str()), false)
-            }
-            Some(Handler::Nothing) => (t!("nexus-handler-nothing"), false),
-            None => (String::new(), false),
-        };
-        body = body.push(
-            row![
-                text(handler)
-                    .size(13)
-                    .color(if is_zendo {
-                        colors().good
-                    } else {
-                        colors().dim
-                    })
-                    .width(Length::Fill),
-                button(text(t!("nexus-become-handler")).size(13))
-                    .padding([6, 12])
-                    .style(style::secondary)
-                    .on_press_maybe(
-                        (!is_zendo && self.nexus.handler.is_some())
-                            .then_some(Message::Nexus(NexusMessage::BecomeHandler)),
-                    ),
-            ]
-            .spacing(10)
-            .align_y(Alignment::Center),
-        );
+        body = body.push(self.handler_row());
         section("Nexus Mods", t!("nexus-about"), body)
     }
 }

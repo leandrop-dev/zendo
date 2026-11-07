@@ -1,0 +1,79 @@
+# Maintainer: Leandro Paixão <leo at codemonk dot eu>
+
+pkgname=zendo-git
+_pkgname=zendo
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="Every game in one library: Steam, Epic, GOG, Amazon and your own, with Proton and mods"
+arch=('x86_64')
+url="https://github.com/leandrop-dev/zendo"
+license=('MIT')
+depends=(
+  'gcc-libs'
+  'glib2'
+  'glibc'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libsoup3'
+  'libxkbcommon'
+  'systemd-libs'
+  'vulkan-icd-loader'
+  'wayland'
+  'webkit2gtk-4.1'
+)
+makedepends=('cargo' 'git')
+optdepends=(
+  'steam: Steam games'
+  'heroic-games-launcher-bin: its installed games, and the legendary, gogdl and nile it bundles for Epic, GOG and Amazon'
+  'legendary: Epic games without Heroic'
+  'umu-launcher: Windows games through Proton'
+  'gamescope: a compositor of its own per game'
+  'mangohud: an overlay with the frame rate'
+  'gamemode: full performance while a game runs'
+  '7zip: mods in 7z and rar archives'
+  'libarchive: mods in archives when 7-Zip is missing'
+  'xdg-utils: opening folders and links, and Nexus Mods links in Zendo'
+)
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+# makepkg's LTO turns ring's C code into GCC LTO objects, which Rust's
+# linker cannot read; Rust's own optimisation is unaffected.
+options=('!lto')
+source=("$_pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  local version
+  version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/zendo/Cargo.toml | head -n1)
+  printf '%s.r%s.g%s' "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd "$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release --package zendo
+}
+
+check() {
+  cd "$_pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen --workspace
+}
+
+package() {
+  cd "$_pkgname"
+  install -Dm755 target/release/zendo "$pkgdir/usr/bin/zendo"
+  install -Dm644 data/zendo.desktop "$pkgdir/usr/share/applications/zendo.desktop"
+  install -Dm644 data/zendo.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/zendo.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

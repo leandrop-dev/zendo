@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Zendo
+GenericName=Game Launcher
+GenericName[pt_PT]=Lançador de jogos
+Comment=Every game in one library: Steam, Epic, GOG, Amazon and your own, with Proton and mods
+Comment[pt_PT]=Todos os jogos numa biblioteca: Steam, Epic, GOG, Amazon e os seus, com Proton e mods
+Exec=zendo
+Icon=zendo
+Terminal=false
+Categories=Game;
+Keywords=games;launcher;steam;epic;gog;amazon;proton;mods;
+Keywords[pt_PT]=jogos;lançador;steam;epic;gog;amazon;proton;mods;
+StartupWMClass=zendo

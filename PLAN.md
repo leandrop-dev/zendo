@@ -1149,36 +1149,56 @@ Groundwork before more screens:
    more themes can be added. With it, a note in the hyprmonk project
    (the user asked for it) saying what `tone.json` should hold and when
    to write it.
-   Built 2026-11-07: Settings' Theme section, Zendo (the default
-   [firm], decided by the user the same day: Zendo may run on any
-   desktop, not only hyprmonk's) or hyprmonk (its tone when
-   `~/.local/state/hyprmonk/theme/tone.json` is there, Zendo's own
-   colours when not), offered only when hyprmonk's state directory is
-   there or it is already chosen; saved as `theme` in `config.toml`.
-   Themes are files (asked by the user the same day): the built-in ones
-   in `crates/zendo/themes/` (`zendo.toml`, built into the binary), the
-   user's in `~/.config/zendo/themes/` (one named as a built-in replaces
-   it), read at start and each time Settings opens; TOML with name,
-   light, background, foreground, accent, optional positive and negative,
-   and optional greys (sidebar, surface, raised, line, dim) mixed from
-   the background and text when left out (`zendo-core/src/theme.rs`).
-   hyprmonk's tone becomes a theme of the same shape. A chosen file that
-   is gone shows Zendo's own and says so; a file that is not a theme is
-   named in the section. Checked on screen with a hand-written
-   `dusk.toml` in the throwaway home. `zendo-core/src/tone.rs` reads the file (version 1:
-   name, label, light, background, foreground, accent, optional positive
-   and negative); `app/themes.rs` follows it, looking at its modification
-   time every 2 seconds; `style.rs` keeps one palette for the window,
-   made from the chosen theme (a test checks Noir mixes within a shade of
-   Zendo's own, and another that `zendo.toml` gives Zendo's own exactly).
-   A new built-in theme is a file in `themes/` and a line in `BUILT_IN`. Checked on screen in a throwaway home (no keyring,
-   no real config) with hand-written files for Noir, Harbor (light) and
-   Kanso: each painted the window and a change repainted it. The note is
-   hyprmonk's `docs/zendo-tone.md` (written, not committed there);
-   hyprmonk does not write the file yet.
+   Built 2026-11-07:
+   - Settings' Theme section lists Zendo (the default [firm], decided by
+     the user the same day: Zendo may run on any desktop, not only
+     hyprmonk's), the user's themes, and hyprmonk's tone, offered only
+     when hyprmonk's state directory is there or it is already chosen.
+     Saved as `theme` in `config.toml`.
+   - Themes are files (asked by the user the same day): the built-in
+     ones in `crates/zendo/themes/` (`zendo.toml`, built into the binary;
+     a new one is a file there and a line in `BUILT_IN`), the user's in
+     `~/.config/zendo/themes/` (one named as a built-in replaces it),
+     read at start and each time Settings opens. TOML with name, light,
+     background, foreground, accent, optional positive and negative, and
+     optional greys (sidebar, surface, raised, line, dim), mixed from the
+     background and text when left out (`zendo-core/src/theme.rs`). A
+     chosen file that is gone shows Zendo's own and says so; a file that
+     is not a theme is named in the section.
+   - hyprmonk's tone: `zendo-core/src/tone.rs` reads
+     `~/.local/state/hyprmonk/theme/tone.json` (version 1: name, label,
+     light, background, foreground, accent, optional positive and
+     negative) and makes it a theme of the same shape; `app/themes.rs`
+     looks at its modification time every 2 seconds and repaints. Zendo's
+     own colours while the file is missing. The note is hyprmonk's
+     `docs/zendo-tone.md` (written, not committed there); hyprmonk does
+     not write the file yet.
+   - `style.rs` keeps one palette for the window, made from the chosen
+     theme. Tests check Noir mixes within a shade of Zendo's own, and
+     that `zendo.toml` gives Zendo's own exactly.
+   Checked on screen in a throwaway home (no keyring, no real config)
+   with hand-written tones for Noir, Harbor (light) and Kanso, each
+   painting the window and a change repainting it, and a `dusk.toml`
+   theme chosen in its `config.toml`.
 7. An Arch package (PKGBUILD for the AUR: binary, `.desktop` file, icon).
    It also gives the `nxm://` handler a fixed path instead of a build
    folder.
+   Built 2026-11-07, as the user chose: `zendo-git` (the latest commit on
+   main; a release package `zendo` once releases are tagged) in
+   `packaging/arch/zendo-git/` with its `.SRCINFO`. Fetches with
+   `--locked`, builds `--frozen --release`, runs the tests in `check()`,
+   and installs `/usr/bin/zendo`, `data/zendo.desktop` (no `MimeType`:
+   the `nxm://` handler stays the Settings button's alone [firm]) and
+   `data/zendo.svg`, an ensō drawn here [tentative, the user may replace
+   it]. Depends on what the binary links (GTK 3, WebKitGTK 4.1, libsoup
+   3, GLib, udev) and what Iced loads (Wayland, xkbcommon, the Vulkan
+   loader); the stores' tools, umu-launcher, gamescope, MangoHud,
+   GameMode and 7-Zip are optional. The handler gets the fixed path by
+   itself: the button writes the running program's path, `/usr/bin/zendo`
+   once installed; Settings now tells a handler left pointing at another
+   copy of Zendo (a build folder's) and offers the button again. Not
+   done: publishing it on the AUR (the user's account), and a release
+   tag.
 
 Features:
 
@@ -1228,7 +1248,8 @@ Later:
   and checked by the user the same day. Item 2, the Rust review, fixed
   the same day (findings 1–10; 11 to fix later [firm]). Item 3, the
   API keys in the keyring, item 4, diagnostics, item 5, languages, and
-  item 6, themes, built the same day; next, item 7, the AUR package.
+  item 6, themes, and item 7, the AUR package, built the same day; next,
+  item 8, the survey of Heroic and Hikari.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"

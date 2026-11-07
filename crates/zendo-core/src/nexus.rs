@@ -486,6 +486,9 @@ pub const HANDLER: &str = "zendo-nxm.desktop";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Handler {
     Zendo,
+    /// Zendo's desktop file, starting another copy of Zendo (a build
+    /// folder's, before a package was installed): its `Exec` line.
+    OtherZendo(String),
     /// Another program's desktop file.
     Other(String),
     Nothing,
@@ -506,9 +509,31 @@ pub fn handler() -> Handler {
         .unwrap_or_default();
     match answer.as_str() {
         "" => Handler::Nothing,
-        HANDLER => Handler::Zendo,
+        HANDLER => zendo_handler(),
         _ => Handler::Other(answer),
     }
+}
+
+/// Whether Zendo's desktop file starts this Zendo.
+fn zendo_handler() -> Handler {
+    let written = paths::data_home()
+        .map(|dir| dir.join("applications").join(HANDLER))
+        .and_then(|path| std::fs::read_to_string(path).ok());
+    let (Some(written), Ok(exe)) = (written, std::env::current_exe()) else {
+        return Handler::Zendo;
+    };
+    which_zendo(&written, &exe)
+}
+
+fn which_zendo(written: &str, exe: &Path) -> Handler {
+    if written == handler_entry(exe) {
+        return Handler::Zendo;
+    }
+    let exec = written
+        .lines()
+        .find_map(|line| line.strip_prefix("Exec="))
+        .unwrap_or_default();
+    Handler::OtherZendo(exec.trim_end_matches(" %u").trim_matches('"').to_owned())
 }
 
 /// Makes this Zendo, the program at `exe`, open `nxm://` links: a hidden
@@ -567,6 +592,20 @@ fn handler_entry(exe: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tells_this_zendo_from_another_copy() {
+        let installed = Path::new("/usr/bin/zendo");
+        let built = Path::new("/home/me/zendo/target/release/zendo");
+        assert_eq!(
+            which_zendo(&handler_entry(installed), installed),
+            Handler::Zendo
+        );
+        assert_eq!(
+            which_zendo(&handler_entry(built), installed),
+            Handler::OtherZendo(built.display().to_string())
+        );
+    }
 
     #[test]
     fn reads_a_mod_manager_link() {

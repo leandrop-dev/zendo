@@ -201,6 +201,7 @@ nexus-get-key = Get your personal API key from API Access on Nexus Mods
 nexus-handler-zendo = Zendo opens Mod manager download links.
 nexus-handler-other = Mod manager download links open in { $other }, not Zendo.
 nexus-handler-nothing = Nothing opens Mod manager download links yet.
+nexus-handler-other-zendo = Mod manager download links open in another copy of Zendo, { $program }; press Open them with Zendo for this one.
 nexus-become-handler = Open them with Zendo
 nexus-about = Mods from Nexus's Mod manager download buttons go straight into the game's mods, and Zendo tells when they have updates. Without Premium, Nexus gives files only through that button on its site. The key is kept in the system keyring, or in your settings file, readable only by you, when there is none.
 nexus-progress = { $done } of { $total } MiB

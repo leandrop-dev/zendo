@@ -29,6 +29,7 @@ install it and give it its colours, but it runs on any Linux desktop.
 
 - [What it does](#what-it-does)
 - [What you need](#what-you-need)
+- [Install](#install)
 - [Build](#build)
 - [Keys](#keys)
 - [The zendo command](#the-zendo-command)
@@ -168,6 +169,21 @@ launcher is needed only for its own games:
 | xdg-utils | Opening `nxm://` links from Nexus Mods in Zendo (`xdg-mime`) |
 | A keyring (GNOME Keyring, KDE Wallet) | Keeping the API keys encrypted; without one they stay in `config.toml`, readable by you only |
 
+## Install
+
+On Arch and its relatives, `zendo-git` builds the latest commit on main;
+its PKGBUILD is in `packaging/arch/zendo-git/`:
+
+```bash
+git clone https://github.com/leandrop-dev/zendo.git
+cd zendo/packaging/arch/zendo-git
+makepkg -si
+```
+
+It installs `zendo` in `/usr/bin`, its menu entry and its icon. Steam,
+Heroic, umu-launcher, gamescope, MangoHud, GameMode and 7-Zip are optional;
+pacman lists what each one adds.
+
 ## Build
 
 Rust 1.98 or newer, and WebKitGTK 4.1 with GTK 3 (on Arch, `webkit2gtk-4.1`;
@@ -180,7 +196,10 @@ cargo build --release
 ./target/release/zendo
 ```
 
-There is no package or installer yet; hyprmonk's installer will set it up.
+To run it from a build folder with a menu entry, copy `data/zendo.desktop`
+to `~/.local/share/applications/` and `data/zendo.svg` to
+`~/.local/share/icons/hicolor/scalable/apps/`, with `Exec=` set to the
+built program.
 
 ## Keys
 
@@ -357,6 +376,8 @@ count their own.
 | `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own, `info.rs` asks their sizes and updates and `downloads.rs` installs them |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
 | `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `mods.rs` for a game's Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `data/` | The menu entry (`zendo.desktop`) and the icon (`zendo.svg`) |
+| `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
 
 ## Roadmap
