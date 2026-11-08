@@ -348,6 +348,7 @@ fn settings(lines: &mut Vec<String>, config: &Config) {
     for (key, name) in [
         (Key::SteamGridDb, "SteamGridDB"),
         (Key::Nexus, "Nexus Mods"),
+        (Key::Steam, "Steam"),
     ] {
         let set = if config.key(key).is_some() {
             "set"
@@ -375,6 +376,12 @@ fn accounts(lines: &mut Vec<String>) {
         };
         lines.push(format!("{:<8} {state}", store.source().label()));
     }
+    let steam = if steam::user(&steam::roots()).is_some() {
+        "an account has signed in"
+    } else {
+        "no account has signed in"
+    };
+    lines.push(format!("{:<8} {steam}", "Steam"));
 }
 
 fn games(lines: &mut Vec<String>, library: &Library) {

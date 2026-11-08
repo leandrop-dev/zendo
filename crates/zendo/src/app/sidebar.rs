@@ -9,6 +9,7 @@ use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, format};
 use crate::i18n::t;
 use zendo_core::Game;
+use zendo_core::owned::Shop;
 
 pub const WIDTH: f32 = 224.0;
 
@@ -69,7 +70,7 @@ impl Zendo {
                 ),
                 entry(
                     t!("page-downloads"),
-                    match self.downloads.queue.len() {
+                    match self.downloads.queue.len() + self.steam_installs.count() {
                         0 => String::new(),
                         n => n.to_string(),
                     },
@@ -79,9 +80,10 @@ impl Zendo {
                 heading(t!("sidebar-system")),
                 entry(
                     t!("page-accounts"),
-                    match self.accounts.signed_in() {
+                    // The stores signed in, and Steam once its key is set.
+                    match self.connected().len() {
                         0 => String::new(),
-                        n => t!("sidebar-signed-in", count = n, stores = 3),
+                        n => t!("sidebar-signed-in", count = n, stores = Shop::ALL.len()),
                     },
                     Page::Accounts,
                     self.page == Page::Accounts

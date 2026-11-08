@@ -204,15 +204,25 @@ impl Fetcher {
     /// When a request fails for another reason than the game not being
     /// known, or the image cannot be saved.
     pub fn fetch(&mut self, game: &dyn Artwork, kind: Kind) -> anyhow::Result<Option<PathBuf>> {
-        let mut url = game.url(kind).map(str::to_owned);
-        if url.is_none() {
-            url = self.steamgriddb(game, kind)?;
+        // The store's own image first; one it does not have (Steam has no
+        // portrait cover for some old games) is looked for on SteamGridDB.
+        let mut found = None;
+        if let Some(url) = game.url(kind) {
+            match download(&self.agent, url) {
+                Ok(image) => found = Some(image),
+                Err(err) if is_status(&err, 404) => {}
+                Err(err) => return Err(err),
+            }
         }
-        let Some(url) = url else {
+        if found.is_none()
+            && let Some(url) = self.steamgriddb(game, kind)?
+        {
+            found = Some(download(&self.agent, &url)?);
+        }
+        let Some((bytes, ext)) = found else {
             self.missed(&kind.miss_key(game.id()));
             return Ok(None);
         };
-        let (bytes, ext) = download(&self.agent, &url)?;
         let stem = stem(game.id(), kind);
         let path = self.dir.join(format!("{stem}.{ext}"));
         paths::write_atomic(&path, &bytes)

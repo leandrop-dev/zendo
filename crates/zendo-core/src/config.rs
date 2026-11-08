@@ -7,6 +7,9 @@
 //! steamgriddb_key = "…"
 //! # A personal key from Nexus Mods' API Access page, for downloading mods.
 //! nexus_key = "…"
+//! # A Steam Web API key from https://steamcommunity.com/dev/apikey, for
+//! # the Steam games you own but have not installed.
+//! steam_key = "…"
 //! # Set to false to never download covers.
 //! download_covers = true
 //! # Where store games are installed, each in a folder of its own.
@@ -54,6 +57,9 @@ pub struct Config {
     /// The user's personal Nexus Mods API key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nexus_key: Option<String>,
+    /// The user's Steam Web API key, for the games owned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steam_key: Option<String>,
     pub download_covers: bool,
     /// Where store games are installed; `~/Games` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +77,7 @@ pub struct Config {
     pub theme: Option<String>,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
-    held: [Held; 2],
+    held: [Held; 3],
 }
 
 /// Where a key is kept.
@@ -101,6 +107,7 @@ impl std::fmt::Debug for Config {
         f.debug_struct("Config")
             .field("steamgriddb_key", &hidden(&self.steamgriddb_key))
             .field("nexus_key", &hidden(&self.nexus_key))
+            .field("steam_key", &hidden(&self.steam_key))
             .field("download_covers", &self.download_covers)
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
@@ -108,6 +115,7 @@ impl std::fmt::Debug for Config {
             .field("theme", &self.theme)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
+            .field("steam_kept", self.kept(Key::Steam))
             .finish_non_exhaustive()
     }
 }
@@ -117,6 +125,7 @@ impl Default for Config {
         Self {
             steamgriddb_key: None,
             nexus_key: None,
+            steam_key: None,
             download_covers: true,
             install_dir: None,
             default_proton: None,
@@ -153,6 +162,7 @@ impl Config {
         match key {
             Key::SteamGridDb => self.steamgriddb_key.as_deref(),
             Key::Nexus => self.nexus_key.as_deref(),
+            Key::Steam => self.steam_key.as_deref(),
         }
     }
 
@@ -160,6 +170,7 @@ impl Config {
         match key {
             Key::SteamGridDb => &mut self.steamgriddb_key,
             Key::Nexus => &mut self.nexus_key,
+            Key::Steam => &mut self.steam_key,
         }
     }
 
@@ -346,6 +357,7 @@ mod tests {
         let config = Config {
             steamgriddb_key: Some("sgdb-secret".into()),
             nexus_key: Some("nexus-secret".into()),
+            steam_key: Some("steam-secret".into()),
             ..Config::default()
         };
         let shown = format!("{config:?}");

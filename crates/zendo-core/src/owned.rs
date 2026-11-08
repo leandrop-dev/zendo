@@ -2,12 +2,14 @@
 //! Epic's list comes from `legendary list --json`, Amazon's from nile's
 //! `library.json` after `nile library sync`, GOG's from GOG's own services
 //! with gogdl's token, as gogdl has no list of its own: the Galaxy library
-//! gives the ids, GOG's games database each game's title and art.
+//! gives the ids, GOG's games database each game's title and art. Steam's
+//! comes from its Web API (`IPlayerService/GetOwnedGames`) with the user's
+//! own key, for the account Steam signed in last.
 //!
 //! Each list is kept in `$XDG_CACHE_HOME/zendo/store/<store>.json`, so the
 //! Store page shows at once and asks again only on Refresh or a sign-in.
-//! Ids are the library's (`epic:…`, `gog:…`, `amazon:…`), so a game's
-//! covers are shared between the two.
+//! Ids are the library's (`epic:…`, `gog:…`, `amazon:…`, `steam:…`), so a
+//! game's covers are shared between the two.
 
 use std::collections::HashMap;
 use std::fs;
@@ -20,13 +22,20 @@ use serde_json::Value;
 
 use crate::covers::{self, Artwork, Kind};
 use crate::stores::Store;
-use crate::{Source, paths};
+use crate::{Source, paths, steam};
+
+const STEAM_OWNED: &str = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/";
+/// Steam's public store details of an app, no key needed.
+const STEAM_DETAILS: &str = "https://store.steampowered.com/api/appdetails";
+/// Steam's images for an app, by its id and the file's name.
+const STEAM_IMAGES: &str = "https://shared.steamstatic.com/store_item_assets/steam/apps";
 
 /// A game a store says the user owns.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Owned {
     pub id: String,
-    pub store: StoreKey,
+    #[serde(rename = "store")]
+    pub shop: Shop,
     pub title: String,
     pub developer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,11 +52,69 @@ pub struct Owned {
     pub platforms: Vec<String>,
     pub cover_url: Option<String>,
     pub hero_url: Option<String>,
+    /// The minutes played, where the store counts them (Steam).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minutes: Option<u64>,
+    /// The space the store's requirements ask for, in bytes (Steam's
+    /// "Storage: 8 GB available space"); an estimate, not the download.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space: Option<u64>,
     /// Images on disk, filled in after loading; not kept in the cache.
     #[serde(skip)]
     pub cover: Option<PathBuf>,
     #[serde(skip)]
     pub hero: Option<PathBuf>,
+}
+
+/// Where an owned game comes from: a store Zendo installs from, or Steam,
+/// which installs its own games. Written in the cache as `store`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Shop {
+    Steam,
+    Epic,
+    Gog,
+    Amazon,
+}
+
+impl Shop {
+    pub const ALL: [Self; 4] = [Self::Steam, Self::Epic, Self::Gog, Self::Amazon];
+
+    /// The store Zendo installs it through; `None` for Steam.
+    #[must_use]
+    pub fn store(self) -> Option<Store> {
+        match self {
+            Self::Steam => None,
+            Self::Epic => Some(Store::Epic),
+            Self::Gog => Some(Store::Gog),
+            Self::Amazon => Some(Store::Amazon),
+        }
+    }
+
+    #[must_use]
+    pub fn source(self) -> Source {
+        self.store().map_or(Source::Steam, Store::source)
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        self.source().label()
+    }
+
+    /// The first half of its games' ids, and its cache file's name.
+    fn key(self) -> &'static str {
+        self.store().map_or("steam", Store::source_key)
+    }
+}
+
+impl From<Store> for Shop {
+    fn from(store: Store) -> Self {
+        match store {
+            Store::Epic => Self::Epic,
+            Store::Gog => Self::Gog,
+            Store::Amazon => Self::Amazon,
+        }
+    }
 }
 
 /// [`Store`] as written in the cache.
@@ -80,17 +147,24 @@ impl From<StoreKey> for Store {
 }
 
 impl Owned {
+    /// The store Zendo installs it through; `None` for a Steam game.
     #[must_use]
-    pub fn store(&self) -> Store {
-        self.store.into()
+    pub fn store(&self) -> Option<Store> {
+        self.shop.store()
+    }
+
+    #[must_use]
+    pub fn source(&self) -> Source {
+        self.shop.source()
     }
 
     /// A game known by the store's own id for it.
     #[must_use]
-    pub fn new(store: Store, id: &str, title: String) -> Self {
+    pub fn new(shop: impl Into<Shop>, id: &str, title: String) -> Self {
+        let shop = shop.into();
         Self {
-            id: format!("{}:{id}", store.source_key()),
-            store: store.into(),
+            id: format!("{}:{id}", shop.key()),
+            shop,
             title,
             developer: None,
             publisher: None,
@@ -100,6 +174,8 @@ impl Owned {
             platforms: Vec::new(),
             cover_url: None,
             hero_url: None,
+            minutes: None,
+            space: None,
             cover: None,
             hero: None,
         }
@@ -114,7 +190,7 @@ impl Artwork for Owned {
         &self.title
     }
     fn source(&self) -> Source {
-        self.store().source()
+        self.shop.source()
     }
     fn url(&self, kind: Kind) -> Option<&str> {
         match kind {
@@ -130,15 +206,15 @@ impl Artwork for Owned {
     }
 }
 
-fn cache_file(store: Store) -> Option<PathBuf> {
-    paths::cache_home().map(|dir| dir.join(format!("zendo/store/{}.json", store.source_key())))
+fn cache_file(shop: Shop) -> Option<PathBuf> {
+    paths::cache_home().map(|dir| dir.join(format!("zendo/store/{}.json", shop.key())))
 }
 
 /// The list kept from the last time the store was asked, with the images
 /// already downloaded; empty when there is none.
 #[must_use]
-pub fn cached(store: Store) -> Vec<Owned> {
-    let mut games: Vec<Owned> = cache_file(store)
+pub fn cached(shop: Shop) -> Vec<Owned> {
+    let mut games: Vec<Owned> = cache_file(shop)
         .and_then(|file| fs::read(file).ok())
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
@@ -147,8 +223,8 @@ pub fn cached(store: Store) -> Vec<Owned> {
 }
 
 /// Removes the kept list, as after signing out.
-pub fn forget(store: Store) {
-    if let Some(file) = cache_file(store) {
+pub fn forget(shop: Shop) {
+    if let Some(file) = cache_file(shop) {
         let _ = fs::remove_file(file);
     }
 }
@@ -160,6 +236,7 @@ fn with_images(games: &mut [Owned]) {
             let image = chosen
                 .get(&game.id, kind)
                 .map(Path::to_path_buf)
+                .or_else(|| steam_cached(game, kind))
                 .or_else(|| covers::cached(&game.id, kind));
             match kind {
                 Kind::Cover => game.cover = image,
@@ -176,7 +253,7 @@ fn with_images(games: &mut [Owned]) {
 /// When no one is signed in, the engine fails or the store cannot be
 /// reached.
 pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
-    let mut games = match store {
+    let games = match store {
         Store::Epic => {
             let output = store.run_checked(&["list", "--json"])?;
             parse_legendary(&output.stdout)?
@@ -193,15 +270,313 @@ pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
         }
         Store::Gog => gog()?,
     };
+    keep(store.into(), games)
+}
+
+/// Sorts a store's list, keeps it in the cache and finds its images.
+fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owned>> {
     games.sort_by_cached_key(|game| game.title.to_lowercase());
     games.dedup_by(|a, b| a.id == b.id);
-    if let Some(file) = cache_file(store) {
+    if let Some(file) = cache_file(shop) {
         let json = serde_json::to_vec(&games)?;
         paths::write_atomic(&file, &json)
             .with_context(|| format!("could not write {}", file.display()))?;
     }
     with_images(&mut games);
     Ok(games)
+}
+
+/// Steam's own copy of a Steam game's image, which it keeps for the games
+/// in its library, installed or not.
+fn steam_cached(game: &Owned, kind: Kind) -> Option<PathBuf> {
+    let app = game.id.strip_prefix("steam:")?;
+    steam::cached_image(app, steam_image(kind))
+}
+
+fn steam_image(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Cover => "library_600x900.jpg",
+        Kind::Hero => "library_hero.jpg",
+    }
+}
+
+pub use crate::steam::User as SteamUser;
+
+/// The Steam account signed in last on this computer, whose games Steam's
+/// Web API is asked for.
+#[must_use]
+pub fn steam_user() -> Option<SteamUser> {
+    steam::user(&steam::roots())
+}
+
+/// What Steam's Web API says of a key and an account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SteamAnswer {
+    /// The games the account owns.
+    Games(Vec<Owned>),
+    /// Steam does not take the key.
+    Rejected,
+    /// Steam took the key but lists nothing: the account's game details
+    /// are not public, or it owns no games.
+    Nothing,
+}
+
+/// Asks Steam for the games an account owns, with the user's key.
+///
+/// # Errors
+///
+/// When Steam cannot be reached or answers oddly.
+pub fn ask_steam(key: &str, user: &SteamUser) -> anyhow::Result<SteamAnswer> {
+    let agent = crate::http::agent(Duration::from_secs(30));
+    // Steam's Web API answers 429 now and then even to a first request in
+    // hours; a few tries a moment apart get through.
+    let mut tries = 0;
+    let response = loop {
+        tries += 1;
+        let response = agent
+            .get(STEAM_OWNED)
+            .query("key", key)
+            .query("steamid", &user.id)
+            .query("include_appinfo", "1")
+            .query("include_played_free_games", "1")
+            .query("format", "json")
+            .call();
+        match response {
+            Ok(response) => break response,
+            Err(ureq::Error::StatusCode(429)) if tries < 4 => {
+                std::thread::sleep(Duration::from_secs(2 * tries));
+            }
+            Err(ureq::Error::StatusCode(401 | 403)) => return Ok(SteamAnswer::Rejected),
+            Err(ureq::Error::StatusCode(code)) => bail!("Steam answered {code}"),
+            Err(err) => return Err(err).context("could not reach Steam"),
+        }
+    };
+    parse_steam(&response.into_body().read_to_string()?)
+}
+
+/// Asks Steam for the games owned, keeps the list and returns it.
+///
+/// # Errors
+///
+/// When Steam cannot be reached, refuses the key or lists nothing.
+pub fn fetch_steam(key: &str, user: &SteamUser) -> anyhow::Result<Vec<Owned>> {
+    match ask_steam(key, user)? {
+        SteamAnswer::Games(games) => keep(Shop::Steam, games),
+        SteamAnswer::Rejected => bail!("Steam does not take the key set in Accounts"),
+        SteamAnswer::Nothing => bail!(
+            "Steam lists no games for {}: its profile's game details may be private",
+            user.name
+        ),
+    }
+}
+
+/// What Steam's store says about a game, for its page.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StoreDetails {
+    pub summary: Option<String>,
+    pub developer: Option<String>,
+    pub publisher: Option<String>,
+    pub released: Option<String>,
+    pub genres: Vec<String>,
+    pub platforms: Vec<String>,
+    /// The space the requirements ask for, in bytes.
+    pub space: Option<u64>,
+}
+
+impl StoreDetails {
+    /// Fills in what a game's entry lacks.
+    pub fn fill(&self, game: &mut Owned) {
+        game.summary = game.summary.take().or_else(|| self.summary.clone());
+        game.developer = game.developer.take().or_else(|| self.developer.clone());
+        game.publisher = game.publisher.take().or_else(|| self.publisher.clone());
+        game.released = game.released.take().or_else(|| self.released.clone());
+        if game.genres.is_empty() {
+            game.genres.clone_from(&self.genres);
+        }
+        if game.platforms.is_empty() {
+            game.platforms.clone_from(&self.platforms);
+        }
+        game.space = game.space.or(self.space);
+    }
+}
+
+/// Asks Steam's store about an app; `None` when the store has no page for
+/// it (removed from sale, a tool).
+///
+/// # Errors
+///
+/// When Steam's store cannot be reached or answers oddly.
+pub fn steam_details(app: &str) -> anyhow::Result<Option<StoreDetails>> {
+    let text = crate::http::agent(Duration::from_secs(30))
+        .get(STEAM_DETAILS)
+        .query("appids", app)
+        .query("l", "english")
+        .call()
+        .context("could not reach Steam's store")?
+        .into_body()
+        .read_to_string()?;
+    parse_steam_details(&text, app)
+}
+
+fn parse_steam_details(text: &str, app: &str) -> anyhow::Result<Option<StoreDetails>> {
+    #[derive(Deserialize)]
+    struct Entry {
+        success: bool,
+        data: Option<Data>,
+    }
+    #[derive(Deserialize)]
+    struct Data {
+        about_the_game: Option<String>,
+        short_description: Option<String>,
+        #[serde(default)]
+        developers: Vec<String>,
+        #[serde(default)]
+        publishers: Vec<String>,
+        release_date: Option<Released>,
+        #[serde(default)]
+        genres: Vec<Genre>,
+        platforms: Option<HashMap<String, bool>>,
+        /// An object with `minimum` and `recommended`, or `[]` when the
+        /// store lists none.
+        pc_requirements: Option<serde_json::Value>,
+    }
+    #[derive(Deserialize)]
+    struct Released {
+        date: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Genre {
+        description: String,
+    }
+    let mut reply: HashMap<String, Entry> =
+        serde_json::from_str(text).context("Steam's store details: not JSON")?;
+    let Some(data) = reply
+        .remove(app)
+        .filter(|entry| entry.success)
+        .and_then(|entry| entry.data)
+    else {
+        return Ok(None);
+    };
+    let joined = |names: &[String]| (!names.is_empty()).then(|| names.join(", "));
+    let platforms = data.platforms.unwrap_or_default();
+    Ok(Some(StoreDetails {
+        summary: data
+            .about_the_game
+            .as_deref()
+            .and_then(plain_text)
+            .or_else(|| data.short_description.as_deref().and_then(plain_text)),
+        developer: joined(&data.developers),
+        publisher: joined(&data.publishers),
+        released: data
+            .release_date
+            .and_then(|released| released.date)
+            .filter(|date| !date.is_empty()),
+        genres: data
+            .genres
+            .into_iter()
+            .map(|genre| genre.description)
+            .collect(),
+        platforms: [("windows", "Windows"), ("mac", "Mac"), ("linux", "Linux")]
+            .into_iter()
+            .filter(|(key, _)| platforms.get(*key) == Some(&true))
+            .map(|(_, name)| name.to_owned())
+            .collect(),
+        space: data.pc_requirements.as_ref().and_then(|wanted| {
+            ["minimum", "recommended"]
+                .into_iter()
+                .filter_map(|level| wanted.get(level)?.as_str())
+                .find_map(space_wanted)
+        }),
+    }))
+}
+
+/// The space a store's requirements ask for, in bytes: "Storage: 8 GB
+/// available space", or "Hard Drive:" in older pages. GB counts as 1024 MB,
+/// as Windows does.
+fn space_wanted(html: &str) -> Option<u64> {
+    const LABELS: [&str; 4] = ["storage:", "hard drive:", "hard disk space:", "disk space:"];
+    let text = plain_text(html)?.to_lowercase();
+    let line = text
+        .lines()
+        .find(|line| LABELS.iter().any(|label| line.starts_with(label)))?;
+    let rest = line.split_once(':')?.1.trim_start();
+    let number: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == ',')
+        .collect();
+    let value: f64 = number.replace(',', ".").parse().ok()?;
+    let unit = rest[number.len()..].trim_start();
+    let scale: f64 = if unit.starts_with("tb") {
+        1024.0 * 1024.0 * 1024.0 * 1024.0
+    } else if unit.starts_with("gb") {
+        1024.0 * 1024.0 * 1024.0
+    } else if unit.starts_with("mb") {
+        1024.0 * 1024.0
+    } else {
+        return None;
+    };
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a positive estimate, far below u64's range"
+    )]
+    let bytes = (value * scale) as u64;
+    (bytes > 0).then_some(bytes)
+}
+
+/// Writes a store's list to the cache as it is now, as after filling in
+/// what Steam's store said about a game.
+///
+/// # Errors
+///
+/// When the cache cannot be written.
+pub fn save(shop: Shop, games: &[Owned]) -> anyhow::Result<()> {
+    let Some(file) = cache_file(shop) else {
+        return Ok(());
+    };
+    paths::write_atomic(&file, &serde_json::to_vec(games)?)
+        .with_context(|| format!("could not write {}", file.display()))
+}
+
+fn parse_steam(text: &str) -> anyhow::Result<SteamAnswer> {
+    #[derive(Deserialize)]
+    struct Reply {
+        response: Response,
+    }
+    #[derive(Deserialize)]
+    struct Response {
+        games: Option<Vec<Game>>,
+    }
+    #[derive(Deserialize)]
+    struct Game {
+        appid: u64,
+        name: Option<String>,
+        #[serde(default)]
+        playtime_forever: u64,
+    }
+    let reply: Reply = serde_json::from_str(text).context("Steam's list of games: not JSON")?;
+    let Some(games) = reply.response.games.filter(|games| !games.is_empty()) else {
+        return Ok(SteamAnswer::Nothing);
+    };
+    Ok(SteamAnswer::Games(
+        games
+            .into_iter()
+            .map(|game| {
+                let app = game.appid.to_string();
+                let title = game
+                    .name
+                    .map(|name| name.trim().to_owned())
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or_else(|| format!("Steam app {app}"));
+                let mut owned = Owned::new(Shop::Steam, &app, title);
+                owned.cover_url =
+                    Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Cover)));
+                owned.hero_url = Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Hero)));
+                owned.minutes = Some(game.playtime_forever);
+                owned
+            })
+            .collect(),
+    ))
 }
 
 /// `legendary list --json`: legendary's game records, DLC left out.
@@ -672,5 +1047,87 @@ mod tests {
         )
         .unwrap();
         assert!(from_gamesdb(&spam).is_none());
+    }
+
+    #[test]
+    fn reads_steams_owned_games() {
+        let json = r#"{"response": {"game_count": 2, "games": [
+            {"appid": 620, "name": "Portal 2", "playtime_forever": 754, "img_icon_url": "x"},
+            {"appid": 4000, "name": " ", "playtime_forever": 0}]}}"#;
+        let SteamAnswer::Games(games) = parse_steam(json).unwrap() else {
+            panic!("games expected");
+        };
+        assert_eq!(games[0].id, "steam:620");
+        assert_eq!(games[0].title, "Portal 2");
+        assert_eq!(games[0].shop, Shop::Steam);
+        assert_eq!(games[0].store(), None);
+        assert_eq!(games[0].minutes, Some(754));
+        assert_eq!(
+            games[0].cover_url.as_deref(),
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg"
+            )
+        );
+        assert_eq!(games[1].title, "Steam app 4000");
+        // A private profile: Steam answers, with no games in it.
+        assert_eq!(
+            parse_steam(r#"{"response": {}}"#).unwrap(),
+            SteamAnswer::Nothing
+        );
+    }
+
+    #[test]
+    fn reads_steams_store_details() {
+        let json = r#"{"620": {"success": true, "data": {
+            "about_the_game": "<p>Portal 2 &amp; more.</p>",
+            "developers": ["Valve"], "publishers": ["Valve"],
+            "release_date": {"coming_soon": false, "date": "18 Apr, 2011"},
+            "genres": [{"id": "1", "description": "Action"}],
+            "platforms": {"windows": true, "mac": false, "linux": true},
+            "pc_requirements": {"minimum": "<strong>Minimum:</strong><br><ul><li><strong>Memory:</strong> 2 GB RAM<br></li><li><strong>Storage:</strong> 8 GB available space<br></li></ul>"}}}}"#;
+        let details = parse_steam_details(json, "620").unwrap().unwrap();
+        assert_eq!(details.space, Some(8 * 1024 * 1024 * 1024));
+        assert_eq!(details.summary.as_deref(), Some("Portal 2 & more."));
+        assert_eq!(details.developer.as_deref(), Some("Valve"));
+        assert_eq!(details.released.as_deref(), Some("18 Apr, 2011"));
+        assert_eq!(details.platforms, ["Windows", "Linux"]);
+        assert_eq!(
+            parse_steam_details(r#"{"1": {"success": false}}"#, "1").unwrap(),
+            None
+        );
+        let mut game = Owned::new(Shop::Steam, "620", "Portal 2".into());
+        game.developer = Some("Kept".into());
+        details.fill(&mut game);
+        assert_eq!(game.developer.as_deref(), Some("Kept"));
+        assert_eq!(game.genres, ["Action"]);
+    }
+
+    #[test]
+    fn reads_the_space_a_game_wants() {
+        let li = |line: &str| {
+            format!("<ul><li><strong>OS:</strong> Windows<br></li><li>{line}</li></ul>")
+        };
+        assert_eq!(
+            space_wanted(&li("<strong>Hard Drive:</strong> 500 MB HD space")),
+            Some(500 * 1024 * 1024)
+        );
+        assert_eq!(
+            space_wanted(&li("<strong>Storage:</strong> 1.5 GB available space")),
+            Some(1_610_612_736)
+        );
+        assert_eq!(space_wanted(&li("<strong>Memory:</strong> 2 GB RAM")), None);
+        assert_eq!(space_wanted(&li("<strong>Storage:</strong> lots")), None);
+        // No requirements: Steam sends an empty list.
+        let json = r#"{"1": {"success": true, "data": {"pc_requirements": []}}}"#;
+        assert_eq!(parse_steam_details(json, "1").unwrap().unwrap().space, None);
+    }
+
+    #[test]
+    fn keeps_the_cache_readable() {
+        let game = Owned::new(Store::Gog, "1", "Game".into());
+        let json = serde_json::to_string(&game).unwrap();
+        assert!(json.contains(r#""store":"gog""#), "{json}");
+        let read: Owned = serde_json::from_str(&json).unwrap();
+        assert_eq!(read.shop, Shop::Gog);
     }
 }

@@ -23,7 +23,10 @@ mod running;
 mod runtimes;
 mod settings;
 mod sidebar;
+mod steam;
+mod steam_installs;
 mod store;
+mod store_game;
 mod style;
 mod themes;
 
@@ -59,6 +62,8 @@ use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
 use runtimes::{RuntimeMessage, RuntimesState};
 use settings::Diagnostics;
+use steam::{SteamMessage, SteamState};
+use steam_installs::{SteamInstallMessage, SteamInstalls};
 use store::{StoreMessage, StoreState};
 use style::colors;
 use themes::{Choice, Themes};
@@ -213,6 +218,8 @@ enum Message {
     Installer(InstallerMessage),
     Proton(ProtonMessage),
     Runtime(RuntimeMessage),
+    Steam(SteamMessage),
+    SteamInstall(SteamInstallMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
     Store(StoreMessage),
@@ -284,6 +291,8 @@ struct Zendo {
     /// The Proton section of Settings.
     protons: Protons,
     runtimes: RuntimesState,
+    steam: SteamState,
+    steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
     config: Config,
@@ -330,6 +339,8 @@ impl Zendo {
             installer: InstallerState::default(),
             protons: Protons::default(),
             runtimes: RuntimesState::default(),
+            steam: SteamState::default(),
+            steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
             config: Config::default(),
             themes: Themes::default(),
@@ -549,6 +560,8 @@ impl Zendo {
             Message::Installer(message) => self.update_installer(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Runtime(message) => self.update_runtimes(message),
+            Message::Steam(message) => self.update_steam(message),
+            Message::SteamInstall(message) => self.update_steam_installs(message),
             Message::Rating(id, result) => {
                 self.rating_arrived(id, result);
                 Task::none()
@@ -607,7 +620,7 @@ impl Zendo {
                 }
                 Err(err) => self.status = Some(err),
             }
-            nexus = self.nexus_loaded();
+            nexus = Task::batch([self.nexus_loaded(), self.steam_loaded()]);
         }
         // A game just added or edited opens.
         if let Some((Some(open), _)) = &after
@@ -670,7 +683,15 @@ impl Zendo {
             Page::Owned(id) if self.is_installed(id) => self.navigate(Page::Game(id.clone())),
             Page::Owned(id) => match self.install_job(&id.clone()) {
                 Some(job) => self.update_download(DownloadMessage::Queue(job)),
-                None => Task::none(),
+                // Steam installs its own, through its install dialog.
+                None => match (id.strip_prefix("steam:"), self.store.owned(id)) {
+                    (Some(app), Some(owned)) if !self.is_installed(id) => {
+                        let message =
+                            SteamInstallMessage::Install(app.to_owned(), owned.title.clone());
+                        self.update_steam_installs(message)
+                    }
+                    _ => Task::none(),
+                },
             },
             Page::Downloads if self.downloads.confirm_close => {
                 self.update_download(DownloadMessage::CloseAnyway)
@@ -723,7 +744,8 @@ impl Zendo {
                 }
                 Task::batch([self.want_protons(), self.want_runtimes()])
             }
-            Page::Downloads | Page::Accounts | Page::About => Task::none(),
+            Page::Accounts => self.want_steam_user(),
+            Page::Downloads | Page::About => Task::none(),
         }
     }
 
@@ -1002,8 +1024,19 @@ impl Zendo {
         } else {
             Subscription::none()
         };
+        // Steam's manifests, read often while it installs something.
+        let steam = if !self.persist {
+            Subscription::none()
+        } else if self.steam_installs.active() {
+            Subscription::run(steam_installs::busy_ticks)
+                .map(|()| Message::SteamInstall(SteamInstallMessage::Tick))
+        } else {
+            Subscription::run(steam_installs::idle_ticks)
+                .map(|()| Message::SteamInstall(SteamInstallMessage::Tick))
+        };
         Subscription::batch([
             tone,
+            steam,
             event::listen_with(on_event),
             Subscription::run(gamepad::events).map(Message::Pad),
             window::close_requests().map(|_| Message::Download(DownloadMessage::CloseRequested)),
@@ -1123,6 +1156,13 @@ impl<T> Fallback for anyhow::Result<T> {
 impl<T> Fallback for Vec<T> {
     fn panicked() -> Self {
         Vec::new()
+    }
+}
+
+/// Two pieces of work, each with its own fallback.
+impl<A: Fallback, B: Fallback> Fallback for (A, B) {
+    fn panicked() -> Self {
+        (A::panicked(), B::panicked())
     }
 }
 

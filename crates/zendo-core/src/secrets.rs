@@ -18,16 +18,18 @@ use secret_service::{EncryptionType, Error};
 pub enum Key {
     SteamGridDb,
     Nexus,
+    Steam,
 }
 
 impl Key {
-    pub const ALL: [Self; 2] = [Self::SteamGridDb, Self::Nexus];
+    pub const ALL: [Self; 3] = [Self::SteamGridDb, Self::Nexus, Self::Steam];
 
     /// Its name in the keyring and in `config.toml`.
     fn name(self) -> &'static str {
         match self {
             Self::SteamGridDb => "steamgriddb",
             Self::Nexus => "nexus",
+            Self::Steam => "steam",
         }
     }
 
@@ -36,6 +38,7 @@ impl Key {
         match self {
             Self::SteamGridDb => "Zendo: SteamGridDB API key",
             Self::Nexus => "Zendo: Nexus Mods API key",
+            Self::Steam => "Zendo: Steam Web API key",
         }
     }
 

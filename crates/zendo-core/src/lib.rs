@@ -32,7 +32,7 @@ pub mod report;
 pub mod runtimes;
 pub mod secrets;
 pub mod state;
-mod steam;
+pub mod steam;
 pub mod steamgriddb;
 pub mod stores;
 pub mod theme;

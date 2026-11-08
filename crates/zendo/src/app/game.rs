@@ -16,6 +16,7 @@ use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source};
 
 use super::downloads::{DownloadMessage, UpdateState, action_doing_alone, update_line};
+use super::steam_installs::SteamInstallMessage;
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, format, game_scroll_id, now, sidebar};
@@ -27,7 +28,7 @@ const COVER_HEIGHT: f32 = 210.0;
 const RADIUS: f32 = 14.0;
 const LABEL_WIDTH: f32 = 130.0;
 /// The page's width from which the details go beside the rest.
-const TWO_COLUMNS: f32 = 960.0;
+pub(super) const TWO_COLUMNS: f32 = 960.0;
 
 /// What is open on a game's page; it starts folded on each game.
 #[derive(Debug, Default)]
@@ -35,7 +36,7 @@ pub struct GameView {
     /// The More row of less used actions.
     more: bool,
     /// The Technical section under the details.
-    technical: bool,
+    pub(super) technical: bool,
     /// The DLC whose Uninstall was pressed once.
     pub(super) confirm_dlc: Option<String>,
 }
@@ -247,12 +248,48 @@ impl Zendo {
                         }))
                 });
         }
+        if let Some(app) = steam_app(game) {
+            more = more.push(self.steam_buttons(game, app));
+        }
         more = more.push(self.local_buttons(game));
         container(more)
             .padding([12, 16])
             .width(Length::Fill)
             .style(style::card)
             .into()
+    }
+
+    /// Verify and Uninstall for a Steam game, asked of Steam, which shows
+    /// its own question and progress.
+    fn steam_buttons<'a>(&self, game: &'a Game, app: &'a str) -> Element<'a, Message> {
+        let ask = |make: fn(String, String) -> SteamInstallMessage| {
+            Message::SteamInstall(make(app.to_owned(), game.title.clone()))
+        };
+        let verifying = self.steam_installs.verifying(app);
+        let uninstall = if self.steam_installs.removing(app) {
+            t!("steam-ask-again-uninstall")
+        } else {
+            t!("steam-uninstall")
+        };
+        row![
+            button(
+                text(if verifying {
+                    t!("steam-verifying")
+                } else {
+                    t!("steam-verify")
+                })
+                .size(14)
+            )
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press_maybe((!verifying).then(|| ask(SteamInstallMessage::Verify))),
+            button(text(uninstall).size(14))
+                .padding([8, 14])
+                .style(style::secondary)
+                .on_press(ask(SteamInstallMessage::Uninstall)),
+        ]
+        .spacing(10)
+        .into()
     }
 
     /// The details worth a look: the store and install, the latest from
@@ -383,7 +420,7 @@ pub(super) fn card(heading: String, body: Element<'_, Message>) -> Element<'_, M
         .into()
 }
 
-fn label_row(label: String, value: Element<'_, Message>) -> Element<'_, Message> {
+pub(super) fn label_row(label: String, value: Element<'_, Message>) -> Element<'_, Message> {
     row![
         text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
         container(value).width(Length::Fill),
@@ -392,7 +429,7 @@ fn label_row(label: String, value: Element<'_, Message>) -> Element<'_, Message>
     .into()
 }
 
-fn plain<'a>(value: String) -> Element<'a, Message> {
+pub(super) fn plain<'a>(value: String) -> Element<'a, Message> {
     text(value).size(14).into()
 }
 
@@ -639,6 +676,10 @@ pub fn store_facts(
 ) -> Vec<(String, String)> {
     let mut facts = Vec::new();
     match info {
+        // Steam's store is asked for the page's details, not sizes.
+        Some(InfoState::Asking) if owned.is_some_and(|owned| owned.store().is_none()) => {
+            facts.push((t!("fact-store-details"), t!("fact-asking")));
+        }
         Some(InfoState::Asking) => facts.push((t!("fact-download-size"), t!("fact-asking"))),
         Some(InfoState::Got(info)) => {
             if let Some(bytes) = info.download_size {
@@ -663,6 +704,9 @@ pub fn store_facts(
         None => {}
     }
     if let Some(owned) = owned {
+        if let Some(bytes) = owned.space.filter(|_| !installed) {
+            facts.push((t!("fact-space-needed"), Size::Bytes(bytes).to_string()));
+        }
         if let Some(publisher) = &owned.publisher {
             facts.push((t!("fact-publisher"), publisher.clone()));
         }
@@ -674,6 +718,13 @@ pub fn store_facts(
         }
     }
     facts
+}
+
+/// A game Steam installed, by its app id.
+fn steam_app(game: &Game) -> Option<&str> {
+    (game.source == Source::Steam)
+        .then(|| game.id.strip_prefix("steam:"))
+        .flatten()
 }
 
 /// What the store says the game is about.

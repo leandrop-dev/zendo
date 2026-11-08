@@ -256,6 +256,42 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   against GitHub releases and web pages; state split by owner (`state.json`
   for the CLI, `prefs.json` for the UI); a preview of the UI against fixture
   data.
+- [Playnite](https://github.com/JosefNemec/Playnite) (MIT, C# and WPF,
+  Windows 10 and 11 only; 10.63 is the latest release, and version 11 is
+  being rewritten in a private repository with no stated platforms), read
+  2026-11-07 from its README, its site and the Steam integration in
+  [PlayniteExtensions](https://github.com/JosefNemec/PlayniteExtensions)
+  (MIT). Its manual needs a browser and was not read. MIT allows more than
+  ideas, but it is C#, so ideas it is. What it confirmed for Zendo: Steam
+  games started with `steam -silent steam://rungameid/<id>` (and
+  `steam://launch/<id>/Dialog` for Steam's launch menu, a setting);
+  installs through `steam://install/<id>` with no progress, only a look
+  every 10 seconds for the game to be installed (Zendo now shows
+  progress); uninstalls through `steam://uninstall/<id>` with a look every
+  5 seconds; play time by watching the processes in the install folder (as
+  Zendo's 5b does); owned games from `IPlayerService/GetOwnedGames` with the
+  user's own key for a private account, or a web sign-in's access token
+  (which also gives `IClientCommService/GetClientAppList` while Steam runs,
+  family sharing, and `IPlayerService/ClientGetLastPlayedTimes`); retries on
+  Steam's 429. Ideas for Zendo, not on the list yet [tentative, for the
+  user to place]:
+  The user agreed with these 2026-11-07; placed as items 24 to 27, their
+  order [tentative]. Uninstall through Steam went into item 11. Dropped by
+  the user 2026-11-08: scripts on game events and on Zendo's start (the
+  per-game script in item 16 stays), saved filter presets and the random
+  game picker.
+  Left out: .NET plugins and PowerShell extensions, a portable mode.
+- [steam-tui](https://github.com/dmadisetti/steam-tui) (MIT, Rust, a
+  terminal client for `steamcmd`; last change 2026-03-12, its author says
+  the project is done), read 2026-11-08. It lists the games owned through
+  `steamcmd`'s `licenses_print` and `app_info_print` (after a `steamcmd`
+  sign-in), installs with `app_update`, reads `app_status` for the folder
+  and size, and starts games with `app_run` or their executable. Little
+  for Zendo, which leaves installs to the Steam client; one lead [to
+  check]: Steam's own `appcache/appinfo.vdf` (binary, version 29 here,
+  4.9 MB) holds the app info `app_info_print` prints, which should include
+  each depot's size, a download size for Steam games without asking
+  anyone. A parser for its binary format is needed.
 
 ## Phases
 
@@ -1314,6 +1350,107 @@ Features:
     user's own key and SteamID; what local files hold is to check), and
     installing them through Steam (`steam://install/<app>` opens Steam's
     install dialog).
+    Built 2026-11-07. What the local files hold: no list of the games
+    owned. `localconfig.vdf` lists 229 apps here, tools, free things and
+    games played but not owned among them; `licensecache` is encrypted;
+    `config/loginusers.vdf` gives the accounts' SteamIDs and names.
+    Decisions:
+    - The user's own Steam Web API key, kept in the keyring like the
+      others (`Key::Steam`, `steam_key` in `config.toml`), with
+      `IPlayerService/GetOwnedGames` for the account Steam signed in last
+      (`MostRecent`, else the latest `timestamp`) [firm: the user chose it
+      over a Steam sign-in in Zendo's window and over public profiles
+      only]. Whether the user's own key reads a private profile is not
+      known; when Steam lists nothing, Zendo says to make Game details
+      public.
+    - The key and the account are on Accounts, as Steam's card, not on
+      Settings [firm: the user asked for it, 2026-11-07].
+    - Steam joins the Store page as a shop of its own (`owned::Shop`,
+      beside the engine stores, so the download queue's `StoreKey` stays
+      as it is), its list kept in `~/.cache/zendo/store/steam.json` with
+      the minutes Steam counted [tentative].
+    - Install opens `steam://install/<app>` (and Enter on the page does
+      too); the library shows the game after a refresh [tentative: a
+      rescan when Steam finishes is item 23's watch].
+    - Covers: Steam's own cache first (it keeps art for games owned, not
+      only installed), then Steam's CDN
+      (`shared.steamstatic.com/store_item_assets/steam/apps/<app>/`), and a
+      404 there now falls through to SteamGridDB for every store.
+    Code: `owned.rs` (`Shop`, `ask_steam`, `fetch_steam`, `steam_user`),
+    `steam.rs` (`user`, `cached_image`), `covers.rs` (the 404), the
+    window's `steam.rs` (the Accounts card) and `store.rs`. Checked:
+    the parser and the key flow in tests; a bad key gets 401 from Steam;
+    the report finds the account here. Not checked: a real key (the user
+    has none yet), so the list, a private profile and Install with Steam
+    are to try.
+    The user tried it with a key the same day; changes after:
+    - The sidebar's Accounts count includes Steam once its key is set
+      (4 of 4).
+    - Install asks Steam as `steam -silent steam://install/<app>`, as
+      Playnite starts Steam games with `-silent`, so a Steam that was not
+      running stays in the tray behind its dialog; `xdg-open` when there is
+      no `steam` command. Whether a running Steam still raises its window
+      is to try.
+    - Zendo follows Steam's installs (`app/steam_installs.rs`): Steam's
+      manifests (`steam::states`: `StateFlags`, `BytesDownloaded` of
+      `BytesToDownload`, `BytesStaged` of `BytesToStage`) are read every
+      2 seconds while something is under way, else every 15 to notice
+      downloads started in Steam; a Steam card on the Downloads page and
+      the game's Store page show the progress, and when one finishes the
+      library is read again and the status line says so [tentative].
+      Pausing and cancelling stay in Steam. Not known: how often Steam
+      writes `BytesDownloaded` during a download (the 64 MB game tried
+      finished in two seconds); to watch with a big game.
+    - The Store's game page is laid out as the library's (the hero, the
+      actions, About and the DLC owned beside a Details card and a folded
+      Technical card, two columns on a wide window; `app/store_game.rs`),
+      and a Steam game's details come from Steam's store
+      (`store/api/appdetails`, no key: description, developers,
+      publishers, release date, genres, platforms), asked once and kept in
+      the Steam list's cache.
+    - Steam's Web API is asked again on 429, which Playnite does too.
+    The user's second try (2026-11-07); changes 2026-11-08:
+    - The progress bar stood still: Steam wrote `BytesDownloaded` only at
+      the end of an 889 MB download (`content_log.txt` said "preallocated
+      0 files"). The progress is now the size of the files Steam writes
+      into `steamapps/downloading/<app>/`, of `BytesToStage`, while it
+      downloads or is paused; the manifest's figures otherwise.
+    - Steam writes nothing when its install dialog is cancelled, so Zendo
+      cannot tell: while it waits, the page's button reads Ask Steam
+      again, Stop waiting (on the page and the Downloads card) ends the
+      wait, and the wait ends by itself after 3 minutes (15 before).
+    - The space a Steam game needs, from its store page's requirements
+      ("Storage: 8 GB available space", minimum first, GB counted as
+      1024 MB), kept in the list's cache and shown on the Store page as
+      "Space needed (store's estimate)". Steam's store gives no download
+      size; once Steam starts, the progress line has its totals.
+    - Uninstall with Steam and Verify with Steam on a Steam game's page
+      (`steam://uninstall/<app>`, `steam://validate/<app>`; Steam asks
+      and shows the progress itself). Zendo now remembers what was
+      installed at the last look: an app whose manifest is gone was
+      uninstalled, one newly installed was installed, whether from Zendo
+      or in Steam, and either reads the library again. A game waiting
+      for an update with automatic updates off (`StateFlags` 2 alone)
+      counts as installed, so it no longer sits on the Downloads card.
+    - The Store page opened slowly with Steam's 1,150 games: the cover
+      grid (the Store's and the library's) builds only the rows on
+      screen and two spare, with spacers for the rest.
+    - A Steam already running raises its own window when asked through a
+      `steam://` link, `-silent` or not; `-silent` only keeps a Steam
+      that was not running in the tray. Zendo cannot change that. The
+      user found: uninstall shows only Steam's question; verify opens
+      Steam's window.
+    - Verify showed nothing in Zendo (the user, 2026-11-08). Steam's
+      manifest says only "update running" while it verifies, but its
+      `logs/content_log.txt` says "Start validating appID <app>" and then
+      "AppID <app> scheduler finished". Zendo notes where the log ends
+      when Verify is pressed, reads it from there while following, shows
+      "Verifying in Steam" on the game page and the Downloads card, and
+      says when Steam is done; given up after 3 minutes if Steam never
+      started. One verify of 140 here verified two Steam Linux Runtimes
+      too. A game Steam updates now says "is updated", not "is
+      installed", and neither a verify nor an update counts as a new
+      install.
 12. Searching Nexus Mods in Zendo instead of the browser. Nexus's v1 API
     has no search; its GraphQL v2 API is to check. Downloading still
     needs the site's Mod manager download for accounts without Premium:
@@ -1379,6 +1516,27 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
     by their start time in `/proc`, which bears on finding 11 (a
     process group id reused).
 
+From Playnite, agreed by the user 2026-11-07, order [tentative]:
+
+24. Steam family sharing: the games a Steam family shares with the
+    account Steam signed in last, on the Store page to install through
+    Steam (what the user wants: their children's computers). Playnite
+    asks `IFamilyGroupsService/GetFamilyGroupForUser` and
+    `GetSharedLibraryApps` with a web sign-in's access token; whether the
+    user's Web API key works there is to check. Steam's
+    `logs/librarysharing_log.txt` names the family group here. Less
+    wanted [tentative]: Steam's launch menu as a choice
+    (`steam://launch/<id>/Dialog`), the last played time of games not
+    installed, extra accounts.
+25. Descriptions and facts for every game, local ones too: Steam's store
+    for any game already matched to a Steam app id (as for ProtonDB).
+    Pairs with 21.
+26. Library views beyond the grid: a list and a details view. Pairs
+    with 22.
+27. Emulation: emulator profiles and ROM folders scanned into the
+    library (Playnite's biggest feature Zendo lacks). Not now, maybe soon
+    after (the user, 2026-11-08).
+
 ## On hyprmonk's side
 
 - Install it (package list or the installer) and bind a key (Super+G).
@@ -1398,7 +1556,9 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
   8, the survey of Heroic and Hikari, done the same day, added items 16
   to 23 (their order confirmed). Item 9, the game page with DLC, built
   the same day. Item 10, the EAC and BattlEye runtimes, built the same
-  day. Next, item 11, Steam's owned games and `steam://install`.
+  day. Item 11, Steam's owned games, built the same day,
+  and changed after the user's two tries (2026-11-08). Next, item 12,
+  searching Nexus Mods in Zendo.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"

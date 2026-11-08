@@ -237,19 +237,75 @@ impl Zendo {
                 on_press: Message::Clicked(index),
             })
         });
-        cards_grid(cards, self.columns)
+        let window = Window {
+            scroll_top: self.scroll_top,
+            height: self.viewport_height,
+        };
+        cards_grid(cards, visible.len(), self.columns, window)
     }
 }
 
 /// Cards in rows of `columns`, in the page's scrollable.
+/// What part of a grid is on screen: how far it is scrolled, and how tall
+/// its window is.
+#[derive(Debug, Clone, Copy)]
+pub struct Window {
+    pub scroll_top: f32,
+    pub height: f32,
+}
+
+/// Rows built beyond those on screen, above and below, so a scroll shows
+/// cards at once.
+const SPARE_ROWS: usize = 2;
+
+/// The rows of a grid of `count` cards worth building for the part on
+/// screen: the first, and how many.
+fn rows_on_screen(count: usize, columns: usize, window: Window) -> (usize, usize) {
+    let rows = count.div_ceil(columns);
+    let row_height = CARD_HEIGHT + SPACING;
+    // Before the first scroll the window's height is not known yet.
+    let height = if window.height > 0.0 {
+        window.height
+    } else {
+        2000.0
+    };
+    let top = (window.scroll_top - GRID_PADDING).max(0.0);
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "non-negative, and far below usize's range"
+    )]
+    let (first, last) = (
+        (top / row_height) as usize,
+        ((top + height) / row_height).ceil() as usize,
+    );
+    let first = first.saturating_sub(SPARE_ROWS).min(rows);
+    let last = (last + SPARE_ROWS).min(rows);
+    (first, last.saturating_sub(first))
+}
+
+/// A grid of cards, of which only the rows near the screen are built:
+/// with a thousand games, laying out every card (and its cover) made each
+/// redraw slow. The rows left out are space of the same height, so the
+/// scroll bar and the cursor's place stay right.
 pub fn cards_grid<'a>(
     cards: impl Iterator<Item = Element<'a, Message>>,
+    count: usize,
     columns: usize,
+    window: Window,
 ) -> Element<'a, Message> {
     let columns = columns.max(1);
-    let mut rows = Vec::new();
+    let total = count.div_ceil(columns);
+    let (first, shown) = rows_on_screen(count, columns, window);
+    let row_height = CARD_HEIGHT + SPACING;
+    #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
+    let space_for = |rows: usize| rows as f32 * row_height - SPACING;
+    let mut rows: Vec<Element<'a, Message>> = Vec::new();
+    if first > 0 {
+        rows.push(space::vertical().height(space_for(first)).into());
+    }
     let mut current = Vec::with_capacity(columns);
-    for card in cards {
+    for card in cards.skip(first * columns).take(shown * columns) {
         current.push(card);
         if current.len() == columns {
             rows.push(row(std::mem::take(&mut current)).spacing(SPACING).into());
@@ -257,6 +313,10 @@ pub fn cards_grid<'a>(
     }
     if !current.is_empty() {
         rows.push(row(current).spacing(SPACING).into());
+    }
+    let after = total - first - shown;
+    if after > 0 {
+        rows.push(space::vertical().height(space_for(after)).into());
     }
     // A fixed width, centred, so a short last row stays in its columns.
     #[expect(clippy::cast_precision_loss, reason = "column counts are small")]
@@ -406,5 +466,24 @@ mod tests {
         assert_eq!(columns_for(five), 5);
         assert_eq!(columns_for(five - 1.0), 4);
         assert_eq!(columns_for(min_width()), 2);
+    }
+
+    #[test]
+    fn builds_only_the_rows_near_the_screen() {
+        let row = CARD_HEIGHT + SPACING;
+        let window = |scroll_top: f32| Window {
+            scroll_top,
+            height: 3.0 * row,
+        };
+        // 1,000 cards in 5 columns: 200 rows.
+        assert_eq!(rows_on_screen(1000, 5, window(0.0)), (0, 3 + SPARE_ROWS));
+        let (first, shown) = rows_on_screen(1000, 5, window(GRID_PADDING + 50.0 * row));
+        assert_eq!(first, 50 - SPARE_ROWS);
+        assert_eq!(shown, 3 + 2 * SPARE_ROWS);
+        // At the end, no rows past the last.
+        let (first, shown) = rows_on_screen(1000, 5, window(GRID_PADDING + 199.0 * row));
+        assert_eq!(first + shown, 200);
+        assert_eq!(rows_on_screen(3, 5, window(0.0)), (0, 1));
+        assert_eq!(rows_on_screen(0, 5, window(0.0)), (0, 0));
     }
 }

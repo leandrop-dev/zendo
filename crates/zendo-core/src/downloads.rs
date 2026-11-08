@@ -117,9 +117,9 @@ pub struct Job {
 #[must_use]
 pub fn install_platform(game: &Owned) -> &'static str {
     match game.store() {
-        Store::Gog if game.platforms.iter().any(|p| p == "Linux") => "linux",
-        Store::Gog => "windows",
-        Store::Epic | Store::Amazon => "Windows",
+        Some(Store::Gog) if game.platforms.iter().any(|p| p == "Linux") => "linux",
+        Some(Store::Gog) => "windows",
+        Some(Store::Epic | Store::Amazon) | None => "Windows",
     }
 }
 
@@ -141,7 +141,7 @@ impl Job {
     pub fn install(game: &Owned, dir: PathBuf, dlc: Vec<String>) -> Option<Self> {
         let (_, app) = game.id.split_once(':')?;
         Some(Self {
-            store: game.store().into(),
+            store: game.store()?.into(),
             app: app.to_owned(),
             title: game.title.clone(),
             action: Action::Install,
@@ -1016,7 +1016,7 @@ pub(crate) fn scan() -> Scan {
         if installed.is_empty() {
             continue;
         }
-        let known: HashMap<String, Owned> = owned::cached(store)
+        let known: HashMap<String, Owned> = owned::cached(store.into())
             .into_iter()
             .map(|game| (game.id.clone(), game))
             .collect();

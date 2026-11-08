@@ -66,6 +66,7 @@ impl Accounts {
         }
     }
 
+    #[cfg(test)]
     pub fn signed_in(&self) -> usize {
         Store::ALL
             .iter()
@@ -237,7 +238,7 @@ impl Zendo {
                 self.accounts.set(store, Account::SignedOut);
                 self.store.forget(store);
                 if self.persist {
-                    zendo_core::owned::forget(store);
+                    zendo_core::owned::forget(store.into());
                 }
                 self.status = Some(t!("accounts-signed-out-of", store = store.label()));
             }
@@ -383,6 +384,7 @@ impl Zendo {
         .spacing(2);
         scrollable(
             column![header]
+                .push(self.steam_card())
                 .extend(Store::ALL.map(|store| self.account_card(store)))
                 .spacing(20)
                 .padding(24)

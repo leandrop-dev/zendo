@@ -1,30 +1,32 @@
-//! The Store page: every game the signed-in stores say the user owns, with
-//! the installed ones marked, and a page for each.
+//! The Store page: every game the signed-in stores (and Steam, with the
+//! user's Web API key) say the user owns, with the installed ones marked,
+//! and a page for each. Steam games install through Steam's own dialog.
 
 use std::collections::{HashMap, HashSet};
 
-use iced::widget::{button, checkbox, column, container, row, scrollable, space, text, text_input};
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::widget::{button, checkbox, column, progress_bar, row, space, text, text_input};
+use iced::{Alignment, Element, Task};
 use zendo_core::downloads::{self, Job};
 use zendo_core::info::{self, Dlc, GameInfo};
-use zendo_core::owned::{self, Owned};
+use zendo_core::owned::{self, Owned, Shop, StoreDetails};
 use zendo_core::stores::Store;
 
 use super::accounts::Account;
 use super::downloads::DownloadMessage;
-use super::game::{Hero, about_card, hero, store_facts};
-use super::library::{Card, GRID_PADDING, card, cards_grid};
+use super::format;
+use super::library::{Card, GRID_PADDING, Window, card, cards_grid};
+use super::steam_installs::{Following, SteamInstallMessage, percent, progress_line};
 use super::style::{self, BOLD, colors};
-use super::{Message, Page, Zendo, blocking, centered, game_scroll_id, store_search_id};
+use super::{Message, Page, Zendo, blocking, centered, store_search_id};
 use crate::i18n::t;
 
 #[derive(Debug, Default)]
 pub struct StoreState {
-    lists: HashMap<Store, Vec<Owned>>,
-    asking: HashSet<Store>,
-    errors: HashMap<Store, String>,
+    lists: HashMap<Shop, Vec<Owned>>,
+    asking: HashSet<Shop>,
+    errors: HashMap<Shop, String>,
     pub search: String,
-    source: Option<Store>,
+    source: Option<Shop>,
     hide_installed: bool,
     pub selected: usize,
     pub scroll_top: f32,
@@ -43,25 +45,27 @@ pub enum InfoState {
 
 #[derive(Debug, Clone)]
 pub enum StoreMessage {
-    Cached(Vec<(Store, Vec<Owned>)>),
+    Cached(Vec<(Shop, Vec<Owned>)>),
     Refresh,
-    Fetched(Store, Result<Vec<Owned>, String>),
+    Fetched(Shop, Result<Vec<Owned>, String>),
     Search(String),
-    Source(Option<Store>),
+    Source(Option<Shop>),
     ToggleInstalled,
     /// "Also install its DLC" ticked or unticked for a game.
     ToggleDlc(String),
     Clicked(usize),
     Info(String, Result<GameInfo, String>),
+    /// What Steam's store says about a Steam game.
+    SteamDetails(String, Result<Option<StoreDetails>, String>),
 }
 
 /// The lists kept from last time, read on a thread.
 pub fn load_cached() -> Task<Message> {
     Task::perform(
         blocking(|| {
-            Store::ALL
+            Shop::ALL
                 .into_iter()
-                .map(|store| (store, owned::cached(store)))
+                .map(|shop| (shop, owned::cached(shop)))
                 .collect()
         }),
         |lists| Message::Store(StoreMessage::Cached(lists)),
@@ -85,15 +89,16 @@ impl StoreState {
             .filter(move |game| game.id == id)
     }
 
-    pub fn has_list(&self, store: Store) -> bool {
-        self.lists.contains_key(&store)
+    pub fn has_list(&self, shop: impl Into<Shop>) -> bool {
+        self.lists.contains_key(&shop.into())
     }
 
     /// A signed-out store's games leave the page; the caller removes the
     /// cache.
-    pub fn forget(&mut self, store: Store) {
-        self.lists.remove(&store);
-        self.errors.remove(&store);
+    pub fn forget(&mut self, shop: impl Into<Shop>) {
+        let shop = shop.into();
+        self.lists.remove(&shop);
+        self.errors.remove(&shop);
     }
 }
 
@@ -101,30 +106,27 @@ impl Zendo {
     pub(super) fn update_store(&mut self, message: StoreMessage) -> Task<Message> {
         match message {
             StoreMessage::Cached(lists) => {
-                for (store, games) in lists {
+                for (shop, games) in lists {
                     if !games.is_empty() {
-                        self.store.lists.entry(store).or_insert(games);
+                        self.store.lists.entry(shop).or_insert(games);
                     }
                 }
                 Task::none()
             }
             StoreMessage::Refresh => {
-                let signed_in: Vec<Store> = Store::ALL
-                    .into_iter()
-                    .filter(|store| matches!(self.accounts.get(*store), Account::SignedIn(_)))
-                    .collect();
-                Task::batch(signed_in.into_iter().map(|store| self.fetch_owned(store)))
+                let connected = self.connected();
+                Task::batch(connected.into_iter().map(|shop| self.fetch_owned(shop)))
             }
-            StoreMessage::Fetched(store, result) => {
-                self.store.asking.remove(&store);
+            StoreMessage::Fetched(shop, result) => {
+                self.store.asking.remove(&shop);
                 match result {
                     Ok(games) => {
-                        self.store.errors.remove(&store);
-                        self.store.lists.insert(store, games);
+                        self.store.errors.remove(&shop);
+                        self.store.lists.insert(shop, games);
                         self.download_images()
                     }
                     Err(err) => {
-                        self.store.errors.insert(store, err);
+                        self.store.errors.insert(shop, err);
                         Task::none()
                     }
                 }
@@ -159,7 +161,46 @@ impl Zendo {
                 self.store.info.insert(id, state);
                 Task::none()
             }
+            StoreMessage::SteamDetails(id, result) => {
+                let state = match result {
+                    Ok(details) => {
+                        if let Some(details) = details {
+                            for game in self.store.each_mut(&id) {
+                                details.fill(game);
+                            }
+                            // Kept, so the page has them on the next start.
+                            if self.persist
+                                && let Some(games) = self.store.lists.get(&Shop::Steam)
+                            {
+                                let _ = owned::save(Shop::Steam, games);
+                            }
+                        }
+                        InfoState::Got(GameInfo::default())
+                    }
+                    Err(err) => InfoState::Failed(err),
+                };
+                self.store.info.insert(id, state);
+                Task::none()
+            }
         }
+    }
+
+    /// Asks Steam's store, on a thread, about a Steam game the list knows
+    /// only by name; once a session.
+    fn want_steam_details(&mut self, id: &str, app: &str) -> Task<Message> {
+        let known = self.store.owned(id).is_none_or(|game| {
+            (game.summary.is_some() || game.developer.is_some()) && game.space.is_some()
+        });
+        if known || self.store.info.contains_key(id) {
+            return Task::none();
+        }
+        self.store.info.insert(id.to_owned(), InfoState::Asking);
+        let id = id.to_owned();
+        let app = app.to_owned();
+        Task::perform(
+            blocking(move || owned::steam_details(&app).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Store(StoreMessage::SteamDetails(id.clone(), result)),
+        )
     }
 
     /// Asks the game's store, on a thread, how big it is and its latest
@@ -168,6 +209,9 @@ impl Zendo {
     pub(super) fn want_info(&mut self, id: &str) -> Task<Message> {
         if !self.persist || self.store.info.contains_key(id) {
             return Task::none();
+        }
+        if let Some(app) = id.strip_prefix("steam:") {
+            return self.want_steam_details(id, app);
         }
         let Some((store, app)) = store_of(id) else {
             return Task::none();
@@ -196,14 +240,32 @@ impl Zendo {
         )
     }
 
+    /// The stores signed in, and Steam when its key is set: the ones whose
+    /// games the page shows and Refresh asks for.
+    pub(super) fn connected(&self) -> Vec<Shop> {
+        Shop::ALL
+            .into_iter()
+            .filter(|shop| self.is_connected(*shop))
+            .collect()
+    }
+
+    fn is_connected(&self, shop: Shop) -> bool {
+        match shop.store() {
+            Some(store) => matches!(self.accounts.get(store), Account::SignedIn(_)),
+            None => self.config.steam_key.is_some(),
+        }
+    }
+
     /// Asks a store for its games, unless it is being asked already.
-    pub(super) fn fetch_owned(&mut self, store: Store) -> Task<Message> {
-        if !self.persist || !self.store.asking.insert(store) {
+    pub(super) fn fetch_owned(&mut self, shop: impl Into<Shop>) -> Task<Message> {
+        let shop = shop.into();
+        if !self.persist || !self.store.asking.insert(shop) {
             return Task::none();
         }
+        let key = self.config.steam_key.clone();
         Task::perform(
-            blocking(move || owned::fetch(store).map_err(|err| format!("{err:#}"))),
-            move |result| Message::Store(StoreMessage::Fetched(store, result)),
+            blocking(move || fetch_list(shop, key.as_deref()).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Store(StoreMessage::Fetched(shop, result)),
         )
     }
 
@@ -230,12 +292,16 @@ impl Zendo {
         self.game(id).is_some()
     }
 
-    /// The games of every store not signed out, before any filter.
+    /// The games of every store not signed out (Steam's while its key is
+    /// set), before any filter.
     fn shown(&self) -> impl Iterator<Item = &Owned> {
         self.store
             .lists
             .iter()
-            .filter(|(store, _)| !matches!(self.accounts.get(**store), Account::SignedOut))
+            .filter(|(shop, _)| match shop.store() {
+                Some(store) => !matches!(self.accounts.get(store), Account::SignedOut),
+                None => self.config.steam_key.is_some(),
+            })
             .flat_map(|(_, games)| games)
     }
 
@@ -253,11 +319,7 @@ impl Zendo {
             .collect();
         let mut games: Vec<&Owned> = self
             .shown()
-            .filter(|game| {
-                self.store
-                    .source
-                    .is_none_or(|source| source == game.store())
-            })
+            .filter(|game| self.store.source.is_none_or(|source| source == game.shop))
             .filter(|game| !self.store.hide_installed || !self.is_installed(&game.id))
             .filter(|game| {
                 let title = game.title.to_lowercase();
@@ -270,22 +332,14 @@ impl Zendo {
 
     pub(super) fn store_page(&self) -> Element<'_, Message> {
         let visible = self.store_visible();
-        let signed_in: Vec<Store> = Store::ALL
-            .into_iter()
-            .filter(|store| matches!(self.accounts.get(*store), Account::SignedIn(_)))
-            .collect();
+        let signed_in = self.connected();
         let shown: Vec<&Owned> = self.shown().collect();
         let installed = shown
             .iter()
             .filter(|game| self.is_installed(&game.id))
             .count();
 
-        let asking: Vec<&str> = self
-            .store
-            .asking
-            .iter()
-            .map(|store| store.label())
-            .collect();
+        let asking: Vec<&str> = self.store.asking.iter().map(|shop| shop.label()).collect();
         let subtitle = if asking.is_empty() {
             format!(
                 "{} · {}",
@@ -337,9 +391,9 @@ impl Zendo {
         let toolbar = self.store_toolbar(&shown, installed);
 
         let mut problems = column![].spacing(4).padding([0.0, GRID_PADDING]);
-        for (store, err) in &self.store.errors {
+        for (shop, err) in &self.store.errors {
             problems = problems.push(
-                text(format!("{}: {err}", store.label()))
+                text(format!("{}: {err}", shop.label()))
                     .size(13)
                     .color(colors().bad),
             );
@@ -369,26 +423,30 @@ impl Zendo {
 
     fn store_grid<'a>(&'a self, visible: Vec<&'a Owned>) -> Element<'a, Message> {
         let selected = self.store.selected.min(visible.len().saturating_sub(1));
+        let count = visible.len();
+        let window = Window {
+            scroll_top: self.store.scroll_top,
+            height: self.viewport_height,
+        };
         cards_grid(
             visible.into_iter().enumerate().map(|(index, game)| {
                 card(Card {
                     title: &game.title,
-                    source: game.store().source(),
+                    source: game.source(),
                     cover: game.cover.as_deref(),
                     faded: false,
                     badge: self
                         .is_installed(&game.id)
                         .then(|| (t!("badge-installed"), colors().good)),
-                    line: game
-                        .developer
-                        .clone()
-                        .unwrap_or_else(|| game.platforms.join(", ")),
+                    line: card_line(game),
                     line_color: colors().dim,
                     selected: index == selected,
                     on_press: Message::Store(StoreMessage::Clicked(index)),
                 })
             }),
+            count,
             self.columns,
+            window,
         )
     }
 
@@ -400,14 +458,14 @@ impl Zendo {
             self.store.source.is_none(),
             Message::Store(StoreMessage::Source(None)),
         )];
-        for store in Store::ALL {
-            let count = shown.iter().filter(|game| game.store() == store).count();
+        for shop in Shop::ALL {
+            let count = shown.iter().filter(|game| game.shop == shop).count();
             if count > 0 {
                 chips.push(chip(
-                    store.source().label().to_owned(),
+                    shop.label().to_owned(),
                     count,
-                    self.store.source == Some(store),
-                    Message::Store(StoreMessage::Source(Some(store))),
+                    self.store.source == Some(shop),
+                    Message::Store(StoreMessage::Source(Some(shop))),
                 ));
             }
         }
@@ -480,7 +538,11 @@ impl Zendo {
     }
 
     /// Open in library, the queued job, or Install.
-    fn owned_actions<'a>(&'a self, game: &'a Owned, installed: bool) -> Element<'a, Message> {
+    pub(super) fn owned_actions<'a>(
+        &'a self,
+        game: &'a Owned,
+        installed: bool,
+    ) -> Element<'a, Message> {
         if installed {
             row![
                 button(text(t!("store-open-in-library")).size(16).font(BOLD))
@@ -490,6 +552,8 @@ impl Zendo {
                 space::horizontal(),
                 text(t!("installed")).size(14).color(colors().dim),
             ]
+        } else if let Some(app) = game.id.strip_prefix("steam:") {
+            return self.steam_actions(game, app);
         } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
             let (label, press) = match (running, job.paused) {
                 (true, _) => (t!("installing"), None),
@@ -552,89 +616,103 @@ impl Zendo {
         .into()
     }
 
-    pub(super) fn owned_page<'a>(&'a self, game: &'a Owned) -> Element<'a, Message> {
-        let installed = self.is_installed(&game.id);
-        let trail = row![
-            button(text(t!("store-back")).size(14))
-                .padding(0)
-                .style(style::link)
-                .on_press(Message::Navigate(Page::Store)),
-            text("/").size(14).color(colors().dim),
-            text(&game.title).size(14).color(colors().dim),
-        ]
-        .spacing(8);
-
-        let mut badges: Vec<(String, iced::Color)> = game
-            .platforms
-            .iter()
-            .map(|platform| (platform.clone(), colors().dim))
-            .collect();
-        if installed {
-            badges.push((t!("badge-installed"), colors().good));
-        }
-        let art = hero(Hero {
-            title: &game.title,
-            source: game.store().source(),
-            art: game.hero.as_deref(),
-            cover: game.cover.as_deref(),
-            badges,
-            developer: game.developer.as_deref(),
-            facts: Vec::new(),
-            rating: self.rating_pill(&game.id),
-            id: &game.id,
-        });
-
-        let actions = self.owned_actions(game, installed);
-
-        let detail = |label: String, value: String, code: bool| {
-            row![
-                text(label).size(14).color(colors().dim).width(170),
-                if code {
-                    text(value).size(13).font(Font::MONOSPACE)
-                } else {
-                    text(value).size(14)
-                },
-            ]
-            .align_y(Alignment::Center)
+    /// Install with Steam, or how far Steam is with it.
+    fn steam_actions<'a>(&'a self, game: &'a Owned, app: &str) -> Element<'a, Message> {
+        let (label, press, note, progress) = match self.steam_installs.following(app) {
+            None => (
+                t!("store-install-with-steam"),
+                Some(Message::SteamInstall(SteamInstallMessage::Install(
+                    app.to_owned(),
+                    game.title.clone(),
+                ))),
+                t!("store-steam-installs"),
+                None,
+            ),
+            // Steam writes nothing when its dialog is cancelled: the button
+            // asks again, and Stop waiting ends the wait.
+            Some(Following::Asked) => (
+                t!("steam-ask-again"),
+                Some(Message::SteamInstall(SteamInstallMessage::Install(
+                    app.to_owned(),
+                    game.title.clone(),
+                ))),
+                t!("steam-waiting-dialog"),
+                None,
+            ),
+            Some(Following::Busy(state)) => (
+                t!("installing"),
+                None,
+                progress_line(state.progress),
+                Some(percent(state.progress)),
+            ),
         };
-        let mut details = column![
-            text(t!("game-details")).size(18).font(BOLD),
-            detail(t!("fact-store"), game.store().label().to_owned(), false),
+        let following = self.steam_installs.following(app);
+        let asked = matches!(following, Some(Following::Asked));
+        let mut actions = row![
+            button(text(label).size(16).font(BOLD))
+                .padding([10, 32])
+                .style(style::primary)
+                .on_press_maybe(press),
         ]
-        .spacing(12);
-        if !game.platforms.is_empty() {
-            details = details.push(detail(
-                t!("fact-platforms"),
-                game.platforms.join(", "),
-                false,
-            ));
+        .spacing(10)
+        .align_y(Alignment::Center);
+        if asked {
+            actions = actions.push(
+                button(text(t!("steam-stop-waiting")).size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::SteamInstall(SteamInstallMessage::Forget(
+                        app.to_owned(),
+                    ))),
+            );
         }
-        if let Some(developer) = &game.developer {
-            details = details.push(detail(t!("fact-developer"), developer.clone(), false));
+        if following.is_some() {
+            actions = actions.push(
+                button(text(t!("see-downloads")).size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::Navigate(Page::Downloads)),
+            );
         }
-        for (label, value) in store_facts(Some(game), self.store.info.get(&game.id), false) {
-            details = details.push(detail(label, value, false));
+        actions = actions
+            .push(space::horizontal())
+            .push(text(note).size(14).color(colors().dim));
+        match progress {
+            Some(percent) => column![
+                actions,
+                progress_bar(0.0..=100.0, percent)
+                    .girth(8)
+                    .style(style::progress),
+            ]
+            .spacing(10)
+            .into(),
+            None => actions.into(),
         }
-        details = details.push(detail(t!("fact-zendo-id"), game.id.clone(), true));
+    }
+}
 
-        let mut page = column![
-            trail,
-            art,
-            actions,
-            container(details)
-                .padding(20)
-                .width(Length::Fill)
-                .style(style::card),
-        ]
-        .spacing(20)
-        .padding(24);
-        if let Some(summary) = &game.summary {
-            page = page.push(about_card(summary));
-        }
-        scrollable(page)
-            .id(game_scroll_id())
-            .height(Length::Fill)
-            .into()
+/// A store's list of games owned; Steam's with the user's key, for the
+/// account Steam signed in last.
+fn fetch_list(shop: Shop, key: Option<&str>) -> anyhow::Result<Vec<Owned>> {
+    if let Some(store) = shop.store() {
+        return owned::fetch(store);
+    }
+    let key = key.ok_or_else(|| anyhow::anyhow!("no Steam key is set"))?;
+    let user = owned::steam_user()
+        .ok_or_else(|| anyhow::anyhow!("Steam has no account signed in on this computer"))?;
+    owned::fetch_steam(key, &user)
+}
+
+/// The line under a card's title: the developer or platforms, or for a
+/// Steam game the time Steam counted.
+fn card_line(game: &Owned) -> String {
+    match game.minutes {
+        Some(0) => t!("played-never"),
+        Some(minutes) => t!("played-time", time = format::play_time(minutes)),
+        None => game
+            .developer
+            .clone()
+            .unwrap_or_else(|| game.platforms.join(", ")),
     }
 }
 
@@ -675,22 +753,22 @@ mod tests {
     use crate::app::Move;
     use zendo_core::{Game, Launch, Library, Source};
 
-    /// Epic and GOG signed in, Amazon signed out; Epic's first game is
-    /// installed.
+    /// Epic and GOG signed in, Amazon signed out, no Steam key; Epic's
+    /// first game is installed.
     fn zendo() -> Zendo {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
         zendo.columns = 2;
-        let owned = |store, id: &str, title: &str| Owned::new(store, id, title.to_owned());
+        let owned = |store: Store, id: &str, title: &str| Owned::new(store, id, title.to_owned());
         zendo.store.lists.insert(
-            Store::Epic,
+            Shop::Epic,
             vec![
                 owned(Store::Epic, "a", "Alpha Quest"),
                 owned(Store::Epic, "b", "Beta Racer"),
             ],
         );
         zendo.store.lists.insert(
-            Store::Gog,
+            Shop::Gog,
             vec![
                 owned(Store::Gog, "1", "Gamma Tales"),
                 owned(Store::Gog, "2", "Delta Quest"),
@@ -699,7 +777,11 @@ mod tests {
         zendo
             .store
             .lists
-            .insert(Store::Amazon, vec![owned(Store::Amazon, "x", "Omega")]);
+            .insert(Shop::Amazon, vec![owned(Store::Amazon, "x", "Omega")]);
+        zendo.store.lists.insert(
+            Shop::Steam,
+            vec![Owned::new(Shop::Steam, "620", "Portal 2".into())],
+        );
         zendo
             .accounts
             .set(Store::Epic, Account::SignedIn("me".into()));
@@ -740,9 +822,23 @@ mod tests {
     }
 
     #[test]
+    fn shows_steams_games_while_its_key_is_set() {
+        let mut zendo = zendo();
+        zendo.config.steam_key = Some("key".into());
+        assert_eq!(zendo.owned_count(), 5);
+        assert_eq!(zendo.connected(), [Shop::Steam, Shop::Epic, Shop::Gog]);
+        let _ = zendo.update(Message::Store(StoreMessage::Source(Some(Shop::Steam))));
+        assert_eq!(titles(&zendo), ["Portal 2"]);
+        assert!(
+            zendo.install_job("steam:620").is_none(),
+            "Steam installs its own games"
+        );
+    }
+
+    #[test]
     fn filters_by_store_search_and_installed() {
         let mut zendo = zendo();
-        let _ = zendo.update(Message::Store(StoreMessage::Source(Some(Store::Gog))));
+        let _ = zendo.update(Message::Store(StoreMessage::Source(Some(Shop::Gog))));
         assert_eq!(titles(&zendo), ["Delta Quest", "Gamma Tales"]);
         let _ = zendo.update(Message::Store(StoreMessage::Source(None)));
         let _ = zendo.update(Message::Type("quest".into()));

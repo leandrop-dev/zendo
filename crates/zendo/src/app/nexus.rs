@@ -45,13 +45,13 @@ pub struct NexusState {
 }
 
 #[derive(Debug, Default)]
-struct KeyField {
-    value: String,
-    shown: bool,
+pub(super) struct KeyField {
+    pub(super) value: String,
+    pub(super) shown: bool,
     /// The key Nexus is being asked about.
-    checking: Option<String>,
-    save_after_check: bool,
-    note: Option<(String, bool)>,
+    pub(super) checking: Option<String>,
+    pub(super) save_after_check: bool,
+    pub(super) note: Option<(String, bool)>,
 }
 
 #[derive(Debug, Clone)]

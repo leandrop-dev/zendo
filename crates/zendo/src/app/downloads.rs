@@ -540,11 +540,14 @@ impl Zendo {
         if state.confirm_close {
             body = body.push(close_banner());
         }
+        if let Some(steam) = self.steam_downloads_card() {
+            body = body.push(steam);
+        }
         if let Some(mods) = self.mod_downloads_card() {
             body = body.push(mods);
         }
         if state.queue.is_empty() && state.finished.is_empty() {
-            if !self.nexus.downloads.is_empty() {
+            if !self.nexus.downloads.is_empty() || self.steam_installs.active() {
                 return body.into();
             }
             return column![
