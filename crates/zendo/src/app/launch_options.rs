@@ -52,6 +52,8 @@ pub struct Sheet {
     tasks: Vec<TaskChoice>,
     picking: bool,
     language: String,
+    /// Whether Epic approves the game for offline play, when it says.
+    offline_approved: Option<bool>,
     gamescope: gamescope::Fields,
     /// For a native game: none, then the runtimes installed.
     runtimes: Vec<Pick<Runtime>>,
@@ -239,6 +241,8 @@ struct Tools {
     offload: bool,
     /// Steam Linux Runtime 4.0, which Proton runs in without umu.
     runtime_4: bool,
+    /// Epic's EOS overlay, installed in Settings.
+    eos_overlay: bool,
 }
 
 impl Tools {
@@ -250,6 +254,7 @@ impl Tools {
             gamescope: on_path("gamescope"),
             offload: offload_possible(),
             runtime_4: Runtime::Four.find().is_some(),
+            eos_overlay: zendo_core::eos_overlay::installed(),
         }
     }
 }
@@ -282,6 +287,9 @@ pub enum SheetMessage {
     Gamescope(bool),
     GamescopeSet(gamescope::Setting),
     NoUmu(bool),
+    Offline(bool),
+    SkipUpdateCheck(bool),
+    EosOverlay(bool),
     SteamRuntime(Pick<Runtime>),
     Language(String),
     Width(String),
@@ -369,6 +377,9 @@ impl Zendo {
             SheetMessage::Gamescope(on) => options.gamescope = on,
             SheetMessage::GamescopeSet(setting) => sheet.gamescope.set(options, setting),
             SheetMessage::NoUmu(on) => options.no_umu = on,
+            SheetMessage::Offline(on) => options.offline = on,
+            SheetMessage::SkipUpdateCheck(on) => options.skip_update_check = on,
+            SheetMessage::EosOverlay(on) => options.eos_overlay = on,
             SheetMessage::SteamRuntime(pick) => options.steam_runtime = pick.value,
             SheetMessage::Language(language) => sheet.language = language,
             SheetMessage::Width(width) => {
@@ -530,6 +541,7 @@ impl Zendo {
             },
             picking: false,
             language: options.language.clone().unwrap_or_default(),
+            offline_approved: store_tasks::epic_offline(&game),
             gamescope: gamescope::Fields::of(&options),
             runtimes: if windows {
                 Vec::new()
@@ -776,6 +788,24 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
             None,
             SheetMessage::NoSync,
         ))
+        .push(runner_switches(sheet))
+        .into()
+}
+
+/// Epic's overlay for an Epic game, and Proton without umu.
+fn runner_switches(sheet: &Sheet) -> Element<'_, Message> {
+    let options = &sheet.options;
+    let mut switches = column![].spacing(18);
+    if sheet.store == Some(StoreKind::Epic) {
+        switches = switches.push(switch(
+            t!("options-eos-overlay"),
+            t!("options-eos-overlay-about"),
+            options.eos_overlay,
+            (!sheet.tools.eos_overlay).then(|| t!("options-eos-overlay-missing")),
+            SheetMessage::EosOverlay,
+        ));
+    }
+    switches
         .push(switch(
             t!("options-no-umu"),
             t!("options-no-umu-about"),
@@ -883,6 +913,29 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
                 .width(200)
                 .style(style::input),
         ));
+        let offline_note = match sheet.offline_approved {
+            Some(false) => format!(
+                "{} {}",
+                t!("options-offline-about"),
+                t!("options-offline-not-approved")
+            ),
+            _ => t!("options-offline-about"),
+        };
+        starting = starting
+            .push(switch(
+                t!("options-offline"),
+                offline_note,
+                sheet.options.offline,
+                None,
+                SheetMessage::Offline,
+            ))
+            .push(switch(
+                t!("options-skip-update"),
+                t!("options-skip-update-about"),
+                sheet.options.skip_update_check,
+                None,
+                SheetMessage::SkipUpdateCheck,
+            ));
     }
     starting.into()
 }

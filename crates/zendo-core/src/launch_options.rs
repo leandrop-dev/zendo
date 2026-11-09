@@ -132,6 +132,18 @@ pub struct LaunchOptions {
     /// The Steam Linux Runtime a native game runs in; none when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steam_runtime: Option<Runtime>,
+    /// An Epic game started without signing in (legendary's `--offline`),
+    /// which also skips the update check.
+    #[serde(skip_serializing_if = "is_false")]
+    pub offline: bool,
+    /// An Epic game started while its update waits
+    /// (`--skip-version-check`); legendary refuses otherwise.
+    #[serde(skip_serializing_if = "is_false")]
+    pub skip_update_check: bool,
+    /// Epic's EOS overlay on in the game's prefix ([`crate::eos_overlay`]);
+    /// off when unset.
+    #[serde(skip_serializing_if = "is_false")]
+    pub eos_overlay: bool,
     /// The game's language for an Epic game (legendary's `--language`):
     /// `fr`, `pt-BR`; the system's when unset.
     #[serde(skip_serializing_if = "Option::is_none")]

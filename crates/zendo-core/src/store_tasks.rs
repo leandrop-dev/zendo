@@ -3,7 +3,8 @@
 //! by their place in the list, `--prefer-task`), and Epic's extra launch
 //! options (`extraLaunchOption_NNN_Name` and `_Args` in the game's
 //! metadata, which legendary keeps; their arguments are passed to the
-//! game). A game's launch options keep the one chosen by its key.
+//! game). A game's launch options keep the one chosen by its key. Also
+//! whether Epic approves a game for offline play (`CanRunOffline`).
 
 use std::fs;
 use std::path::Path;
@@ -120,6 +121,24 @@ fn other_gog_tasks(tasks: &[PlayTask]) -> Vec<StoreTask> {
             })
         })
         .collect()
+}
+
+/// Whether Epic approves the game for offline play; `None` when it does
+/// not say or the game is not Epic's. legendary only warns when it is
+/// not.
+#[must_use]
+pub fn epic_offline(game: &Game) -> Option<bool> {
+    let Launch::Engine { app, .. } = &game.launch else {
+        return None;
+    };
+    if game.source != Source::Epic {
+        return None;
+    }
+    let metadata = epic_metadata(app)?;
+    let value = metadata
+        .pointer("/metadata/customAttributes/CanRunOffline/value")?
+        .as_str()?;
+    Some(value.eq_ignore_ascii_case("true"))
 }
 
 fn epic_metadata(app: &str) -> Option<Value> {

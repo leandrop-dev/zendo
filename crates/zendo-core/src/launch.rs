@@ -34,6 +34,7 @@ use std::thread;
 use anyhow::{Context, bail};
 
 use crate::config::Config;
+use crate::eos_overlay;
 use crate::launch_options::LaunchOptions;
 use crate::runtimes::{self, Runtime};
 use crate::steam_runtime::Runtime as SteamRuntime;
@@ -47,6 +48,8 @@ pub struct Started {
     pub watch: Watch,
     /// Where its output goes, for the games Zendo starts itself.
     pub log: Option<PathBuf>,
+    /// Something that went wrong on the way without stopping the game.
+    pub warning: Option<String>,
 }
 
 /// How Zendo tells a game it started still runs.
@@ -148,6 +151,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             run_script(game, &before, Script::Before)?;
         }
     }
+    let mut warning = None;
     let (mut command, log, folder) = match &game.launch {
         Launch::Uri { uri } => {
             let mut command = Command::new("xdg-open");
@@ -179,6 +183,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         Launch::Engine { app, .. } => {
             let command = engine_command(game, app)?;
             make_prefix(&command)?;
+            warning = apply_overlay(game);
             let log = log_path(&game.id);
             (command, log, None)
         }
@@ -213,7 +218,24 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
     thread::spawn(move || {
         let _ = child.wait();
     });
-    Ok(Started { watch, log })
+    Ok(Started {
+        watch,
+        log,
+        warning,
+    })
+}
+
+/// Turns Epic's overlay on or off in a Windows Epic game's prefix, as its
+/// launch options say; what went wrong, which does not stop the game.
+fn apply_overlay(game: &Game) -> Option<String> {
+    if game.source != Source::Epic || !needs_proton(game) {
+        return None;
+    }
+    let on = LaunchOptions::load(&game.id).ok()?.eos_overlay;
+    let prefix = prefix(game)?;
+    eos_overlay::set_in(&prefix, on)
+        .err()
+        .map(|err| format!("{}: the EOS overlay: {err:#}", game.title))
 }
 
 /// Runs the command the game's launch options give for after it ends.
@@ -810,10 +832,16 @@ fn engine_command_with(
             if let Some(program) = &program {
                 command.args(["--override-exe", program]);
             }
-            if store == Store::Epic
-                && let Some(language) = &options.language
-            {
-                command.args(["--language", language]);
+            if store == Store::Epic {
+                if let Some(language) = &options.language {
+                    command.args(["--language", language]);
+                }
+                if options.offline {
+                    command.arg("--offline");
+                }
+                if options.skip_update_check {
+                    command.arg("--skip-version-check");
+                }
             }
         }
         Store::Gog => {
@@ -1040,6 +1068,8 @@ mod tests {
         game.details.platform = Some("linux".into());
         let options = LaunchOptions {
             language: Some("pt-BR".into()),
+            offline: true,
+            skip_update_check: true,
             ..LaunchOptions::default()
         };
         let command = engine_command_with(
@@ -1052,7 +1082,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             describe(&command),
-            "legendary launch Sugar --language pt-BR"
+            "legendary launch Sugar --language pt-BR --offline --skip-version-check"
         );
     }
 

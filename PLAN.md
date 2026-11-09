@@ -1743,6 +1743,7 @@ brackets):
     environment without umu, the `pfx` link, the language, the sheet).
     Not yet seen in the window, and no game started without umu or in a
     runtime yet: for the user to try.
+    Tried by the user 2026-11-09 [firm]: 13a, 13b and 13c work.
 14. (was 17) Epic and GOG while playing: offline mode (Epic games that allow it,
     legendary's `--offline`), cloud saves (upload and download by hand,
     and by itself before and after the game: Heroic's `autoSyncSaves`,
@@ -1750,6 +1751,33 @@ brackets):
     Epic's EOS overlay on or off, starting a game while its update waits
     (`ignoreGameUpdates`), and GOG's played time sent back (Heroic's
     playtime sync).
+    Taken in three parts [tentative]: (a) Epic's launch switches and its
+    overlay, (b) cloud saves, (c) GOG's played time.
+    14a, built 2026-11-09 (`eos_overlay.rs`, Settings' `eos_overlay.rs`).
+    Checked first (legendary 0.21.1's help, and its source for facts
+    only, no code taken):
+    - `launch` checks the version unless offline or
+      `--skip-version-check`, and refuses an out-of-date game ("Game is
+      out of date, please update or launch with update check
+      skipping!"): so an Epic game with an update waiting could not start
+      from Zendo at all. The sheet's Start while an update waits passes
+      the flag.
+    - `--offline` skips the sign-in and the version check; for a game
+      whose `CanRunOffline` is false legendary only warns. Of the 172
+      Epic games' metadata here, 85 say true, 3 false, 84 nothing; the
+      sheet's Offline says when Epic has not approved the game.
+    - `eos-overlay install --path`, `update`, `remove`; `enable` and
+      `disable --prefix` edit the prefix's `user.reg` without Wine
+      (`OverlayPath` under `Software\Epic Games\EOS`), so the prefix
+      must have been started once. `-y` answers legendary's prompts.
+      Settings has Epic's overlay (Install or Update, Remove asked twice)
+      into `~/.local/share/zendo/eos-overlay`; not run here, as it
+      downloads Epic's overlay. A Windows Epic game's Epic's overlay
+      switch turns it on or off in its prefix as it starts, when that
+      changes anything (Zendo reads `user.reg` first); a failure is shown
+      and does not stop the game.
+    Checked: clippy, tests (the flags, reading `user.reg`, Settings'
+    Remove). Tried by the user 2026-11-09 [firm].
 15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.

@@ -107,6 +107,7 @@ impl Zendo {
             let started = Started {
                 watch: Watch::Nothing,
                 log: None,
+                warning: None,
             };
             return self.update_running(RunMessage::Started(game.id, Ok(started)));
         }
@@ -208,6 +209,7 @@ impl Zendo {
     fn started(&mut self, id: &str, started: Started) -> Task<Message> {
         let title = self.title_of(id);
         let launcher = launcher(self.game(id));
+        let start_warning = started.warning;
         match started.watch {
             Watch::Nothing => {
                 self.running.games.remove(id);
@@ -217,7 +219,8 @@ impl Zendo {
                 if let Some(session) = self.running.games.get_mut(id) {
                     session.seen = matches!(watch, Watch::Group(_));
                     session.started = Instant::now();
-                    self.status = Some(if let Some(warning) = session.warning.take() {
+                    let warning = session.warning.take().or(start_warning);
+                    self.status = Some(if let Some(warning) = warning {
                         warning
                     } else if session.seen {
                         t!("run-running", title = title)
@@ -370,6 +373,7 @@ mod tests {
         let started = Started {
             watch: Watch::Group(launch::Group::new(4_000_000, None)),
             log: None,
+            warning: None,
         };
         let _ = zendo.update(Message::Run(RunMessage::Started(
             "gog:1".into(),
@@ -425,6 +429,7 @@ mod tests {
         let started = Started {
             watch: Watch::Folder("/games/Portal 2".into()),
             log: None,
+            warning: None,
         };
         let _ = zendo.update(Message::Run(RunMessage::Started(
             "steam:620".into(),

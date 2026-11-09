@@ -14,6 +14,7 @@ pub mod config;
 pub mod covers;
 mod desktop;
 pub mod downloads;
+pub mod eos_overlay;
 pub mod fomod;
 pub mod ge_proton;
 mod heroic;

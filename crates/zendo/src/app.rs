@@ -9,6 +9,7 @@ mod accounts;
 mod artwork;
 mod dlc;
 mod downloads;
+mod eos_overlay;
 mod format;
 mod game;
 mod installer;
@@ -52,6 +53,7 @@ use crate::i18n::{self, Language, t};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use downloads::{DownloadMessage, DownloadsState};
+use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
 use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
@@ -223,6 +225,7 @@ enum Message {
     Installer(InstallerMessage),
     Proton(ProtonMessage),
     Runtime(RuntimeMessage),
+    Overlay(OverlayMessage),
     Steam(SteamMessage),
     SteamInstall(SteamInstallMessage),
     /// What `ProtonDB` says of a game.
@@ -298,6 +301,7 @@ struct Zendo {
     /// The Proton section of Settings.
     protons: Protons,
     runtimes: RuntimesState,
+    overlay: OverlayState,
     steam: SteamState,
     steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -347,6 +351,7 @@ impl Zendo {
             installer: InstallerState::default(),
             protons: Protons::default(),
             runtimes: RuntimesState::default(),
+            overlay: OverlayState::default(),
             steam: SteamState::default(),
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
@@ -570,6 +575,7 @@ impl Zendo {
             Message::Installer(message) => self.update_installer(message),
             Message::Proton(message) => self.update_protons(message),
             Message::Runtime(message) => self.update_runtimes(message),
+            Message::Overlay(message) => self.update_overlay(message),
             Message::Steam(message) => self.update_steam(message),
             Message::SteamInstall(message) => self.update_steam_installs(message),
             Message::Rating(id, result) => {
@@ -750,6 +756,7 @@ impl Zendo {
                 if self.persist {
                     self.themes.reload(Theme::dir().as_deref());
                 }
+                self.want_overlay();
                 Task::batch([self.want_protons(), self.want_runtimes()])
             }
             Page::Accounts | Page::Downloads | Page::About => Task::none(),
