@@ -354,7 +354,7 @@ mod tests {
             .games
             .insert("gog:1".into(), Session::starting());
         let started = Started {
-            watch: Watch::Group(4_000_000),
+            watch: Watch::Group(launch::Group::new(4_000_000, None)),
             log: None,
         };
         let _ = zendo.update(Message::Run(RunMessage::Started(

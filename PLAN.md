@@ -276,7 +276,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   Steam's 429. Ideas for Zendo, not on the list yet [tentative, for the
   user to place]:
   The user agreed with these 2026-11-07; placed as items 24 to 27, their
-  order [tentative]. Uninstall through Steam went into item 11. Dropped by
+  order [tentative] (24 dropped 2026-11-09, the rest now 24 to 26). Uninstall through Steam went into item 11. Dropped by
   the user 2026-11-08: scripts on game events and on Zendo's start (the
   per-game script in item 16 stays), saved filter presets and the random
   game picker.
@@ -292,6 +292,18 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   4.9 MB) holds the app info `app_info_print` prints, which should include
   each depot's size, a download size for Steam games without asking
   anyone. A parser for its binary format is needed.
+  Checked 2026-11-09 (a throwaway script, the file read only): version
+  29, keys by index into a string table at the offset the header gives;
+  each app's `depots.<id>.manifests.public` has `size` (installed bytes)
+  and `download`, a number or a string. Leaving out depots from another
+  app (`depotfromapp`, `sharedinstall`: redistributables), optional DLC
+  (`config.optionaldlc`), other systems (`config.oslist`), other
+  languages and low violence, 748 of the user's 749 Steam games in the
+  Store's list have a size (MECCHA CHAMELEON 3.65 GB, 3.43 GB to
+  download); the cache holds what the Steam client has seen, so a
+  computer with Steam signed in to that account. Proposed [tentative,
+  for the user]: the Store's Steam games take their size from it, before
+  the store requirements' "Storage" estimate.
 
 ## Phases
 
@@ -1086,7 +1098,13 @@ Quick and fresh first:
        `order`, `apply`, `files` and `tests`.
    To fix, later [firm]: 11, a game's process group id could be
    reused by another program after the game ends, and Stop would then
-   signal it. The minimum Rust is 1.98 [firm]: no older than the
+   signal it. Fixed 2026-11-09 (the user asked): the group is known by
+   its first process's start time too (`launch::Group`); its processes
+   are those started since, the id held by a later process means the
+   group ended, a group seen ended stays so, and Stop and Kill signal
+   its processes by pid, never the group id. Tested with a group whose
+   start does not match (not running, nothing signalled) and the real
+   one (running, then ended). The minimum Rust is 1.98 [firm]: no older than the
    systems Zendo is for, checked 2026-11-07 (Arch 1.99.1, Fedora 44
    1.99.1, Fedora 45 1.98.1; Fedora updates Rust in its released
    versions); `File::lock` needs 1.89. Clippy then asked for
@@ -1253,8 +1271,9 @@ Features:
    per game with GE-Proton downloads, MangoHud, GameMode, gamescope,
    arguments and environment, ProtonDB, covers, local games, mods,
    `zendo launch` for scripts (Heroic's `heroic://launch`). What it
-   lacks became items 16 to 23 (order [firm], confirmed the same day);
-   DLC (9), EAC and BattlEye (10) and OptiScaler (15) were
+   lacks became items 16 to 23 (order [firm], confirmed the same day;
+   13 to 20 since 2026-11-09); DLC (9), EAC and BattlEye (10) and
+   OptiScaler (15, now 23) were
    already on the list. Left out: plain Wine with DXVK, VKD3D and
    DXVK-NVAPI installed into the prefix (Zendo runs Proton, which brings
    them), CrossOver and macOS settings, Hikari's update check against
@@ -1371,7 +1390,7 @@ Features:
       the minutes Steam counted [tentative].
     - Install opens `steam://install/<app>` (and Enter on the page does
       too); the library shows the game after a refresh [tentative: a
-      rescan when Steam finishes is item 23's watch].
+      rescan when Steam finishes is item 20's watch (23 before)].
     - Covers: Steam's own cache first (it keeps art for games owned, not
       only installed), then Steam's CDN
       (`shared.steamstatic.com/store_item_assets/steam/apps/<app>/`), and a
@@ -1516,7 +1535,7 @@ Features:
     - `IWishlistService/GetWishlist`: app id, date added, priority.
     - Not with the token: `ISteamUserStats/GetPlayerAchievements`
       answers 400.
-    The wishlist could be a Store filter later [idea].
+    The wishlist as a Store filter: dropped by the user 2026-11-09.
 11c. Steam's extra details [firm: the user asked 2026-11-09, all but the
     achievements and the wishlist], built the same day:
     - The Store's Steam games keep `last_played`, `recent_minutes` (two
@@ -1536,7 +1555,7 @@ Features:
       uses them yet); first played times (`ClientGetLastPlayedTimes`).
     - Installed Steam games already had their last played time and
       minutes from Steam's own files (`localconfig.vdf`), so the library
-      is unchanged. This covers item 24's "last played time of games not
+      is unchanged. This covers the old item 24's "last played time of games not
       installed".
 12. Searching Nexus Mods in Zendo instead of the browser. Nexus's v1 API
     has no search; its GraphQL v2 API is to check. Downloading still
@@ -1612,19 +1631,11 @@ Features:
 
 Later:
 
-13. Recompiled games (N64 recomps and the like) and their mods, with
-    ideas from Quiver Launcher. Checked 2026-11-07: Quiver installs and
-    runs apps from GitHub and GitLab releases with community catalogs
-    (recomps ship that way); TypeScript; Business Source License 1.1 from
-    version 4 (MIT after a year, version 3 and before MIT): ideas only,
-    no code.
-14. A Fedora package (a native RPM, as the user prefers, through COPR
-    [tentative]), after the Arch one.
-15. OptiScaler, last: niche.
+From the survey (item 8), order confirmed by the user 2026-11-07 [firm];
+put first and renumbered by the user 2026-11-09 (the old number in
+brackets):
 
-From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
-
-16. The launch options sheet, more of what both have: the game's own
+13. (was 16) The launch options sheet, more of what both have: the game's own
     executable chosen instead of the store's (`targetExe`), the extra
     launch options a store lists for a game (legendary and GOG's play
     tasks; Hikari: "This game reports no extra launch options"), a
@@ -1636,17 +1647,17 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
     (Hikari: upscale size and method, window type, FPS limit, more
     options), running Proton without umu, the game's language (legendary
     and gogdl take one), and the Steam Runtime for native games.
-17. Epic and GOG while playing: offline mode (Epic games that allow it,
+14. (was 17) Epic and GOG while playing: offline mode (Epic games that allow it,
     legendary's `--offline`), cloud saves (upload and download by hand,
     and by itself before and after the game: Heroic's `autoSyncSaves`,
     legendary's `sync-saves`, gogdl's save sync, a save path per game),
     Epic's EOS overlay on or off, starting a game while its update waits
     (`ignoreGameUpdates`), and GOG's played time sent back (Heroic's
     playtime sync).
-18. The prefix's tools: winecfg, winetricks, running an `.exe` in the
+15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.
-19. What happens by itself on install: GOG's redistributables (Visual
+16. (was 19) What happens by itself on install: GOG's redistributables (Visual
     C++, DirectX) into the prefix (gogdl's `redist`, Heroic's
     `tools/redist/gog`); known fixes per game (Heroic's
     `known_fixes.json`: winetricks verbs, environment, a program run in
@@ -1654,32 +1665,43 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
     Heroic gets the file and its licence are to check, and how much
     umu's own fixes already cover); a desktop entry and a Steam
     shortcut for the game (Heroic adds both, each a setting).
-20. Managing installs: moving a game to another folder (legendary's
+17. (was 20) Managing installs: moving a game to another folder (legendary's
     `move`), importing a game already on disk (legendary's `import`),
     updating games by themselves (Heroic's `autoUpdateGames`), the
     download workers (`maxWorkers`), GOG's changelog.
-21. What the game page tells: anti-cheat status before installing
+18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
     the store's requirements, achievements. Pairs with 9.
-22. The library: categories of the user's own, beyond pins and hiding.
-23. The window: minimise when a game starts, Discord presence, and
+19. (was 22) The library: categories of the user's own, beyond pins and hiding.
+20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
     their modification times). Hikari also tracks a prefix's processes
-    by their start time in `/proc`, which bears on finding 11 (a
-    process group id reused).
+    by their start time in `/proc` (finding 11, a process group id
+    reused, was fixed 2026-11-09 the same way).
 
-From Playnite, agreed by the user 2026-11-07, order [tentative]:
+Moved after those by the user 2026-11-09 [firm]:
 
-24. Steam, more [tentative, less wanted]: Steam's launch menu as a
-    choice (`steam://launch/<id>/Dialog`), extra accounts. Family sharing
-    moved to 11b, the last played time of games not installed to 11c.
-25. Descriptions and facts for every game, local ones too: Steam's store
+21. (was 13) Recompiled games (N64 recomps and the like) and their mods, with
+    ideas from Quiver Launcher. Checked 2026-11-07: Quiver installs and
+    runs apps from GitHub and GitLab releases with community catalogs
+    (recomps ship that way); TypeScript; Business Source License 1.1 from
+    version 4 (MIT after a year, version 3 and before MIT): ideas only,
+    no code.
+22. (was 14) A Fedora package (a native RPM, as the user prefers, through COPR
+    [tentative]), after the Arch one.
+23. (was 15) OptiScaler, last: niche.
+
+From Playnite, agreed by the user 2026-11-07, order [tentative]. The
+old item 24 (Steam's launch menu as a choice, extra accounts) dropped
+by the user 2026-11-09:
+
+24. (was 25) Descriptions and facts for every game, local ones too: Steam's store
     for any game already matched to a Steam app id (as for ProtonDB).
-    Pairs with 21.
-26. Library views beyond the grid: a list and a details view. Pairs
-    with 22.
-27. Emulation: emulator profiles and ROM folders scanned into the
+    Pairs with 18.
+25. (was 26) Library views beyond the grid: a list and a details view. Pairs
+    with 19.
+26. (was 27) Emulation: emulator profiles and ROM folders scanned into the
     library (Playnite's biggest feature Zendo lacks). Not now, maybe soon
     after (the user, 2026-11-08).
 
@@ -1700,36 +1722,19 @@ From Playnite, agreed by the user 2026-11-07, order [tentative]:
   API keys in the keyring, item 4, diagnostics, item 5, languages, and
   item 6, themes, and item 7, the AUR package, built the same day; item
   8, the survey of Heroic and Hikari, done the same day, added items 16
-  to 23 (their order confirmed). Item 9, the game page with DLC, built
+  to 23 (their order confirmed; 13 to 20 since 2026-11-09). Item 9, the game page with DLC, built
   the same day. Item 10, the EAC and BattlEye runtimes, built the same
   day. Item 11, Steam's owned games, built the same day,
   and changed after the user's two tries (2026-11-08). Item 11b, the
   Steam sign-in with the family's games, built 2026-11-08, tried by the
   user with the QR code 2026-11-09; the old key dropped and item 11c,
   Steam's extra details, the same day. Item 12, searching Nexus Mods in
-  Zendo, built and tried by the user 2026-11-09. Next, item 13.
-- To try when the user is back home (item 3): start Zendo, which moves
-  both keys from `config.toml` into the keyring; Settings should say
-  "Kept in the system keyring" under each; `grep -c "_key"
-  ~/.config/zendo/config.toml` should print 0, and `secret-tool search
-  --all application zendo | grep "^label"` list both items (without
-  printing the keys); covers and Nexus should still work. Then item 3
-  is [firm]. Item 4 the same visit: Settings' Diagnostics section, Copy
-  report and paste it somewhere to read; Open launch logs. Item 5 the
-  same visit: Settings' Language section, choose Português (Portugal)
-  and go through each page (Library, a game, Store, Downloads,
-  Accounts, Settings, About, launch options, Change art, Add game, the
-  mods page) for text that is cut off, still English or reads wrong;
-  then System, and English again. Item 6 the same visit: Settings' Theme
-  section should offer Zendo and hyprmonk (this computer has hyprmonk);
-  choosing hyprmonk should say "Following hyprmonk's tone" with its
-  name, paint the window in it, and repaint within 2 seconds when the
-  tone is changed in hyprmonk's Settings. Item 9 the same visit: a
-  game's page in two columns (More, the folded Technical section); on
-  an Epic or GOG game Zendo installed that has DLC, install one from its
-  DLC card, check it plays, then uninstall it; update and repair the
-  game and check the DLC stay; install a game with DLC from the Store
-  with "Also install its DLC" ticked.
+  Zendo, built and tried by the user 2026-11-09. Finding 11 fixed the
+  same day; the list then reordered by the user. Next, the new item 13,
+  the launch options sheet (16 before).
+- Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
+  (themes) and 9 (the game page and DLC) tried by the user at home,
+  2026-11-09: they work [firm].
 - Phase 7 is done. 7e, Bethesda plugin order, built 2026-11-07; the
   user tried it on Fallout 3 GOTY (Steam 22370) the same day: it works.
   Before that, Fallout 3 was made

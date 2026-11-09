@@ -5,7 +5,9 @@
 //! means the same wherever Zendo was started). It counts as running while
 //! any process of the group is alive: legendary, for one, starts the game
 //! and exits at once, and the game's processes stay in the group. Stop
-//! signals the whole group.
+//! signals the group's processes one by one, those started since the game
+//! was: a group's id is given again once the group has ended, and a later
+//! group with it is never taken for the game's ([`Group`]).
 //!
 //! A game handed to Steam or Heroic runs under their processes instead, so
 //! it is found by its install folder: a process whose program is in it or
@@ -25,7 +27,8 @@ use std::io::Write as _;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use anyhow::{Context, bail};
@@ -48,11 +51,84 @@ pub struct Started {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Watch {
     /// The process group Zendo started it in.
-    Group(u32),
+    Group(Group),
     /// The game's install folder, for a game its launcher runs.
     Folder(PathBuf),
     /// Not at all: a link with no install folder known.
     Nothing,
+}
+
+/// The process group a game was started in. Its id is its first process's
+/// pid, which the system gives again once the group has ended; so the
+/// group is known by that process's start time too, its processes are
+/// those started since, and once it is seen ended it stays ended.
+#[derive(Debug, Clone)]
+pub struct Group {
+    id: u32,
+    /// The first process's start, in clock ticks since boot; `None` when
+    /// it could not be read.
+    since: Option<u64>,
+    ended: Arc<AtomicBool>,
+}
+
+impl PartialEq for Group {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.since == other.since
+    }
+}
+
+impl Eq for Group {}
+
+impl Group {
+    /// The group a process just started leads, read while the process is
+    /// there (a zombie too, before it is waited for).
+    #[must_use]
+    pub fn led_by(pid: u32) -> Self {
+        let since = fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| parse_stat(pid, &stat))
+            .map(|process| process.start);
+        Self::new(pid, since)
+    }
+
+    /// A group by its id and its first process's start.
+    #[must_use]
+    pub fn new(id: u32, since: Option<u64>) -> Self {
+        Self {
+            id,
+            since,
+            ended: Arc::default(),
+        }
+    }
+
+    /// The group's processes alive now; none, for good, once it ended.
+    fn members(&self) -> Vec<u32> {
+        if self.ended.load(Ordering::Relaxed) {
+            return Vec::new();
+        }
+        let all = processes();
+        let since = self.since.unwrap_or(0);
+        // The first process's pid held by a later process: the id was given
+        // again, so the game's group had ended.
+        let reused = self.since.is_some_and(|since| {
+            all.iter()
+                .any(|process| process.pid == self.id && process.start != since)
+        });
+        let own = std::process::id();
+        let members: Vec<u32> = if reused {
+            Vec::new()
+        } else {
+            all.iter()
+                .filter(|process| process.group == self.id && process.start >= since)
+                .map(|process| process.pid)
+                .filter(|&pid| pid > 1 && pid != own)
+                .collect()
+        };
+        if members.is_empty() {
+            self.ended.store(true, Ordering::Relaxed);
+        }
+        members
+    }
 }
 
 /// Starts the game without waiting for it, and notes the launch in Zendo's
@@ -114,7 +190,8 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         .process_group(0)
         .spawn()
         .with_context(|| format!("could not start {}", game.title))?;
-    let group = child.id();
+    // Read before the child is waited for, so it is there to read.
+    let group = Group::led_by(child.id());
     let watch = match folder {
         None => Watch::Group(group),
         Some(Some(folder)) => Watch::Folder(folder),
@@ -143,7 +220,7 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
 #[must_use]
 pub fn running(watch: &Watch) -> bool {
     match watch {
-        Watch::Group(group) => processes().iter().any(|process| process.group == *group),
+        Watch::Group(group) => !group.members().is_empty(),
         Watch::Folder(folder) => !in_folder(folder).is_empty(),
         Watch::Nothing => false,
     }
@@ -157,11 +234,7 @@ pub fn running(watch: &Watch) -> bool {
 #[must_use]
 pub fn stop(watch: &Watch) -> bool {
     let pids: std::collections::HashSet<u32> = match watch {
-        Watch::Group(group) => processes()
-            .into_iter()
-            .filter(|process| process.group == *group)
-            .map(|process| process.pid)
-            .collect(),
+        Watch::Group(group) => group.members().into_iter().collect(),
         Watch::Folder(folder) => in_folder(folder).into_iter().collect(),
         Watch::Nothing => return false,
     };
@@ -178,19 +251,15 @@ pub fn kill(watch: &Watch) {
 }
 
 fn signal(watch: &Watch, signal: &str) {
-    let own = own_group();
-    let targets: Vec<String> = match watch {
-        // 0 is the caller's own group and 1 init's: never a game's.
-        Watch::Group(group) if *group > 1 && i64::from(*group) != i64::from(own) => {
-            vec![format!("-{group}")]
-        }
+    let pids = match watch {
+        Watch::Group(group) => group.members(),
         Watch::Folder(folder) => in_folder(folder)
             .into_iter()
             .filter(|&pid| pid > 1 && pid != std::process::id())
-            .map(|pid| pid.to_string())
             .collect(),
-        _ => Vec::new(),
+        Watch::Nothing => Vec::new(),
     };
+    let targets: Vec<String> = pids.iter().map(u32::to_string).collect();
     if targets.is_empty() {
         return;
     }
@@ -209,6 +278,25 @@ struct Process {
     pid: u32,
     parent: u32,
     group: u32,
+    /// When it started, in clock ticks since boot.
+    start: u64,
+}
+
+/// A `/proc/<pid>/stat`: `pid (name) state ppid pgrp …`, the start the
+/// 22nd field; the name may hold spaces and parentheses. `None` for a
+/// zombie.
+fn parse_stat(pid: u32, stat: &str) -> Option<Process> {
+    let (_, rest) = stat.rsplit_once(") ")?;
+    let fields: Vec<&str> = rest.split_whitespace().collect();
+    if *fields.first()? == "Z" {
+        return None;
+    }
+    Some(Process {
+        pid,
+        parent: fields.get(1)?.parse().ok()?,
+        group: fields.get(2)?.parse().ok()?,
+        start: fields.get(19)?.parse().ok()?,
+    })
 }
 
 /// Every process alive, zombies left out.
@@ -221,15 +309,7 @@ fn processes() -> Vec<Process> {
         .filter_map(|entry| {
             let pid = entry.file_name().to_str()?.parse().ok()?;
             let stat = fs::read_to_string(entry.path().join("stat")).ok()?;
-            // `pid (name) state ppid pgrp …`; the name may hold spaces.
-            let (_, rest) = stat.rsplit_once(") ")?;
-            let mut fields = rest.split_whitespace();
-            if fields.next()? == "Z" {
-                return None;
-            }
-            let parent = fields.next()?.parse().ok()?;
-            let group = fields.next()?.parse().ok()?;
-            Some(Process { pid, parent, group })
+            parse_stat(pid, &stat)
         })
         .collect()
 }
@@ -285,17 +365,6 @@ fn mentions(arg: &str, folder: &str) -> bool {
         matches!(before, None | Some('=' | '"' | '\'' | ' '))
             && matches!(after, None | Some('/' | '"' | '\''))
     })
-}
-
-/// Zendo's own process group, from `/proc/self/stat`.
-fn own_group() -> i32 {
-    fs::read_to_string("/proc/self/stat")
-        .ok()
-        .and_then(|stat| {
-            let (_, rest) = stat.rsplit_once(") ")?;
-            rest.split_whitespace().nth(2)?.parse().ok()
-        })
-        .unwrap_or(-1)
 }
 
 /// Where a game's last launch was logged.
@@ -731,11 +800,51 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap();
-        let watch = Watch::Group(child.id());
+        let watch = Watch::Group(Group::led_by(child.id()));
         assert!(running(&watch));
         kill(&watch);
         let _ = child.wait();
         assert!(!running(&watch));
+    }
+
+    #[test]
+    fn a_group_id_given_again_is_not_the_games() {
+        let mut child = Command::new("sleep")
+            .arg("5")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let real = Group::led_by(child.id());
+        assert!(real.since.is_some());
+        // The same id, but its first process started later: as when the
+        // system gives the id again after the game's group ended.
+        let later = Group::new(child.id(), real.since.map(|since| since + 1_000_000));
+        assert!(!running(&Watch::Group(later.clone())));
+        // Once seen ended, it stays so; nothing is signalled.
+        kill(&Watch::Group(later));
+        assert!(
+            running(&Watch::Group(real.clone())),
+            "the real game still runs"
+        );
+        let earlier = Group::new(child.id(), real.since.map(|since| since.saturating_sub(1)));
+        assert!(
+            !running(&Watch::Group(earlier)),
+            "its pid started at another time"
+        );
+        kill(&Watch::Group(real.clone()));
+        let _ = child.wait();
+        assert!(!running(&Watch::Group(real)));
+    }
+
+    #[test]
+    fn reads_a_process_line_with_spaces_in_its_name() {
+        let stat = "42 (Game (x64) .exe) S 7 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 3 0 98765 1 2";
+        let process = parse_stat(42, stat).unwrap();
+        assert_eq!(
+            (process.parent, process.group, process.start),
+            (7, 42, 98765)
+        );
+        assert!(parse_stat(42, "42 (z) Z 7 42 42 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 5").is_none());
     }
 
     #[test]
