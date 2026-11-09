@@ -6,6 +6,7 @@
 
 mod about;
 mod accounts;
+mod achievements;
 mod anti_cheat;
 mod artwork;
 mod cloud_saves;
@@ -246,6 +247,11 @@ enum Message {
     Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
+    /// A game's achievements and the player's unlocks.
+    Achievements(
+        String,
+        Result<Option<zendo_core::achievements::Achievements>, String>,
+    ),
     /// What a game asks of the computer.
     Requirements(
         String,
@@ -349,6 +355,8 @@ struct Zendo {
     decks: std::collections::HashMap<String, steam_deck::DeckState>,
     /// The system requirements of each game whose page was opened.
     requirements: std::collections::HashMap<String, requirements::RequirementsState>,
+    /// The achievements of each game whose page was opened.
+    achievements: std::collections::HashMap<String, achievements::AchievementsState>,
     /// The tools run in the Windows games' prefixes.
     prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
@@ -408,6 +416,7 @@ impl Zendo {
             anti_cheat: std::collections::HashMap::new(),
             decks: std::collections::HashMap::new(),
             requirements: std::collections::HashMap::new(),
+            achievements: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
             changelogs: std::collections::HashMap::new(),
@@ -643,6 +652,7 @@ impl Zendo {
             Message::AntiCheat(id, result) => self.anti_cheat_arrived(id, result),
             Message::Deck(id, result) => self.deck_arrived(id, result),
             Message::Requirements(id, result) => self.requirements_arrived(id, result),
+            Message::Achievements(id, result) => self.achievements_arrived(id, result),
             Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
@@ -723,6 +733,7 @@ impl Zendo {
                     self.want_rating(&id),
                     self.want_gog_total(&id),
                     self.want_changelog(&id),
+                    self.want_achievements(&id),
                     self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])
@@ -811,6 +822,7 @@ impl Zendo {
                     self.want_rating(&id),
                     self.want_gog_total(&id),
                     self.want_changelog(&id),
+                    self.want_achievements(&id),
                     self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])

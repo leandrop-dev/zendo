@@ -1040,3 +1040,18 @@ requirements-from-epic = { $system } · da Epic Games Store
 requirements-from-steam = { $system } · da página do Steam
 requirements-minimum = Mínimos
 requirements-recommended = Recomendados
+
+## O cartão Conquistas
+achievements-title = Conquistas
+achievements-unlocked = { $unlocked } de { $total } desbloqueadas
+achievements-unknown = { $total } conquistas · a loja não disse quais desbloqueaste
+achievements-unknown-steam = { $total } conquistas · os detalhes de jogo do teu perfil Steam são privados, por isso não se vê quais desbloqueaste
+achievements-hidden = Conquista oculta
+achievements-hidden-about = Desbloqueia-a para ver o que é
+achievements-unlocked-when = Desbloqueada { $when }
+achievements-unlocked-plain = Desbloqueada
+achievements-rarity = { $percent }% dos jogadores
+achievements-more = { $count ->
+    [one] Mostrar mais 1
+   *[other] Mostrar mais ({ $count } em falta)
+}

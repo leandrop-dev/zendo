@@ -41,6 +41,8 @@ pub struct GameView {
     pub(super) confirm_dlc: Option<String>,
     /// How many changelog entries are shown beyond the newest.
     pub(super) changelog_more: usize,
+    /// How many achievements are shown beyond the first ones.
+    pub(super) achievements_more: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +53,8 @@ pub enum GameViewMessage {
     AskRemoveDlc(String),
     /// Show earlier updates, on the changelog card.
     MoreChangelog,
+    /// Show more, on the achievements card.
+    MoreAchievements,
 }
 
 impl Zendo {
@@ -61,6 +65,9 @@ impl Zendo {
             GameViewMessage::ToggleTechnical => view.technical = !view.technical,
             GameViewMessage::AskRemoveDlc(id) => view.confirm_dlc = Some(id),
             GameViewMessage::MoreChangelog => view.changelog_more += super::gog_changelog::MORE,
+            GameViewMessage::MoreAchievements => {
+                view.achievements_more += super::achievements::SHOWN;
+            }
         }
         Task::none()
     }
@@ -109,6 +116,7 @@ impl Zendo {
         if let Some(changelog) = self.changelog_card(game) {
             main.push(changelog);
         }
+        main.extend(self.achievements_card(&game.id));
         main.extend(self.requirements_card(&game.id));
         let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
 

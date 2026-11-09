@@ -2343,6 +2343,72 @@ brackets):
     works [firm].
     18d, PCGamingWiki's facts, dropped by the user 2026-11-09 [firm]: no
     value seen for Zendo now.
+    18e, checked first (2026-11-09, read-only, with the user's own
+    sign-ins, as the user agreed; no token printed or kept):
+    - GOG: `gameplay.gog.com/clients/<id>/users/<user>/achievements`
+      with gogdl's token answers the same for the product id
+      (1423049311) and the client id from `goggame-<id>.info`
+      (53652320436400298), so a game not installed works too.
+      Cyberpunk 2077: 57, one unlocked; each with `achievement_key`,
+      `name`, `description`, `date_unlocked` (null when locked),
+      `rarity` (percent), `rarity_level_description` ("Uncommon"),
+      `visible` and both images.
+    - Steam: with the sign-in's `access_token`,
+      `IPlayerService/GetGameAchievements/v1` gives the list (names,
+      descriptions, `icon` and `icon_gray` files, `hidden`,
+      `player_percent_unlocked`); `IPlayerService/GetAchievementsProgress/v1`
+      (POST only) gives unlocked and total per app (Rust 58 of 116).
+      `ISteamUserStats/GetPlayerAchievements` and `GetSchemaForGame` want
+      a Web API key, which Zendo no longer has (dropped with 11c). Which
+      ones are unlocked, and when: the profile's
+      `steamcommunity.com/profiles/<id>/stats/<app>/achievements/?xml=1`
+      (no sign-in; `closed="1"` and `unlockTimestamp`; 58 for Rust), only
+      while the profile's game details are public (the user's are).
+    - Epic: the store GraphQL (`store.epicgames.com/graphql`)
+      `Achievement.productAchievementsRecordBySandbox(sandboxId:
+      <namespace>)` gives the list without a sign-in (`productId`,
+      names, `rarity.percent`, `hidden`, icons): Rocket League 88,
+      Farming Simulator 22 43, World War Z none, some games null. The
+      player's own: `PlayerProfile.playerProfile(epicAccountId)
+      .productAchievements(productId)` with legendary's token
+      (`stores/epic/user.json`; refused without it): Rocket League 26
+      unlocked, each with `unlocked` and `unlockDate`. The token lasts
+      about two days; legendary renews it when it runs.
+    - Amazon: not checked.
+    Decided by the user 2026-11-09 [firm]: an Achievements card with the
+    count and a bar, then each achievement with its icon, name,
+    description, and its unlock date or how rare it is; unlocked first
+    (newest first), then locked (most common first); ten shown, with
+    Show more. A locked hidden achievement shows as "Hidden achievement",
+    its name and description kept back until unlocked.
+    18e, built 2026-11-09 (`achievements.rs`, the window's
+    `achievements.rs`). Zendo [tentative]: GOG's from gameplay.gog.com
+    with gogdl's token; Steam's list from `GetGameAchievements` (no
+    key) and the unlocks from the profile's public stats page, for the
+    Steam sign-in's account, else the one Steam on this computer signed
+    in last; Epic's list from the store GraphQL by namespace and the
+    unlocks with legendary's token. Unlocks not known (a private Steam
+    profile, a stale Epic token) leave the list without them, saying
+    why. Asked once a session as the page opens; icons kept in
+    `$XDG_CACHE_HOME/zendo/achievements/`, each address downloaded once
+    (Rust's locked ones share icons; two threads writing one file
+    raced), with the extension the bytes call for (the window draws
+    nothing for Epic's icons, whose addresses have none). Steam's icons
+    come from `shared.fastly.steamstatic.com/community_assets/images/apps`,
+    as the profile page's do: the older `cdn.fastly…/steamcommunity/
+    public/images/apps` lacked ten of Rust's grey ones. The card sits
+    near the end of the main column, before the requirements. Checked:
+    clippy, tests (each store's shape, GOG's `+0000` dates, Steam's names
+    matched ignoring case, a private profile, Epic refusing, the order,
+    icon kinds, the card and Show more); an ignored test against the real
+    Steam without a profile (Rust's 116, unlocks not known, icons); once,
+    with the user's sign-ins (read-only, the test removed after):
+    Cyberpunk 2077 on GOG 1 of 57 (20 hidden still locked), Rocket League
+    on Epic 26 of 88, Rust on Steam 58 of 116 (9 hidden still locked),
+    every icon there; in a throwaway home with no sign-ins, Rocket
+    League's page (a build that moved the card up, reverted) showed 88
+    achievements with icons and their share of players. Tried by the
+    user 2026-11-09: it works [firm].
 19. (was 22) The library: categories of the user's own, beyond pins and hiding.
 20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
@@ -2421,8 +2487,9 @@ by the user 2026-11-09:
   same day; 18a, the anti-cheat status, built and tried by the user
   the same day; 18b, the Steam Deck rating, built and tried by the
   user the same day; 18c, the requirements, built and tried by the
-  user the same day; 18d, PCGamingWiki's facts, dropped by the user.
-  Next: 18e, achievements.
+  user the same day; 18d, PCGamingWiki's facts, dropped by the user;
+  18e, achievements, built and tried by the user the same day. Item 18
+  is done. Next: item 19, the library's categories.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

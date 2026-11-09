@@ -1026,3 +1026,18 @@ requirements-from-epic = { $system } · from the Epic Games Store
 requirements-from-steam = { $system } · from Steam's store page
 requirements-minimum = Minimum
 requirements-recommended = Recommended
+
+## The Achievements card
+achievements-title = Achievements
+achievements-unlocked = { $unlocked } of { $total } unlocked
+achievements-unknown = { $total } achievements · the store did not say which you have unlocked
+achievements-unknown-steam = { $total } achievements · your Steam profile's game details are private, so which you have unlocked cannot be seen
+achievements-hidden = Hidden achievement
+achievements-hidden-about = Unlock it to see what it is
+achievements-unlocked-when = Unlocked { $when }
+achievements-unlocked-plain = Unlocked
+achievements-rarity = { $percent }% of players
+achievements-more = { $count ->
+    [one] Show 1 more
+   *[other] Show more ({ $count } left)
+}
