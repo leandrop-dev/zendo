@@ -96,6 +96,12 @@ impl Running {
     pub fn is_running(&self, id: &str) -> bool {
         self.games.get(id).is_some_and(|session| session.seen)
     }
+
+    /// Whether the game is starting (its prefix being set up, say) or
+    /// running: its files are in use either way.
+    pub fn is_open(&self, id: &str) -> bool {
+        self.games.contains_key(id)
+    }
 }
 
 /// The program a link hands the game to.
@@ -187,7 +193,8 @@ impl Zendo {
                 }
                 let title = self.title_of(&id);
                 self.status = Some(t!("run-closed", title = title, minutes = minutes));
-                Task::none()
+                // A job held while the game ran can go now.
+                self.next_job()
             }
             RunMessage::SavesSyncing(id) => {
                 self.cloud.syncing.insert(id);
@@ -488,6 +495,7 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
 mod tests {
     use super::*;
     use zendo_core::Source;
+    use zendo_core::downloads::{Action, Job};
 
     #[test]
     fn a_game_runs_until_its_group_is_gone() {
@@ -592,5 +600,36 @@ mod tests {
             zendo.game("steam:620").map(|game| game.played.minutes),
             Some(0)
         );
+    }
+
+    #[test]
+    fn a_job_changing_a_running_games_files_waits_for_it() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let mut game = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        game.details.install_path = Some("/home/me/Games/Sugar".into());
+        let update = Job::for_game(&game, Action::Update).unwrap();
+        let mut import = update.clone();
+        import.action = Action::Import;
+        zendo.library = Some(zendo_core::Library {
+            games: vec![game],
+            problems: Vec::new(),
+        });
+        zendo
+            .running
+            .games
+            .insert("gog:1".into(), Session::starting());
+        assert!(zendo.held_by_game(&update));
+        assert!(!zendo.held_by_game(&import));
+        let _ = zendo.update(Message::Run(RunMessage::Ended("gog:1".into())));
+        assert!(!zendo.held_by_game(&update));
     }
 }

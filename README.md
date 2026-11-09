@@ -129,6 +129,11 @@ install it and give it its colours, but it runs on any Linux desktop.
   for next time. A game's page shows its download size, size on disk and
   latest version, and for the games Zendo installed whether an update is
   waiting.
+- Updates those games by themselves when an update is found (turned off
+  in Settings, Downloads). An update, repair, move or uninstall of a game
+  that is running waits on the Downloads page until it is closed.
+  Settings also chooses how many files Epic's and GOG's engines download
+  at once; Amazon's always downloads six.
 - Moves a game Zendo installed to another folder (More, then Move…, in
   the desktop's folder dialog): renamed at once on the same drive, copied
   with its progress on the Downloads page to another drive, then the old

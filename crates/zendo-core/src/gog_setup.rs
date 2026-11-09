@@ -425,8 +425,14 @@ fn every_needed() -> BTreeSet<String> {
 fn download(folder: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(folder).with_context(|| format!("could not make {}", folder.display()))?;
     let ids = every_needed().into_iter().collect::<Vec<_>>().join(",");
+    let folder = folder.to_string_lossy();
+    let workers = crate::config::Config::load_file()
+        .map(|config| config.workers_args())
+        .unwrap_or_default();
+    let mut args = vec!["redist", "--ids", &ids, "--path", &folder];
+    args.extend(workers.iter().map(String::as_str));
     Store::Gog
-        .run_checked(&["redist", "--ids", &ids, "--path", &folder.to_string_lossy()])
+        .run_checked(&args)
         .context("could not download GOG's redistributables")?;
     Ok(())
 }

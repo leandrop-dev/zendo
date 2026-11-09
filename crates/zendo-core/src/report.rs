@@ -340,6 +340,17 @@ fn settings(lines: &mut Vec<String>, config: &Config) {
         if config.download_covers { "yes" } else { "no" }
     ));
     lines.push(format!(
+        "Update games by themselves: {}",
+        if config.auto_update { "yes" } else { "no" }
+    ));
+    lines.push(format!(
+        "Download workers: {}",
+        config
+            .download_workers
+            .filter(|&workers| workers > 0)
+            .map_or_else(|| "the engine's choice".to_owned(), |n| n.to_string())
+    ));
+    lines.push(format!(
         "Games folder: {}",
         config
             .install_dir()

@@ -19,6 +19,10 @@ use crate::i18n::{self, Language, t};
 
 const KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
 
+/// The download workers Settings offers besides the engine's own choice,
+/// which is the computer's processors (legendary at most 16).
+const WORKERS: [u32; 4] = [2, 4, 8, 16];
+
 impl Zendo {
     pub(super) fn update_settings(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -61,6 +65,14 @@ impl Zendo {
                 } else {
                     Task::none()
                 }
+            }
+            Message::SetAutoUpdate(on) => self.set_auto_update(on),
+            Message::SetWorkers(workers) => {
+                let previous = std::mem::replace(&mut self.config.download_workers, workers);
+                if !self.save_config() {
+                    self.config.download_workers = previous;
+                }
+                Task::none()
             }
             Message::CopyReport => {
                 if self.diagnostics.gathering {
@@ -219,6 +231,7 @@ impl Zendo {
                 self.key_section(),
                 self.nexus_section(),
                 self.covers_section(),
+                self.downloads_section(),
                 self.protons_section(),
                 self.runtimes_section(),
                 self.overlay_section(),
@@ -385,6 +398,41 @@ impl Zendo {
         ]
         .spacing(14);
         section(t!("covers-title"), t!("covers-about"), body)
+    }
+
+    /// Updating by itself, and how many files the engines download at once.
+    fn downloads_section(&self) -> Element<'_, Message> {
+        let chosen = self.config.download_workers.filter(|workers| *workers > 0);
+        let choice = |label: String, workers: Option<u32>| {
+            button(text(label).size(13))
+                .padding([5, 12])
+                .style(style::chip(chosen == workers))
+                .on_press(Message::SetWorkers(workers))
+        };
+        let mut choices = row![choice(t!("workers-engine"), None)]
+            .spacing(8)
+            .align_y(Alignment::Center);
+        for workers in WORKERS {
+            choices = choices.push(choice(workers.to_string(), Some(workers)));
+        }
+        let body = column![
+            toggler(self.config.auto_update)
+                .label(t!("auto-update"))
+                .text_size(14)
+                .on_toggle(Message::SetAutoUpdate),
+            column![
+                text(t!("workers-title")).size(14),
+                choices,
+                text(t!("workers-about")).size(13).color(colors().dim),
+            ]
+            .spacing(8),
+        ]
+        .spacing(14);
+        section(
+            t!("downloads-settings-title"),
+            t!("downloads-settings-about"),
+            body,
+        )
     }
 
     fn sources_section(&self) -> Element<'_, Message> {

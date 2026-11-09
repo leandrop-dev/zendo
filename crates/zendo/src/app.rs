@@ -205,6 +205,11 @@ enum Message {
     CheckKey,
     KeyChecked(Result<KeyCheck, String>),
     SetDownloadCovers(bool),
+    /// Settings' "Update games by themselves".
+    SetAutoUpdate(bool),
+    /// How many files the engines download at once; `None` leaves it to
+    /// them.
+    SetWorkers(Option<u32>),
     DownloadNow,
     /// Settings' Copy report: gathered on a thread, then copied.
     CopyReport,
@@ -569,6 +574,8 @@ impl Zendo {
             | Message::CheckKey
             | Message::KeyChecked(_)
             | Message::SetDownloadCovers(_)
+            | Message::SetAutoUpdate(_)
+            | Message::SetWorkers(_)
             | Message::DownloadNow
             | Message::CopyReport
             | Message::ReportReady(_)

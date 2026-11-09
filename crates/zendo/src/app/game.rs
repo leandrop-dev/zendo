@@ -236,7 +236,7 @@ impl Zendo {
                     .style(style::secondary)
                     .on_press_maybe(free.then(|| queue(game, Action::Repair)).flatten()),
             );
-            let movable = free && !self.running.is_running(&game.id);
+            let movable = free && !self.running.is_open(&game.id);
             more = more.push(
                 button(text(t!("downloads-move")).size(14))
                     .padding([8, 14])

@@ -2149,6 +2149,30 @@ brackets):
     Amazon's imports without a sign-in refused with why. Not tried yet
     in the window: no store game is on disk outside Zendo (the two
     folders in `~/Games/Heroic` are Wine prefixes).
+    17c, built 2026-11-09 (`config.rs`, `downloads.rs`, Settings'
+    Downloads section). Checked first (nile's source, facts only): nile's
+    `install`, `update` and `verify` take `--max-workers` but ignore it,
+    as its downloader always runs six (`ThreadPoolExecutor(max_workers=6)`
+    in `manager.py`). Zendo [tentative]: `auto_update` in `config.toml`,
+    on unless set false (the user's choice), and `download_workers`, left
+    out for the engine's choice. Settings has a switch for the first and
+    chips for the second (the engine's choice, 2, 4, 8, 16). When the
+    update check (once a session and after each download) finds updates
+    and the switch is on, each one not queued already is queued as an
+    Update job, by title; turning the switch on queues the ones found.
+    The workers go to legendary's install, update, repair and DLC jobs and
+    to gogdl's download, update, repair and redist; not to nile, and
+    Settings says so. Jobs that change a running game's files (updates,
+    repairs, moves, uninstalls, DLC) now wait in the queue, saying why,
+    until the game is closed, and the queue goes on with the next job
+    meanwhile; closing the game starts them. This replaces 17a's move
+    paused with why. The diagnostics report lists both settings.
+    Checked: clippy, tests (the settings' defaults and what they write,
+    the workers in each engine's arguments and not in an uninstall's,
+    updates found queued by themselves or not when off, a job for a
+    running game waiting and starting once it is closed). Not tried yet
+    in the window; no game has an update now (Cyberpunk 2077's newest GOG
+    build is the one installed).
 18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
@@ -2223,8 +2247,9 @@ by the user 2026-11-09:
   (comet), built the same day and tried by the user.
   Item 17, managing installs, split by the user (17a to 17d) the same
   day; 17a, moving a game, built the same day and tried by the user.
-  17b, importing a game from a folder, built the same day, for the user
-  to try. Next: 17c, the download workers and automatic updates.
+  17b, importing a game from a folder, built the same day. 17c, the
+  download workers and automatic updates, built the same day, for the
+  user to try. Next: 17d, GOG's changelog on the game page.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

@@ -387,7 +387,12 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
         }
         (Store::Epic, Action::AddDlc | Action::RemoveDlc) => epic_dlc(job, &job.dlc, stop, report)?,
         (Store::Epic, Action::Update) => {
-            let ended = engine(store, &engine_args(job, &job.path), stop, report)?;
+            let ended = engine(
+                store,
+                &engine_args(job, &job.path, &workers()),
+                stop,
+                report,
+            )?;
             if ended == Ended::Done {
                 // legendary updates the game alone; its DLC have versions
                 // of their own.
@@ -412,11 +417,14 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
                 report(Event::Folder(folder.clone()));
                 folder
             };
-            engine(store, &engine_args(job, &folder), stop, report)?
+            engine(store, &engine_args(job, &folder, &workers()), stop, report)?
         }
-        (Store::Epic | Store::Amazon, _) => {
-            engine(store, &engine_args(job, &job.path), stop, report)?
-        }
+        (Store::Epic | Store::Amazon, _) => engine(
+            store,
+            &engine_args(job, &job.path, &workers()),
+            stop,
+            report,
+        )?,
     };
     if ended == Ended::Done {
         let installed = installs(store).iter().any(|game| game.app == job.app);
@@ -463,6 +471,7 @@ fn epic_dlc(
     stop: &Stop,
     report: &mut dyn FnMut(Event),
 ) -> anyhow::Result<Ended> {
+    let workers = workers();
     for (index, id) in dlc.iter().enumerate() {
         if dlc.len() > 1 {
             report(Event::Step(format!("DLC {} of {}…", index + 1, dlc.len())));
@@ -479,7 +488,10 @@ fn epic_dlc(
             ],
             _ => &["install", id, "--platform", &job.platform, "-y"],
         };
-        let args: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        let mut args: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        if job.action != Action::RemoveDlc {
+            args.extend_from_slice(&workers);
+        }
         if engine(Store::Epic, &args, stop, report)? == Ended::Stopped {
             return Ok(Ended::Stopped);
         }
@@ -487,9 +499,27 @@ fn epic_dlc(
     Ok(Ended::Done)
 }
 
-/// legendary's and nile's arguments for a job; `folder` is the game's own
-/// folder for an install.
-fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
+/// The download workers the user set, read when a job starts.
+fn workers() -> Vec<String> {
+    crate::config::Config::load_file()
+        .map(|config| config.workers_args())
+        .unwrap_or_default()
+}
+
+/// legendary's and nile's arguments for a job, with `workers` for those
+/// that download; `folder` is the game's own folder for an install.
+fn engine_args(job: &Job, folder: &Path, workers: &[String]) -> Vec<String> {
+    let mut args = words_for(job, folder);
+    if matches!(
+        job.action,
+        Action::Install | Action::Update | Action::Repair
+    ) {
+        args.extend_from_slice(workers);
+    }
+    args
+}
+
+fn words_for(job: &Job, folder: &Path) -> Vec<String> {
     let app = job.app.clone();
     let base = folder
         .parent()
@@ -753,12 +783,11 @@ fn gog_install(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
     // A resumed download counts only what is left; shown against the
     // whole game, it carries on from where the bar was.
     let whole = info.disk_size();
-    let ended = engine(
-        Store::Gog,
-        &gog_args(job, "download", &job.path, &job.dlc)?,
-        stop,
-        &mut |event| report(overall(event, whole)),
-    )?;
+    let mut args = gog_args(job, "download", &job.path, &job.dlc)?;
+    args.extend(workers());
+    let ended = engine(Store::Gog, &args, stop, &mut |event| {
+        report(overall(event, whole));
+    })?;
     if ended == Ended::Stopped {
         return Ok(ended);
     }
@@ -799,12 +828,9 @@ fn gog_refresh(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
         Action::RemoveDlc => dlc.retain(|id| !job.dlc.contains(id)),
         _ => {}
     }
-    let ended = engine(
-        Store::Gog,
-        &gog_args(job, verb, &job.path, &dlc)?,
-        stop,
-        report,
-    )?;
+    let mut args = gog_args(job, verb, &job.path, &dlc)?;
+    args.extend(workers());
+    let ended = engine(Store::Gog, &args, stop, report)?;
     if ended == Ended::Done {
         record_gog(job, &job.path, &info, &dlc)?;
     }
@@ -1565,7 +1591,7 @@ mod tests {
         };
         let folder = Path::new("/home/me/Games/Sugar Rush");
         assert_eq!(
-            engine_args(&job, folder).join(" "),
+            engine_args(&job, folder, &[]).join(" "),
             "install Sugar --base-path /home/me/Games --game-folder Sugar Rush --platform Windows --skip-sdl --skip-dlcs -y"
         );
         let job = Job {
@@ -1573,15 +1599,29 @@ mod tests {
             ..job
         };
         assert_eq!(
-            engine_args(&job, folder),
+            engine_args(&job, folder, &[]),
             ["install", "--path", "/home/me/Games/Sugar Rush", "Sugar"]
         );
         let job = Job {
             action: Action::Repair,
             ..job
         };
-        assert_eq!(engine_args(&job, &job.path), ["verify", "Sugar"]);
+        assert_eq!(engine_args(&job, &job.path, &[]), ["verify", "Sugar"]);
         assert_eq!(job.id(), "amazon:Sugar");
+        // The workers go with what downloads, not with an uninstall.
+        let workers = ["--max-workers".to_owned(), "4".to_owned()];
+        assert_eq!(
+            engine_args(&job, &job.path, &workers),
+            ["verify", "Sugar", "--max-workers", "4"]
+        );
+        let job = Job {
+            action: Action::Uninstall,
+            ..job
+        };
+        assert_eq!(
+            engine_args(&job, &job.path, &workers),
+            ["uninstall", "Sugar"]
+        );
     }
 
     #[test]
@@ -1599,7 +1639,7 @@ mod tests {
             to: None,
         };
         assert!(
-            engine_args(&job, Path::new("/home/me/Games/Sugar"))
+            engine_args(&job, Path::new("/home/me/Games/Sugar"), &[])
                 .contains(&"--with-dlcs".to_owned())
         );
         let job = Job {

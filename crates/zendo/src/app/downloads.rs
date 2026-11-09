@@ -27,6 +27,12 @@ use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking, centered};
 use crate::i18n::t;
 
+/// Whether the job changes the files of a game that may be running: all
+/// but installing and importing one Zendo does not have yet.
+fn changes_files(action: Action) -> bool {
+    !matches!(action, Action::Install | Action::Import)
+}
+
 /// The action's name, as its button says it: Install.
 fn action_label(action: Action) -> String {
     t!("action-label", action = action_tag(action))
@@ -303,8 +309,13 @@ impl Zendo {
             }
             DownloadMessage::CheckUpdate(id) => self.check_updates(&[id]),
             DownloadMessage::UpdatesChecked(results) => {
+                let found: Vec<String> = results
+                    .iter()
+                    .filter(|(_, result)| matches!(result, Ok(Update::Available { .. })))
+                    .map(|(id, _)| id.clone())
+                    .collect();
                 self.downloads.keep_updates(results);
-                Task::none()
+                self.update_by_themselves(&found)
             }
             DownloadMessage::ChooseFolder(purpose, id) => self.choose_folder(purpose, id),
             DownloadMessage::FolderChosen(purpose, id, result) => {
@@ -324,7 +335,7 @@ impl Zendo {
                 let Some(game) = self.game(&id) else {
                     return Task::none();
                 };
-                if self.running.is_running(&id) {
+                if self.running.is_open(&id) {
                     self.status = Some(t!("downloads-move-running", title = game.title.as_str()));
                     return Task::none();
                 }
@@ -482,34 +493,43 @@ impl Zendo {
         }
     }
 
+    /// Whether the job waits for its game to close: it would change the
+    /// files of a game running.
+    pub(super) fn held_by_game(&self, job: &Job) -> bool {
+        changes_files(job.action) && self.running.is_open(&job.id())
+    }
+
+    /// Turns "Update games by themselves" on or off; turned on, the
+    /// updates found already are queued too.
+    pub(super) fn set_auto_update(&mut self, on: bool) -> Task<Message> {
+        self.config.auto_update = on;
+        if !self.save_config() {
+            self.config.auto_update = !on;
+            return Task::none();
+        }
+        let found: Vec<String> = self
+            .downloads
+            .updates
+            .iter()
+            .filter(|(_, state)| matches!(state, UpdateState::Available(_)))
+            .map(|(id, _)| id.clone())
+            .collect();
+        self.update_by_themselves(&found)
+    }
+
     /// Starts the first job not paused, unless one runs; it moves to the
-    /// front of the queue.
-    fn next_job(&mut self) -> Task<Message> {
+    /// front of the queue. A job that changes a game's files waits while
+    /// the game runs, and goes when it closes.
+    pub(super) fn next_job(&mut self) -> Task<Message> {
         if !self.persist || self.downloads.running.is_some() || self.downloads.closing {
             return Task::none();
         }
-        // A game started since its move was queued holds the move.
-        let running: Vec<String> = self
+        let Some(index) = self
             .downloads
             .queue
             .iter()
-            .filter(|job| !job.paused && job.action == Action::Move)
-            .map(Job::id)
-            .filter(|id| self.running.is_running(id))
-            .collect();
-        for job in &mut self.downloads.queue {
-            if running.contains(&job.id()) && job.action == Action::Move {
-                job.paused = true;
-                self.downloads.errors.insert(
-                    job.id(),
-                    t!("downloads-move-running", title = job.title.as_str()),
-                );
-            }
-        }
-        if !running.is_empty() {
-            self.save_queue();
-        }
-        let Some(index) = self.downloads.queue.iter().position(|job| !job.paused) else {
+            .position(|job| !job.paused && !self.held_by_game(job))
+        else {
             return Task::none();
         };
         let job = self.downloads.queue.remove(index);
@@ -594,6 +614,30 @@ impl Zendo {
                 self.next_job()
             }
         }
+    }
+
+    /// Queues the updates just found, unless Settings says games update
+    /// only when asked; a game already in the queue keeps its job. One
+    /// running waits until it closes ([`Self::next_job`]).
+    fn update_by_themselves(&mut self, found: &[String]) -> Task<Message> {
+        if !self.config.auto_update {
+            return Task::none();
+        }
+        let mut jobs: Vec<Job> = found
+            .iter()
+            .filter(|id| self.downloads.job_for(id).is_none())
+            .filter_map(|id| self.game(id))
+            .filter_map(|game| Job::for_game(game, Action::Update))
+            .collect();
+        if jobs.is_empty() {
+            return Task::none();
+        }
+        jobs.sort_by(|a, b| a.title.cmp(&b.title));
+        for job in jobs {
+            self.queue_job(job);
+        }
+        self.save_queue();
+        self.next_job()
     }
 
     /// Asks the stores, on a thread, whether these games have updates.
@@ -698,7 +742,8 @@ impl Zendo {
                     .color(colors().dim),
             );
             for job in rest().filter(|job| !job.paused) {
-                body = body.push(queued_row(job, None));
+                let waits = self.held_by_game(job);
+                body = body.push(queued_row(job, None, waits));
             }
         }
         if rest().any(|job| job.paused) {
@@ -709,7 +754,7 @@ impl Zendo {
                     .color(colors().dim),
             );
             for job in rest().filter(|job| job.paused) {
-                body = body.push(queued_row(job, state.errors.get(&job.id())));
+                body = body.push(queued_row(job, state.errors.get(&job.id()), false));
             }
         }
         if !state.finished.is_empty() {
@@ -877,7 +922,7 @@ fn progress_line(job: &Job, progress: &Progress) -> String {
 }
 
 /// A job waiting its turn, or paused, with why it failed if it did.
-fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Message> {
+fn queued_row<'a>(job: &'a Job, error: Option<&'a String>, waits: bool) -> Element<'a, Message> {
     let id = job.id();
     let mut about = column![
         text(&job.title).size(15),
@@ -890,6 +935,13 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>) -> Element<'a, Messag
         .color(colors().dim),
     ]
     .spacing(2);
+    if waits {
+        about = about.push(
+            text(t!("downloads-waits-running"))
+                .size(12)
+                .color(colors().dim),
+        );
+    }
     if let Some(error) = error {
         about = about.push(
             text(t!("downloads-failed", error = error.as_str()))
@@ -1135,5 +1187,41 @@ mod tests {
     fn writes_sizes_for_people() {
         assert_eq!(mebibytes(12.34), "12.3 MiB");
         assert_eq!(mebibytes(2048.0), "2.00 GiB");
+    }
+
+    #[test]
+    fn updates_found_are_queued_by_themselves_when_set() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let mut game = Game::new(
+            "epic:Sugar".into(),
+            "Sugar".into(),
+            zendo_core::Source::Epic,
+            zendo_core::Launch::Engine {
+                runner: "legendary".into(),
+                app: "Sugar".into(),
+            },
+        );
+        game.details.install_path = Some("/home/me/Games/Sugar".into());
+        zendo.library = Some(zendo_core::Library {
+            games: vec![game],
+            problems: Vec::new(),
+        });
+        let found = || {
+            Message::Download(DownloadMessage::UpdatesChecked(vec![(
+                "epic:Sugar".into(),
+                Ok(Update::Available {
+                    version: Some("2".into()),
+                }),
+            )]))
+        };
+        zendo.config.auto_update = false;
+        let _ = zendo.update(found());
+        assert_eq!(zendo.downloads.queue, []);
+        zendo.config.auto_update = true;
+        let _ = zendo.update(found());
+        let _ = zendo.update(found());
+        let actions: Vec<Action> = zendo.downloads.queue.iter().map(|job| job.action).collect();
+        assert_eq!(actions, [Action::Update]);
     }
 }

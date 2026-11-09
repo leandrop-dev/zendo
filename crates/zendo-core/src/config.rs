@@ -17,6 +17,11 @@
 //! gog_galaxy = true
 //! # Where store games are installed, each in a folder of its own.
 //! install_dir = "~/Games"
+//! # Set to false to update store games only when asked.
+//! auto_update = true
+//! # How many files the store's engine downloads at once. Left out, the
+//! # engine's own choice (from the computer's processors).
+//! download_workers = 8
 //! # The Proton Windows games run with unless their launch options choose
 //! # one: a folder name. Left out, the newest GE-Proton found, then others.
 //! default_proton = "GE-Proton11-12-x86_64"
@@ -81,6 +86,12 @@ pub struct Config {
     /// Where store games are installed; `~/Games` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_dir: Option<PathBuf>,
+    /// Whether an update found for a game Zendo installed is queued by
+    /// itself.
+    pub auto_update: bool,
+    /// The engines' `--max-workers`; their own choice when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_workers: Option<u32>,
     /// The Proton games run with unless their launch options choose one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_proton: Option<String>,
@@ -144,6 +155,8 @@ impl std::fmt::Debug for Config {
             .field("gog_galaxy", &self.gog_galaxy)
             .field("nexus_adult", &self.nexus_adult)
             .field("install_dir", &self.install_dir)
+            .field("auto_update", &self.auto_update)
+            .field("download_workers", &self.download_workers)
             .field("default_proton", &self.default_proton)
             .field("language", &self.language)
             .field("theme", &self.theme)
@@ -165,6 +178,8 @@ impl Default for Config {
             gog_galaxy: true,
             nexus_adult: false,
             install_dir: None,
+            auto_update: true,
+            download_workers: None,
             default_proton: None,
             language: None,
             theme: None,
@@ -178,6 +193,16 @@ impl Config {
     #[must_use]
     pub fn path() -> Option<PathBuf> {
         paths::config_home().map(|dir| dir.join("zendo/config.toml"))
+    }
+
+    /// The engines' `--max-workers <n>` when the user set how many, as
+    /// legendary, gogdl and nile all take it.
+    #[must_use]
+    pub fn workers_args(&self) -> Vec<String> {
+        self.download_workers
+            .filter(|workers| *workers > 0)
+            .map(|workers| vec!["--max-workers".to_owned(), workers.to_string()])
+            .unwrap_or_default()
     }
 
     /// Where store games go: `install_dir` with a leading `~` expanded, or
@@ -615,5 +640,18 @@ mod tests {
         assert_eq!(config.install_dir(), Some(home.join("Spiele")));
         let config = Config::parse("install_dir = \"/mnt/games\"").unwrap();
         assert_eq!(config.install_dir(), Some(PathBuf::from("/mnt/games")));
+    }
+
+    #[test]
+    fn games_update_by_themselves_unless_told_and_workers_only_when_set() {
+        let config = Config::parse("").unwrap();
+        assert!(config.auto_update);
+        assert_eq!(config.workers_args(), Vec::<String>::new());
+        let config = Config::parse("auto_update = false\ndownload_workers = 8\n").unwrap();
+        assert!(!config.auto_update);
+        assert_eq!(config.workers_args(), ["--max-workers", "8"]);
+        // Nought is the engine's own choice, as in Heroic.
+        let config = Config::parse("download_workers = 0\n").unwrap();
+        assert_eq!(config.workers_args(), Vec::<String>::new());
     }
 }
