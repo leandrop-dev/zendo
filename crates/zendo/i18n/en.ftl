@@ -465,6 +465,8 @@ run-running = { $title } is running
 run-waiting = Waiting for { $launcher } to start { $title }…
 run-fetching-runtime = Downloading the { $runtime } runtime for { $title }…
 run-runtime-failed = { $title } is running without its anti-cheat runtime: { $error }
+run-gog-setup = Setting up { $title } for its first start: { $step }…
+run-gog-setup-failed = GOG's setup for { $title } did not finish ({ $error }); the Wine prefix card runs it again
 run-missed = Handed { $title } to { $launcher }; Zendo did not see it start
 run-closed = { $minutes ->
     [0] { $title } closed
@@ -912,6 +914,7 @@ prefix-run-program = Run a program…
 prefix-choose-program = Choose a Windows program to run in the game's prefix
 prefix-components-placeholder = Winetricks components, such as vcrun2022 d3dx9
 prefix-install = Install
+prefix-gog-setup = GOG's setup
 prefix-running = { $what } is running in the prefix…
 prefix-game-running = The tools wait until the game ends.
 prefix-done = { $what } ended

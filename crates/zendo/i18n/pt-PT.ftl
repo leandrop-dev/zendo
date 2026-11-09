@@ -479,6 +479,8 @@ run-running = { $title } está a correr
 run-waiting = À espera que { $launcher } inicie { $title }…
 run-fetching-runtime = A transferir o runtime { $runtime } para { $title }…
 run-runtime-failed = { $title } está a correr sem o runtime anti-batota: { $error }
+run-gog-setup = A preparar { $title } para o primeiro arranque: { $step }…
+run-gog-setup-failed = A preparação da GOG para { $title } não terminou ({ $error }); o cartão do prefixo Wine executa-a de novo
 run-missed = { $title } entregue a { $launcher }; o Zendo não o viu iniciar
 run-closed = { $minutes ->
     [0] { $title } fechou
@@ -926,6 +928,7 @@ prefix-run-program = Executar um programa…
 prefix-choose-program = Escolha um programa Windows para executar no prefixo do jogo
 prefix-components-placeholder = Componentes do winetricks, como vcrun2022 d3dx9
 prefix-install = Instalar
+prefix-gog-setup = Preparação da GOG
 prefix-running = { $what } em execução no prefixo…
 prefix-game-running = As ferramentas esperam que o jogo termine.
 prefix-done = { $what } terminou

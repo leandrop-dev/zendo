@@ -1918,6 +1918,58 @@ brackets):
     Heroic gets the file and its licence are to check, and how much
     umu's own fixes already cover); a desktop entry and a Steam
     shortcut for the game (Heroic adds both, each a setting).
+    Decided by the user 2026-11-09 [firm]: (a) GOG's setup first, then
+    (b) the known fixes, fetched at run time from Heroic's repository
+    as Heroic does, never shipped (the `Heroic-Games-Launcher/known-fixes`
+    repository states no licence; 104 games: 74 Epic, 29 GOG, 1 Amazon;
+    66 with winetricks verbs, 8 with environment, 1 with a program run in
+    the prefix; its README says some are redundant with umu's
+    protonfixes, which key their fixes by umu id, `umu-<Steam id>`, so
+    the overlap needs the umu database to count). (c), the desktop entry
+    and Steam shortcut, dropped: games are started from Zendo, and a
+    desktop entry would come back into the library through the
+    `.desktop` scan.
+    16a, built 2026-11-09 (`gog_setup.rs`). Checked first (gogdl in
+    Heroic 2.22.4's bundle and Heroic's GOG setup, facts only, no code
+    taken):
+    - Heroic on Linux runs the setup when a game is first added to its
+      prefix (as it starts), and again after an update or a move without
+      the redistributables. From the game's manifest
+      (`heroic_gogdl/manifests/<id>`): `dependencies` (version 2) or each
+      depot's `redist` (version 1); with `scriptInterpreter`, GOG's
+      `__redist/ISI/scriptinterpreter.exe` for the game and each DLC
+      installed (`/VERYSILENT /DIR= /Language= /LANG= /ProductId=
+      /galaxyclient /buildId= /versionName= /lang-code= /supportDir=` and
+      both spellings of `/nodesktopshortcut`, GOG's typo); otherwise each
+      product's `temp_executable` from the support files.
+    - `gogdl redist --ids <ids> --path <folder>` downloads the shared
+      ones (`__redist…`) and keeps GOG's list in
+      `.gogdl-redist-manifest` (each one's `executable` `path` and
+      `arguments`, `HGLInstalled` the ids asked). It removes what it was
+      not asked for this time, so Heroic asks for every installed game's
+      and `ISI`. Arguments are split as a shell would (`shlex`); Visual
+      C++ 2005's carry quotes. PhysX Legacy, an `.msi`, through `msiexec
+      /i … /qb`.
+    Zendo [tentative]: before the first start of a Windows game it
+    installed from GOG in its prefix (kept in the prefix's
+    `.zendo-gog-setup.json`), on the game's thread: gogdl downloads every
+    GOG game's redistributables into `~/.local/share/zendo/gog-redist`,
+    each of this game's runs in its prefix through umu (the game's
+    Proton, prefix and environment; from that folder), then the game's
+    own steps. The status line says each step; a failed step is said once
+    the game runs, does not stop it, and the prefix counts as set up all
+    the same (so no game is held at every start); the Wine prefix card's
+    GOG's setup runs it again. Language: English, as Zendo installs. Not
+    yet: after an update or a move, and version 1's `support_commands`.
+    Logged to `~/.local/state/zendo/logs/<id>.gog-setup.log`. Checked:
+    clippy, tests (both manifest versions, the shell split with Visual
+    C++ 2005's, `.msi`, Wine's `Z:` paths, the prefix's record, the
+    script interpreter's arguments for the game and its DLC); for real,
+    gogdl downloaded `ISI` and `MSVC2015` (14 MiB) into a throwaway
+    folder with Zendo's sign-in, and GOG's Visual C++ 2015 installer ran
+    with GOG's arguments through umu and GE-Proton 11-12 in a throwaway
+    prefix (exit 0; its registry entries and DLLs there). Tried by the
+    user 2026-11-09: it works [firm].
 17. (was 20) Managing installs: moving a game to another folder (legendary's
     `move`), importing a game already on disk (legendary's `import`),
     updating games by themselves (Heroic's `autoUpdateGames`), the
@@ -1989,8 +2041,9 @@ by the user 2026-11-09:
   saves) the same day, both tried by the user. 14c, GOG's played time
   sent back, built the same day and tried by the user, then GOG's total
   on the game's page (tried). Item 15, the prefix's tools, built the
-  same day and tried by the user. Next, item 16, what happens by
-  itself on install.
+  same day and tried by the user. Item 16 split by the user: 16a,
+  GOG's setup, built the same day and tried by the user; then 16b, the
+  known fixes; the desktop entry and Steam shortcut dropped.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use iced::widget::{button, column, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
+use zendo_core::gog_setup;
 use zendo_core::launch;
 use zendo_core::prefix_tools::{self, Ran, Tool};
 
@@ -45,6 +46,7 @@ fn label(tool: &Tool) -> String {
         Tool::WineSettings => t!("prefix-wine-settings"),
         Tool::Winetricks => "winetricks".to_owned(),
         Tool::Components(verbs) => verbs.join(" "),
+        Tool::GogSetup => t!("prefix-gog-setup"),
         Tool::Program(program) => program
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
@@ -173,6 +175,12 @@ impl Zendo {
         ]
         .spacing(10)
         .align_y(Alignment::Center);
+        if gog_setup::applies(game) {
+            tools = tools.push(tool(
+                t!("prefix-gog-setup"),
+                message(PrefixMessage::Run(id.clone(), Tool::GogSetup)),
+            ));
+        }
         if let Some(folder) = folder {
             tools = tools.push(tool(
                 t!("files-open-folder"),

@@ -21,7 +21,7 @@ use std::process::Command;
 
 use anyhow::{Context, bail};
 
-use crate::{Game, Launch, Source, launch};
+use crate::{Game, Launch, Source, gog_setup, launch};
 
 /// What to run in the prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +34,9 @@ pub enum Tool {
     Components(Vec<String>),
     /// A Windows program: an `.exe`, or an `.msi` through `msiexec`.
     Program(PathBuf),
+    /// GOG's setup again: its redistributables and the game's own steps
+    /// ([`gog_setup`]).
+    GogSetup,
 }
 
 /// How a run went.
@@ -134,6 +137,13 @@ pub fn run(game: &Game, tool: &Tool) -> anyhow::Result<Ran> {
             }
             command.arg("");
             wait(command, &log).context("winetricks")?;
+            Ok(Ran::default())
+        }
+        Tool::GogSetup => {
+            let setup = gog_setup::run(game, &mut |_| {})?;
+            if !setup.failed.is_empty() {
+                bail!("{}", setup.failed.join("; "));
+            }
             Ok(Ran::default())
         }
         Tool::Program(program) => {
