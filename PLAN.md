@@ -1656,6 +1656,32 @@ brackets):
     (Hikari: upscale size and method, window type, FPS limit, more
     options), running Proton without umu, the game's language (legendary
     and gogdl take one), and the Steam Runtime for native games.
+    Taken in three parts [tentative]: (a) the switches, (b) the
+    executable, the store's launch tasks and the scripts, (c) gamescope's
+    other settings, Proton without umu, the language and the Steam
+    Runtime.
+    13a, the switches, built 2026-11-09. Checked first against the two
+    builds here (their `proton` scripts and Wine's libraries, read
+    only): GE-Proton11-12 reads `PROTON_NO_ESYNC`, `PROTON_NO_FSYNC`,
+    `PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR` (it then sets
+    `DXVK_HDR`), `PROTON_USE_WOW64`; proton-cachyos-slr
+    (cachyos-11.0-20261015) the same but `PROTON_NO_ESYNC` (it turns
+    esync off itself for a few games) and any HDR name (DXVK reads
+    `DXVK_HDR` itself, so Zendo sets both). Both builds' Wine reads
+    `WINE_FULLSCREEN_FSR` and `WINE_FULLSCREEN_FSR_STRENGTH` (in
+    `win32u.so`; the X11 driver's full-screen hack, which the Wayland
+    driver turns off), and both scripts handle `DXVK_FRAME_RATE` and
+    `VKD3D_FRAME_RATE`. The switches go before the game's own
+    environment, which can change any of them; the Proton ones only for
+    a Windows game. The sheet names a switch the chosen build's script
+    does not read (`Proton::ignores`, for the `PROTON_*` names). NVIDIA
+    offload (`__NV_PRIME_RENDER_OFFLOAD`, `__VK_LAYER_NV_optimus`,
+    `__GLX_VENDOR_LIBRARY_NAME`) is for every game Zendo starts, and
+    usable only with NVIDIA's driver and a second card (this computer
+    has one card: shown greyed). HDR under gamescope adds
+    `--hdr-enabled`. Checked: clippy, tests (the environment, its order,
+    the check of a build's script, the sheet's switches). Not yet seen in
+    the window.
 14. (was 17) Epic and GOG while playing: offline mode (Epic games that allow it,
     legendary's `--offline`), cloud saves (upload and download by hand,
     and by itself before and after the game: Heroic's `autoSyncSaves`,

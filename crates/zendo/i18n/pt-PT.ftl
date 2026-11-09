@@ -558,6 +558,27 @@ options-arguments-about = Passados ao jogo, divididos como numa shell.
 options-environment = Ambiente
 options-environment-about = Pares NOME=valor para o jogo, separados por espaços.
 options-not-installed = Não instalado.
+options-offload = Descarga para a NVIDIA
+options-offload-about = Desenha o jogo na placa NVIDIA de um computador com duas (PRIME render offload), como na maioria dos portáteis.
+options-offload-none = Este computador não tem uma segunda placa com o controlador da NVIDIA.
+options-proton-switches = Proton
+options-build-ignores = O { $build } não lê { $names }.
+options-wayland = Controlador Wayland
+options-wayland-about = O Wine desenha através do Wayland em vez do X11: mais nítido em ecrãs com escala, e necessário para HDR fora do gamescope.
+options-hdr-about = Para jogos que oferecem HDR, num ecrã e ambiente de trabalho com HDR ligado; precisa do controlador Wayland ou do gamescope.
+options-fsr-about = O FSR 1 do Wine: um jogo em ecrã inteiro abaixo da resolução do ecrã é ampliado com o FSR da AMD. Não com o controlador Wayland.
+options-fsr-sharpening = Nitidez
+options-fsr-sharpest = 0 (mais nítido)
+options-fsr-softest = 5 (mais suave)
+options-fsr-default = 2 (o do Wine)
+options-fps-counter = Contador de FPS
+options-fps-counter-about = A taxa de fotogramas do DXVK, no canto superior esquerdo, para jogos Direct3D 8 a 11; o MangoHud mostra mais.
+options-frame-cap = Limite de fotogramas
+options-frame-cap-about = O máximo de fotogramas por segundo que o jogo desenha, através do DXVK e do VKD3D-Proton.
+options-frame-cap-empty = Vazio: sem limite
+options-wow64-about = Corre código Windows de 32 bits sem as bibliotecas de 32 bits do sistema. Alguns jogos antigos correm pior assim.
+options-no-sync = Esync e fsync desligados
+options-no-sync-about = Para jogos que bloqueiam ou falham com as formas mais rápidas de espera do Wine.
 
 ## Mais palavras comuns
 

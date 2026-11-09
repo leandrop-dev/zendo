@@ -144,9 +144,14 @@ install it and give it its colours, but it runs on any Linux desktop.
   by their install folder.
 - Gives each game it starts itself (the ones it installed or you added,
   `.desktop` ones) launch options on its page: the Proton build, MangoHud, GameMode,
-  gamescope with full screen and a size, controllers as Xbox pads for
-  games that ignore others, arguments and environment. Steam and Heroic
-  games keep their launcher's own settings.
+  gamescope with full screen and a size, NVIDIA offload on a computer
+  with two cards, arguments and environment; and for Windows games
+  Proton's switches: controllers as Xbox pads for games that ignore
+  others, Wine's Wayland driver, HDR, Wine's FSR with its sharpening,
+  DXVK's FPS counter, a frame cap, WoW64, and esync and fsync off. A
+  switch the chosen Proton build does not read says so (CachyOS's
+  Proton has no `PROTON_NO_ESYNC`). Steam and Heroic games keep their
+  launcher's own settings.
 - Downloads GE-Proton from Settings: the latest releases, and older ones
   on asking, checked against their checksums, into Steam's compatibility
   tools folder, where Steam and Heroic find them too; removes the ones
@@ -396,8 +401,17 @@ gamescope_fullscreen = true
 gamescope_width = 1920          # with a height; the game's own size when left out
 gamescope_height = 1080
 xbox_controllers = true         # PROTON_PREFER_SDL=1
+wayland = true                  # PROTON_ENABLE_WAYLAND=1
+hdr = true                      # PROTON_ENABLE_HDR=1 DXVK_HDR=1; gamescope --hdr-enabled
+fsr = true                      # WINE_FULLSCREEN_FSR=1
+fsr_strength = 3                # 0 sharpest to 5; Wine's 2 when left out
+wow64 = true                    # PROTON_USE_WOW64=1
+no_sync = true                  # PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1
+fps_counter = true              # DXVK_HUD=fps
+frame_cap = 60                  # DXVK_FRAME_RATE and VKD3D_FRAME_RATE
+nvidia_offload = true           # __NV_PRIME_RENDER_OFFLOAD=1 and the rest
 arguments = "-windowed"
-environment = "DXVK_HUD=fps"
+environment = "DXVK_HUD=fps"    # after the switches', so it wins
 ```
 
 What Zendo keeps itself:

@@ -65,6 +65,24 @@ pub fn installed() -> Vec<Proton> {
     found
 }
 
+impl Proton {
+    /// Which of these variables its `proton` script never reads, so the
+    /// switches that set them do nothing with this build
+    /// (`proton-cachyos-slr` has no `PROTON_NO_ESYNC`). None when the
+    /// script cannot be read.
+    #[must_use]
+    pub fn ignores<'a>(&self, names: &[&'a str]) -> Vec<&'a str> {
+        let Ok(script) = fs::read_to_string(self.path.join("proton")) else {
+            return Vec::new();
+        };
+        names
+            .iter()
+            .copied()
+            .filter(|name| !script.contains(&format!("\"{name}\"")))
+            .collect()
+    }
+}
+
 /// The Proton a game runs with unless its launch options choose one: the
 /// one Settings made the default (`default_proton`), while it is
 /// installed, else [`automatic`]. `None` lets umu download UMU-Proton
@@ -133,6 +151,27 @@ fn version(name: &str) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_the_switches_a_build_ignores() {
+        let dir = std::env::temp_dir().join(format!("zendo-proton-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("proton"),
+            "self.check_environment(\"PROTON_NO_FSYNC\", \"nofsync\")\n",
+        )
+        .unwrap();
+        let proton = Proton {
+            name: "proton-cachyos-slr".into(),
+            path: dir.clone(),
+        };
+        assert_eq!(
+            proton.ignores(&["PROTON_NO_ESYNC", "PROTON_NO_FSYNC"]),
+            ["PROTON_NO_ESYNC"]
+        );
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(proton.ignores(&["PROTON_NO_ESYNC"]).is_empty(), "no script");
+    }
 
     #[test]
     fn prefers_the_newest_ge_proton() {

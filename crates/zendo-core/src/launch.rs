@@ -154,7 +154,9 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             words.extend(args.iter().cloned());
             words.extend(options.arguments()?);
             let mut command = Command::new(&words[0]);
-            command.args(&words[1..]).envs(options.environment()?);
+            command
+                .args(&words[1..])
+                .envs(options.environment_for(false)?);
             if let Some(dir) = dir.as_ref().filter(|dir| dir.is_dir()) {
                 command.current_dir(dir);
             }
@@ -454,9 +456,6 @@ fn umu_setup(
     if let Some(proton) = chosen.or_else(proton::default) {
         env.push(("PROTONPATH", proton.path.into_os_string()));
     }
-    if options.xbox_controllers {
-        env.push(("PROTON_PREFER_SDL", "1".into()));
-    }
     // umu leaves the anti-cheat runtimes to Steam; outside it, Proton
     // finds them only through these.
     env.extend(runtimes::environment());
@@ -477,7 +476,8 @@ fn local_command(
 ) -> anyhow::Result<Command> {
     let mut words = options.wrappers();
     let mut env = Vec::new();
-    if needs_proton(game) {
+    let windows = needs_proton(game);
+    if windows {
         let umu = umu_setup(game, options, None)?;
         words.push(umu.program);
         env = umu.env;
@@ -489,7 +489,7 @@ fn local_command(
     command
         .args(&words[1..])
         .envs(env)
-        .envs(options.environment()?);
+        .envs(options.environment_for(windows)?);
     if let Some(dir) = dir.filter(|dir| dir.is_dir()) {
         command.current_dir(dir);
     }
@@ -591,7 +591,7 @@ fn engine_command_with(
         command.envs(umu.env);
         wrapper.push(umu.program);
     }
-    command.envs(options.environment()?);
+    command.envs(options.environment_for(windows)?);
     match store {
         Store::Epic | Store::Amazon => {
             command.args(["launch", app]);

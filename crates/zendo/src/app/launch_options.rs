@@ -1,7 +1,9 @@
 //! A game's launch options sheet, over its page: the Proton it runs with,
-//! `MangoHud`, `GameMode`, gamescope, controllers as Xbox pads, and the
-//! game's arguments and environment. Only for the games Zendo starts
-//! itself; Steam and Heroic keep their own settings.
+//! `MangoHud`, `GameMode`, gamescope, NVIDIA offload, Proton's switches
+//! (controllers as Xbox pads, Wine's Wayland driver, HDR, FSR, `WoW64`,
+//! esync and fsync off, DXVK's counter and frame cap), and the game's
+//! arguments and environment. Only for the games Zendo starts itself;
+//! Steam and Heroic keep their own settings.
 
 use std::fmt;
 
@@ -10,7 +12,7 @@ use iced::widget::{
     toggler,
 };
 use iced::{Alignment, Background, Color, Element, Length, Task};
-use zendo_core::launch_options::LaunchOptions;
+use zendo_core::launch_options::{self, LaunchOptions};
 use zendo_core::{Game, Launch, launch, proton};
 
 use super::style::{self, BOLD, colors};
@@ -27,9 +29,70 @@ pub struct Sheet {
     options: LaunchOptions,
     width: String,
     height: String,
+    frame_cap: String,
     protons: Vec<ProtonChoice>,
+    /// The build the game would run with, and the switches' variables its
+    /// script never reads.
+    build: Option<(String, Vec<&'static str>)>,
     tools: Tools,
     error: Option<String>,
+}
+
+/// The variables of Proton's switches its script reads, checked against
+/// the build chosen; the others (DXVK's, Wine's) the builds share.
+const CHECKED: [&str; 5] = [
+    "PROTON_PREFER_SDL",
+    "PROTON_NO_ESYNC",
+    "PROTON_NO_FSYNC",
+    "PROTON_ENABLE_WAYLAND",
+    "PROTON_USE_WOW64",
+];
+
+/// The build a choice runs, and what of [`CHECKED`] it ignores; none when
+/// umu would download its own.
+fn build_for(choice: Option<&str>) -> Option<(String, Vec<&'static str>)> {
+    let proton = choice.and_then(proton::named).or_else(proton::default)?;
+    let ignored = proton.ignores(&CHECKED);
+    Some((proton.name, ignored))
+}
+
+/// FSR's sharpening, as the list offers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sharpening(u8);
+
+impl Sharpening {
+    fn all() -> Vec<Self> {
+        (0..=launch_options::MOST_SOFT).map(Self).collect()
+    }
+}
+
+impl fmt::Display for Sharpening {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self.0 {
+            0 => t!("options-fsr-sharpest"),
+            launch_options::MOST_SOFT => t!("options-fsr-softest"),
+            launch_options::WINE_SHARPENING => t!("options-fsr-default"),
+            n => n.to_string(),
+        };
+        f.write_str(&label)
+    }
+}
+
+/// Whether the computer has an NVIDIA card's driver and another card,
+/// which render offload needs.
+fn offload_possible() -> bool {
+    let cards = std::fs::read_dir("/sys/class/drm").map_or(0, |entries| {
+        entries
+            .flatten()
+            .filter(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                name.strip_prefix("card")
+                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            })
+            .count()
+    });
+    cards > 1 && std::path::Path::new("/sys/module/nvidia").is_dir()
 }
 
 /// Which of the wrappers are installed.
@@ -40,6 +103,8 @@ struct Tools {
     mangoapp: bool,
     gamemode: bool,
     gamescope: bool,
+    /// Not a program: an NVIDIA card beside another.
+    offload: bool,
 }
 
 impl Tools {
@@ -49,6 +114,7 @@ impl Tools {
             mangoapp: on_path("mangoapp"),
             gamemode: on_path("gamemoderun"),
             gamescope: on_path("gamescope"),
+            offload: offload_possible(),
         }
     }
 }
@@ -83,6 +149,15 @@ pub enum SheetMessage {
     Width(String),
     Height(String),
     XboxControllers(bool),
+    NoSync(bool),
+    Wayland(bool),
+    Hdr(bool),
+    Fsr(bool),
+    FsrSharpening(Sharpening),
+    Wow64(bool),
+    FpsCounter(bool),
+    FrameCap(String),
+    NvidiaOffload(bool),
     Arguments(String),
     Environment(String),
     Save,
@@ -141,7 +216,10 @@ impl Zendo {
         let options = &mut sheet.options;
         match message {
             SheetMessage::Open => {}
-            SheetMessage::Proton(choice) => options.proton = choice.name,
+            SheetMessage::Proton(choice) => {
+                sheet.build = build_for(choice.name.as_deref());
+                sheet.options.proton = choice.name;
+            }
             SheetMessage::MangoHud(on) => options.mangohud = on,
             SheetMessage::GameMode(on) => options.gamemode = on,
             SheetMessage::Gamescope(on) => options.gamescope = on,
@@ -153,6 +231,19 @@ impl Zendo {
                 sheet.height = height.chars().filter(char::is_ascii_digit).collect();
             }
             SheetMessage::XboxControllers(on) => options.xbox_controllers = on,
+            SheetMessage::NoSync(on) => options.no_sync = on,
+            SheetMessage::Wayland(on) => options.wayland = on,
+            SheetMessage::Hdr(on) => options.hdr = on,
+            SheetMessage::Fsr(on) => options.fsr = on,
+            SheetMessage::FsrSharpening(Sharpening(n)) => {
+                options.fsr_strength = (n != launch_options::WINE_SHARPENING).then_some(n);
+            }
+            SheetMessage::Wow64(on) => options.wow64 = on,
+            SheetMessage::FpsCounter(on) => options.fps_counter = on,
+            SheetMessage::FrameCap(cap) => {
+                sheet.frame_cap = cap.chars().filter(char::is_ascii_digit).collect();
+            }
+            SheetMessage::NvidiaOffload(on) => options.nvidia_offload = on,
             SheetMessage::Arguments(arguments) => options.arguments = arguments,
             SheetMessage::Environment(environment) => options.environment = environment,
             SheetMessage::Save => return self.save_sheet(),
@@ -219,10 +310,16 @@ impl Zendo {
                 .gamescope_height
                 .map(|n| n.to_string())
                 .unwrap_or_default(),
+            frame_cap: options.frame_cap.map(|n| n.to_string()).unwrap_or_default(),
             protons: if windows {
                 proton_choices(options.proton.as_deref())
             } else {
                 Vec::new()
+            },
+            build: if windows {
+                build_for(options.proton.as_deref())
+            } else {
+                None
             },
             options,
             tools: Tools::find(),
@@ -238,6 +335,7 @@ impl Zendo {
         let mut options = sheet.options.clone();
         options.gamescope_width = number(&sheet.width);
         options.gamescope_height = number(&sheet.height);
+        options.frame_cap = number(&sheet.frame_cap);
         if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
             sheet.error = Some(t!("options-size-both"));
             return Task::none();
@@ -311,38 +409,40 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     } else {
         tools.mangohud
     };
+    let missing = |installed: bool| (!installed).then(|| t!("options-not-installed"));
     body = body.push(switch(
         "MangoHud".to_owned(),
         t!("options-mangohud-about"),
         options.mangohud,
-        mangohud_ready,
+        missing(mangohud_ready),
         SheetMessage::MangoHud,
     ));
     body = body.push(switch(
         "GameMode".to_owned(),
         t!("options-gamemode-about"),
         options.gamemode,
-        tools.gamemode,
+        missing(tools.gamemode),
         SheetMessage::GameMode,
     ));
     body = body.push(switch(
         "Gamescope".to_owned(),
         t!("options-gamescope-about"),
         options.gamescope,
-        tools.gamescope,
+        missing(tools.gamescope),
         SheetMessage::Gamescope,
     ));
     if options.gamescope {
         body = body.push(gamescope_options(sheet));
     }
+    body = body.push(switch(
+        t!("options-offload"),
+        t!("options-offload-about"),
+        options.nvidia_offload,
+        (!tools.offload).then(|| t!("options-offload-none")),
+        SheetMessage::NvidiaOffload,
+    ));
     if sheet.windows {
-        body = body.push(switch(
-            t!("options-xbox"),
-            t!("options-xbox-about"),
-            options.xbox_controllers,
-            true,
-            SheetMessage::XboxControllers,
-        ));
+        body = body.push(proton_switches(sheet));
     }
     body = body.push(text_fields(options));
     if let Some(error) = &sheet.error {
@@ -367,6 +467,126 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         .max_width(620)
         .style(style::card)
         .into()
+}
+
+/// The switches Proton, Wine and DXVK read, for a Windows game.
+fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
+    let options = &sheet.options;
+    // What the chosen build does not read, said under its switch.
+    let ignored = |names: &[&str]| -> Option<String> {
+        let (build, ignored) = sheet.build.as_ref()?;
+        let unread: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|name| ignored.contains(name))
+            .collect();
+        (!unread.is_empty()).then(|| {
+            t!(
+                "options-build-ignores",
+                build = build.as_str(),
+                names = unread.join(", ")
+            )
+        })
+    };
+    let note = |about: String, names: &[&str]| match ignored(names) {
+        Some(unread) => format!("{about} {unread}"),
+        None => about,
+    };
+    let mut switches = column![
+        text(t!("options-proton-switches")).size(15).font(BOLD),
+        switch(
+            t!("options-xbox"),
+            note(t!("options-xbox-about"), &["PROTON_PREFER_SDL"]),
+            options.xbox_controllers,
+            None,
+            SheetMessage::XboxControllers,
+        ),
+        switch(
+            t!("options-wayland"),
+            note(t!("options-wayland-about"), &["PROTON_ENABLE_WAYLAND"]),
+            options.wayland,
+            None,
+            SheetMessage::Wayland,
+        ),
+        switch(
+            "HDR".to_owned(),
+            t!("options-hdr-about"),
+            options.hdr,
+            None,
+            SheetMessage::Hdr,
+        ),
+        switch(
+            "FSR".to_owned(),
+            t!("options-fsr-about"),
+            options.fsr,
+            None,
+            SheetMessage::Fsr,
+        ),
+    ]
+    .spacing(18);
+    if options.fsr {
+        switches = switches.push(fsr_sharpening(options));
+    }
+    switches
+        .push(switch(
+            t!("options-fps-counter"),
+            t!("options-fps-counter-about"),
+            options.fps_counter,
+            None,
+            SheetMessage::FpsCounter,
+        ))
+        .push(field(
+            t!("options-frame-cap"),
+            t!("options-frame-cap-about"),
+            text_input(&t!("options-frame-cap-empty"), &sheet.frame_cap)
+                .on_input(|value| Message::Sheet(SheetMessage::FrameCap(value)))
+                .on_submit(Message::Sheet(SheetMessage::Save))
+                .size(14)
+                .padding([8, 12])
+                .width(160)
+                .style(style::input),
+        ))
+        .push(switch(
+            "WoW64".to_owned(),
+            note(t!("options-wow64-about"), &["PROTON_USE_WOW64"]),
+            options.wow64,
+            None,
+            SheetMessage::Wow64,
+        ))
+        .push(switch(
+            t!("options-no-sync"),
+            note(
+                t!("options-no-sync-about"),
+                &["PROTON_NO_ESYNC", "PROTON_NO_FSYNC"],
+            ),
+            options.no_sync,
+            None,
+            SheetMessage::NoSync,
+        ))
+        .into()
+}
+
+/// FSR's sharpening, under its switch.
+fn fsr_sharpening(options: &LaunchOptions) -> Element<'_, Message> {
+    let chosen = Sharpening(
+        options
+            .fsr_strength
+            .unwrap_or(launch_options::WINE_SHARPENING),
+    );
+    row![
+        text(t!("options-fsr-sharpening"))
+            .size(14)
+            .color(colors().dim),
+        pick_list(Sharpening::all(), Some(chosen), |chosen| {
+            Message::Sheet(SheetMessage::FsrSharpening(chosen))
+        })
+        .text_size(14)
+        .padding([8, 12]),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center)
+    .padding([0, 20])
+    .into()
 }
 
 /// Full screen and the size, under gamescope's switch.
@@ -437,22 +657,24 @@ fn field<'a>(
     .into()
 }
 
-/// A switch, greyed out with a note when its program is missing (unless
-/// already on, so it can be turned off).
+/// A switch, greyed out with a note saying why when it cannot be used
+/// here, as when its program is missing (unless already on, so it can be
+/// turned off).
 fn switch<'a>(
     label: String,
     about: String,
     on: bool,
-    installed: bool,
+    unusable: Option<String>,
     message: fn(bool) -> SheetMessage,
 ) -> Element<'a, Message> {
+    let usable = unusable.is_none();
     let mut about = about;
-    if !installed {
+    if let Some(why) = unusable {
         about.push(' ');
-        about.push_str(&t!("options-not-installed"));
+        about.push_str(&why);
     }
     let toggle = toggler(on).label(label).text_size(15);
-    let toggle = if installed || on {
+    let toggle = if usable || on {
         toggle.on_toggle(move |on| Message::Sheet(message(on)))
     } else {
         toggle
@@ -553,6 +775,33 @@ mod tests {
             Page::Game("gog:1".into()),
             "Escape left the page be"
         );
+    }
+
+    #[test]
+    fn keeps_protons_switches_and_the_frame_cap() {
+        let mut zendo = zendo_with(gog_game());
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        for message in [
+            SheetMessage::Fsr(true),
+            SheetMessage::FsrSharpening(Sharpening(4)),
+            SheetMessage::Wayland(true),
+            SheetMessage::NoSync(true),
+            SheetMessage::FrameCap("6o0".into()),
+        ] {
+            let _ = zendo.update(Message::Sheet(message));
+        }
+        let sheet = zendo.sheet.as_ref().unwrap();
+        assert_eq!(sheet.frame_cap, "60");
+        assert_eq!(sheet.options.fsr_strength, Some(4));
+        assert!(sheet.options.wayland && sheet.options.no_sync);
+        // Wine's own sharpening is not written.
+        let _ = zendo.update(Message::Sheet(SheetMessage::FsrSharpening(Sharpening(
+            launch_options::WINE_SHARPENING,
+        ))));
+        assert_eq!(zendo.sheet.as_ref().unwrap().options.fsr_strength, None);
+        let _ = zendo.update(Message::Activate);
+        assert!(zendo.sheet.is_none(), "saved");
+        assert_eq!(Sharpening(0).to_string(), "0 (sharpest)");
     }
 
     #[test]

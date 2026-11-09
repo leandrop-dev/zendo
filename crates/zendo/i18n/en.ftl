@@ -544,6 +544,27 @@ options-arguments-about = Passed to the game, as a shell splits them.
 options-environment = Environment
 options-environment-about = NAME=value pairs for the game, separated by spaces.
 options-not-installed = Not installed.
+options-offload = NVIDIA offload
+options-offload-about = Draws the game on the NVIDIA card of a computer with two (PRIME render offload), as on most laptops.
+options-offload-none = This computer has no second card with NVIDIA's driver.
+options-proton-switches = Proton
+options-build-ignores = { $build } does not read { $names }.
+options-wayland = Wayland driver
+options-wayland-about = Wine draws through Wayland instead of X11: sharper on scaled screens, and needed for HDR outside gamescope.
+options-hdr-about = For games that offer HDR, on a screen and desktop with it on; needs the Wayland driver or gamescope.
+options-fsr-about = Wine's FSR 1: a full-screen game set below the screen's resolution is upscaled with AMD's FSR. Not with the Wayland driver.
+options-fsr-sharpening = Sharpening
+options-fsr-sharpest = 0 (sharpest)
+options-fsr-softest = 5 (softest)
+options-fsr-default = 2 (Wine's default)
+options-fps-counter = FPS counter
+options-fps-counter-about = DXVK's frame rate, top left, for Direct3D 8 to 11 games; MangoHud shows more.
+options-frame-cap = Frame cap
+options-frame-cap-about = The most frames a second the game draws, through DXVK and VKD3D-Proton.
+options-frame-cap-empty = Empty: no cap
+options-wow64-about = Runs 32-bit Windows code without the system's 32-bit libraries. Some older games run worse with it.
+options-no-sync = Esync and fsync off
+options-no-sync-about = For games that hang or crash with Wine's faster ways of waiting.
 
 ## More common words
 

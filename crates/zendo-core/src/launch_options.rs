@@ -9,6 +9,9 @@
 //! gamescope = true
 //! gamescope_fullscreen = true
 //! xbox_controllers = true
+//! fsr = true
+//! fsr_strength = 3
+//! frame_cap = 60
 //! arguments = "-windowed"
 //! environment = "DXVK_ASYNC=1"
 //! ```
@@ -61,6 +64,40 @@ pub struct LaunchOptions {
     /// controller's touchpad, motion and triggers are then not passed on).
     #[serde(skip_serializing_if = "is_false")]
     pub xbox_controllers: bool,
+    /// Proton's esync and fsync off (`PROTON_NO_ESYNC`, `PROTON_NO_FSYNC`),
+    /// for games that hang or crash with them.
+    #[serde(skip_serializing_if = "is_false")]
+    pub no_sync: bool,
+    /// Wine's Wayland driver instead of X11 (`PROTON_ENABLE_WAYLAND`).
+    #[serde(skip_serializing_if = "is_false")]
+    pub wayland: bool,
+    /// HDR: `PROTON_ENABLE_HDR` and `DXVK_HDR` (which DXVK reads itself),
+    /// and gamescope's `--hdr-enabled` under gamescope.
+    #[serde(skip_serializing_if = "is_false")]
+    pub hdr: bool,
+    /// Wine's FSR 1 upscaling (`WINE_FULLSCREEN_FSR`), for a game run full
+    /// screen below the screen's size, through the X11 driver.
+    #[serde(skip_serializing_if = "is_false")]
+    pub fsr: bool,
+    /// FSR's sharpening, 0 (the most) to 5 (`WINE_FULLSCREEN_FSR_STRENGTH`);
+    /// Wine's 2 when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fsr_strength: Option<u8>,
+    /// Wine's `WoW64` (`PROTON_USE_WOW64`): 32-bit Windows code run without
+    /// the system's 32-bit libraries.
+    #[serde(skip_serializing_if = "is_false")]
+    pub wow64: bool,
+    /// DXVK's frame rate counter (`DXVK_HUD=fps`), for Direct3D 8 to 11.
+    #[serde(skip_serializing_if = "is_false")]
+    pub fps_counter: bool,
+    /// The most frames a second DXVK and VKD3D-Proton draw
+    /// (`DXVK_FRAME_RATE`, `VKD3D_FRAME_RATE`); none when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_cap: Option<u32>,
+    /// Draws on the NVIDIA card of a computer with two (PRIME render
+    /// offload).
+    #[serde(skip_serializing_if = "is_false")]
+    pub nvidia_offload: bool,
     /// Passed to the game, split as a shell would.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub arguments: String,
@@ -69,6 +106,11 @@ pub struct LaunchOptions {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub environment: String,
 }
+
+/// FSR's least sharpening.
+pub const MOST_SOFT: u8 = 5;
+/// The sharpening Wine gives FSR when none is set.
+pub const WINE_SHARPENING: u8 = 2;
 
 #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
 fn is_false(value: &bool) -> bool {
@@ -137,7 +179,79 @@ impl LaunchOptions {
     pub fn check(&self) -> anyhow::Result<()> {
         self.arguments()?;
         self.environment()?;
+        if self
+            .fsr_strength
+            .is_some_and(|strength| strength > MOST_SOFT)
+        {
+            bail!("FSR's sharpening goes from 0 to {MOST_SOFT}");
+        }
+        if self.frame_cap == Some(0) {
+            bail!("a frame cap of 0 would stop the game");
+        }
         Ok(())
+    }
+
+    /// What the switches set in the game's environment, before the game's
+    /// own environment (which can change any of it); the Proton ones only
+    /// for a game Proton runs (`windows`).
+    #[must_use]
+    pub fn switches(&self, windows: bool) -> Vec<(&'static str, String)> {
+        let mut env: Vec<(&'static str, String)> = Vec::new();
+        let on = || "1".to_owned();
+        if self.nvidia_offload {
+            env.push(("__NV_PRIME_RENDER_OFFLOAD", on()));
+            env.push(("__VK_LAYER_NV_optimus", "NVIDIA_only".into()));
+            env.push(("__GLX_VENDOR_LIBRARY_NAME", "nvidia".into()));
+        }
+        if !windows {
+            return env;
+        }
+        if self.xbox_controllers {
+            env.push(("PROTON_PREFER_SDL", on()));
+        }
+        if self.no_sync {
+            env.push(("PROTON_NO_ESYNC", on()));
+            env.push(("PROTON_NO_FSYNC", on()));
+        }
+        if self.wayland {
+            env.push(("PROTON_ENABLE_WAYLAND", on()));
+        }
+        if self.hdr {
+            env.push(("PROTON_ENABLE_HDR", on()));
+            env.push(("DXVK_HDR", on()));
+        }
+        if self.fsr {
+            env.push(("WINE_FULLSCREEN_FSR", on()));
+            if let Some(strength) = self.fsr_strength {
+                env.push(("WINE_FULLSCREEN_FSR_STRENGTH", strength.to_string()));
+            }
+        }
+        if self.wow64 {
+            env.push(("PROTON_USE_WOW64", on()));
+        }
+        if self.fps_counter {
+            env.push(("DXVK_HUD", "fps".into()));
+        }
+        if let Some(cap) = self.frame_cap {
+            env.push(("DXVK_FRAME_RATE", cap.to_string()));
+            env.push(("VKD3D_FRAME_RATE", cap.to_string()));
+        }
+        env
+    }
+
+    /// The switches' environment and then the game's own.
+    ///
+    /// # Errors
+    ///
+    /// As [`environment`](Self::environment).
+    pub fn environment_for(&self, windows: bool) -> anyhow::Result<Vec<(String, String)>> {
+        let mut env: Vec<(String, String)> = self
+            .switches(windows)
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect();
+        env.extend(self.environment()?);
+        Ok(env)
     }
 
     /// The arguments for the game.
@@ -188,6 +302,9 @@ impl LaunchOptions {
             words.push("gamescope".into());
             if self.gamescope_fullscreen {
                 words.push("-f".into());
+            }
+            if self.hdr {
+                words.push("--hdr-enabled".into());
             }
             if let (Some(width), Some(height)) = (self.gamescope_width, self.gamescope_height) {
                 for (flag, value) in [("-W", width), ("-H", height)] {
@@ -279,6 +396,62 @@ mod tests {
     }
 
     #[test]
+    fn sets_the_switches_for_proton_and_leaves_the_rest_to_the_game() {
+        let options = LaunchOptions {
+            xbox_controllers: true,
+            no_sync: true,
+            wayland: true,
+            fsr: true,
+            fsr_strength: Some(4),
+            frame_cap: Some(60),
+            nvidia_offload: true,
+            environment: "DXVK_FRAME_RATE=30".into(),
+            ..LaunchOptions::default()
+        };
+        let names = |env: Vec<(&'static str, String)>| {
+            env.into_iter()
+                .map(|(name, value)| format!("{name}={value}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(options.switches(true)),
+            [
+                "__NV_PRIME_RENDER_OFFLOAD=1",
+                "__VK_LAYER_NV_optimus=NVIDIA_only",
+                "__GLX_VENDOR_LIBRARY_NAME=nvidia",
+                "PROTON_PREFER_SDL=1",
+                "PROTON_NO_ESYNC=1",
+                "PROTON_NO_FSYNC=1",
+                "PROTON_ENABLE_WAYLAND=1",
+                "WINE_FULLSCREEN_FSR=1",
+                "WINE_FULLSCREEN_FSR_STRENGTH=4",
+                "DXVK_FRAME_RATE=60",
+                "VKD3D_FRAME_RATE=60",
+            ]
+        );
+        // A native game: only what is not Proton's.
+        assert_eq!(names(options.switches(false)).len(), 3);
+        // The game's own environment comes last, so it wins.
+        let env = options.environment_for(true).unwrap();
+        assert_eq!(
+            env.last(),
+            Some(&("DXVK_FRAME_RATE".to_owned(), "30".to_owned()))
+        );
+        for bad in [
+            LaunchOptions {
+                fsr_strength: Some(6),
+                ..LaunchOptions::default()
+            },
+            LaunchOptions {
+                frame_cap: Some(0),
+                ..LaunchOptions::default()
+            },
+        ] {
+            assert!(bad.check().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
     fn puts_mangohud_inside_gamescope() {
         let options = LaunchOptions {
             mangohud: true,
@@ -287,6 +460,7 @@ mod tests {
             gamescope_fullscreen: true,
             gamescope_width: Some(1920),
             gamescope_height: Some(1080),
+            hdr: true,
             ..LaunchOptions::default()
         };
         assert_eq!(
@@ -295,6 +469,7 @@ mod tests {
                 "gamemoderun",
                 "gamescope",
                 "-f",
+                "--hdr-enabled",
                 "-W",
                 "1920",
                 "-H",
