@@ -10,6 +10,7 @@
 //! images it downloaded).
 
 pub mod appinfo;
+pub mod areweanticheatyet;
 pub mod cloud_saves;
 pub mod config;
 pub mod covers;

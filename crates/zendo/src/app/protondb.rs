@@ -49,22 +49,22 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer; a failure (offline, say) is forgotten, so the
-    /// page asks again next time it opens.
+    /// Keeps the answer, then looks the game up on `AreWeAntiCheatYet` by
+    /// the Steam app id found; a failure (offline, say) is forgotten, so
+    /// the page asks again next time it opens.
     pub(super) fn rating_arrived(
         &mut self,
         id: String,
         result: Result<Option<Rating>, String>,
     ) -> Task<Message> {
-        match result {
-            Ok(rating) => {
-                self.ratings.insert(id, RatingState::Got(rating));
-            }
-            Err(_) => {
-                self.ratings.remove(&id);
-            }
-        }
-        Task::none()
+        let Ok(rating) = result else {
+            self.ratings.remove(&id);
+            return Task::none();
+        };
+        let app = rating.as_ref().map(|rating| rating.app);
+        let task = self.want_anti_cheat(&id, app);
+        self.ratings.insert(id, RatingState::Got(rating));
+        task
     }
 
     /// The pill for the game's page: nothing when `ProtonDB` cannot know the

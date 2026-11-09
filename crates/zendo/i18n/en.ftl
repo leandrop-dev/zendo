@@ -954,3 +954,21 @@ prefix-done = { $what } ended
 prefix-installed = Installed { $components }
 prefix-all-there = Already installed: { $components }
 prefix-installed-some = Installed { $components }; { $already } was there already
+
+## The Anti-cheat card, from AreWeAntiCheatYet
+anti-cheat-title = Anti-cheat
+anti-cheat-supported = SUPPORTED
+anti-cheat-running = RUNNING
+anti-cheat-planned = PLANNED
+anti-cheat-broken = BROKEN
+anti-cheat-denied = DENIED
+anti-cheat-unknown = UNKNOWN
+anti-cheat-supported-about = Plays online on Linux: the developers enabled its anti-cheat there, or it works under Proton as it is.
+anti-cheat-running-about = Plays online on Linux, though it may need some tinkering.
+anti-cheat-planned-about = The developers have said they will make its anti-cheat work on Linux. Until then, online play may not work.
+anti-cheat-broken-about = Online play will not work on Linux: its anti-cheat stops it.
+anti-cheat-denied-about = Online play will not work on Linux: the developers have said they will not enable its anti-cheat there.
+anti-cheat-unknown-about = AreWeAntiCheatYet gives a status this version of Zendo does not know; online play may not work.
+anti-cheat-latest = Latest: { $change }
+anti-cheat-latest-dated = Latest: { $change } · { $date }
+anti-cheat-open = Open AreWeAntiCheatYet

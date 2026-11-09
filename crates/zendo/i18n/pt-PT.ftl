@@ -968,3 +968,21 @@ prefix-done = { $what } terminou
 prefix-installed = Instalado: { $components }
 prefix-all-there = Já instalado: { $components }
 prefix-installed-some = Instalado: { $components }; { $already } já estava instalado
+
+## O cartão Anti-batota, do AreWeAntiCheatYet
+anti-cheat-title = Anti-batota
+anti-cheat-supported = SUPORTADO
+anti-cheat-running = FUNCIONA
+anti-cheat-planned = PLANEADO
+anti-cheat-broken = NÃO FUNCIONA
+anti-cheat-denied = RECUSADO
+anti-cheat-unknown = DESCONHECIDO
+anti-cheat-supported-about = Joga-se online no Linux: os criadores ativaram lá o anti-batota, ou funciona no Proton tal como está.
+anti-cheat-running-about = Joga-se online no Linux, embora possa precisar de alguns ajustes.
+anti-cheat-planned-about = Os criadores disseram que vão pôr o anti-batota a funcionar no Linux. Até lá, o jogo online pode não funcionar.
+anti-cheat-broken-about = O jogo online não funciona no Linux: o anti-batota impede-o.
+anti-cheat-denied-about = O jogo online não funciona no Linux: os criadores disseram que não vão ativar lá o anti-batota.
+anti-cheat-unknown-about = O AreWeAntiCheatYet dá um estado que esta versão do Zendo não conhece; o jogo online pode não funcionar.
+anti-cheat-latest = Mais recente: { $change }
+anti-cheat-latest-dated = Mais recente: { $change } · { $date }
+anti-cheat-open = Abrir o AreWeAntiCheatYet

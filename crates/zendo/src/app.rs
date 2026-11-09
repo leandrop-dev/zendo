@@ -6,6 +6,7 @@
 
 mod about;
 mod accounts;
+mod anti_cheat;
 mod artwork;
 mod cloud_saves;
 mod dlc;
@@ -243,6 +244,11 @@ enum Message {
     Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
+    /// What `AreWeAntiCheatYet` says of a game.
+    AntiCheat(
+        String,
+        Result<Option<zendo_core::areweanticheatyet::Entry>, String>,
+    ),
     /// GOG's changelog for a game.
     GogChangelog(
         String,
@@ -325,6 +331,8 @@ struct Zendo {
     steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
+    /// `AreWeAntiCheatYet`'s word on each game whose page was opened.
+    anti_cheat: std::collections::HashMap<String, anti_cheat::AntiCheatState>,
     /// The tools run in the Windows games' prefixes.
     prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
@@ -381,6 +389,7 @@ impl Zendo {
             steam: SteamState::default(),
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
+            anti_cheat: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
             changelogs: std::collections::HashMap::new(),
@@ -609,6 +618,7 @@ impl Zendo {
             Message::Rating(id, result) => self.rating_arrived(id, result),
             Message::Prefix(message) => self.update_prefix(message),
             Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
+            Message::AntiCheat(id, result) => self.anti_cheat_arrived(id, result),
             Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),

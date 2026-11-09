@@ -141,7 +141,8 @@ pub fn epic_offline(game: &Game) -> Option<bool> {
     Some(value.eq_ignore_ascii_case("true"))
 }
 
-fn epic_metadata(app: &str) -> Option<Value> {
+/// legendary's record of an Epic game, kept in Zendo's Epic folder.
+pub(crate) fn epic_metadata(app: &str) -> Option<Value> {
     let file = Store::Epic
         .dir()?
         .join("metadata")

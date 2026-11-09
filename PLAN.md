@@ -2205,6 +2205,85 @@ brackets):
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
     the store's requirements, achievements. Pairs with 9.
+    Checked first (2026-11-09; Heroic 2.22.4's bundle, the endpoints
+    asked once each without a sign-in; facts only):
+    - Anti-cheat: Heroic downloads `games.json` from AreWeAntiCheatYet
+      (the repo moved to `AreWeAntiCheatYet/AreWeAntiCheatYet`, MIT,
+      last pushed 2026-10-24) and matches only `storeIds.epic.namespace`,
+      so Steam and GOG games never get its warning. The list: 1167
+      games, `status` Supported 196, Running 280, Planned 2, Broken 636,
+      Denied 53, `anticheats` names, `storeIds` with `steam` (682 games)
+      or `epic` (73), `reference` and `updates`. Heroic warns on Denied,
+      Broken and Unknown. Zendo already gives every game a Steam app id
+      (ProtonDB's matching), so the list can match by it as well.
+    - Steam Deck: `store.steampowered.com/saleaction/
+      ajaxgetdeckappcompatibilityreport?nAppID=<id>`,
+      `results.resolved_category` (Cyberpunk 2077: 3) and
+      `resolved_items` (`display_type`, `loc_token` such as
+      `#SteamDeckVerified_TestResult_InterfaceTextIsLegible`). Which
+      number means Verified, Playable or Unsupported is not checked.
+    - PCGamingWiki: Heroic finds the page by GOG id with a Cargo query,
+      but the wiki now refuses those ("You don't have permission to run
+      arbitrary Cargo queries"), so only its fallback works: a title
+      search, then the page's wikitext. The wikitext holds `steam appid`,
+      `gogcom id` (and `… side`), `hltb`, Metacritic and OpenCritic
+      scores, `direct3d versions`, `controller support`,
+      `ultrawidescreen`, `anticheat` and release dates. The wiki's text
+      is CC BY-NC-SA 3.0 (its `rightsinfo`).
+    - HowLongToBeat: Heroic takes the id from PCGamingWiki's `hltb`
+      (Cyberpunk 2077: 2127) and reads the game's page on
+      howlongtobeat.com, the JSON in `<script id="__NEXT_DATA__">`:
+      `comp_main`, `comp_plus`, `comp_100` in seconds. The page answers
+      a browser User-Agent; `robots.txt` answered curl's own with a 403.
+      HowLongToBeat has no public API; its terms are not checked. For
+      GOG games Heroic reads the HowLongToBeat box on GOG's store page.
+    - Requirements: Steam's `appdetails` `pc_requirements` (HTML; Zendo
+      already reads it for the space a game needs); GOG's
+      `api.gog.com/v2/games/<id>` `supportedOperatingSystems[].
+      systemRequirements` (often empty: Cyberpunk 2077 and The Witcher 3
+      had none, The Witcher had seven minimum lines); Epic's
+      `store-content.ak.epicgames.com/api/<lang>/content/products/<slug>`
+      `productHome` page, `requirements.systems[].details` with title,
+      minimum and recommended (Cyberpunk 2077 answered). Amazon's not
+      found in Heroic.
+    - Achievements: Heroic has GOG's only, signed in:
+      `gameplay.gog.com/clients/<id>/users/<user>/achievements` with the
+      bearer token and `X-Gog-Lc`. Heroic passes the product id where
+      the path says client id; whether that answers is not checked.
+      Steam's global percentages need no key
+      (`ISteamUserStats/GetGlobalAchievementPercentagesForApp`, 57 for
+      Cyberpunk 2077); a player's own need a key or the session, not
+      checked. Epic's not checked.
+    Decided by the user 2026-11-09 [firm]: five parts in this order, 18a
+    the anti-cheat status, 18b the Steam Deck rating, 18c the
+    requirements, 18d PCGamingWiki's facts, 18e achievements;
+    HowLongToBeat left out; a game Denied or Broken is warned about on
+    its page only, with Install and Play left as they are.
+    18a, built 2026-11-09 (`areweanticheatyet.rs`, the window's
+    `anti_cheat.rs`). Zendo [tentative]: the list is downloaded at most
+    once a day into `$XDG_CACHE_HOME/zendo/areweanticheatyet.json`
+    (offline, the one kept is used); a game is matched by the Epic
+    namespace in legendary's record, else by the Steam app id ProtonDB's
+    lookup found, so the lookup runs once ProtonDB has answered. Both
+    game pages, installed and store, get an Anti-cheat card: the status
+    as a badge (Supported and Running good, Planned dim, Broken, Denied
+    and a status Zendo does not know bad), the anti-cheats, the site's
+    meaning of the status, the newest update with its date, the notes
+    (each opening its source) and Open AreWeAntiCheatYet. A game that
+    will not play online has the card first, else it comes after About;
+    a game not on the list has none. The list's notes are `[text,
+    null]` when they have no source. Checked: clippy, tests (Steam id and
+    namespace, the namespace winning, notes with and without links, a
+    status Zendo does not know, the card and its lookup only after
+    ProtonDB); an ignored test against the real list (Rust Denied by
+    Steam id, Fortnite Denied by namespace, an unknown GOG game none); in
+    a throwaway home with only Fortnite's Epic record, its page showed
+    DENIED, Easy Anti-Cheat, "Removed BattlEye · Jun 11, 2024" and the
+    Xbox Cloud note above About. Games the user owns on the list:
+    Fortnite and Grand Theft Auto V (Denied), Fall Guys (Running),
+    Rocket League and Killing Floor 2 (Supported) on Epic; Rust
+    (Denied), 7 Days to Die and Cry of Fear (Supported) on Steam.
+    Tried by the user 2026-11-09: it works [firm].
 19. (was 22) The library: categories of the user's own, beyond pins and hiding.
 20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
@@ -2278,8 +2357,10 @@ by the user 2026-11-09:
   17b, importing a game from a folder, built the same day. 17c, the
   download workers and automatic updates, built the same day and taken
   as working by the user. 17d, GOG's changelog on the game page, built
-  and tried by the user the same day. Item 17 is done. Next: item 18,
-  what the game page tells.
+  and tried by the user the same day. Item 17 is done. Item 18, what
+  the game page tells, checked and split by the user (18a to 18e) the
+  same day; 18a, the anti-cheat status, built and tried by the user
+  the same day. Next: 18b, the Steam Deck rating.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

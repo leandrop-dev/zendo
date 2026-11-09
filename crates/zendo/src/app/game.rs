@@ -96,6 +96,7 @@ impl Zendo {
         if let Some(summary) = owned.and_then(|owned| owned.summary.as_deref()) {
             main.push(about_card(summary));
         }
+        self.add_anti_cheat_card(&game.id, &mut main);
         if let Some(dlc) = self.dlc_card(game) {
             main.push(dlc);
         }
