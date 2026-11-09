@@ -348,6 +348,7 @@ impl Store {
                         _ => {}
                     }
                 }
+                crate::gog_playtime::forget()?;
             }
             Self::Amazon => {
                 let output = self.run(&["auth", "--logout"])?;

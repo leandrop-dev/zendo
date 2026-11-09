@@ -173,7 +173,10 @@ install it and give it its colours, but it runs on any Linux desktop.
   it ends, unless their launch options turn it off, or by hand (Sync
   now, or Upload or Download to replace one side), through legendary's
   `sync-saves` and gogdl's `save-sync`. The game's page says whether
-  they are in sync, when they last synced, or what went wrong. Steam and Heroic games keep their launcher's own settings.
+  they are in sync, when they last synced, or what went wrong. The time
+  played in a GOG game Zendo starts goes to the GOG account as the game
+  ends, as Heroic sends it (a session that cannot be sent waits for the
+  next; Accounts' GOG card turns it off). Steam and Heroic games keep their launcher's own settings.
 - Downloads GE-Proton from Settings: the latest releases, and older ones
   on asking, checked against their checksums, into Steam's compatibility
   tools folder, where Steam and Heroic find them too; removes the ones
@@ -354,6 +357,9 @@ nexus_key = "…"
 steam_session = "…"
 # false to never download covers.
 download_covers = true
+# false to keep the time played in GOG games Zendo starts from GOG (Accounts'
+# GOG card sets it).
+gog_playtime = true
 # Whether Nexus searches show mods marked adult.
 nexus_adult = false
 # Where store games are installed, each in a folder of its own.
@@ -483,7 +489,7 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods (`nexus_search.rs` searches it), `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options, `store_tasks.rs` for the other ways a store lists to start a game, `steam_runtime.rs` for Steam's Linux runtimes, `eos_overlay.rs` for Epic's overlay, `cloud_saves.rs` for Epic's and GOG's cloud saves) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods (`nexus_search.rs` searches it), `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options, `store_tasks.rs` for the other ways a store lists to start a game, `steam_runtime.rs` for Steam's Linux runtimes, `eos_overlay.rs` for Epic's overlay, `cloud_saves.rs` for Epic's and GOG's cloud saves, `gog_playtime.rs` for the time played sent to GOG) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
 | `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet (gamescope's part in `launch_options/gamescope.rs`), `cloud_saves.rs` for the game page's cloud saves line, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `nexus_search.rs` for its search sheet, `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `eos_overlay.rs` for its Epic's overlay section, `steam.rs` for Accounts' Steam card and the sign-in's token, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal), the `sidebar.rs` and the colours (`style.rs`) |
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`zendo.svg`) |

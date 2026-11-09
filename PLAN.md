@@ -1833,6 +1833,28 @@ brackets):
       page's Details says it ("In sync, 5 min ago", "Failed 2 h ago:
       …", "Syncing the saves…" as the game ends, "Off" when turned off).
     Tried by the user 2026-11-09 [firm]: the syncs and the page's line work.
+    14c, built 2026-11-09 (`gog_playtime.rs`). Checked first (Heroic
+    2.22.4's bundled `app.asar`, read for facts only, no code taken):
+    - As a GOG game ends Heroic posts `{"session_date": <start, Unix
+      seconds>, "time": <whole minutes>}` to
+      `https://gameplay.gog.com/games/<id>/users/<user_id>/sessions`
+      with the account's Bearer token; 201 is taken. A session under a
+      minute is not sent. One that fails waits in a queue per user and
+      goes when back online. A `GET` on the same address gives
+      `time_sum`, GOG's total (Heroic shows it; Zendo does not yet).
+      Heroic's setting is `disablePlaytimeSync`, with no default in the
+      bundle: unset (as in this computer's `config.json`), it sends.
+    Zendo [tentative]: after a GOG game it started through gogdl ends
+    (Heroic sends its own), after the saves and the script, with
+    gogdl's refreshed token (`gogdl auth`). One not sent waits in
+    `~/.local/share/zendo/gog-playtime.json` (under a lock) and goes
+    with the next GOG game's; the status line says it waits. Signing
+    out of GOG drops them. On unless Accounts' GOG card turns it off
+    (`gog_playtime = false` in `config.toml`). Not sent against GOG
+    here, as it writes to the user's account. Checked: clippy, tests
+    (whole minutes, under one skipped, only gogdl's games, the failed
+    ones kept, the body, the switch). Tried by the user 2026-11-09: it
+    works [firm].
 15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.
@@ -1909,8 +1931,12 @@ by the user 2026-11-09:
   user with the QR code 2026-11-09; the old key dropped and item 11c,
   Steam's extra details, the same day. Item 12, searching Nexus Mods in
   Zendo, built and tried by the user 2026-11-09. Finding 11 fixed the
-  same day; the list then reordered by the user. Next, the new item 13,
-  the launch options sheet (16 before).
+  same day; the list then reordered by the user. Item 13, the launch
+  options sheet, built in three parts (13a to 13c) and tried by the
+  user 2026-11-09; 14a (Epic's switches and overlay) and 14b (cloud
+  saves) the same day, both tried by the user. 14c, GOG's played time
+  sent back, built the same day and tried by the user. Then item 15,
+  the prefix's tools.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

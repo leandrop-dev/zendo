@@ -11,6 +11,8 @@
 //! steam_session = "…"
 //! # Set to false to never download covers.
 //! download_covers = true
+//! # Set to false to keep the time played in GOG games from GOG.
+//! gog_playtime = true
 //! # Where store games are installed, each in a folder of its own.
 //! install_dir = "~/Games"
 //! # The Proton Windows games run with unless their launch options choose
@@ -61,6 +63,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steam_session: Option<String>,
     pub download_covers: bool,
+    /// Whether the sessions of GOG games Zendo starts are sent to GOG
+    /// ([`crate::gog_playtime`]).
+    pub gog_playtime: bool,
     /// Whether Nexus searches show mods marked adult.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub nexus_adult: bool,
@@ -126,6 +131,7 @@ impl std::fmt::Debug for Config {
             .field("nexus_key", &hidden(&self.nexus_key))
             .field("steam_session", &hidden(&self.steam_session))
             .field("download_covers", &self.download_covers)
+            .field("gog_playtime", &self.gog_playtime)
             .field("nexus_adult", &self.nexus_adult)
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
@@ -145,6 +151,7 @@ impl Default for Config {
             nexus_key: None,
             steam_session: None,
             download_covers: true,
+            gog_playtime: true,
             nexus_adult: false,
             install_dir: None,
             default_proton: None,

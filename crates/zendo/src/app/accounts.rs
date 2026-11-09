@@ -5,7 +5,7 @@
 //! they paste back the code or address it ends on.
 
 use iced::widget::{
-    button, column, container, operation, row, scrollable, space, text, text_input,
+    button, column, container, operation, row, scrollable, space, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::stores::{self, AmazonLogin, Store};
@@ -91,6 +91,8 @@ pub enum AccountMessage {
     Cancel,
     SignOut(Store),
     SignedOut(Store, Result<(), String>),
+    /// Whether the sessions of GOG games go to GOG.
+    SetGogPlaytime(bool),
 }
 
 /// Asks each engine who is signed in, each on a thread.
@@ -195,6 +197,13 @@ impl Zendo {
                 )
             }
             AccountMessage::SignedOut(store, result) => self.signed_out(store, result),
+            AccountMessage::SetGogPlaytime(on) => {
+                self.config.gog_playtime = on;
+                if !self.save_config() {
+                    self.config.gog_playtime = !on;
+                }
+                Task::none()
+            }
         }
     }
 
@@ -449,6 +458,14 @@ impl Zendo {
         };
 
         let mut body = column![title, text(status).size(14).color(color), engine_line].spacing(8);
+        if store == Store::Gog && matches!(self.accounts.get(store), Account::SignedIn(_)) {
+            body = body.push(
+                toggler(self.config.gog_playtime)
+                    .label(t!("accounts-gog-playtime"))
+                    .text_size(14)
+                    .on_toggle(|on| Message::Account(AccountMessage::SetGogPlaytime(on))),
+            );
+        }
         if let Some(sign_in) = signing_in {
             body = body.push(if sign_in.browser {
                 sign_in_steps(sign_in)
@@ -587,6 +604,16 @@ mod tests {
         accounts.set(Store::Gog, Account::SignedIn("me".into()));
         accounts.set(Store::Epic, Account::SignedOut);
         assert_eq!(accounts.signed_in(), 1);
+    }
+
+    #[test]
+    fn gogs_played_time_is_sent_until_turned_off() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.config = zendo_core::config::Config::default();
+        assert!(zendo.config.gog_playtime, "on by default");
+        let _ = zendo.update(Message::Account(AccountMessage::SetGogPlaytime(false)));
+        assert!(!zendo.config.gog_playtime);
     }
 
     /// A GOG sign-in with its window open, as `open_window` leaves it.

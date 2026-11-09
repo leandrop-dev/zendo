@@ -755,6 +755,7 @@ accounts-signed-in-as = Sessão iniciada como { $name }
 accounts-sign-out = Terminar sessão
 accounts-sign-in = Iniciar sessão
 accounts-through = Através de { $path }
+accounts-gog-playtime = Enviar o tempo de jogo para a sua conta GOG
 accounts-engine-missing = { $engine } não encontrado: instale-o, ou o Heroic, que o inclui
 accounts-preparing-amazon = A preparar a página da Amazon…
 accounts-signing-in = A iniciar sessão…

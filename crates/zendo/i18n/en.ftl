@@ -741,6 +741,7 @@ accounts-signed-in-as = Signed in as { $name }
 accounts-sign-out = Sign out
 accounts-sign-in = Sign in
 accounts-through = Through { $path }
+accounts-gog-playtime = Send the time played to your GOG account
 accounts-engine-missing = { $engine } not found: install it, or Heroic, which bundles it
 accounts-preparing-amazon = Preparing Amazon's page…
 accounts-signing-in = Signing in…

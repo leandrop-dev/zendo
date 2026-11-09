@@ -11,9 +11,9 @@ use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, row, text};
 use iced::{Alignment, Element, Task};
-use zendo_core::cloud_saves;
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
+use zendo_core::{cloud_saves, gog_playtime};
 
 use super::style::{self, BOLD};
 use super::{Message, Zendo};
@@ -314,6 +314,8 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
                     sender.unbounded_send(RunMessage::FetchFailed(id.clone(), format!("{err:#}")));
             }
             let result = launch::start(&game).map_err(|err| format!("{err:#}"));
+            // When the session began, for GOG.
+            let began = super::now();
             let watch = result.as_ref().ok().map(|started| started.watch.clone());
             let _ = sender.unbounded_send(RunMessage::Started(id.clone(), result));
             let send = |message| sender.unbounded_send(message).is_ok();
@@ -353,7 +355,11 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
                 if cloud_saves::wanted_for(&game) {
                     send(RunMessage::SavesSyncing(id.clone()));
                 }
-                let result = launch::after(&game).map_err(|err| format!("{err:#}"));
+                // The saves and the script, then the session for GOG: one
+                // not sent is kept and goes with the next.
+                let after = launch::after(&game);
+                let playtime = gog_playtime::send(&game, began, super::now());
+                let result = after.and(playtime).map_err(|err| format!("{err:#}"));
                 send(RunMessage::AfterDone(id, result));
             }
         });
