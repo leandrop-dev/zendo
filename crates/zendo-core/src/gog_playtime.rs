@@ -9,9 +9,17 @@
 //! sent. One that cannot be sent (no network, GOG down) waits in
 //! `$XDG_DATA_HOME/zendo/gog-playtime.json` and goes with the next one;
 //! signing out of GOG drops them, as they belong to that account.
+//!
+//! A `GET` at the same address gives GOG's total for the game, in minutes
+//! (`time_sum`), from every client that sends sessions. Zendo asks it as
+//! the game's page opens and keeps it in
+//! `$XDG_DATA_HOME/zendo/gog-playtime-totals.json`, so the library shows
+//! it from the start; the larger of it and the launchers' count is shown,
+//! as Heroic does.
 
+use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -26,6 +34,9 @@ const GAMEPLAY: &str = "https://gameplay.gog.com/games";
 
 /// The sessions not sent yet.
 const QUEUE_FILE: &str = "gog-playtime.json";
+
+/// GOG's total for each game, in minutes, by Zendo's id (`gog:<id>`).
+const TOTALS_FILE: &str = "gog-playtime-totals.json";
 
 /// One session of a game, as GOG takes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +72,7 @@ pub fn send(game: &Game, started: u64, ended: u64) -> anyhow::Result<()> {
         return Ok(());
     }
     let new = played(app, started, ended);
-    let file = queue_file().context("no home folder to keep GOG's played time in")?;
+    let file = file(QUEUE_FILE).context("no home folder to keep GOG's played time in")?;
     paths::locked(&file, || {
         let mut queue = load(&file);
         queue.extend(new);
@@ -96,6 +107,74 @@ pub fn send(game: &Game, started: u64, ended: u64) -> anyhow::Result<()> {
     })
 }
 
+/// GOG's total for the game with Zendo's id `id` (`gog:<id>`), in
+/// minutes, kept for the next start; `None` for a game not from GOG, or
+/// when no one is signed in to GOG.
+///
+/// # Errors
+///
+/// When GOG cannot be reached or answers with an error.
+pub fn total(id: &str) -> anyhow::Result<Option<u64>> {
+    let Some(game) = id.strip_prefix("gog:") else {
+        return Ok(None);
+    };
+    let Some(credentials) = Store::Gog.gog_token()? else {
+        return Ok(None);
+    };
+    let response = crate::http::answering_agent(Duration::from_secs(15))
+        .get(format!(
+            "{GAMEPLAY}/{game}/users/{}/sessions",
+            credentials.user_id
+        ))
+        .header(
+            "Authorization",
+            format!("Bearer {}", credentials.access_token),
+        )
+        .call()
+        .context("could not reach GOG")?;
+    let status = response.status().as_u16();
+    if !(200..=299).contains(&status) {
+        bail!("GOG answered {status}");
+    }
+    let text = response
+        .into_body()
+        .read_to_string()
+        .context("GOG's played time")?;
+    let minutes = time_sum(&text)?;
+    // Only the next start's first look is lost when it cannot be kept.
+    let _ = keep_total(id, minutes);
+    Ok(Some(minutes))
+}
+
+/// GOG's totals kept from the games' pages, in minutes, by id.
+#[must_use]
+pub fn totals() -> BTreeMap<String, u64> {
+    file(TOTALS_FILE)
+        .and_then(|file| fs::read(file).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// The total in GOG's answer: none yet is 0.
+fn time_sum(text: &str) -> anyhow::Result<u64> {
+    #[derive(Deserialize)]
+    struct Sessions {
+        time_sum: Option<u64>,
+    }
+    let sessions: Sessions = serde_json::from_str(text).context("GOG's played time")?;
+    Ok(sessions.time_sum.unwrap_or(0))
+}
+
+fn keep_total(id: &str, minutes: u64) -> anyhow::Result<()> {
+    let file = file(TOTALS_FILE).context("no home folder")?;
+    paths::locked(&file, || {
+        let mut map = totals();
+        map.insert(id.to_owned(), minutes);
+        paths::write_atomic(&file, &serde_json::to_vec_pretty(&map)?)
+            .with_context(|| format!("could not write {}", file.display()))
+    })
+}
+
 /// The session from `started` to `ended`, in whole minutes; none under a
 /// minute.
 fn played(game: &str, started: u64, ended: u64) -> Option<Session> {
@@ -107,16 +186,23 @@ fn played(game: &str, started: u64, ended: u64) -> Option<Session> {
     })
 }
 
-/// Forgets the sessions not sent yet, as their account signs out.
+/// Forgets the sessions not sent yet and GOG's totals, as their account
+/// signs out.
 ///
 /// # Errors
 ///
-/// When the file cannot be removed.
+/// When a file cannot be removed.
 pub(crate) fn forget() -> anyhow::Result<()> {
-    let Some(file) = queue_file() else {
-        return Ok(());
-    };
-    match fs::remove_file(&file) {
+    for name in [QUEUE_FILE, TOTALS_FILE] {
+        if let Some(file) = file(name) {
+            remove(&file)?;
+        }
+    }
+    Ok(())
+}
+
+fn remove(file: &Path) -> anyhow::Result<()> {
+    match fs::remove_file(file) {
         Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
             Err(err).with_context(|| format!("could not remove {}", file.display()))
         }
@@ -170,26 +256,21 @@ fn minutes_kept(left: &[Session]) -> String {
     }
 }
 
-fn queue_file() -> Option<PathBuf> {
-    paths::data_home().map(|dir| dir.join("zendo").join(QUEUE_FILE))
+fn file(name: &str) -> Option<PathBuf> {
+    paths::data_home().map(|dir| dir.join("zendo").join(name))
 }
 
 /// The sessions waiting; none when the file is missing or unreadable.
-fn load(file: &std::path::Path) -> Vec<Session> {
+fn load(file: &Path) -> Vec<Session> {
     fs::read(file)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default()
 }
 
-fn save(file: &std::path::Path, queue: &[Session]) -> anyhow::Result<()> {
+fn save(file: &Path, queue: &[Session]) -> anyhow::Result<()> {
     if queue.is_empty() {
-        return match fs::remove_file(file) {
-            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
-                Err(err).with_context(|| format!("could not remove {}", file.display()))
-            }
-            _ => Ok(()),
-        };
+        return remove(file);
     }
     paths::write_atomic(file, &serde_json::to_vec_pretty(queue)?)
         .with_context(|| format!("could not write {}", file.display()))
@@ -258,6 +339,16 @@ mod tests {
         assert_eq!(played("1", start, start + 59), None);
         assert_eq!(played("1", start, start + 3_719), Some(session("1", 61)));
         assert_eq!(played("1", start, start - 5), None, "a clock set back");
+    }
+
+    #[test]
+    fn reads_gogs_total() {
+        assert_eq!(
+            time_sum(r#"{"time_sum": 754, "sessions": []}"#).unwrap(),
+            754
+        );
+        assert_eq!(time_sum("{}").unwrap(), 0, "none played yet");
+        assert!(time_sum("<html>").is_err());
     }
 
     #[test]

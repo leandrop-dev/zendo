@@ -1854,7 +1854,19 @@ brackets):
     here, as it writes to the user's account. Checked: clippy, tests
     (whole minutes, under one skipped, only gogdl's games, the failed
     ones kept, the body, the switch). Tried by the user 2026-11-09: it
-    works [firm].
+    works [firm]. The user then asked for GOG's total on the game's page,
+    as Steam's games show Steam's; built the same day. Heroic's game page
+    (its renderer in `app.asar`) asks `time_sum` as the page opens and
+    as the game's status changes, takes it as minutes, and keeps the
+    larger of it and its own count. Zendo [tentative]: asked once a
+    session as a `gog:` game's page opens (installed or only owned),
+    and again after a session is sent; a failure is forgotten, so the
+    page asks again. Kept in `~/.local/share/zendo/gog-playtime-totals.json`
+    and merged into the library and the Store's list as they load (the
+    larger counts), so the cards and Most played have it from the start;
+    signing out of GOG drops it. Checked: clippy, tests (`time_sum` read,
+    none yet as 0, the library and the page taking the larger). Tried by
+    the user 2026-11-09: it works [firm]. Item 14 is done.
 15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.

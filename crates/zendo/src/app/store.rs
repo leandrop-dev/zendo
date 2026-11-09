@@ -92,6 +92,19 @@ impl StoreState {
         self.lists.values().flatten().find(|game| game.id == id)
     }
 
+    /// The minutes played in an owned game, where `minutes` is more than
+    /// known (GOG's total).
+    pub fn raise_minutes(&mut self, id: &str, minutes: u64) {
+        for game in self
+            .lists
+            .values_mut()
+            .flatten()
+            .filter(|game| game.id == id)
+        {
+            game.minutes = Some(game.minutes.unwrap_or(0).max(minutes));
+        }
+    }
+
     pub fn all(&self) -> impl Iterator<Item = &Owned> {
         self.lists.values().flatten()
     }

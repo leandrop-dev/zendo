@@ -51,7 +51,11 @@ impl Zendo {
 
     /// Keeps the answer; a failure (offline, say) is forgotten, so the
     /// page asks again next time it opens.
-    pub(super) fn rating_arrived(&mut self, id: String, result: Result<Option<Rating>, String>) {
+    pub(super) fn rating_arrived(
+        &mut self,
+        id: String,
+        result: Result<Option<Rating>, String>,
+    ) -> Task<Message> {
         match result {
             Ok(rating) => {
                 self.ratings.insert(id, RatingState::Got(rating));
@@ -60,6 +64,7 @@ impl Zendo {
                 self.ratings.remove(&id);
             }
         }
+        Task::none()
     }
 
     /// The pill for the game's page: nothing when `ProtonDB` cannot know the

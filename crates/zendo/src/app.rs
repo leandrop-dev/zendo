@@ -13,6 +13,7 @@ mod downloads;
 mod eos_overlay;
 mod format;
 mod game;
+mod gog_playtime;
 mod installer;
 mod launch_options;
 mod library;
@@ -231,6 +232,8 @@ enum Message {
     SteamInstall(SteamInstallMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
+    /// GOG's total for a game, in minutes.
+    GogTotal(String, Result<Option<u64>, String>),
     Store(StoreMessage),
     GameView(GameViewMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
@@ -308,6 +311,8 @@ struct Zendo {
     steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
+    /// The GOG games whose total GOG was asked for, this session.
+    gog_totals: std::collections::HashSet<String>,
     config: Config,
     /// The window's colours and where they come from.
     themes: Themes,
@@ -358,6 +363,7 @@ impl Zendo {
             steam: SteamState::default(),
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
+            gog_totals: std::collections::HashSet::new(),
             config: Config::default(),
             themes: Themes::default(),
             key: KeyForm::default(),
@@ -581,10 +587,8 @@ impl Zendo {
             Message::Overlay(message) => self.update_overlay(message),
             Message::Steam(message) => self.update_steam(message),
             Message::SteamInstall(message) => self.update_steam_installs(message),
-            Message::Rating(id, result) => {
-                self.rating_arrived(id, result);
-                Task::none()
-            }
+            Message::Rating(id, result) => self.rating_arrived(id, result),
+            Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -662,6 +666,7 @@ impl Zendo {
                 Task::batch([
                     self.want_info(&id),
                     self.want_rating(&id),
+                    self.want_gog_total(&id),
                     self.want_mods(&id),
                 ])
             }
@@ -747,6 +752,7 @@ impl Zendo {
                     operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 }),
                     self.want_info(&id),
                     self.want_rating(&id),
+                    self.want_gog_total(&id),
                     self.want_mods(&id),
                 ])
             }

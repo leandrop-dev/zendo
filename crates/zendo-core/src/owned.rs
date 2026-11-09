@@ -22,7 +22,7 @@ use serde_json::Value;
 
 use crate::covers::{self, Artwork, Kind};
 use crate::stores::Store;
-use crate::{Source, appinfo, paths, steam};
+use crate::{Source, appinfo, gog_playtime, paths, steam};
 
 const STEAM_OWNED: &str = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/";
 /// Steam's public store details of an app, no key needed.
@@ -52,7 +52,8 @@ pub struct Owned {
     pub platforms: Vec<String>,
     pub cover_url: Option<String>,
     pub hero_url: Option<String>,
-    /// The minutes played, where the store counts them (Steam).
+    /// The minutes played, where the store counts them (Steam; GOG once
+    /// the game's page asked).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minutes: Option<u64>,
     /// When it was last played, in seconds since 1970, where the store
@@ -269,6 +270,7 @@ pub fn cached(shop: Shop) -> Vec<Owned> {
         .unwrap_or_default();
     with_images(&mut games);
     with_sizes(&mut games);
+    with_gog_minutes(&mut games);
     games
 }
 
@@ -292,6 +294,16 @@ fn with_images(games: &mut [Owned]) {
                 Kind::Cover => game.cover = image,
                 Kind::Hero => game.hero = image,
             }
+        }
+    }
+}
+
+/// GOG's totals kept from the games' pages ([`gog_playtime::totals`]).
+fn with_gog_minutes(games: &mut [Owned]) {
+    let totals = gog_playtime::totals();
+    for game in games {
+        if let Some(&minutes) = totals.get(&game.id) {
+            game.minutes = Some(game.minutes.unwrap_or(0).max(minutes));
         }
     }
 }
@@ -351,6 +363,7 @@ pub(crate) fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owne
     }
     with_images(&mut games);
     with_sizes(&mut games);
+    with_gog_minutes(&mut games);
     Ok(games)
 }
 

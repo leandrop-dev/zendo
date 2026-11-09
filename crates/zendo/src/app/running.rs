@@ -196,7 +196,8 @@ impl Zendo {
                 if let Err(err) = result {
                     self.status = Some(err);
                 }
-                Task::none()
+                // GOG's total now holds the session just sent.
+                self.refresh_gog_total(&id)
             }
             RunMessage::Stop(id) => {
                 let Some(session) = self.running.games.get_mut(&id) else {

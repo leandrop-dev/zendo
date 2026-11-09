@@ -49,7 +49,7 @@ pub mod tone;
 mod umu;
 mod windows;
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -342,6 +342,7 @@ impl Library {
         };
         let mut library = Self::from_scan(scan);
         library.apply(&state);
+        library.apply_gog_totals(&gog_playtime::totals());
         let chosen = covers::Choices::load();
         for game in &mut library.games {
             // One chosen by hand comes before Steam's and the stores'.
@@ -385,6 +386,16 @@ impl Library {
         }
     }
 
+    /// GOG's totals, in minutes, where they are more than the launchers'
+    /// count: they hold every client's sessions.
+    pub fn apply_gog_totals(&mut self, totals: &BTreeMap<String, u64>) {
+        for game in &mut self.games {
+            if let Some(&minutes) = totals.get(&game.id) {
+                game.played.minutes = game.played.minutes.max(minutes);
+            }
+        }
+    }
+
     /// The game with this id.
     #[must_use]
     pub fn find(&self, id: &str) -> Option<&Game> {
@@ -395,6 +406,35 @@ impl Library {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gogs_totals_count_where_they_are_more() {
+        let game = |id: &str, minutes| {
+            let mut game = Game::new(
+                id.into(),
+                id.into(),
+                Source::Gog,
+                Launch::Engine {
+                    runner: "gogdl".into(),
+                    app: id.into(),
+                },
+            );
+            game.played.minutes = minutes;
+            game
+        };
+        let mut library = Library {
+            games: vec![game("gog:1", 30), game("gog:2", 500), game("gog:3", 7)],
+            problems: Vec::new(),
+        };
+        let totals = BTreeMap::from([("gog:1".to_owned(), 120), ("gog:2".to_owned(), 90)]);
+        library.apply_gog_totals(&totals);
+        let minutes: Vec<u64> = library
+            .games
+            .iter()
+            .map(|game| game.played.minutes)
+            .collect();
+        assert_eq!(minutes, [120, 500, 7]);
+    }
 
     #[test]
     fn writes_sizes_for_people() {
