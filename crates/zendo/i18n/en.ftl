@@ -1018,3 +1018,11 @@ deck-note-external-controller = Does not use a plugged-in or Bluetooth controlle
 deck-note-external-controllers-local = Local multiplayer does not take plugged-in or Bluetooth controllers
 deck-note-gyro = The gyro or trackpad can aim the camera while the sticks move
 deck-note-hdr = HDR works, but has to be switched on in the game's settings
+
+## The System requirements card
+requirements-title = System requirements
+requirements-from-gog = { $system } · from GOG
+requirements-from-epic = { $system } · from the Epic Games Store
+requirements-from-steam = { $system } · from Steam's store page
+requirements-minimum = Minimum
+requirements-recommended = Recommended

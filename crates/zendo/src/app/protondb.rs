@@ -50,7 +50,8 @@ impl Zendo {
     }
 
     /// Keeps the answer, then looks the game up on `AreWeAntiCheatYet` and
-    /// asks for its Steam Deck review by the Steam app id found; a failure
+    /// asks for its requirements and Steam Deck review by the Steam app id
+    /// found; a failure
     /// (offline, say) is forgotten, so the page asks again next time it
     /// opens.
     pub(super) fn rating_arrived(
@@ -63,7 +64,10 @@ impl Zendo {
             return Task::none();
         };
         let app = rating.as_ref().map(|rating| rating.app);
-        let mut tasks = vec![self.want_anti_cheat(&id, app)];
+        let mut tasks = vec![
+            self.want_anti_cheat(&id, app),
+            self.want_requirements(&id, app),
+        ];
         if let Some(app) = app {
             tasks.push(self.want_deck(&id, app));
         }

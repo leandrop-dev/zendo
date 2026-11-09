@@ -42,6 +42,7 @@ pub mod prefix_tools;
 pub mod proton;
 pub mod protondb;
 pub mod report;
+pub mod requirements;
 pub mod runtimes;
 pub mod secrets;
 pub mod state;

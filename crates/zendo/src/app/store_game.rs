@@ -67,6 +67,7 @@ impl Zendo {
         if let Some(dlc) = self.owned_dlc_card(game) {
             main.push(dlc);
         }
+        main.extend(self.requirements_card(&game.id));
         let side = column![
             self.owned_details_card(game, installed),
             self.owned_technical_card(game)

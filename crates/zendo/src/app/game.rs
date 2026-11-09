@@ -26,7 +26,7 @@ const HERO_HEIGHT: f32 = 340.0;
 const COVER_WIDTH: f32 = 140.0;
 const COVER_HEIGHT: f32 = 210.0;
 const RADIUS: f32 = 14.0;
-const LABEL_WIDTH: f32 = 130.0;
+pub(super) const LABEL_WIDTH: f32 = 130.0;
 /// The page's width from which the details go beside the rest.
 pub(super) const TWO_COLUMNS: f32 = 960.0;
 
@@ -109,6 +109,7 @@ impl Zendo {
         if let Some(changelog) = self.changelog_card(game) {
             main.push(changelog);
         }
+        main.extend(self.requirements_card(&game.id));
         let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
 
         let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;

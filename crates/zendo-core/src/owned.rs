@@ -1011,7 +1011,7 @@ fn day(date: &str) -> Option<String> {
 
 /// A store's description as plain text: tags dropped, the common entities
 /// written out, blank runs of lines closed up.
-fn plain_text(html: &str) -> Option<String> {
+pub(crate) fn plain_text(html: &str) -> Option<String> {
     let mut text = String::with_capacity(html.len());
     let mut in_tag = false;
     let mut tag = String::new();

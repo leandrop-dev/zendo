@@ -1032,3 +1032,11 @@ deck-note-external-controller = Não usa primeiro um comando ligado por cabo ou 
 deck-note-external-controllers-local = O multijogador local não aceita comandos ligados por cabo ou Bluetooth
 deck-note-gyro = O giroscópio ou o trackpad podem apontar a câmara enquanto os manípulos movem
 deck-note-hdr = O HDR funciona, mas tem de ser ligado nas definições do jogo
+
+## O cartão Requisitos do sistema
+requirements-title = Requisitos do sistema
+requirements-from-gog = { $system } · do GOG
+requirements-from-epic = { $system } · da Epic Games Store
+requirements-from-steam = { $system } · da página do Steam
+requirements-minimum = Mínimos
+requirements-recommended = Recomendados

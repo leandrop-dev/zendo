@@ -2312,6 +2312,37 @@ brackets):
     PROTONDB PLATINUM and DECK VERIFIED. Of the 55 games the user had
     looked up, 22 are Verified, 13 Playable, 9 Unsupported and 11 have
     no review. Tried by the user 2026-11-09: it works [firm].
+    18c, built 2026-11-09 (`requirements.rs`, the window's
+    `requirements.rs`). Checked first: of 20 of the user's GOG games, 15
+    had requirements on GOG (older ones, Dark Forces II, BioShock 2, the
+    Savage Frontier games, none); Epic's store-content answered for 3 of
+    10 Epic games, only those whose store slug has no code on the end
+    (`world-war-z`, not `botany-manor-e7c456`); Steam's `appdetails`
+    needs no key, though its `filters` drops the requirements fields.
+    Zendo [tentative]: the game's own store first (GOG v2; Epic's slug
+    from the launcher GraphQL by the namespace in legendary's record,
+    then store-content), else Steam's store page for the Steam app id
+    ProtonDB's lookup found (Amazon's and local games always); in
+    English, as Zendo's other store details; for Windows, or Linux for a
+    game installed as a Linux build, falling back to Windows when no
+    store lists Linux's. Steam's HTML is read through the plain-text
+    reader into "Label: value" lines, a line with no label kept as it
+    is. A System requirements card at the end of the main column on
+    both pages: where they came from ("Windows · from GOG"), then each
+    row with Minimum and Recommended side by side, or one column when
+    the store gives no recommended. Kept a week in
+    `$XDG_CACHE_HOME/zendo/requirements.json`, by game and system.
+    Checked: clippy, tests (Steam's, GOG's and Epic's shapes, levels
+    paired by label, lines with no label, none listed); an ignored test
+    against the real stores (Conarium's Linux ones from GOG, World War
+    Z's from Epic, Cyberpunk 2077 on GOG from Steam as GOG lists none,
+    an unknown GOG game none); in a throwaway home, Rocket League's page
+    (with a build that moved the card up for the screenshot, reverted)
+    showed "Windows · from the Epic Games Store" with OS, Processor,
+    Memory and Storage at both levels. Tried by the user 2026-11-09: it
+    works [firm].
+    18d, PCGamingWiki's facts, dropped by the user 2026-11-09 [firm]: no
+    value seen for Zendo now.
 19. (was 22) The library: categories of the user's own, beyond pins and hiding.
 20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
@@ -2389,7 +2420,9 @@ by the user 2026-11-09:
   the game page tells, checked and split by the user (18a to 18e) the
   same day; 18a, the anti-cheat status, built and tried by the user
   the same day; 18b, the Steam Deck rating, built and tried by the
-  user the same day. Next: 18c, the requirements.
+  user the same day; 18c, the requirements, built and tried by the
+  user the same day; 18d, PCGamingWiki's facts, dropped by the user.
+  Next: 18e, achievements.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

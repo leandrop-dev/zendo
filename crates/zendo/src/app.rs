@@ -26,6 +26,7 @@ mod nexus_search;
 mod prefix;
 mod protondb;
 mod protons;
+mod requirements;
 mod running;
 mod runtimes;
 mod settings;
@@ -245,6 +246,11 @@ enum Message {
     Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
+    /// What a game asks of the computer.
+    Requirements(
+        String,
+        Result<Option<zendo_core::requirements::Requirements>, String>,
+    ),
     /// Valve's Steam Deck review of a game.
     Deck(
         String,
@@ -341,6 +347,8 @@ struct Zendo {
     anti_cheat: std::collections::HashMap<String, anti_cheat::AntiCheatState>,
     /// Valve's Steam Deck review of each game whose page was opened.
     decks: std::collections::HashMap<String, steam_deck::DeckState>,
+    /// The system requirements of each game whose page was opened.
+    requirements: std::collections::HashMap<String, requirements::RequirementsState>,
     /// The tools run in the Windows games' prefixes.
     prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
@@ -399,6 +407,7 @@ impl Zendo {
             ratings: std::collections::HashMap::new(),
             anti_cheat: std::collections::HashMap::new(),
             decks: std::collections::HashMap::new(),
+            requirements: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
             changelogs: std::collections::HashMap::new(),
@@ -633,6 +642,7 @@ impl Zendo {
             Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
             Message::AntiCheat(id, result) => self.anti_cheat_arrived(id, result),
             Message::Deck(id, result) => self.deck_arrived(id, result),
+            Message::Requirements(id, result) => self.requirements_arrived(id, result),
             Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
