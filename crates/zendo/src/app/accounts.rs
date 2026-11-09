@@ -8,6 +8,7 @@ use iced::widget::{
     button, column, container, operation, row, scrollable, space, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, Task};
+use zendo_core::config::Config;
 use zendo_core::stores::{self, AmazonLogin, Store};
 
 use super::style::{self, BOLD, colors};
@@ -93,6 +94,7 @@ pub enum AccountMessage {
     SignedOut(Store, Result<(), String>),
     /// Whether the sessions of GOG games go to GOG.
     SetGogPlaytime(bool),
+    SetGogGalaxy(bool),
 }
 
 /// Asks each engine who is signed in, each on a thread.
@@ -197,14 +199,19 @@ impl Zendo {
                 )
             }
             AccountMessage::SignedOut(store, result) => self.signed_out(store, result),
-            AccountMessage::SetGogPlaytime(on) => {
-                self.config.gog_playtime = on;
-                if !self.save_config() {
-                    self.config.gog_playtime = !on;
-                }
-                Task::none()
-            }
+            AccountMessage::SetGogPlaytime(on) => self.set_switch(on, |c| &mut c.gog_playtime),
+            AccountMessage::SetGogGalaxy(on) => self.set_switch(on, |c| &mut c.gog_galaxy),
         }
+    }
+
+    /// Turns one of the config's switches, kept as it was when the file
+    /// cannot be written.
+    fn set_switch(&mut self, on: bool, switch: fn(&mut Config) -> &mut bool) -> Task<Message> {
+        *switch(&mut self.config) = on;
+        if !self.save_config() {
+            *switch(&mut self.config) = !on;
+        }
+        Task::none()
     }
 
     fn amazon_ready(&mut self, result: Result<AmazonLogin, String>) -> Task<Message> {
@@ -465,6 +472,12 @@ impl Zendo {
                     .text_size(14)
                     .on_toggle(|on| Message::Account(AccountMessage::SetGogPlaytime(on))),
             );
+            body = body.push(
+                toggler(self.config.gog_galaxy)
+                    .label(t!("accounts-gog-galaxy"))
+                    .text_size(14)
+                    .on_toggle(|on| Message::Account(AccountMessage::SetGogGalaxy(on))),
+            );
         }
         if let Some(sign_in) = signing_in {
             body = body.push(if sign_in.browser {
@@ -614,6 +627,16 @@ mod tests {
         assert!(zendo.config.gog_playtime, "on by default");
         let _ = zendo.update(Message::Account(AccountMessage::SetGogPlaytime(false)));
         assert!(!zendo.config.gog_playtime);
+    }
+
+    #[test]
+    fn gog_galaxy_starts_with_gog_games_until_turned_off() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.config = zendo_core::config::Config::default();
+        assert!(zendo.config.gog_galaxy, "on by default");
+        let _ = zendo.update(Message::Account(AccountMessage::SetGogGalaxy(false)));
+        assert!(!zendo.config.gog_galaxy);
     }
 
     /// A GOG sign-in with its window open, as `open_window` leaves it.

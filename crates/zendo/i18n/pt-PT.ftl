@@ -483,6 +483,8 @@ run-gog-setup = A preparar { $title } antes de arrancar: { $step }…
 run-known-fix = correção conhecida { $fix }
 run-known-fixes-failed = Algumas correções conhecidas para { $title } não foram aplicadas ({ $error }); o cartão do prefixo Wine aplica-as de novo
 run-gog-setup-failed = A preparação da GOG para { $title } não terminou ({ $error }); o cartão do prefixo Wine executa-a de novo
+run-galaxy-service = serviço do GOG Galaxy
+run-galaxy-failed = { $title } está a correr sem o GOG Galaxy: { $error }
 run-missed = { $title } entregue a { $launcher }; o Zendo não o viu iniciar
 run-closed = { $minutes ->
     [0] { $title } fechou
@@ -760,6 +762,7 @@ accounts-sign-out = Terminar sessão
 accounts-sign-in = Iniciar sessão
 accounts-through = Através de { $path }
 accounts-gog-playtime = Enviar o tempo de jogo para a sua conta GOG
+accounts-gog-galaxy = Iniciar os jogos da GOG com o GOG Galaxy, para as conquistas e os seus inícios de sessão
 accounts-engine-missing = { $engine } não encontrado: instale-o, ou o Heroic, que o inclui
 accounts-preparing-amazon = A preparar a página da Amazon…
 accounts-signing-in = A iniciar sessão…

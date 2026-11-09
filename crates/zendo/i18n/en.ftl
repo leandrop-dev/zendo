@@ -469,6 +469,8 @@ run-gog-setup = Setting up { $title } before it starts: { $step }…
 run-known-fix = known fix { $fix }
 run-known-fixes-failed = Some known fixes for { $title } did not apply ({ $error }); the Wine prefix card applies them again
 run-gog-setup-failed = GOG's setup for { $title } did not finish ({ $error }); the Wine prefix card runs it again
+run-galaxy-service = GOG Galaxy's service
+run-galaxy-failed = { $title } is running without GOG Galaxy: { $error }
 run-missed = Handed { $title } to { $launcher }; Zendo did not see it start
 run-closed = { $minutes ->
     [0] { $title } closed
@@ -746,6 +748,7 @@ accounts-sign-out = Sign out
 accounts-sign-in = Sign in
 accounts-through = Through { $path }
 accounts-gog-playtime = Send the time played to your GOG account
+accounts-gog-galaxy = Start GOG games with GOG Galaxy, for achievements and their sign-ins
 accounts-engine-missing = { $engine } not found: install it, or Heroic, which bundles it
 accounts-preparing-amazon = Preparing Amazon's page…
 accounts-signing-in = Signing in…

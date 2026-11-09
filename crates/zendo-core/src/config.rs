@@ -13,6 +13,8 @@
 //! download_covers = true
 //! # Set to false to keep the time played in GOG games from GOG.
 //! gog_playtime = true
+//! # Set to false to start GOG games without GOG Galaxy (comet).
+//! gog_galaxy = true
 //! # Where store games are installed, each in a folder of its own.
 //! install_dir = "~/Games"
 //! # The Proton Windows games run with unless their launch options choose
@@ -52,6 +54,10 @@ const HEADER: &str = "\
 /// report never shows them.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent settings, each a key in the file"
+)]
 pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steamgriddb_key: Option<String>,
@@ -66,6 +72,9 @@ pub struct Config {
     /// Whether the sessions of GOG games Zendo starts are sent to GOG
     /// ([`crate::gog_playtime`]).
     pub gog_playtime: bool,
+    /// Whether GOG games Zendo installed start with GOG Galaxy, through
+    /// comet ([`crate::galaxy`]).
+    pub gog_galaxy: bool,
     /// Whether Nexus searches show mods marked adult.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub nexus_adult: bool,
@@ -132,6 +141,7 @@ impl std::fmt::Debug for Config {
             .field("steam_session", &hidden(&self.steam_session))
             .field("download_covers", &self.download_covers)
             .field("gog_playtime", &self.gog_playtime)
+            .field("gog_galaxy", &self.gog_galaxy)
             .field("nexus_adult", &self.nexus_adult)
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
@@ -152,6 +162,7 @@ impl Default for Config {
             steam_session: None,
             download_covers: true,
             gog_playtime: true,
+            gog_galaxy: true,
             nexus_adult: false,
             install_dir: None,
             default_proton: None,

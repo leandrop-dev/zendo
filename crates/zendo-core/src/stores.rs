@@ -92,12 +92,7 @@ impl Store {
     /// The engine, from `PATH` first, then Heroic's bundled copy.
     #[must_use]
     pub fn engine(self) -> Option<PathBuf> {
-        let name = self.engine_name();
-        let path = std::env::var_os("PATH").unwrap_or_default();
-        std::env::split_paths(&path)
-            .chain(HEROIC_ENGINES.iter().map(PathBuf::from))
-            .map(|dir| dir.join(name))
-            .find(|file| is_executable(file))
+        bundled(self.engine_name())
     }
 
     /// The page the user signs in on, for Epic and GOG; Amazon's is made
@@ -349,6 +344,7 @@ impl Store {
                     }
                 }
                 crate::gog_playtime::forget()?;
+                crate::galaxy::forget()?;
             }
             Self::Amazon => {
                 let output = self.run(&["auth", "--logout"])?;
@@ -377,7 +373,7 @@ pub(crate) struct GogCredentials {
     pub user_id: String,
 }
 
-fn gog_username(credentials: &GogCredentials) -> anyhow::Result<String> {
+pub(crate) fn gog_username(credentials: &GogCredentials) -> anyhow::Result<String> {
     #[derive(Deserialize)]
     struct User {
         username: String,
@@ -469,6 +465,24 @@ fn private_dir(dir: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("could not make {}", dir.display()))?;
     fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
         .with_context(|| format!("could not protect {}", dir.display()))
+}
+
+/// A program Heroic bundles beside its engines (comet as well), from
+/// `PATH` first.
+pub(crate) fn bundled(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path)
+        .chain(HEROIC_ENGINES.iter().map(PathBuf::from))
+        .map(|dir| dir.join(name))
+        .find(|file| is_executable(file))
+}
+
+/// A Windows program Heroic bundles for its prefixes, beside its engines.
+pub(crate) fn bundled_windows(name: &str) -> Option<PathBuf> {
+    HEROIC_ENGINES
+        .iter()
+        .map(|dir| Path::new(dir).with_file_name("win32").join(name))
+        .find(|file| file.is_file())
 }
 
 fn is_executable(file: &Path) -> bool {

@@ -13,7 +13,7 @@ use iced::widget::{button, row, text};
 use iced::{Alignment, Element, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
-use zendo_core::{cloud_saves, gog_playtime, gog_setup, known_fixes};
+use zendo_core::{cloud_saves, galaxy, gog_playtime, gog_setup, known_fixes};
 
 use super::style::{self, BOLD};
 use super::{Message, Zendo};
@@ -75,6 +75,8 @@ pub enum RunMessage {
     SetupFailed(String, String),
     /// Some known fixes failed; the game starts all the same.
     FixesFailed(String, String),
+    /// GOG Galaxy could not be set up or started; the game starts without.
+    GalaxyFailed(String, String),
     Started(String, Result<Started, String>),
     /// The launcher started the game: its processes turned up.
     Seen(String),
@@ -134,7 +136,8 @@ impl Zendo {
             | RunMessage::FetchFailed(..)
             | RunMessage::SettingUp(..)
             | RunMessage::SetupFailed(..)
-            | RunMessage::FixesFailed(..) => {
+            | RunMessage::FixesFailed(..)
+            | RunMessage::GalaxyFailed(..) => {
                 self.before_start(message);
                 Task::none()
             }
@@ -253,6 +256,11 @@ impl Zendo {
                 );
                 (id, warning)
             }
+            RunMessage::GalaxyFailed(id, err) => {
+                let title = self.title_of(&id);
+                let warning = t!("run-galaxy-failed", title = title, error = err.as_str());
+                (id, warning)
+            }
             _ => return,
         };
         if let Some(session) = self.running.games.get_mut(&id) {
@@ -339,7 +347,8 @@ impl Zendo {
 }
 /// What a game's prefix gets before the game starts, the first time or
 /// when there is more: GOG's setup, then the known fixes not tried yet
-/// (with Heroic's list asked again once a day; offline, the one kept).
+/// (with Heroic's list asked again once a day; offline, the one kept),
+/// then GOG Galaxy's stand-in service.
 /// Each step and failure goes to `send`; none stops the game.
 fn prepare(game: &Game, send: &mut dyn FnMut(RunMessage)) {
     let id = game.id.clone();
@@ -355,6 +364,18 @@ fn prepare(game: &Game, send: &mut dyn FnMut(RunMessage)) {
             send(RunMessage::SetupFailed(id.clone(), failed));
         }
     }
+    apply_known_fixes(game, send);
+    if galaxy::service_needed(game) {
+        send(RunMessage::SettingUp(id.clone(), t!("run-galaxy-service")));
+        if let Err(err) = galaxy::install_service(game) {
+            send(RunMessage::GalaxyFailed(id, format!("{err:#}")));
+        }
+    }
+}
+
+/// The known fixes not tried yet in the game's prefix.
+fn apply_known_fixes(game: &Game, send: &mut dyn FnMut(RunMessage)) {
+    let id = game.id.clone();
     if !known_fixes::applies(game) {
         return;
     }
@@ -394,6 +415,12 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
                 let _ =
                     sender.unbounded_send(RunMessage::FetchFailed(id.clone(), format!("{err:#}")));
             }
+            // GOG Galaxy beside the game, stopped once the game ends.
+            let comet = galaxy::start(&game).unwrap_or_else(|err| {
+                let _ =
+                    sender.unbounded_send(RunMessage::GalaxyFailed(id.clone(), format!("{err:#}")));
+                None
+            });
             let result = launch::start(&game).map_err(|err| format!("{err:#}"));
             // When the session began, for GOG.
             let began = super::now();
@@ -427,6 +454,7 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
                 }
                 _ => return,
             }
+            drop(comet);
             if !send(RunMessage::Ended(id.clone())) {
                 return;
             }

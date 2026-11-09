@@ -1992,9 +1992,62 @@ brackets):
     and "Apply known fixes" runs them again. Checked: clippy, tests (the
     list's shape, the store keys, which games, paths kept in the game's
     folder, the prefix's record, the card), and Heroic's real list read
-    whole (104 games, 66 with fixes Zendo applies). Taken as working by the user 2026-11-09 [firm]: none of the games
-    installed is on the list (Cyberpunk 2077 is not), so not yet seen
-    applied on a real game.
+    whole (104 games, 66 with fixes Zendo applies). Taken as working by
+    the user 2026-11-09 [firm]: none of the games installed is on the
+    list (Cyberpunk 2077 is not), so not yet seen applied on a real game.
+    16c, GOG Galaxy for GOG games, added 2026-11-09 after the user's
+    try of Cyberpunk 2077 (GOG 1423049311): from Zendo, its in-game CD
+    Projekt RED sign-in was asked at every start. REDlauncher's log in
+    the prefix (`AppData/Local/Programs/CD Projekt Red/REDlauncher/logs`)
+    showed "Signing in to GalaxySdk failed", "Failed to get GOG Galaxy
+    executable name", and the DLC checks "assuming as not owned". Checked
+    first (Heroic 2.22.4's bundle; comet's source at its tag v0.2.0, the
+    version Heroic bundles; facts only):
+    - Heroic, for GOG games, unless its `cometSupport` experiment is
+      turned off (on by default): before the start, copies comet's
+      stand-in `GalaxyCommunication.exe` to
+      `C:\ProgramData\GOG.com\Galaxy\redists` when it is not there and
+      runs `sc create GalaxyCommunication binpath=…`, and at every start
+      `reg add HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths /v
+      client /d "C:\Program Files\GOG Galaxy"`; it spawns `comet
+      --from-heroic --username <name> --quit` beside the game and kills
+      it when gogdl returns.
+    - comet (Apache-2.0) listens on 127.0.0.1:9977 as Galaxy's service
+      does, reads the tokens once (from Heroic's
+      `$XDG_CONFIG_PATH/heroic/gog_store/auth.json`, which has gogdl's
+      layout, client `46899977096215655`, or from `--access-token`,
+      `--refresh-token` and `--user-id`) and writes nothing back; keeps
+      its files in `$XDG_DATA_HOME/comet`; with `--quit` it ends 15 s
+      after the last game disconnects, and on Ctrl+C. Its compatibility
+      list has Cyberpunk 2077's achievements working with v0.2.0.
+    Zendo [tentative]: for GOG games it installed, unless Accounts' GOG
+    card turns it off (`gog_galaxy`, on by default): before the start,
+    after the known fixes, a Windows game's prefix gets the service and
+    both registry entries once (the service's file there marks it done);
+    on the game's thread, gogdl refreshes the tokens and comet starts
+    with `XDG_CONFIG_PATH` at `stores/gog/comet`, whose
+    `heroic/gog_store/auth.json` is a link to Zendo's tokens (never the
+    command line, where other programs could read them), and
+    `XDG_DATA_HOME` at Zendo's data folder (so `zendo/comet`), in a
+    process group of its own; it is asked to stop (SIGINT, then killed
+    after 5 s) as soon as the game ends. A failure is said once the game
+    runs, which starts without Galaxy. Signing out of GOG removes comet's
+    link and files. Logged to `<id>.comet.log` and `<id>.galaxy.log`.
+    Checked: clippy, tests (which games, the service's place, the logs,
+    the switch); for real, comet read Zendo's tokens through the link,
+    signed in to GOG's notifications, fetched Galaxy's peer library into
+    a throwaway data folder and stopped on SIGINT; the service and both
+    registry entries were put into a throwaway prefix through umu and
+    GE-Proton (`ControlSet001\Services\GalaxyCommunication`,
+    `Wow6432Node\GOG.com\GalaxyClient\paths`). Also found in that try,
+    not Zendo's: REDlauncher's window takes no input and the game starts
+    by itself 30 s later, because a lock left at 14:51
+    (`REDlauncher/locks/REDlauncher.exe.lock`, holding 356) names the PID
+    Wine gives every REDlauncher in that prefix, so each one waits for
+    "another instance", which is itself.
+    Tried by the user 2026-11-09 on Cyberpunk 2077, with the lock removed
+    and the game's own launcher chosen again: the launcher takes the
+    mouse, and the CD Projekt RED sign-in stays [firm].
 17. (was 20) Managing installs: moving a game to another folder (legendary's
     `move`), importing a game already on disk (legendary's `import`),
     updating games by themselves (Heroic's `autoUpdateGames`), the
@@ -2069,8 +2122,9 @@ by the user 2026-11-09:
   same day and tried by the user. Item 16 split by the user: 16a,
   GOG's setup, built the same day and tried by the user; 16b, the
   known fixes, built the same day and taken as working by the user; the
-  desktop entry and Steam shortcut dropped. Next: 16c, GOG Galaxy for
-  GOG games (comet), then item 17, managing installs.
+  desktop entry and Steam shortcut dropped. 16c, GOG Galaxy for GOG games
+  (comet), built the same day and tried by the user.
+  Next: item 17, managing installs.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].
