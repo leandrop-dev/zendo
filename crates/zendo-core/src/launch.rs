@@ -690,6 +690,58 @@ fn without_umu(
     ]
 }
 
+/// umu-run with a Windows game's Proton, prefix and environment, for a
+/// program run in its prefix rather than the game: `game_id` is umu's
+/// `GAMEID` (which protonfixes reads), the game's own when `None`.
+/// Through umu even when the launch options leave it out: umu is what
+/// runs winetricks, and the prefix is the same either way.
+///
+/// # Errors
+///
+/// When the game is not a Windows one Zendo starts, umu is missing, or
+/// its launch options or prefix cannot be read or made.
+pub(crate) fn prefix_command(game: &Game, game_id: Option<&str>) -> anyhow::Result<Command> {
+    let store = match (&game.launch, game.source) {
+        (Launch::Engine { app, .. }, Source::Epic) => Some((store_key(Store::Epic), app)),
+        (Launch::Engine { app, .. }, Source::Gog) => Some((store_key(Store::Gog), app)),
+        (Launch::Engine { app, .. }, Source::Amazon) => Some((store_key(Store::Amazon), app)),
+        (Launch::Local { .. }, Source::Local) => None,
+        _ => bail!("Zendo keeps no Wine prefix for {}", game.title),
+    };
+    if !needs_proton(game) {
+        bail!("{} is not a Windows game", game.title);
+    }
+    let mut options = LaunchOptions::load(&game.id)?;
+    options.no_umu = false;
+    let store = store.map(|(key, app)| (umu::store_name(key), app.as_str()));
+    let mut umu = umu_setup(game, &options, store)?;
+    if let Some(id) = game_id
+        && let Some(pair) = umu.env.iter_mut().find(|(key, _)| *key == "GAMEID")
+    {
+        pair.1 = id.into();
+    }
+    let mut command = Command::new(&umu.words[0]);
+    command
+        .args(&umu.words[1..])
+        .envs(umu.env)
+        .envs(options.environment_for(true)?);
+    make_prefix(&command)?;
+    if let Some(home) = paths::home() {
+        command.current_dir(home);
+    }
+    Ok(command)
+}
+
+/// Starts a log afresh at `log`, headed with how `command` was started,
+/// for its output.
+///
+/// # Errors
+///
+/// When the log cannot be written.
+pub(crate) fn log_to(log: &Path, command: &Command) -> anyhow::Result<(Stdio, Stdio)> {
+    open_log(log, command)?.stdio()
+}
+
 /// Makes the prefix with `pfx` in it leading back to itself, as umu does,
 /// so Proton, which keeps the prefix in `pfx` of its data folder, uses it.
 fn link_pfx(prefix: &Path) -> anyhow::Result<()> {

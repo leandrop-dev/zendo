@@ -1870,6 +1870,46 @@ brackets):
 15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.
+    Built 2026-11-09 (`prefix_tools.rs`, the window's `prefix.rs`).
+    Checked first (umu-launcher 1.4.3's `umu_run.py` and `umu_util.py`,
+    GE-Proton 11-12's protonfixes, Heroic 2.22.4's bundle; facts only, no
+    code taken):
+    - umu: a program name that is no file (`winecfg`, `msiexec`) goes to
+      Wine as it is ("Assume that the executable will be inside prefix");
+      `umu-run winetricks <verbs>` runs Proton's own
+      `protonfixes/winetricks` with `-q`, and exits 1 running none when
+      one verb is in the prefix's `winetricks.log` already ("ERROR:
+      winetricks verb '…' is already installed in '…'"; settings verbs
+      such as `win10` excepted); a verb is
+      `^[a-zA-Z_0-9-]+(=[a-zA-Z0-9]*)?$`.
+    - winetricks' own window: protonfixes' fix for the id
+      `winetricks-gui` runs `winetricks --unattended` with no verb
+      (`gamefixes-umu/winetricks-gui.py`); Heroic starts it as `umu-run
+      ""` with `GAMEID=winetricks-gui`. GE-Proton and UMU-Proton carry
+      protonfixes; Valve's Proton does not.
+    - Heroic runs winecfg and a program with the game's own umu id, and
+      winetricks verbs with `umu-0`.
+    Zendo [tentative]: a Wine prefix card on the page of a Windows game
+    Zendo starts (installed by it or added by hand): Wine settings,
+    winetricks (refused, saying why, when the game's Proton has no
+    `winetricks-gui` fix), Run a program… (the file dialog's new
+    `installer` kind, `.exe` and `.msi` from `~/Downloads`; an `.msi`
+    through `msiexec /i`, run from its own folder), components typed and
+    installed one verb at a time (so one already there is said and
+    skipped, from umu's log, without copying umu's list of settings
+    verbs; a leading dash refused as an option), and Open folder once the
+    prefix exists (the Technical card keeps its own). Always through
+    umu, even when the launch options leave umu out (the prefix is the
+    same); the game's Proton, prefix and environment, not its wrappers.
+    One tool at a time per game and none while it runs; no Stop (the
+    tool's window is closed). Each logs to
+    `~/.local/state/zendo/logs/<id>.prefix.log`. Checked: clippy, tests
+    (the verbs, `.msi`, umu's refusal, which games, the card's states),
+    and the real umu and GE-Proton 11-12 in a throwaway prefix (`win10`
+    installed, `vcrun2022` written into `winetricks.log` heard as
+    already there); winecfg, winetricks' window and a program not run
+    here, as they open windows. Tried by the user 2026-11-09: it all
+    works [firm].
 16. (was 19) What happens by itself on install: GOG's redistributables (Visual
     C++, DirectX) into the prefix (gogdl's `redist`, Heroic's
     `tools/redist/gog`); known fixes per game (Heroic's
@@ -1947,8 +1987,10 @@ by the user 2026-11-09:
   options sheet, built in three parts (13a to 13c) and tried by the
   user 2026-11-09; 14a (Epic's switches and overlay) and 14b (cloud
   saves) the same day, both tried by the user. 14c, GOG's played time
-  sent back, built the same day and tried by the user. Then item 15,
-  the prefix's tools.
+  sent back, built the same day and tried by the user, then GOG's total
+  on the game's page (tried). Item 15, the prefix's tools, built the
+  same day and tried by the user. Next, item 16, what happens by
+  itself on install.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

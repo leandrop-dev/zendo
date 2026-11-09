@@ -1,6 +1,7 @@
 //! Choosing a file in the desktop's own dialog:
 //! `zendo pick-file <kind> <title>`, where the kind is `program` (from
-//! `~/Games`) or `mod` (an archive, from `~/Downloads`);
+//! `~/Games`), `mod` (an archive, from `~/Downloads`) or `installer` (a
+//! Windows program for a game's prefix, from `~/Downloads`);
 //! a second process like the sign-in window, since GTK needs its own loop
 //! apart from Iced's. GTK's native chooser goes through the desktop portal
 //! when there is one, so it is the dialog every other app shows. The path
@@ -21,6 +22,8 @@ pub enum Kind {
     Program,
     /// A mod's archive.
     Mod,
+    /// A Windows program to run in a game's prefix: an installer, a patch.
+    Installer,
 }
 
 impl Kind {
@@ -28,11 +31,12 @@ impl Kind {
         match self {
             Self::Program => "program",
             Self::Mod => "mod",
+            Self::Installer => "installer",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        [Self::Program, Self::Mod]
+        [Self::Program, Self::Mod, Self::Installer]
             .into_iter()
             .find(|kind| kind.name() == name)
     }
@@ -40,10 +44,13 @@ impl Kind {
     fn start(self) -> &'static str {
         match self {
             Self::Program => "Games",
-            Self::Mod => "Downloads",
+            Self::Mod | Self::Installer => "Downloads",
         }
     }
 }
+
+/// Windows programs and installers, as either case spells them.
+const WINDOWS_PROGRAMS: [&str; 4] = ["*.exe", "*.EXE", "*.msi", "*.MSI"];
 
 /// The archives 7-Zip unpacks that mods come in.
 const ARCHIVES: [&str; 9] = [
@@ -84,13 +91,21 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
         };
         let _ = dialog.set_current_folder(start);
     }
-    if kind == Kind::Mod {
-        let archives = gtk::FileFilter::new();
-        archives.set_name(Some(&crate::i18n::t!("dialog-archives")));
-        for pattern in ARCHIVES {
-            archives.add_pattern(pattern);
+    let shown = match kind {
+        Kind::Mod => Some((crate::i18n::t!("dialog-archives"), &ARCHIVES[..])),
+        Kind::Installer => Some((
+            crate::i18n::t!("dialog-windows-programs"),
+            &WINDOWS_PROGRAMS[..],
+        )),
+        Kind::Program => None,
+    };
+    if let Some((name, patterns)) = shown {
+        let files = gtk::FileFilter::new();
+        files.set_name(Some(&name));
+        for pattern in patterns {
+            files.add_pattern(pattern);
         }
-        dialog.add_filter(archives);
+        dialog.add_filter(files);
         let all = gtk::FileFilter::new();
         all.set_name(Some(&crate::i18n::t!("dialog-all-files")));
         all.add_pattern("*");

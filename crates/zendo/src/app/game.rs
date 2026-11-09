@@ -97,6 +97,9 @@ impl Zendo {
         if let Some(mods) = self.mods_card(game) {
             main.push(mods);
         }
+        if let Some(prefix) = self.prefix_card(game) {
+            main.push(prefix);
+        }
         let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
 
         let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;

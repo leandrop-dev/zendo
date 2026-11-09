@@ -31,6 +31,7 @@ pub mod nexus_search;
 pub mod owned;
 mod paths;
 pub mod plugins;
+pub mod prefix_tools;
 pub mod proton;
 pub mod protondb;
 pub mod report;

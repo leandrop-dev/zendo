@@ -43,7 +43,9 @@ impl Zendo {
                 if let Some(game) = self.game_mut(id) {
                     game.played.minutes = game.played.minutes.max(minutes);
                 }
-                self.store.raise_minutes(id, minutes);
+                for owned in self.store.each_mut(id) {
+                    owned.minutes = Some(owned.minutes.unwrap_or(0).max(minutes));
+                }
             }
             Ok(None) => {}
             Err(_) => {

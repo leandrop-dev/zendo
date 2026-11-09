@@ -901,6 +901,7 @@ downloads-done = Concluído
 
 dialog-choose = Escolher
 dialog-archives = Arquivos
+dialog-windows-programs = Programas Windows
 dialog-all-files = Todos os ficheiros
 sign-in-window-title = Iniciar sessão em { $store } · Zendo
 sign-in-popup-title = Iniciar sessão · Zendo
@@ -915,3 +916,19 @@ theme-not-read = Não é um tema: { $problem }
 theme-missing = O hyprmonk não escreveu nenhum tom, por isso aparecem as cores do próprio Zendo.
 theme-following = A seguir o tom do hyprmonk: { $tone }.
 theme-failed = Não foi possível ler o tom do hyprmonk, por isso as cores ficam como estavam: { $error }
+
+## O cartão do prefixo Wine
+
+prefix-title = Prefixo Wine
+prefix-about = As definições do Wine, o winetricks e programas Windows (instaladores, correções) são executados no prefixo deste jogo, com o seu Proton.
+prefix-wine-settings = Definições do Wine
+prefix-run-program = Executar um programa…
+prefix-choose-program = Escolha um programa Windows para executar no prefixo do jogo
+prefix-components-placeholder = Componentes do winetricks, como vcrun2022 d3dx9
+prefix-install = Instalar
+prefix-running = { $what } em execução no prefixo…
+prefix-game-running = As ferramentas esperam que o jogo termine.
+prefix-done = { $what } terminou
+prefix-installed = Instalado: { $components }
+prefix-all-there = Já instalado: { $components }
+prefix-installed-some = Instalado: { $components }; { $already } já estava instalado

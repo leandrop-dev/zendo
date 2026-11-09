@@ -21,6 +21,7 @@ mod local;
 mod mods;
 mod nexus;
 mod nexus_search;
+mod prefix;
 mod protondb;
 mod protons;
 mod running;
@@ -232,6 +233,8 @@ enum Message {
     SteamInstall(SteamInstallMessage),
     /// What `ProtonDB` says of a game.
     Rating(String, Result<Option<zendo_core::protondb::Rating>, String>),
+    /// A tool for a game's Wine prefix.
+    Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
     Store(StoreMessage),
@@ -311,6 +314,8 @@ struct Zendo {
     steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
     ratings: std::collections::HashMap<String, RatingState>,
+    /// The tools run in the Windows games' prefixes.
+    prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
     gog_totals: std::collections::HashSet<String>,
     config: Config,
@@ -363,6 +368,7 @@ impl Zendo {
             steam: SteamState::default(),
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
+            prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
             config: Config::default(),
             themes: Themes::default(),
@@ -501,10 +507,7 @@ impl Zendo {
         match message {
             Message::Loaded(loaded) => self.loaded(*loaded),
             Message::Refresh => self.refresh(),
-            Message::Image(id, kind, result) => {
-                self.image_arrived(&id, kind, result);
-                Task::none()
-            }
+            Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),
             Message::Resized(id, size) => self.resized(id, size),
             Message::Focused(id, focused) => {
@@ -588,6 +591,7 @@ impl Zendo {
             Message::Steam(message) => self.update_steam(message),
             Message::SteamInstall(message) => self.update_steam_installs(message),
             Message::Rating(id, result) => self.rating_arrived(id, result),
+            Message::Prefix(message) => self.update_prefix(message),
             Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
@@ -837,13 +841,19 @@ impl Zendo {
         })
     }
 
-    fn image_arrived(&mut self, id: &str, kind: Kind, result: Result<Option<PathBuf>, String>) {
+    fn image_arrived(
+        &mut self,
+        id: &str,
+        kind: Kind,
+        result: Result<Option<PathBuf>, String>,
+    ) -> Task<Message> {
         self.images.left = self.images.left.saturating_sub(1);
         match result {
             Ok(Some(path)) => self.set_image(id, kind, &path),
             Ok(None) => {}
             Err(_) => self.images.failed += 1,
         }
+        Task::none()
     }
 
     /// Shows a game's new image, in the library and the store, which can
