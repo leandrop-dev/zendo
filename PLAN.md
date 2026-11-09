@@ -1970,6 +1970,31 @@ brackets):
     with GOG's arguments through umu and GE-Proton 11-12 in a throwaway
     prefix (exit 0; its registry entries and DLLs there). Tried by the
     user 2026-11-09: it works [firm].
+    16b, built 2026-11-09 (`known_fixes.rs`). Checked first (Heroic
+    2.22.4's bundle, facts only): Heroic downloads
+    `raw.githubusercontent.com/Heroic-Games-Launcher/known-fixes/main/known_fixes.json`
+    and applies a game's fixes when the game is first set up in its
+    prefix, after the store's own setup: winetricks verbs, then each
+    `runInPrefix` path (relative to the game's folder). All 8
+    `envVariables` are `USE_FAKE_EPIC_EXE`, Heroic's own switch for a
+    stand-in Epic launcher, so Zendo leaves them out.
+    Zendo [tentative]: for Windows games it installed from Epic, GOG or
+    Amazon, before the start and after GOG's setup, on the game's
+    thread: the list is downloaded at most once a day into
+    `$XDG_CACHE_HOME/zendo/known_fixes.json` (a failed download keeps the
+    old one); the fixes not yet tried in the prefix run through the
+    prefix tools (verbs checked as typed in the card; a program only
+    inside the game's folder), the status line says each, and each is
+    kept tried in the prefix's `.zendo-known-fixes.json`, failed or not,
+    so a fix added to the list later is applied at the next start and a
+    game is not held at every start. A failure is said once the game
+    runs. The Wine prefix card lists the game's fixes with Heroic's notes
+    and "Apply known fixes" runs them again. Checked: clippy, tests (the
+    list's shape, the store keys, which games, paths kept in the game's
+    folder, the prefix's record, the card), and Heroic's real list read
+    whole (104 games, 66 with fixes Zendo applies). Taken as working by the user 2026-11-09 [firm]: none of the games
+    installed is on the list (Cyberpunk 2077 is not), so not yet seen
+    applied on a real game.
 17. (was 20) Managing installs: moving a game to another folder (legendary's
     `move`), importing a game already on disk (legendary's `import`),
     updating games by themselves (Heroic's `autoUpdateGames`), the
@@ -2042,8 +2067,10 @@ by the user 2026-11-09:
   sent back, built the same day and tried by the user, then GOG's total
   on the game's page (tried). Item 15, the prefix's tools, built the
   same day and tried by the user. Item 16 split by the user: 16a,
-  GOG's setup, built the same day and tried by the user; then 16b, the
-  known fixes; the desktop entry and Steam shortcut dropped.
+  GOG's setup, built the same day and tried by the user; 16b, the
+  known fixes, built the same day and taken as working by the user; the
+  desktop entry and Steam shortcut dropped. Next: 16c, GOG Galaxy for
+  GOG games (comet), then item 17, managing installs.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

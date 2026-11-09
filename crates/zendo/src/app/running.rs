@@ -13,7 +13,7 @@ use iced::widget::{button, row, text};
 use iced::{Alignment, Element, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
-use zendo_core::{cloud_saves, gog_playtime, gog_setup};
+use zendo_core::{cloud_saves, gog_playtime, gog_setup, known_fixes};
 
 use super::style::{self, BOLD};
 use super::{Message, Zendo};
@@ -73,6 +73,8 @@ pub enum RunMessage {
     SettingUp(String, String),
     /// Some of it failed; the game starts all the same.
     SetupFailed(String, String),
+    /// Some known fixes failed; the game starts all the same.
+    FixesFailed(String, String),
     Started(String, Result<Started, String>),
     /// The launcher started the game: its processes turned up.
     Seen(String),
@@ -131,7 +133,8 @@ impl Zendo {
             RunMessage::Fetching(..)
             | RunMessage::FetchFailed(..)
             | RunMessage::SettingUp(..)
-            | RunMessage::SetupFailed(..) => {
+            | RunMessage::SetupFailed(..)
+            | RunMessage::FixesFailed(..) => {
                 self.before_start(message);
                 Task::none()
             }
@@ -241,6 +244,15 @@ impl Zendo {
                 let warning = t!("run-gog-setup-failed", title = title, error = err.as_str());
                 (id, warning)
             }
+            RunMessage::FixesFailed(id, err) => {
+                let title = self.title_of(&id);
+                let warning = t!(
+                    "run-known-fixes-failed",
+                    title = title,
+                    error = err.as_str()
+                );
+                (id, warning)
+            }
             _ => return,
         };
         if let Some(session) = self.running.games.get_mut(&id) {
@@ -325,6 +337,46 @@ impl Zendo {
         .into()
     }
 }
+/// What a game's prefix gets before the game starts, the first time or
+/// when there is more: GOG's setup, then the known fixes not tried yet
+/// (with Heroic's list asked again once a day; offline, the one kept).
+/// Each step and failure goes to `send`; none stops the game.
+fn prepare(game: &Game, send: &mut dyn FnMut(RunMessage)) {
+    let id = game.id.clone();
+    if gog_setup::needed(game) {
+        let result = gog_setup::run(game, &mut |step| {
+            send(RunMessage::SettingUp(id.clone(), step.to_owned()));
+        });
+        let failed = match result {
+            Ok(setup) => setup.failed.join("; "),
+            Err(err) => format!("{err:#}"),
+        };
+        if !failed.is_empty() {
+            send(RunMessage::SetupFailed(id.clone(), failed));
+        }
+    }
+    if !known_fixes::applies(game) {
+        return;
+    }
+    let _ = known_fixes::refresh();
+    let Some(fixes) = known_fixes::pending(game) else {
+        return;
+    };
+    let result = known_fixes::apply(game, &fixes, &mut |step| {
+        send(RunMessage::SettingUp(
+            id.clone(),
+            t!("run-known-fix", fix = step),
+        ));
+    });
+    let failed = match result {
+        Ok(applied) => applied.failed.join("; "),
+        Err(err) => format!("{err:#}"),
+    };
+    if !failed.is_empty() {
+        send(RunMessage::FixesFailed(id, failed));
+    }
+}
+
 /// Starts the game, says how, and then says when its process group is
 /// gone.
 fn follow(game: Game) -> impl Stream<Item = RunMessage> {
@@ -332,19 +384,9 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
         let (sender, mut receiver) = mpsc::unbounded();
         thread::spawn(move || {
             let id = game.id.clone();
-            if gog_setup::needed(&game) {
-                let result = gog_setup::run(&game, &mut |step| {
-                    let _ =
-                        sender.unbounded_send(RunMessage::SettingUp(id.clone(), step.to_owned()));
-                });
-                let failed = match result {
-                    Ok(setup) => setup.failed.join("; "),
-                    Err(err) => format!("{err:#}"),
-                };
-                if !failed.is_empty() {
-                    let _ = sender.unbounded_send(RunMessage::SetupFailed(id.clone(), failed));
-                }
-            }
+            prepare(&game, &mut |message| {
+                let _ = sender.unbounded_send(message);
+            });
             let fetched = launch::fetch_runtimes(&game, &mut |runtime| {
                 let _ = sender.unbounded_send(RunMessage::Fetching(id.clone(), runtime.label()));
             });

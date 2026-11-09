@@ -21,7 +21,7 @@ use std::process::Command;
 
 use anyhow::{Context, bail};
 
-use crate::{Game, Launch, Source, gog_setup, launch};
+use crate::{Game, Launch, Source, gog_setup, known_fixes, launch};
 
 /// What to run in the prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +37,8 @@ pub enum Tool {
     /// GOG's setup again: its redistributables and the game's own steps
     /// ([`gog_setup`]).
     GogSetup,
+    /// The game's known fixes again, every one ([`known_fixes`]).
+    KnownFixes,
 }
 
 /// How a run went.
@@ -137,6 +139,15 @@ pub fn run(game: &Game, tool: &Tool) -> anyhow::Result<Ran> {
             }
             command.arg("");
             wait(command, &log).context("winetricks")?;
+            Ok(Ran::default())
+        }
+        Tool::KnownFixes => {
+            let fixes =
+                known_fixes::for_game(game).context("Heroic's list has no fixes for this game")?;
+            let applied = known_fixes::apply(game, &fixes, &mut |_| {})?;
+            if !applied.failed.is_empty() {
+                bail!("{}", applied.failed.join("; "));
+            }
             Ok(Ran::default())
         }
         Tool::GogSetup => {

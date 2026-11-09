@@ -671,6 +671,7 @@ impl Zendo {
                     self.want_info(&id),
                     self.want_rating(&id),
                     self.want_gog_total(&id),
+                    self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])
             }
@@ -757,6 +758,7 @@ impl Zendo {
                     self.want_info(&id),
                     self.want_rating(&id),
                     self.want_gog_total(&id),
+                    self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])
             }
@@ -1188,6 +1190,13 @@ impl<T> Fallback for anyhow::Result<T> {
 }
 
 /// A list nothing came of.
+/// Work that found nothing when it hit a bug.
+impl<T> Fallback for Option<T> {
+    fn panicked() -> Self {
+        None
+    }
+}
+
 impl<T> Fallback for Vec<T> {
     fn panicked() -> Self {
         Vec::new()

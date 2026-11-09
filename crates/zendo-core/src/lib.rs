@@ -23,6 +23,7 @@ pub mod gog_setup;
 mod heroic;
 mod http;
 pub mod info;
+pub mod known_fixes;
 pub mod launch;
 pub mod launch_options;
 pub mod local;

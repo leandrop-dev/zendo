@@ -11,6 +11,7 @@ use iced::widget::{button, column, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
 use zendo_core::gog_setup;
+use zendo_core::known_fixes::{self, Fixes};
 use zendo_core::launch;
 use zendo_core::prefix_tools::{self, Ran, Tool};
 
@@ -27,6 +28,9 @@ pub struct PrefixState {
     components: String,
     /// How each game's last tool went: the words, and whether it went well.
     notes: HashMap<String, (String, bool)>,
+    /// Each game's known fixes, read as its page opens; `None` when the
+    /// list has none for it.
+    fixes: HashMap<String, Option<Fixes>>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +42,8 @@ pub enum PrefixMessage {
     Components(String),
     Install(String),
     Done(String, Result<Ran, String>),
+    /// The game's known fixes, read from the list kept.
+    Fixes(String, Option<Fixes>),
 }
 
 /// What the card says runs.
@@ -47,6 +53,7 @@ fn label(tool: &Tool) -> String {
         Tool::Winetricks => "winetricks".to_owned(),
         Tool::Components(verbs) => verbs.join(" "),
         Tool::GogSetup => t!("prefix-gog-setup"),
+        Tool::KnownFixes => t!("prefix-known-fixes"),
         Tool::Program(program) => program
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
@@ -102,6 +109,10 @@ impl Zendo {
                     Task::none()
                 }
             },
+            PrefixMessage::Fixes(id, fixes) => {
+                self.prefix.fixes.insert(id, fixes);
+                Task::none()
+            }
             PrefixMessage::Done(id, result) => {
                 let Some(tool) = self.prefix.busy.remove(&id) else {
                     return Task::none();
@@ -124,6 +135,29 @@ impl Zendo {
     /// the game does not.
     fn tools_free(&self, id: &str) -> bool {
         !self.prefix.busy.contains_key(id) && !self.running.is_running(id)
+    }
+
+    /// Reads the game's known fixes, on a thread, as its page opens (Heroic's
+    /// list asked again once a day).
+    pub(super) fn want_known_fixes(&mut self, id: &str) -> Task<Message> {
+        let Some(game) = self
+            .game(id)
+            .filter(|game| known_fixes::applies(game))
+            .cloned()
+        else {
+            return Task::none();
+        };
+        if !self.persist {
+            return Task::none();
+        }
+        let id = id.to_owned();
+        Task::perform(
+            blocking(move || {
+                let _ = known_fixes::refresh();
+                known_fixes::for_game(&game)
+            }),
+            move |fixes| Message::Prefix(PrefixMessage::Fixes(id.clone(), fixes)),
+        )
     }
 
     fn run_tool(&mut self, id: String, tool: Tool) -> Task<Message> {
@@ -211,6 +245,12 @@ impl Zendo {
             install,
         ]
         .spacing(12);
+        if let Some(Some(fixes)) = self.prefix.fixes.get(id) {
+            body = body.push(fixes_list(
+                fixes,
+                message(PrefixMessage::Run(id.clone(), Tool::KnownFixes)),
+            ));
+        }
         if let Some(tool) = self.prefix.busy.get(id) {
             body = body.push(
                 text(t!("prefix-running", what = label(tool)))
@@ -225,6 +265,30 @@ impl Zendo {
         }
         Some(card(t!("prefix-title"), body.into()))
     }
+}
+
+/// The game's known fixes with why each is there, and a button to apply
+/// them again.
+fn fixes_list(fixes: &Fixes, apply: Option<Message>) -> Element<'_, Message> {
+    let mut list = column![text(t!("prefix-known-fixes-title")).size(14)].spacing(4);
+    let paths = fixes.run_in_prefix.iter();
+    for fix in fixes.winetricks.iter().chain(paths) {
+        let line = match fixes.notes.get(fix) {
+            Some(note) => format!("{fix}: {note}"),
+            None => fix.clone(),
+        };
+        list = list.push(text(line).size(13).color(colors().dim));
+    }
+    row![
+        list.width(Length::Fill),
+        button(text(t!("prefix-known-fixes")).size(14))
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press_maybe(apply),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center)
+    .into()
 }
 
 #[cfg(test)]
@@ -313,5 +377,32 @@ mod tests {
             ))
         );
         assert_eq!(zendo.prefix.components, "");
+    }
+
+    #[test]
+    fn keeps_the_fixes_read_and_applies_them_as_a_tool() {
+        let mut zendo = with_game();
+        let fixes = Fixes {
+            winetricks: vec!["vcrun2019".into()],
+            ..Fixes::default()
+        };
+        send(
+            &mut zendo,
+            PrefixMessage::Fixes("gog:1".into(), Some(fixes.clone())),
+        );
+        assert_eq!(zendo.prefix.fixes.get("gog:1"), Some(&Some(fixes)));
+        send(
+            &mut zendo,
+            PrefixMessage::Run("gog:1".into(), Tool::KnownFixes),
+        );
+        assert_eq!(zendo.prefix.busy.get("gog:1"), Some(&Tool::KnownFixes));
+        send(
+            &mut zendo,
+            PrefixMessage::Done("gog:1".into(), Err("vcrun2019 failed".into())),
+        );
+        assert_eq!(
+            zendo.prefix.notes.get("gog:1"),
+            Some(&("vcrun2019 failed".to_owned(), false))
+        );
     }
 }
