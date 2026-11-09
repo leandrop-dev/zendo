@@ -685,6 +685,7 @@ store-into = Into { $path }
 store-installs-into = Installs into { $path }
 store-install-with-steam = Install with Steam
 store-steam-installs = Steam asks where to install it; Zendo follows the download and adds the game when it is done
+store-steam-installs-needs = Steam asks where to install it; Zendo follows the download and adds the game when it is done · needs { $size }
 store-installs-into-needs = Installs into { $path } · needs { $size }
 store-with-dlc = Also install its DLC ({ $count })
 store-with-dlc-size = Also install its DLC ({ $count }, { $size })

@@ -704,7 +704,18 @@ pub fn store_facts(
         None => {}
     }
     if let Some(owned) = owned {
-        if let Some(bytes) = owned.space.filter(|_| !installed) {
+        if let Some(sizes) = owned.sizes {
+            facts.push((
+                t!("fact-download-size"),
+                Size::Bytes(sizes.download).to_string(),
+            ));
+            if !installed {
+                facts.push((
+                    t!("fact-size-on-disk"),
+                    Size::Bytes(sizes.install).to_string(),
+                ));
+            }
+        } else if let Some(bytes) = owned.space.filter(|_| !installed) {
             facts.push((t!("fact-space-needed"), Size::Bytes(bytes).to_string()));
         }
         if let Some(publisher) = &owned.publisher {

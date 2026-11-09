@@ -9,6 +9,7 @@
 //! Zendo remembers: launches, hidden games, the sort) and [`covers`] (the
 //! images it downloaded).
 
+pub mod appinfo;
 pub mod config;
 pub mod covers;
 mod desktop;

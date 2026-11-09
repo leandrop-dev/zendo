@@ -665,7 +665,15 @@ impl Zendo {
                     app.to_owned(),
                     game.title.clone(),
                 ))),
-                t!("store-steam-installs"),
+                game.sizes.map_or_else(
+                    || t!("store-steam-installs"),
+                    |sizes| {
+                        t!(
+                            "store-steam-installs-needs",
+                            size = zendo_core::Size::Bytes(sizes.install).to_string()
+                        )
+                    },
+                ),
                 None,
             ),
             // Steam writes nothing when its dialog is cancelled: the button

@@ -106,7 +106,10 @@ install it and give it its colours, but it runs on any Linux desktop.
   page remembers the sign-in in `~/.local/share/zendo/steam-web`). The
   Steam Web API key Zendo took before is no longer used: Zendo removes it
   from the settings file and the keyring. A Steam game's page has the
-  description, makers, genres and release date from Steam's store. Install
+  description, makers, genres and release date from Steam's store, and
+  its download size and size on disk as the Steam client counts them (from
+  its `appcache/appinfo.vdf`, read only; the store's "Storage" estimate
+  when the client has not seen the game). Install
   opens Steam's own install dialog (`steam -silent steam://install/<app>`);
   Steam downloads the game, Zendo shows how far it is on the Downloads page
   and the game's page, and adds it to the library when Steam is done. If

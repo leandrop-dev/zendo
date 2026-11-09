@@ -3,15 +3,15 @@
 //! `library.json` after `nile library sync`, GOG's from GOG's own services
 //! with gogdl's token, as gogdl has no list of its own: the Galaxy library
 //! gives the ids, GOG's games database each game's title and art. Steam's
-//! comes from its Web API (`IPlayerService/GetOwnedGames`) with the user's
-//! own key, for the account Steam signed in last.
+//! comes from its Web API (`IPlayerService/GetOwnedGames`) with the token
+//! of Zendo's own Steam sign-in; its sizes from the Steam client's cache.
 //!
 //! Each list is kept in `$XDG_CACHE_HOME/zendo/store/<store>.json`, so the
 //! Store page shows at once and asks again only on Refresh or a sign-in.
 //! Ids are the library's (`epic:…`, `gog:…`, `amazon:…`, `steam:…`), so a
 //! game's covers are shared between the two.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -22,7 +22,7 @@ use serde_json::Value;
 
 use crate::covers::{self, Artwork, Kind};
 use crate::stores::Store;
-use crate::{Source, paths, steam};
+use crate::{Source, appinfo, paths, steam};
 
 const STEAM_OWNED: &str = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/";
 /// Steam's public store details of an app, no key needed.
@@ -73,6 +73,10 @@ pub struct Owned {
     /// "Storage: 8 GB available space"); an estimate, not the download.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space: Option<u64>,
+    /// A Steam game's size, as the Steam client's own cache counts it;
+    /// filled in after loading, not kept in the cache.
+    #[serde(skip)]
+    pub sizes: Option<appinfo::Sizes>,
     /// Images on disk, filled in after loading; not kept in the cache.
     #[serde(skip)]
     pub cover: Option<PathBuf>,
@@ -220,6 +224,7 @@ impl Owned {
             played_on: PlayedOn::default(),
             shared: false,
             space: None,
+            sizes: None,
             cover: None,
             hero: None,
         }
@@ -263,6 +268,7 @@ pub fn cached(shop: Shop) -> Vec<Owned> {
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
     with_images(&mut games);
+    with_sizes(&mut games);
     games
 }
 
@@ -287,6 +293,23 @@ fn with_images(games: &mut [Owned]) {
                 Kind::Hero => game.hero = image,
             }
         }
+    }
+}
+
+/// The Steam games' sizes, from the Steam client's cache.
+fn with_sizes(games: &mut [Owned]) {
+    let app = |game: &Owned| {
+        game.id
+            .strip_prefix("steam:")
+            .and_then(|app| app.parse::<u64>().ok())
+    };
+    let apps: HashSet<u64> = games.iter().filter_map(app).collect();
+    if apps.is_empty() {
+        return;
+    }
+    let sizes = appinfo::sizes(&steam::roots(), &apps);
+    for game in games {
+        game.sizes = app(game).and_then(|app| sizes.get(&app).copied());
     }
 }
 
@@ -327,6 +350,7 @@ pub(crate) fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owne
             .with_context(|| format!("could not write {}", file.display()))?;
     }
     with_images(&mut games);
+    with_sizes(&mut games);
     Ok(games)
 }
 

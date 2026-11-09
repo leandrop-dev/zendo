@@ -301,9 +301,18 @@ Nothing is required. Zendo detects each tool and shows what is missing.
   languages and low violence, 748 of the user's 749 Steam games in the
   Store's list have a size (MECCHA CHAMELEON 3.65 GB, 3.43 GB to
   download); the cache holds what the Steam client has seen, so a
-  computer with Steam signed in to that account. Proposed [tentative,
-  for the user]: the Store's Steam games take their size from it, before
-  the store requirements' "Storage" estimate.
+  computer with Steam signed in to that account. The Store's Steam games
+  take their size from it, before the store requirements' "Storage"
+  estimate [firm, the user 2026-11-09]. Built 2026-11-09
+  (`zendo-core/src/appinfo.rs`, versions 28 and 29): read, never written,
+  each time the Steam list is loaded or refreshed. Over the throwaway
+  check it also leaves out DLC depots (`dlcappid`), takes the Linux
+  depots when the app has a released one (Steam installs the native
+  version then; some list a Linux depot with no public build) and the
+  64-bit ones where both are (`osarch` a number or text); a `download`
+  of 0 (old apps) counts as the size. All 749 games in the user's list
+  have a size. The game page shows Download size and Size on disk; the
+  Install with Steam note says what it needs.
 
 ## Phases
 
