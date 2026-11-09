@@ -252,7 +252,7 @@ impl Zendo {
     fn is_connected(&self, shop: Shop) -> bool {
         match shop.store() {
             Some(store) => matches!(self.accounts.get(store), Account::SignedIn(_)),
-            None => self.config.steam_key.is_some(),
+            None => self.config.steam_session.is_some() || self.config.steam_key.is_some(),
         }
     }
 
@@ -261,6 +261,12 @@ impl Zendo {
         let shop = shop.into();
         if !self.persist || !self.store.asking.insert(shop) {
             return Task::none();
+        }
+        // Signed in to Steam: the sign-in's token, renewed when it ran out.
+        if shop == Shop::Steam
+            && let Some(session) = self.steam_session()
+        {
+            return super::steam::fetch_steam_signed_in(session);
         }
         let key = self.config.steam_key.clone();
         Task::perform(
@@ -292,15 +298,15 @@ impl Zendo {
         self.game(id).is_some()
     }
 
-    /// The games of every store not signed out (Steam's while its key is
-    /// set), before any filter.
+    /// The games of every store not signed out (Steam's while signed in,
+    /// or its old key is set), before any filter.
     fn shown(&self) -> impl Iterator<Item = &Owned> {
         self.store
             .lists
             .iter()
             .filter(|(shop, _)| match shop.store() {
                 Some(store) => !matches!(self.accounts.get(store), Account::SignedOut),
-                None => self.config.steam_key.is_some(),
+                None => self.is_connected(Shop::Steam),
             })
             .flat_map(|(_, games)| games)
     }
@@ -706,6 +712,9 @@ fn fetch_list(shop: Shop, key: Option<&str>) -> anyhow::Result<Vec<Owned>> {
 /// The line under a card's title: the developer or platforms, or for a
 /// Steam game the time Steam counted.
 fn card_line(game: &Owned) -> String {
+    if game.shared && game.minutes.is_none_or(|minutes| minutes == 0) {
+        return t!("store-shared");
+    }
     match game.minutes {
         Some(0) => t!("played-never"),
         Some(minutes) => t!("played-time", time = format::play_time(minutes)),

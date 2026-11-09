@@ -159,7 +159,8 @@ enum Move {
 
 #[derive(Debug, Clone)]
 enum Message {
-    Loaded(Library, Sort, Result<Config, String>),
+    /// Boxed: the settings and the library are large.
+    Loaded(Box<(Library, Sort, Result<Config, String>)>),
     Refresh,
     /// An image download finished: the file, none found, or what went wrong.
     Image(String, Kind, Result<Option<PathBuf>, String>),
@@ -476,7 +477,7 @@ impl Zendo {
             return task;
         }
         match message {
-            Message::Loaded(library, sort, config) => self.loaded(library, sort, config),
+            Message::Loaded(loaded) => self.loaded(*loaded),
             Message::Refresh => self.refresh(),
             Message::Image(id, kind, result) => {
                 self.image_arrived(&id, kind, result);
@@ -595,9 +596,7 @@ impl Zendo {
 
     fn loaded(
         &mut self,
-        library: Library,
-        sort: Sort,
-        config: Result<Config, String>,
+        (library, sort, config): (Library, Sort, Result<Config, String>),
     ) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
@@ -1115,7 +1114,7 @@ fn scan() -> Task<Message> {
             let config = Config::load().map_err(|err| format!("{err:#}"));
             (Library::scan(), sort, config)
         }),
-        |(library, sort, config)| Message::Loaded(library, sort, config),
+        |loaded| Message::Loaded(Box::new(loaded)),
     )
 }
 

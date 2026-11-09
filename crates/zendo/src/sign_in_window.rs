@@ -3,6 +3,12 @@
 //! `zendo sign-in-window <store> <url>`, because the web view needs GTK's
 //! own loop, apart from Iced's.
 //!
+//! Steam's is different ([`steam`]): its store page gives a signed-in user
+//! a Web API token, which the window writes instead of a code. Its cookies
+//! are kept in a folder of Zendo's, so Steam's page remembers the sign-in
+//! and gives a new token later in a window that never shows
+//! (`steam-renew`).
+//!
 //! It watches the addresses the page goes to. On the page the store's
 //! sign-in ends on ([`stores::code_at`]) it writes the code to stdout and
 //! closes; Zendo's window, waiting on it, finishes the sign-in. Closing it
@@ -20,8 +26,10 @@ use gtk::prelude::*;
 use serde_json::Value;
 use webkit2gtk::{SettingsExt, WebViewExt};
 use wry::{
-    NewWindowResponse, PageLoadEvent, WebViewBuilder, WebViewBuilderExtUnix, WebViewExtUnix,
+    NewWindowResponse, PageLoadEvent, WebContext, WebViewBuilder, WebViewBuilderExtUnix,
+    WebViewExtUnix,
 };
+use zendo_core::steam_web::{self, Session};
 use zendo_core::stores::{self, Store};
 
 /// How the window says it was closed before the sign-in ended.
@@ -71,11 +79,18 @@ fn name_of(store: Store) -> &'static str {
 /// `zendo sign-in-window <store> <url>`: shows the page until the sign-in
 /// ends or the window is closed.
 pub fn main(store: &str, url: &str) -> ExitCode {
-    let Some(store) = store_named(store) else {
-        eprintln!("zendo: no store called {store}");
-        return ExitCode::from(2);
+    let shown = match store {
+        "steam" => steam::show(false, url),
+        "steam-renew" => steam::show(true, url),
+        name => {
+            let Some(store) = store_named(name) else {
+                eprintln!("zendo: no store called {name}");
+                return ExitCode::from(2);
+            };
+            show(store, url)
+        }
     };
-    match show(store, url) {
+    match shown {
         Ok(Some(code)) => {
             let mut stdout = std::io::stdout();
             if writeln!(stdout, "{code}")
@@ -266,10 +281,46 @@ impl Handle {
 ///
 /// When the window cannot be started or fails, as without `WebKitGTK`.
 pub fn open(store: Store, url: &str, handle: &Handle) -> anyhow::Result<Option<String>> {
+    run(name_of(store), url, handle)
+}
+
+/// Opens Steam's sign-in and waits for it: the session, or `None` when the
+/// window was closed first. It blocks; the window calls it on a thread.
+///
+/// # Errors
+///
+/// When the window cannot be started or fails, or writes no session.
+pub fn open_steam(handle: &Handle) -> anyhow::Result<Option<Session>> {
+    steam_session(run("steam", steam_web::SIGN_IN_PAGE, handle)?)
+}
+
+/// Asks Steam's page for a new token, in a window that never shows: the
+/// session, or `None` when Steam's page no longer knows the sign-in.
+///
+/// # Errors
+///
+/// When the window cannot be started or fails.
+pub fn renew_steam() -> anyhow::Result<Option<Session>> {
+    steam_session(run(
+        "steam-renew",
+        steam_web::STORE_PAGE,
+        &Handle::default(),
+    )?)
+}
+
+fn steam_session(text: Option<String>) -> anyhow::Result<Option<Session>> {
+    text.map(|text| {
+        Session::parse(&text).ok_or_else(|| anyhow::anyhow!("Steam's page gave no sign-in"))
+    })
+    .transpose()
+}
+
+/// Runs `zendo sign-in-window <name> <url>` and reads what it writes.
+fn run(name: &str, url: &str, handle: &Handle) -> anyhow::Result<Option<String>> {
     let exe = std::env::current_exe().context("could not find Zendo's own program")?;
     let mut command = Command::new(exe);
     command
-        .args(["sign-in-window", name_of(store), url])
+        .args(["sign-in-window", name, url])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -300,6 +351,128 @@ pub fn open(store: Store, url: &str, handle: &Handle) -> anyhow::Result<Option<S
                 .map_or_else(|| output.status.to_string(), str::to_owned);
             bail!("the sign-in window failed: {reason}")
         }
+    }
+}
+
+/// Steam's sign-in on its own store page.
+mod steam {
+    use std::time::Duration;
+
+    use super::{
+        Context, Rc, Read, RefCell, Session, Value, WebContext, WebViewBuilder,
+        WebViewBuilderExtUnix,
+    };
+    use gtk::prelude::*;
+    use zendo_core::steam_web;
+
+    /// How long a renewal waits for Steam's page.
+    const RENEW_WAIT: Duration = Duration::from_secs(45);
+
+    /// Run on Steam's store pages: whether the user is signed in (not on
+    /// the sign-in page) and, when so, the Steam ID and the Web API token
+    /// the page carries in `#application_config` (as Playnite reads it).
+    const SCRIPT: &str = r"
+window.addEventListener('DOMContentLoaded', () => {
+  if (location.hostname !== 'store.steampowered.com') {
+    return;
+  }
+  // Steam sends a browser not signed in to its sign-in page.
+  if (location.pathname.startsWith('/login')) {
+    window.ipc.postMessage(JSON.stringify({ steam: null }));
+    return;
+  }
+  const config = document.getElementById('application_config');
+  if (!config) {
+    return;
+  }
+  const read = (text) => { try { return JSON.parse(text || '{}'); } catch (e) { return {}; } };
+  const user = read(config.dataset.userinfo);
+  const store = read(config.dataset.store_user_config);
+  const signedIn = user.logged_in === true && !!user.steamid && !!store.webapi_token;
+  window.ipc.postMessage(JSON.stringify(signedIn
+    ? { steam: { steamid: String(user.steamid), token: store.webapi_token } }
+    : { steam: null }));
+});
+";
+
+    /// Shows Steam's page until it gives a token: written as a session, or
+    /// `None` when the window was closed or, renewing, Steam's page is not
+    /// signed in.
+    pub fn show(renew: bool, url: &str) -> anyhow::Result<Option<String>> {
+        gtk::glib::set_prgname(Some(crate::app::APP_ID));
+        gtk::glib::set_application_name("Zendo");
+        gtk::init().context("could not start GTK")?;
+        crate::i18n::set_from_settings();
+        let profile = steam_web::profile_dir().context("no home folder for Steam's page")?;
+        zendo_core::steam_web::make_profile_dir(&profile)?;
+        let mut context = WebContext::new(Some(profile));
+
+        // Renewing, the window is drawn off screen: never seen.
+        let window: gtk::Window = if renew {
+            gtk::OffscreenWindow::new().upcast()
+        } else {
+            let window = gtk::Window::new(gtk::WindowType::Toplevel);
+            window.set_title(&crate::i18n::t!("sign-in-window-title", store = "Steam"));
+            window.set_default_size(560, 760);
+            window
+        };
+        let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        window.add(&container);
+
+        let session: Rc<RefCell<Option<String>>> = Rc::default();
+        let webview = WebViewBuilder::new_with_web_context(&mut context)
+            .with_url(url)
+            .with_initialization_script(SCRIPT)
+            .with_ipc_handler({
+                let session = Rc::clone(&session);
+                move |request| {
+                    let Ok(page) = serde_json::from_str::<Value>(request.body()) else {
+                        return;
+                    };
+                    let found =
+                        page.get("steam")
+                            .filter(|steam| !steam.is_null())
+                            .and_then(|steam| {
+                                Some(Session {
+                                    steamid: steam.get("steamid")?.as_str()?.to_owned(),
+                                    token: steam.get("token")?.as_str()?.to_owned(),
+                                })
+                            });
+                    match found {
+                        Some(found) => {
+                            *session.borrow_mut() = Some(found.to_text());
+                            gtk::main_quit();
+                        }
+                        // Signed out: a renewal ends; a sign-in waits for
+                        // the user.
+                        None if renew => gtk::main_quit(),
+                        None => {}
+                    }
+                }
+            })
+            .build_gtk(&container)
+            .context("could not open Steam's page")?;
+
+        window.connect_delete_event(|_, _| {
+            gtk::main_quit();
+            gtk::glib::Propagation::Proceed
+        });
+        if renew {
+            gtk::glib::timeout_add_local_once(RENEW_WAIT, gtk::main_quit);
+        } else {
+            // Zendo's window holds the other end; it closes on Cancel or exit.
+            std::thread::spawn(|| {
+                let mut stdin = std::io::stdin();
+                let mut sink = [0_u8; 64];
+                while matches!(stdin.read(&mut sink), Ok(read) if read > 0) {}
+                gtk::glib::idle_add_once(gtk::main_quit);
+            });
+        }
+        window.show_all();
+        gtk::main();
+        drop(webview);
+        let session = session.borrow_mut().take();
+        Ok(session)
     }
 }
 

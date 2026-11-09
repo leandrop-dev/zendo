@@ -96,11 +96,15 @@ install it and give it its colours, but it runs on any Linux desktop.
   installed ones marked, a search, store chips and "Not installed only",
   and a page for each.
 - Lists the Steam games you own there too, installed or not, with the time
-  Steam counted, once you add your own Steam Web API key on the Accounts
-  page (<https://steamcommunity.com/dev/apikey>; Steam asks for a domain
-  name, and any will do). Zendo asks for the account Steam signed in last
-  on this computer; if Steam lists no games for it, set Game details to
-  Public in Steam's privacy settings. A Steam game's page has the
+  Steam counted, and the games your Steam family shares with you, once you
+  sign in with Steam on the Accounts page. You sign in on Steam's own page,
+  in Zendo's sign-in window, with your password and Steam Guard or the
+  Steam app's QR code; Zendo never sees the password. It keeps the Web API
+  token Steam's page gives in the system keyring, and gets a new one from
+  Steam's page, in a window that never shows, when it runs out (Steam's
+  page remembers the sign-in in `~/.local/share/zendo/steam-web`). A
+  Steam Web API key set before the sign-in existed is used until you sign
+  in, and can be removed on Accounts. A Steam game's page has the
   description, makers, genres and release date from Steam's store. Install
   opens Steam's own install dialog (`steam -silent steam://install/<app>`);
   Steam downloads the game, Zendo shows how far it is on the Downloads page
@@ -304,9 +308,9 @@ readable by you only, and does not keep comments added by hand:
 steamgriddb_key = "…"
 # Your personal key from API Access on Nexus Mods, for downloading mods.
 nexus_key = "…"
-# Your Steam Web API key from https://steamcommunity.com/dev/apikey, for the
-# Steam games you own but have not installed.
-steam_key = "…"
+# The Steam sign-in, written by Accounts when no keyring answers; it is
+# kept in the keyring otherwise. Not for writing by hand.
+steam_session = "…"
 # false to never download covers.
 download_covers = true
 # Where store games are installed, each in a folder of its own.
@@ -343,11 +347,13 @@ negative = "#f7768e"        # optional red
 
 The built-in themes are the files in `crates/zendo/themes/`.
 
-The three keys go in the system keyring when one answers (the Secret
-Service: GNOME Keyring, KDE Wallet), and in this file only when none does;
-Settings (Accounts for Steam's) says where each is. A key written in the
-file by hand moves into the keyring the next time Zendo starts. In the keyring they are items with
-`application` `zendo` and `key` `steamgriddb`, `nexus` or `steam`, so
+The keys and the Steam sign-in go in the system keyring when one answers
+(the Secret Service: GNOME Keyring, KDE Wallet), and in this file only
+when none does; Settings (Accounts for Steam's) says where each is. A key
+written in the file by hand moves into the keyring the next time Zendo
+starts. In the keyring they are items with `application` `zendo` and `key`
+`steamgriddb`, `nexus`, `steam` (the old Steam Web API key) or
+`steam-session`, so
 `secret-tool lookup application zendo key nexus` prints one. A key written
 `""` means none, without asking the keyring.
 
@@ -407,9 +413,9 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `steam.rs` for Accounts' Steam card, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `steam.rs` for Accounts' Steam card and the sign-in's token, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal), the `sidebar.rs` and the colours (`style.rs`) |
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`zendo.svg`) |
 | `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |

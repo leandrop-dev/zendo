@@ -209,23 +209,18 @@ nexus-download-failed = Não foi possível transferir o mod: { $error }
 nexus-downloads-title = Mods do Nexus
 nexus-paste = Cole a sua chave pessoal da API do Nexus Mods
 nexus-get-key = Obtenha a sua chave pessoal da API em API Access no Nexus Mods
-steam-about = O Steam inicia sessão por si. Com a sua chave da Web API do Steam, a Loja mostra os jogos que esta conta tem, instalados ou não, e instala-os através do Steam. A chave fica no porta-chaves do sistema, como as outras chaves do Zendo.
-steam-paste = Cole a sua chave da Web API do Steam
-steam-account = Conta do Steam neste computador: { $name }
-steam-no-account = Nenhuma conta do Steam iniciou sessão neste computador; inicie sessão no Steam primeiro
-steam-get-key = Obter uma chave do Steam
-steam-key-domain = (O Steam pede um nome de domínio; qualquer um, como localhost, serve)
-steam-key-accepted = { $count ->
-    [one] O Steam aceita a chave e mostra 1 jogo de { $name }
-   *[other] O Steam aceita a chave e mostra { $count } jogos de { $name }
-}
-steam-key-saved = { $count ->
-    [one] Guardada. O Steam mostra 1 jogo de { $name }
-   *[other] Guardada. O Steam mostra { $count } jogos de { $name }
-}
-steam-key-nothing = O Steam aceita a chave mas não mostra jogos de { $name }: ponha os Detalhes de jogos como Públicos nas definições de privacidade do Steam
-steam-key-rejected = O Steam não aceita esta chave
-steam-key-rejected-unsaved = O Steam não aceita esta chave, por isso não foi guardada
+steam-sign-in-about = Inicie sessão na própria página do Steam, com a palavra-passe e o Steam Guard ou o código QR da aplicação Steam; o Zendo nunca vê a palavra-passe. A Loja passa a listar os jogos que tem e os que a sua família Steam partilha, e instala-os através do Steam. O Zendo guarda a sessão no porta-chaves do sistema e a página do Steam lembra-se dela.
+steam-sign-in = Iniciar sessão com o Steam
+steam-signing-in = Inicie sessão na página do Steam, na janela que abriu
+steam-signed-in = Sessão iniciada: a Loja está a pedir os seus jogos ao Steam
+steam-signed-in-about = A Loja lista os jogos desta conta e os que a sua família Steam partilha.
+steam-signed-out = Sessão do Steam terminada
+steam-sign-in-again = A sessão do Steam terminou: inicie sessão de novo
+steam-family-failed = Não foi possível listar os jogos da sua família: { $error }
+steam-old-key-used = A chave da Steam Web API definida antes é usada até iniciar sessão.
+steam-old-key-unused = A chave da Steam Web API definida antes já não é usada.
+steam-remove-key = Remover a chave
+store-shared = Partilhado pela sua família
 steam-asked = Pedido ao Steam para instalar { $title }: escolha onde na janela do Steam
 steam-installed = { $title } está instalado
 steam-downloads-title = Steam
@@ -423,6 +418,7 @@ fact-last-played = Jogado pela última vez
 fact-never = Nunca
 fact-play-time = Tempo de jogo
 fact-status = Estado
+fact-owner = De quem é
 fact-not-installed = Não instalado
 fact-started-from-zendo = Iniciado a partir do Zendo
 fact-launch-command = Comando de lançamento
@@ -651,7 +647,7 @@ store-installed = { $count ->
 store-asking-stores = A perguntar a { $stores } pelos seus jogos…
 store-search = Pesquisar os seus jogos
 store-asking = A perguntar…
-store-sign-in-first = Inicie sessão numa loja, ou adicione a sua chave do Steam, para ver os jogos que tem
+store-sign-in-first = Inicie sessão numa loja em Contas para ver os jogos que tem
 store-go-accounts = Ir para Contas
 store-asking-all = A perguntar às lojas pelos seus jogos…
 store-nothing = Nada aqui

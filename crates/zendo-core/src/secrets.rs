@@ -19,10 +19,17 @@ pub enum Key {
     SteamGridDb,
     Nexus,
     Steam,
+    /// The Steam sign-in: its Steam ID and Web API token, as JSON.
+    SteamSession,
 }
 
 impl Key {
-    pub const ALL: [Self; 3] = [Self::SteamGridDb, Self::Nexus, Self::Steam];
+    pub const ALL: [Self; 4] = [
+        Self::SteamGridDb,
+        Self::Nexus,
+        Self::Steam,
+        Self::SteamSession,
+    ];
 
     /// Its name in the keyring and in `config.toml`.
     fn name(self) -> &'static str {
@@ -30,6 +37,7 @@ impl Key {
             Self::SteamGridDb => "steamgriddb",
             Self::Nexus => "nexus",
             Self::Steam => "steam",
+            Self::SteamSession => "steam-session",
         }
     }
 
@@ -39,6 +47,7 @@ impl Key {
             Self::SteamGridDb => "Zendo: SteamGridDB API key",
             Self::Nexus => "Zendo: Nexus Mods API key",
             Self::Steam => "Zendo: Steam Web API key",
+            Self::SteamSession => "Zendo: Steam sign-in",
         }
     }
 

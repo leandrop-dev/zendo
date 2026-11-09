@@ -423,7 +423,7 @@ fn parse_library_folders(text: &str) -> anyhow::Result<Vec<PathBuf>> {
 /// A Steam account signed in on this computer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct User {
-    /// The 64-bit `SteamID` Steam's Web API takes.
+    /// The 64-bit `Steam ID` Steam's Web API takes.
     pub id: String,
     /// The name friends see.
     pub name: String,
@@ -440,10 +440,37 @@ pub fn user(roots: &[PathBuf]) -> Option<User> {
     })
 }
 
+/// The name Steam on this computer knows an account by, when it does.
+#[must_use]
+pub fn user_named(roots: &[PathBuf], id: &str) -> Option<String> {
+    roots.iter().find_map(|root| {
+        let text = fs::read_to_string(root.join("config/loginusers.vdf")).ok()?;
+        users(&text)
+            .into_iter()
+            .find(|(_, user)| user.id == id)
+            .map(|(_, user)| user.name)
+            .filter(|name| !name.is_empty())
+    })
+}
+
 fn parse_users(text: &str) -> Option<User> {
-    let vdf = Vdf::from(keyvalues_parser::parse(text).ok()?);
-    vdf.value
-        .get_obj()?
+    users(text)
+        .into_iter()
+        .max_by_key(|(order, _)| *order)
+        .map(|(_, user)| user)
+}
+
+/// The accounts in `loginusers.vdf`, each with whether it is the most
+/// recent and when it signed in.
+fn users(text: &str) -> Vec<((bool, u64), User)> {
+    let Ok(parsed) = keyvalues_parser::parse(text) else {
+        return Vec::new();
+    };
+    let vdf = Vdf::from(parsed);
+    let Some(accounts) = vdf.value.get_obj() else {
+        return Vec::new();
+    };
+    accounts
         .iter()
         .filter(|(id, _)| id.len() == 17 && id.bytes().all(|byte| byte.is_ascii_digit()))
         .filter_map(|(id, values)| {
@@ -461,8 +488,7 @@ fn parse_users(text: &str) -> Option<User> {
                 },
             ))
         })
-        .max_by_key(|(order, _)| *order)
-        .map(|(_, user)| user)
+        .collect()
 }
 
 /// Steam's cached image for an app, installed or not: `library_600x900.jpg`

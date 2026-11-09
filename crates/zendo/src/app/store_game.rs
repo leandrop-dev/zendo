@@ -100,6 +100,9 @@ impl Zendo {
             rows.push(label_row(label, value));
         };
         add(t!("fact-store"), plain(game.shop.label().to_owned()));
+        if game.shared {
+            add(t!("fact-owner"), plain(t!("store-shared")));
+        }
         add(
             t!("fact-status"),
             if installed {

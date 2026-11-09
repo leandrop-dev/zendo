@@ -1,49 +1,84 @@
-//! Steam's card on the Accounts page: the account Steam signed in last on
-//! this computer, and the user's Steam Web API key, with which the Store
-//! lists the Steam games that account owns. Steam signs in by itself; Zendo
-//! only reads which account it is.
+//! Steam's card on the Accounts page: the Steam sign-in, on Steam's own
+//! page in Zendo's sign-in window, with which the Store lists the games the
+//! account owns and those its Steam family shares. The token Steam's page
+//! gives is kept in the keyring and asked again of Steam's page, in a
+//! window that never shows, when it runs out.
+//!
+//! A Steam Web API key set before the sign-in existed is still used until
+//! the user signs in, and can be removed here.
 
-use iced::widget::{button, column, container, row, space, text, text_input};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use iced::widget::{button, column, container, row, space, text};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Source;
-use zendo_core::owned::{self, Shop, SteamAnswer, SteamUser};
+use zendo_core::owned::{self, Owned, Shop, SteamUser};
 use zendo_core::secrets::Key;
+use zendo_core::steam_web::{self, Session, WebAnswer};
 
-use super::nexus::KeyField;
 use super::settings::kept_note;
+use super::store::StoreMessage;
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
-
-/// Where Steam makes Web API keys.
-const KEY_PAGE: &str = "https://steamcommunity.com/dev/apikey";
+use crate::sign_in_window::{self, Handle};
 
 #[derive(Debug, Default)]
 pub struct SteamState {
-    key: KeyField,
-    /// The account Steam signed in last here, read when the settings are.
+    /// The accounts Steam signed in on this computer, for the signed-in
+    /// account's name.
     user: Option<SteamUser>,
+    /// The sign-in window, while it is open.
+    signing_in: Option<Handle>,
+    /// What the last sign-in, sign-out or list said, and whether it went
+    /// well.
+    note: Option<(String, bool)>,
+    /// Why the family's games could not be listed, when they could not.
+    family_note: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum SteamMessage {
-    KeyInput(String),
-    ToggleShown,
-    SaveKey,
-    CheckKey,
-    KeyChecked(Result<SteamAnswer, String>),
+    SignIn,
+    CancelSignIn,
+    SignedIn(Result<Option<Session>, String>),
+    SignOut,
+    /// Removes the Web API key set before the sign-in.
+    RemoveKey,
+    Fetched(Result<SteamFetch, String>),
+}
+
+/// Steam's list asked with the sign-in.
+#[derive(Debug, Clone)]
+pub enum SteamFetch {
+    Games {
+        games: Vec<Owned>,
+        /// A new token, when the old one had run out.
+        renewed: Option<Session>,
+        family_error: Option<String>,
+    },
+    /// Steam's page no longer knows the sign-in.
+    SignedOut,
 }
 
 impl Zendo {
-    /// After the settings are read: the key in its field, the account, and
-    /// Steam's list when there is a key and none kept.
+    /// The signed-in session, read from the settings.
+    pub(super) fn steam_session(&self) -> Option<Session> {
+        self.config
+            .steam_session
+            .as_deref()
+            .and_then(Session::parse)
+    }
+
+    /// After the settings are read: the account, and Steam's list when
+    /// signed in (or a key is set) and none is kept.
     pub(super) fn steam_loaded(&mut self) -> Task<Message> {
-        self.steam.key.value = self.config.steam_key.clone().unwrap_or_default();
         if !self.persist {
             return Task::none();
         }
         self.steam.user = owned::steam_user();
-        if self.config.steam_key.is_some() && !self.store.has_list(Shop::Steam) {
+        let connected = self.config.steam_session.is_some() || self.config.steam_key.is_some();
+        if connected && !self.store.has_list(Shop::Steam) {
             return self.fetch_owned(Shop::Steam);
         }
         Task::none()
@@ -60,169 +95,154 @@ impl Zendo {
 
     pub(super) fn update_steam(&mut self, message: SteamMessage) -> Task<Message> {
         match message {
-            SteamMessage::KeyInput(value) => {
-                self.steam.key.value = value;
-                self.steam.key.note = None;
-                Task::none()
-            }
-            SteamMessage::ToggleShown => {
-                self.steam.key.shown = !self.steam.key.shown;
-                Task::none()
-            }
-            SteamMessage::SaveKey => {
-                let key = self.steam.key.value.trim().to_owned();
-                self.steam.key.value.clone_from(&key);
-                if key.is_empty() {
-                    if self.store_steam_key(None) {
-                        self.store.forget(Shop::Steam);
-                        if self.persist {
-                            owned::forget(Shop::Steam);
-                        }
-                        self.steam.key.note = Some((t!("key-removed"), true));
-                    }
+            SteamMessage::SignIn => {
+                if self.steam.signing_in.is_some() {
                     return Task::none();
                 }
-                self.steam.key.save_after_check = true;
-                self.check_steam_key(key)
+                let handle = Handle::default();
+                self.steam.signing_in = Some(handle.clone());
+                self.steam.note = None;
+                if !self.persist {
+                    return Task::none();
+                }
+                Task::perform(
+                    blocking(move || {
+                        sign_in_window::open_steam(&handle).map_err(|err| format!("{err:#}"))
+                    }),
+                    |result| Message::Steam(SteamMessage::SignedIn(result)),
+                )
             }
-            SteamMessage::CheckKey => {
-                self.steam.key.save_after_check = false;
-                let key = self.steam.key.value.trim().to_owned();
-                self.check_steam_key(key)
+            SteamMessage::CancelSignIn => {
+                if let Some(handle) = self.steam.signing_in.take() {
+                    handle.close();
+                }
+                Task::none()
             }
-            SteamMessage::KeyChecked(result) => self.steam_key_checked(result),
+            SteamMessage::SignedIn(result) => self.steam_signed_in(result),
+            SteamMessage::SignOut => {
+                if !self.store_steam_session(None) {
+                    return Task::none();
+                }
+                self.store.forget(Shop::Steam);
+                self.steam.family_note = None;
+                if self.persist {
+                    owned::forget(Shop::Steam);
+                    if let Err(err) = steam_web::forget_profile() {
+                        self.steam.note = Some((format!("{err:#}"), false));
+                        return Task::none();
+                    }
+                }
+                self.steam.note = Some((t!("steam-signed-out"), true));
+                // The old key, if any, lists the games again.
+                if self.config.steam_key.is_some() {
+                    return self.fetch_owned(Shop::Steam);
+                }
+                Task::none()
+            }
+            SteamMessage::RemoveKey => {
+                let previous = self.config.steam_key.take();
+                if self.persist
+                    && let Err(err) = self.config.save()
+                {
+                    self.config.steam_key = previous;
+                    self.steam.note = Some((format!("{err:#}"), false));
+                    return Task::none();
+                }
+                self.steam.note = Some((t!("key-removed"), true));
+                if self.config.steam_session.is_none() {
+                    self.store.forget(Shop::Steam);
+                    if self.persist {
+                        owned::forget(Shop::Steam);
+                    }
+                }
+                Task::none()
+            }
+            SteamMessage::Fetched(result) => self.steam_fetched(result),
         }
     }
 
-    fn check_steam_key(&mut self, key: String) -> Task<Message> {
-        if key.is_empty() {
-            self.steam.key.note = Some((t!("key-paste-first"), false));
+    fn steam_signed_in(&mut self, result: Result<Option<Session>, String>) -> Task<Message> {
+        // Cancelled from here: whatever the window said is dropped.
+        if self.steam.signing_in.take().is_none() {
             return Task::none();
         }
-        let Some(user) = self.steam.user.clone() else {
-            self.steam.key.note = Some((t!("steam-no-account"), false));
-            return Task::none();
-        };
-        self.steam.key.checking = Some(key.clone());
-        self.steam.key.note = None;
-        if !self.persist {
-            return Task::none();
+        match result {
+            Ok(Some(session)) => {
+                if !self.store_steam_session(Some(&session)) {
+                    return Task::none();
+                }
+                self.steam.note = Some((t!("steam-signed-in"), true));
+                self.steam.family_note = None;
+                self.store.forget(Shop::Steam);
+                self.fetch_owned(Shop::Steam)
+            }
+            Ok(None) => Task::none(),
+            Err(err) => {
+                self.steam.note = Some((err, false));
+                Task::none()
+            }
         }
-        Task::perform(
-            blocking(move || owned::ask_steam(&key, &user).map_err(|err| format!("{err:#}"))),
-            |result| Message::Steam(SteamMessage::KeyChecked(result)),
-        )
     }
 
-    fn steam_key_checked(&mut self, result: Result<SteamAnswer, String>) -> Task<Message> {
-        let Some(key) = self.steam.key.checking.take() else {
-            return Task::none();
+    fn steam_fetched(&mut self, result: Result<SteamFetch, String>) -> Task<Message> {
+        let result = match result {
+            Ok(SteamFetch::Games {
+                games,
+                renewed,
+                family_error,
+            }) => {
+                if let Some(session) = renewed {
+                    // Kept for the next start; the list stands either way.
+                    self.store_steam_session(Some(&session));
+                }
+                self.steam.family_note = family_error;
+                Ok(games)
+            }
+            Ok(SteamFetch::SignedOut) => {
+                self.store_steam_session(None);
+                self.steam.note = Some((t!("steam-sign-in-again"), false));
+                Err(t!("steam-sign-in-again"))
+            }
+            Err(err) => Err(err),
         };
-        let save = std::mem::take(&mut self.steam.key.save_after_check);
-        let name = self
-            .steam
-            .user
-            .as_ref()
-            .map(|user| user.name.clone())
-            .unwrap_or_default();
-        let (note, keep) = match result {
-            Ok(SteamAnswer::Games(games)) => {
-                let count = games.len();
-                let note = if save {
-                    t!("steam-key-saved", count = count, name = name.as_str())
-                } else {
-                    t!("steam-key-accepted", count = count, name = name.as_str())
-                };
-                ((note, true), save)
-            }
-            // A good key: kept, with what to change in Steam.
-            Ok(SteamAnswer::Nothing) => {
-                ((t!("steam-key-nothing", name = name.as_str()), false), save)
-            }
-            Ok(SteamAnswer::Rejected) => {
-                let note = if save {
-                    t!("steam-key-rejected-unsaved")
-                } else {
-                    t!("steam-key-rejected")
-                };
-                ((note, false), false)
-            }
-            // Offline is no reason to lose what the user pasted.
-            Err(err) if save => ((t!("key-saved-unchecked", error = err), false), true),
-            Err(err) => ((err, false), false),
-        };
-        if keep && !self.store_steam_key(Some(key)) {
-            return Task::none();
-        }
-        self.steam.key.note = Some(note);
-        if keep {
-            self.store.forget(Shop::Steam);
-            return self.fetch_owned(Shop::Steam);
-        }
-        Task::none()
+        self.update_store(StoreMessage::Fetched(Shop::Steam, result))
     }
 
-    /// Sets the key and writes the settings; on failure the old key stays.
-    fn store_steam_key(&mut self, key: Option<String>) -> bool {
-        let previous = std::mem::replace(&mut self.config.steam_key, key);
+    /// Sets the session and writes the settings; on failure the old one
+    /// stays.
+    fn store_steam_session(&mut self, session: Option<&Session>) -> bool {
+        let previous = std::mem::replace(
+            &mut self.config.steam_session,
+            session.map(Session::to_text),
+        );
         if !self.persist {
             return true;
         }
         match self.config.save() {
             Ok(()) => true,
             Err(err) => {
-                self.config.steam_key = previous;
-                self.steam.key.note = Some((format!("{err:#}"), false));
+                self.config.steam_session = previous;
+                self.steam.note = Some((format!("{err:#}"), false));
                 false
             }
         }
     }
 
-    pub(super) fn steam_card(&self) -> Element<'_, Message> {
-        let key = &self.steam.key;
-        let saved = self.config.steam_key.as_deref().unwrap_or("");
-        let changed = key.value.trim() != saved;
-        let field = row![
-            text_input(&t!("steam-paste"), &key.value)
-                .secure(!key.shown)
-                .on_input(|value| Message::Steam(SteamMessage::KeyInput(value)))
-                .on_submit(Message::Steam(SteamMessage::SaveKey))
-                .padding([8, 12])
-                .size(14)
-                .style(style::input),
-            button(
-                text(if key.shown {
-                    t!("key-hide")
-                } else {
-                    t!("key-show")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
-            .style(style::secondary)
-            .on_press(Message::Steam(SteamMessage::ToggleShown)),
-            button(
-                text(if key.checking.is_some() {
-                    t!("key-checking")
-                } else {
-                    t!("key-check")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
-            .style(style::secondary)
-            .on_press_maybe(
-                (key.checking.is_none() && !key.value.trim().is_empty())
-                    .then_some(Message::Steam(SteamMessage::CheckKey))
-            ),
-            button(text(t!("key-save")).size(14).font(BOLD))
-                .padding([8, 18])
-                .style(style::primary)
-                .on_press_maybe(changed.then_some(Message::Steam(SteamMessage::SaveKey))),
-        ]
-        .spacing(8)
-        .align_y(Alignment::Center);
+    /// The signed-in account's name: Steam's own on this computer when it
+    /// knows it, else the Steam ID.
+    fn steam_name(&self, session: &Session) -> String {
+        owned::steam_user_named(&session.steamid)
+            .or_else(|| {
+                self.steam
+                    .user
+                    .as_ref()
+                    .filter(|user| user.id == session.steamid)
+                    .map(|user| user.name.clone())
+            })
+            .unwrap_or_else(|| session.steamid.clone())
+    }
 
+    pub(super) fn steam_card(&self) -> Element<'_, Message> {
         let title = row![
             style::badge(Source::Steam.label(), style::source_color(Source::Steam)),
             text("Steam").size(18).font(BOLD),
@@ -230,43 +250,87 @@ impl Zendo {
         ]
         .spacing(10)
         .align_y(Alignment::Center);
-        let account = match &self.steam.user {
-            Some(user) => text(t!("steam-account", name = user.name.as_str()))
-                .size(14)
-                .color(colors().good),
-            None => text(t!("steam-no-account")).size(14).color(colors().bad),
-        };
-        let mut body = column![
-            title,
-            account,
-            text(t!("steam-about")).size(13).color(colors().dim),
-            field,
-        ]
-        .spacing(8);
-        match &key.note {
-            Some((note, good)) => {
-                body = body.push(text(note).size(13).color(if *good {
-                    colors().good
-                } else {
-                    colors().bad
-                }));
+        let mut body = column![title].spacing(8);
+        let session = self.steam_session();
+        match (&session, &self.steam.signing_in) {
+            (Some(session), _) => {
+                let name = self.steam_name(session);
+                body = body.push(
+                    row![
+                        text(t!("accounts-signed-in-as", name = name.as_str()))
+                            .size(14)
+                            .color(colors().good),
+                        space::horizontal(),
+                        button(text(t!("accounts-sign-out")).size(14))
+                            .padding([8, 14])
+                            .style(style::secondary)
+                            .on_press(Message::Steam(SteamMessage::SignOut)),
+                    ]
+                    .align_y(Alignment::Center),
+                );
+                body = body.push(
+                    text(t!("steam-signed-in-about"))
+                        .size(13)
+                        .color(colors().dim),
+                );
             }
-            None if saved.is_empty() => {
-                body = body.push(text(t!("key-none")).size(13).color(colors().dim));
+            (None, Some(_)) => {
+                body = body.push(text(t!("steam-sign-in-about")).size(13).color(colors().dim));
+                body = body.push(
+                    row![
+                        text(t!("steam-signing-in")).size(14),
+                        space::horizontal(),
+                        button(text(t!("cancel")).size(14))
+                            .padding([8, 14])
+                            .style(style::secondary)
+                            .on_press(Message::Steam(SteamMessage::CancelSignIn)),
+                    ]
+                    .align_y(Alignment::Center),
+                );
             }
-            None => {}
+            (None, None) => {
+                body = body.push(text(t!("steam-sign-in-about")).size(13).color(colors().dim));
+                body = body.push(
+                    button(text(t!("steam-sign-in")).size(14).font(BOLD))
+                        .padding([8, 18])
+                        .style(style::primary)
+                        .on_press(Message::Steam(SteamMessage::SignIn)),
+                );
+            }
         }
-        body = body.push(kept_note(self.config.kept(Key::Steam)));
-        body = body.push(
-            row![
-                button(text(t!("steam-get-key")).size(13))
-                    .padding(0)
-                    .style(style::link)
-                    .on_press(Message::Open(KEY_PAGE.to_owned())),
-                text(t!("steam-key-domain")).size(13).color(colors().dim),
-            ]
-            .spacing(8),
-        );
+        if let Some((note, good)) = &self.steam.note {
+            body = body.push(text(note).size(13).color(if *good {
+                colors().good
+            } else {
+                colors().bad
+            }));
+        }
+        if let Some(error) = &self.steam.family_note {
+            body = body.push(
+                text(t!("steam-family-failed", error = error.as_str()))
+                    .size(13)
+                    .color(colors().bad),
+            );
+        }
+        body = body.push(kept_note(self.config.kept(Key::SteamSession)));
+        if self.config.steam_key.is_some() {
+            let line = if session.is_some() {
+                t!("steam-old-key-unused")
+            } else {
+                t!("steam-old-key-used")
+            };
+            body = body.push(
+                row![
+                    text(line).size(13).color(colors().dim).width(Length::Fill),
+                    button(text(t!("steam-remove-key")).size(13))
+                        .padding([6, 12])
+                        .style(style::secondary)
+                        .on_press(Message::Steam(SteamMessage::RemoveKey)),
+                ]
+                .spacing(10)
+                .align_y(Alignment::Center),
+            );
+        }
         container(body)
             .padding(20)
             .width(Length::Fill)
@@ -275,58 +339,126 @@ impl Zendo {
     }
 }
 
+/// Steam's list with the sign-in, on a thread: a new token first when
+/// the old one has run out or Steam refuses it.
+pub(super) fn fetch_steam_signed_in(session: Session) -> Task<Message> {
+    Task::perform(
+        blocking(move || fetch_signed_in(session).map_err(|err| format!("{err:#}"))),
+        |result| Message::Steam(SteamMessage::Fetched(result)),
+    )
+}
+
+/// Seconds since 1970.
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
+/// Steam's list with the sign-in: a new token from Steam's page first when
+/// the old one has run out, and again once if Steam refuses it.
+fn fetch_signed_in(session: Session) -> anyhow::Result<SteamFetch> {
+    let mut session = session;
+    let mut renewed = None;
+    if !session.fresh(now()) {
+        match sign_in_window::renew_steam()? {
+            Some(new) => {
+                session = new.clone();
+                renewed = Some(new);
+            }
+            None => return Ok(SteamFetch::SignedOut),
+        }
+    }
+    let mut answer = steam_web::ask(&session)?;
+    if matches!(answer, WebAnswer::Rejected) && renewed.is_none() {
+        match sign_in_window::renew_steam()? {
+            Some(new) => {
+                answer = steam_web::ask(&new)?;
+                renewed = Some(new);
+            }
+            None => return Ok(SteamFetch::SignedOut),
+        }
+    }
+    match answer {
+        WebAnswer::Games {
+            games,
+            family_error,
+        } => Ok(SteamFetch::Games {
+            games: steam_web::keep(games)?,
+            renewed,
+            family_error,
+        }),
+        WebAnswer::Rejected => Ok(SteamFetch::SignedOut),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn with_user(zendo: &mut Zendo) {
-        zendo.steam.user = Some(SteamUser {
-            id: "76561197960265730".into(),
-            name: "Player".into(),
-        });
+    fn session() -> Session {
+        Session {
+            steamid: "76561197960265730".into(),
+            token: "token".into(),
+        }
     }
 
     #[test]
-    fn saves_a_key_steam_takes() {
+    fn keeps_the_sign_in_and_asks_for_the_list() {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
-        with_user(&mut zendo);
-        let _ = zendo.update(Message::Steam(SteamMessage::KeyInput(" abc ".into())));
-        let _ = zendo.update(Message::Steam(SteamMessage::SaveKey));
-        assert_eq!(zendo.steam.key.checking.as_deref(), Some("abc"));
-        let games = vec![owned::Owned::new(Shop::Steam, "620", "Portal 2".into())];
-        let _ = zendo.update(Message::Steam(SteamMessage::KeyChecked(Ok(
-            SteamAnswer::Games(games),
+        let _ = zendo.update(Message::Steam(SteamMessage::SignIn));
+        assert!(zendo.steam.signing_in.is_some());
+        let _ = zendo.update(Message::Steam(SteamMessage::SignedIn(Ok(Some(session())))));
+        assert!(zendo.steam.signing_in.is_none());
+        assert_eq!(zendo.steam_session(), Some(session()));
+        assert_eq!(zendo.steam.note, Some((t!("steam-signed-in"), true)));
+    }
+
+    #[test]
+    fn a_cancelled_sign_in_keeps_nothing() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let _ = zendo.update(Message::Steam(SteamMessage::SignIn));
+        let _ = zendo.update(Message::Steam(SteamMessage::CancelSignIn));
+        let _ = zendo.update(Message::Steam(SteamMessage::SignedIn(Ok(Some(session())))));
+        assert_eq!(zendo.config.steam_session, None);
+    }
+
+    #[test]
+    fn a_renewed_token_is_kept_and_a_lost_sign_in_forgotten() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.config.steam_session = Some(session().to_text());
+        let renewed = Session {
+            token: "new".into(),
+            ..session()
+        };
+        let games = vec![Owned::new(Shop::Steam, "620", "Portal 2".into())];
+        let _ = zendo.update(Message::Steam(SteamMessage::Fetched(Ok(
+            SteamFetch::Games {
+                games,
+                renewed: Some(renewed.clone()),
+                family_error: Some("Steam's family answered 401".into()),
+            },
         ))));
-        assert_eq!(zendo.config.steam_key.as_deref(), Some("abc"));
-        assert_eq!(
-            zendo.steam.key.note,
-            Some(("Saved. Steam lists 1 game for Player".into(), true))
-        );
-    }
-
-    #[test]
-    fn keeps_out_a_key_steam_refuses() {
-        let (mut zendo, _) = Zendo::boot();
-        zendo.persist = false;
-        with_user(&mut zendo);
-        let _ = zendo.update(Message::Steam(SteamMessage::KeyInput("bad".into())));
-        let _ = zendo.update(Message::Steam(SteamMessage::SaveKey));
-        let _ = zendo.update(Message::Steam(SteamMessage::KeyChecked(Ok(
-            SteamAnswer::Rejected,
+        assert_eq!(zendo.steam_session(), Some(renewed));
+        assert!(zendo.store.has_list(Shop::Steam));
+        assert!(zendo.steam.family_note.is_some());
+        let _ = zendo.update(Message::Steam(SteamMessage::Fetched(Ok(
+            SteamFetch::SignedOut,
         ))));
-        assert_eq!(zendo.config.steam_key, None);
-        assert!(zendo.steam.key.note.as_ref().is_some_and(|(_, good)| !good));
+        assert_eq!(zendo.config.steam_session, None);
+        assert_eq!(zendo.steam.note, Some((t!("steam-sign-in-again"), false)));
     }
 
     #[test]
-    fn needs_a_steam_account_to_check() {
+    fn signing_out_forgets_the_sign_in_and_the_list() {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
-        zendo.steam.user = None;
-        let _ = zendo.update(Message::Steam(SteamMessage::KeyInput("abc".into())));
-        let _ = zendo.update(Message::Steam(SteamMessage::CheckKey));
-        assert_eq!(zendo.steam.key.checking, None);
-        assert!(zendo.steam.key.note.as_ref().is_some_and(|(_, good)| !good));
+        zendo.config.steam_session = Some(session().to_text());
+        let _ = zendo.update(Message::Steam(SteamMessage::SignOut));
+        assert_eq!(zendo.config.steam_session, None);
+        assert!(!zendo.store.has_list(Shop::Steam));
     }
 }

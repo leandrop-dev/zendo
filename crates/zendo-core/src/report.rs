@@ -346,9 +346,10 @@ fn settings(lines: &mut Vec<String>, config: &Config) {
             .map_or_else(|| "none".to_owned(), |dir| dir.display().to_string())
     ));
     for (key, name) in [
-        (Key::SteamGridDb, "SteamGridDB"),
-        (Key::Nexus, "Nexus Mods"),
-        (Key::Steam, "Steam"),
+        (Key::SteamGridDb, "SteamGridDB key"),
+        (Key::Nexus, "Nexus Mods key"),
+        (Key::Steam, "Steam Web API key"),
+        (Key::SteamSession, "Steam sign-in"),
     ] {
         let set = if config.key(key).is_some() {
             "set"
@@ -362,7 +363,7 @@ fn settings(lines: &mut Vec<String>, config: &Config) {
             Kept::File(Some(why)) => format!(", in config.toml ({why})"),
             Kept::Unread(why) => format!(", keyring not read ({why})"),
         };
-        lines.push(format!("{name} key: {set}{kept}"));
+        lines.push(format!("{name}: {set}{kept}"));
     }
 }
 

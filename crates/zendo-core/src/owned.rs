@@ -55,6 +55,9 @@ pub struct Owned {
     /// The minutes played, where the store counts them (Steam).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minutes: Option<u64>,
+    /// Shared by the user's Steam family, not owned.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shared: bool,
     /// The space the store's requirements ask for, in bytes (Steam's
     /// "Storage: 8 GB available space"); an estimate, not the download.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -175,6 +178,7 @@ impl Owned {
             cover_url: None,
             hero_url: None,
             minutes: None,
+            shared: false,
             space: None,
             cover: None,
             hero: None,
@@ -274,7 +278,7 @@ pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
 }
 
 /// Sorts a store's list, keeps it in the cache and finds its images.
-fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owned>> {
+pub(crate) fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owned>> {
     games.sort_by_cached_key(|game| game.title.to_lowercase());
     games.dedup_by(|a, b| a.id == b.id);
     if let Some(file) = cache_file(shop) {
@@ -309,6 +313,12 @@ pub fn steam_user() -> Option<SteamUser> {
     steam::user(&steam::roots())
 }
 
+/// The name Steam on this computer knows an account by, by its Steam ID.
+#[must_use]
+pub fn steam_user_named(id: &str) -> Option<String> {
+    steam::user_named(&steam::roots(), id)
+}
+
 /// What Steam's Web API says of a key and an account.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SteamAnswer {
@@ -327,6 +337,12 @@ pub enum SteamAnswer {
 ///
 /// When Steam cannot be reached or answers oddly.
 pub fn ask_steam(key: &str, user: &SteamUser) -> anyhow::Result<SteamAnswer> {
+    ask_owned(("key", key), &user.id)
+}
+
+/// Asks Steam's Web API for the games an account owns, with a key or a
+/// sign-in's access token: `("key", …)` or `("access_token", …)`.
+pub(crate) fn ask_owned(auth: (&str, &str), steamid: &str) -> anyhow::Result<SteamAnswer> {
     let agent = crate::http::agent(Duration::from_secs(30));
     // Steam's Web API answers 429 now and then even to a first request in
     // hours; a few tries a moment apart get through.
@@ -335,8 +351,8 @@ pub fn ask_steam(key: &str, user: &SteamUser) -> anyhow::Result<SteamAnswer> {
         tries += 1;
         let response = agent
             .get(STEAM_OWNED)
-            .query("key", key)
-            .query("steamid", &user.id)
+            .query(auth.0, auth.1)
+            .query("steamid", steamid)
             .query("include_appinfo", "1")
             .query("include_played_free_games", "1")
             .query("format", "json")
@@ -561,22 +577,24 @@ fn parse_steam(text: &str) -> anyhow::Result<SteamAnswer> {
     Ok(SteamAnswer::Games(
         games
             .into_iter()
-            .map(|game| {
-                let app = game.appid.to_string();
-                let title = game
-                    .name
-                    .map(|name| name.trim().to_owned())
-                    .filter(|name| !name.is_empty())
-                    .unwrap_or_else(|| format!("Steam app {app}"));
-                let mut owned = Owned::new(Shop::Steam, &app, title);
-                owned.cover_url =
-                    Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Cover)));
-                owned.hero_url = Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Hero)));
-                owned.minutes = Some(game.playtime_forever);
-                owned
-            })
+            .map(|game| steam_game(game.appid, game.name, game.playtime_forever))
             .collect(),
     ))
+}
+
+/// A Steam game for the Store's list: its title (or "Steam app N"), Steam's
+/// images and the minutes played.
+pub(crate) fn steam_game(app: u64, name: Option<String>, minutes: u64) -> Owned {
+    let app = app.to_string();
+    let title = name
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| format!("Steam app {app}"));
+    let mut owned = Owned::new(Shop::Steam, &app, title);
+    owned.cover_url = Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Cover)));
+    owned.hero_url = Some(format!("{STEAM_IMAGES}/{app}/{}", steam_image(Kind::Hero)));
+    owned.minutes = Some(minutes);
+    owned
 }
 
 /// `legendary list --json`: legendary's game records, DLC left out.

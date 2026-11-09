@@ -198,23 +198,18 @@ nexus-download-failed = Could not download the mod: { $error }
 nexus-downloads-title = Mods from Nexus
 nexus-paste = Paste your Nexus Mods personal API key
 nexus-get-key = Get your personal API key from API Access on Nexus Mods
-steam-about = Steam signs in by itself. With your Steam Web API key, the Store lists the games this account owns, installed or not, and installs them through Steam. The key is kept in the system keyring, like Zendo's other keys.
-steam-paste = Paste your Steam Web API key
-steam-account = Steam's account on this computer: { $name }
-steam-no-account = No Steam account has signed in on this computer; sign in to Steam first
-steam-get-key = Get a key from Steam
-steam-key-domain = (Steam asks for a domain name; any, such as localhost, will do)
-steam-key-accepted = { $count ->
-    [one] Steam takes the key and lists 1 game for { $name }
-   *[other] Steam takes the key and lists { $count } games for { $name }
-}
-steam-key-saved = { $count ->
-    [one] Saved. Steam lists 1 game for { $name }
-   *[other] Saved. Steam lists { $count } games for { $name }
-}
-steam-key-nothing = Steam takes the key but lists no games for { $name }: set Game details to Public in Steam's privacy settings
-steam-key-rejected = Steam does not take this key
-steam-key-rejected-unsaved = Steam does not take this key, so it was not saved
+steam-sign-in-about = Sign in on Steam's own page, with your password and Steam Guard or the Steam app's QR code; Zendo never sees your password. The Store then lists the games you own and those your Steam family shares, and installs them through Steam. Zendo keeps the sign-in in the system keyring and Steam's page remembers it.
+steam-sign-in = Sign in with Steam
+steam-signing-in = Sign in on Steam's page in the window that opened
+steam-signed-in = Signed in: the Store is asking Steam for your games
+steam-signed-in-about = The Store lists the games this account owns and those its Steam family shares.
+steam-signed-out = Signed out of Steam
+steam-sign-in-again = Steam's sign-in has ended: sign in again
+steam-family-failed = Your family's games could not be listed: { $error }
+steam-old-key-used = The Steam Web API key set before is used until you sign in.
+steam-old-key-unused = The Steam Web API key set before is no longer used.
+steam-remove-key = Remove the key
+store-shared = Shared by your family
 steam-asked = Asked Steam to install { $title }: choose where in Steam's dialog
 steam-installed = { $title } is installed
 steam-downloads-title = Steam
@@ -409,6 +404,7 @@ fact-last-played = Last played
 fact-never = Never
 fact-play-time = Play time
 fact-status = Status
+fact-owner = Owned by
 fact-not-installed = Not installed
 fact-started-from-zendo = Started from Zendo
 fact-launch-command = Launch command
@@ -637,7 +633,7 @@ store-installed = { $count ->
 store-asking-stores = Asking { $stores } for your games…
 store-search = Search your games
 store-asking = Asking…
-store-sign-in-first = Sign in to a store, or add your Steam key, to see the games you own
+store-sign-in-first = Sign in to a store in Accounts to see the games you own
 store-go-accounts = Go to Accounts
 store-asking-all = Asking the stores for your games…
 store-nothing = Nothing here

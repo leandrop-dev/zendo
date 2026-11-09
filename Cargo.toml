@@ -10,6 +10,8 @@ repository = "https://github.com/leandrop-dev/zendo"
 
 [workspace.dependencies]
 anyhow = "1"
+# The Steam sign-in token's dates (a JWT); already in the build.
+base64 = "0.23.1"
 # The window's words in each language (Mozilla's Fluent); unic-langid
 # names the languages, sys-locale finds the system's (cosmic-text already
 # brings it).

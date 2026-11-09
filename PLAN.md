@@ -1451,6 +1451,72 @@ Features:
       too. A game Steam updates now says "is updated", not "is
       installed", and neither a verify nor an update counts as a new
       install.
+11b. The Steam sign-in, replacing the Web API key [firm: the user chose
+    it 2026-11-08, both ways to sign in, now before 12], for the games
+    the family shares (the user's children see the user's games in
+    Steam; MECCHA CHAMELEON, app 4704690, was missing from Zendo).
+    Checked first, 2026-11-08: the user's key works for `GetOwnedGames`
+    (717 games) but both `IFamilyGroupsService` calls answer 401 to a
+    key, and `appcache/librarycache` (1,270 apps, 553 not owned) cannot
+    tell shared games from tools and runtimes. Steam's
+    `IAuthenticationService` takes form fields and answers JSON (tried
+    without an account: an RSA key for a made-up name, a QR session
+    nobody approved, which polls as waiting); its
+    `GenerateAccessTokenForApp` wants a routing parameter a made-up
+    token does not give.
+    Built 2026-11-08 [tentative until the user tries it], as Playnite
+    does it: the user signs in on Steam's own store page in Zendo's
+    sign-in window (`zendo sign-in-window steam`), with the password and
+    Steam Guard or the Steam app's QR code, so Zendo never handles the
+    password and needs no crypto of its own. Signed in, the store page
+    carries the account's Web API token in `#application_config`
+    (`data-store_user_config.webapi_token`, with `data-userinfo`'s
+    `steamid`; checked on the page signed out, where the token is
+    empty); a script sends both to the window. Decisions:
+    - The session (Steam ID and token, as JSON) is kept in the keyring
+      as `steam-session` (`Key::SteamSession`), like the keys.
+    - The window keeps Steam's cookies in
+      `~/.local/share/zendo/steam-web` (0700), so Steam's page remembers
+      the sign-in. When the token runs out (its JWT `exp`, ten minutes
+      early) or Steam refuses it, Zendo asks Steam's page again in a
+      window drawn off screen (`steam-renew`); a signed-out page (Steam
+      sends a browser not signed in to `/login`) means signing in again.
+      Tried signed out in a throwaway home: the hidden page loads,
+      reports signed out and ends in a second.
+    - With the token: `GetOwnedGames` (`access_token`), then
+      `GetFamilyGroupForUser` and `GetSharedLibraryApps` (excluded apps
+      and those the account owns itself left out); shared games join the
+      Steam list marked "Shared by your family" (`Owned::shared`). The
+      family failing keeps the owned list and says why on Accounts.
+    - The account's name comes from `loginusers.vdf` by Steam ID, else
+      the Steam ID is shown.
+    - Sign out removes the session and Steam's cookies. The old key is
+      used until the user signs in, and Accounts can remove it; the
+      key's code goes once the sign-in works for the user.
+    Code: core `steam_web.rs`, `secrets.rs`, `config.rs`, `owned.rs`
+    (`ask_owned`, `steam_game`, `shared`), `steam.rs` (`user_named`); the
+    window's `sign_in_window.rs` (`steam` module), `app/steam.rs` (the
+    card, the fetch and renewal), `store.rs`.
+    Tried by the user 2026-11-09 [firm]: signed in with the QR code, and
+    after Refresh the Store showed the family's games. Not tried yet:
+    the password and Steam Guard (the children's way) and a renewal once
+    the token runs out (about a day).
+    What else the token reads (checked 2026-11-09, field names only), for
+    later items; nothing changed for now:
+    - `GetOwnedGames` with `include_extended_appinfo`: `rtime_last_played`,
+      `playtime_2weeks`, playtime per system (`_linux_`, `_windows_`,
+      `_deck_`, `_mac_forever`), `has_dlc`, `has_workshop`,
+      `has_community_visible_stats`, `capsule_filename`, `sort_as`.
+    - `ClientGetLastPlayedTimes`: first and last played times, per system
+      too; `GetRecentlyPlayedGames`: the last two weeks.
+    - `GetSharedLibraryApps`: also `rt_last_played`, `rt_time_acquired`,
+      `capsule_filename`, `sort_as`; `GetFamilyGroup`: the family's name
+      and members (Steam ID, role, joined).
+    - `IWishlistService/GetWishlist`: app id, date added, priority.
+    - Not with the token: `ISteamUserStats/GetPlayerAchievements`
+      answers 400.
+    The last played times serve item 24 (and a "recently played" sort);
+    the wishlist could be a Store filter later [idea].
 12. Searching Nexus Mods in Zendo instead of the browser. Nexus's v1 API
     has no search; its GraphQL v2 API is to check. Downloading still
     needs the site's Mod manager download for accounts without Premium:
@@ -1518,16 +1584,9 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
 
 From Playnite, agreed by the user 2026-11-07, order [tentative]:
 
-24. Steam family sharing: the games a Steam family shares with the
-    account Steam signed in last, on the Store page to install through
-    Steam (what the user wants: their children's computers). Playnite
-    asks `IFamilyGroupsService/GetFamilyGroupForUser` and
-    `GetSharedLibraryApps` with a web sign-in's access token; whether the
-    user's Web API key works there is to check. Steam's
-    `logs/librarysharing_log.txt` names the family group here. Less
-    wanted [tentative]: Steam's launch menu as a choice
-    (`steam://launch/<id>/Dialog`), the last played time of games not
-    installed, extra accounts.
+24. Steam, more [tentative, less wanted]: Steam's launch menu as a
+    choice (`steam://launch/<id>/Dialog`), the last played time of games
+    not installed, extra accounts. Family sharing moved to 11b.
 25. Descriptions and facts for every game, local ones too: Steam's store
     for any game already matched to a Steam app id (as for ProtonDB).
     Pairs with 21.
@@ -1557,8 +1616,9 @@ From Playnite, agreed by the user 2026-11-07, order [tentative]:
   to 23 (their order confirmed). Item 9, the game page with DLC, built
   the same day. Item 10, the EAC and BattlEye runtimes, built the same
   day. Item 11, Steam's owned games, built the same day,
-  and changed after the user's two tries (2026-11-08). Next, item 12,
-  searching Nexus Mods in Zendo.
+  and changed after the user's two tries (2026-11-08). Item 11b, the
+  Steam sign-in with the family's games, built 2026-11-08, tried by the
+  user with the QR code 2026-11-09. Next, item 12, searching Nexus Mods in Zendo.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"

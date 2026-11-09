@@ -33,6 +33,7 @@ pub mod runtimes;
 pub mod secrets;
 pub mod state;
 pub mod steam;
+pub mod steam_web;
 pub mod steamgriddb;
 pub mod stores;
 pub mod theme;
