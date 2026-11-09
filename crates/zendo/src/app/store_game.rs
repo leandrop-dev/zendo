@@ -5,7 +5,7 @@
 use iced::widget::{button, column, container, row, scrollable, space, text};
 use iced::{Alignment, Color, Element, Font, Length};
 use zendo_core::Size;
-use zendo_core::owned::Owned;
+use zendo_core::owned::{Owned, PlayedOn};
 
 use super::format;
 use super::game::{
@@ -14,7 +14,7 @@ use super::game::{
 use super::sidebar;
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
-use super::{Message, Page, Zendo, game_scroll_id};
+use super::{Message, Page, Zendo, game_scroll_id, now};
 use crate::i18n::t;
 
 impl Zendo {
@@ -130,6 +130,18 @@ impl Zendo {
                 }),
             );
         }
+        if let Some(played) = game.last_played {
+            add(t!("fact-last-played"), plain(format::ago(played, now())));
+        }
+        if game.recent_minutes > 0 {
+            add(
+                t!("fact-recent-time"),
+                plain(format::play_time(game.recent_minutes)),
+            );
+        }
+        if let Some(systems) = played_on(game.played_on) {
+            add(t!("fact-played-on"), plain(systems));
+        }
         card(t!("game-details"), column(rows).spacing(12).into())
     }
 
@@ -191,4 +203,19 @@ impl Zendo {
             .style(style::card)
             .into()
     }
+}
+
+/// "Linux 10 h · Windows 45 min": the systems Steam counted time on.
+fn played_on(minutes: PlayedOn) -> Option<String> {
+    let systems: Vec<String> = [
+        (t!("system-linux"), minutes.linux),
+        (t!("system-deck"), minutes.deck),
+        (t!("system-windows"), minutes.windows),
+        (t!("system-mac"), minutes.mac),
+    ]
+    .into_iter()
+    .filter(|(_, minutes)| *minutes > 0)
+    .map(|(system, minutes)| format!("{system} {}", format::play_time(minutes)))
+    .collect();
+    (!systems.is_empty()).then(|| systems.join(" · "))
 }

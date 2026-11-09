@@ -3,36 +3,30 @@
 //! account owns and those its Steam family shares. The token Steam's page
 //! gives is kept in the keyring and asked again of Steam's page, in a
 //! window that never shows, when it runs out.
-//!
-//! A Steam Web API key set before the sign-in existed is still used until
-//! the user signs in, and can be removed here.
-
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use iced::widget::{button, column, container, row, space, text};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Source;
-use zendo_core::owned::{self, Owned, Shop, SteamUser};
+use zendo_core::owned::{self, Owned, Shop};
 use zendo_core::secrets::Key;
-use zendo_core::steam_web::{self, Session, WebAnswer};
+use zendo_core::steam_web::{self, Family, Session, WebAnswer};
 
 use super::settings::kept_note;
 use super::store::StoreMessage;
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo, blocking};
+use super::{Message, Zendo, blocking, now};
 use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
 
 #[derive(Debug, Default)]
 pub struct SteamState {
-    /// The accounts Steam signed in on this computer, for the signed-in
-    /// account's name.
-    user: Option<SteamUser>,
     /// The sign-in window, while it is open.
     signing_in: Option<Handle>,
     /// What the last sign-in, sign-out or list said, and whether it went
     /// well.
     note: Option<(String, bool)>,
+    /// The account's Steam family, as the last list said.
+    family: Option<Family>,
     /// Why the family's games could not be listed, when they could not.
     family_note: Option<String>,
 }
@@ -43,8 +37,6 @@ pub enum SteamMessage {
     CancelSignIn,
     SignedIn(Result<Option<Session>, String>),
     SignOut,
-    /// Removes the Web API key set before the sign-in.
-    RemoveKey,
     Fetched(Result<SteamFetch, String>),
 }
 
@@ -55,6 +47,7 @@ pub enum SteamFetch {
         games: Vec<Owned>,
         /// A new token, when the old one had run out.
         renewed: Option<Session>,
+        family: Option<Family>,
         family_error: Option<String>,
     },
     /// Steam's page no longer knows the sign-in.
@@ -70,25 +63,12 @@ impl Zendo {
             .and_then(Session::parse)
     }
 
-    /// After the settings are read: the account, and Steam's list when
-    /// signed in (or a key is set) and none is kept.
+    /// After the settings are read: Steam's list when signed in and none is
+    /// kept.
     pub(super) fn steam_loaded(&mut self) -> Task<Message> {
-        if !self.persist {
-            return Task::none();
-        }
-        self.steam.user = owned::steam_user();
-        let connected = self.config.steam_session.is_some() || self.config.steam_key.is_some();
-        if connected && !self.store.has_list(Shop::Steam) {
+        if self.persist && self.config.steam_session.is_some() && !self.store.has_list(Shop::Steam)
+        {
             return self.fetch_owned(Shop::Steam);
-        }
-        Task::none()
-    }
-
-    /// Reads again which account Steam signed in last, as the Accounts
-    /// page opens.
-    pub(super) fn want_steam_user(&mut self) -> Task<Message> {
-        if self.persist {
-            self.steam.user = owned::steam_user();
         }
         Task::none()
     }
@@ -124,6 +104,7 @@ impl Zendo {
                     return Task::none();
                 }
                 self.store.forget(Shop::Steam);
+                self.steam.family = None;
                 self.steam.family_note = None;
                 if self.persist {
                     owned::forget(Shop::Steam);
@@ -133,28 +114,6 @@ impl Zendo {
                     }
                 }
                 self.steam.note = Some((t!("steam-signed-out"), true));
-                // The old key, if any, lists the games again.
-                if self.config.steam_key.is_some() {
-                    return self.fetch_owned(Shop::Steam);
-                }
-                Task::none()
-            }
-            SteamMessage::RemoveKey => {
-                let previous = self.config.steam_key.take();
-                if self.persist
-                    && let Err(err) = self.config.save()
-                {
-                    self.config.steam_key = previous;
-                    self.steam.note = Some((format!("{err:#}"), false));
-                    return Task::none();
-                }
-                self.steam.note = Some((t!("key-removed"), true));
-                if self.config.steam_session.is_none() {
-                    self.store.forget(Shop::Steam);
-                    if self.persist {
-                        owned::forget(Shop::Steam);
-                    }
-                }
                 Task::none()
             }
             SteamMessage::Fetched(result) => self.steam_fetched(result),
@@ -172,6 +131,7 @@ impl Zendo {
                     return Task::none();
                 }
                 self.steam.note = Some((t!("steam-signed-in"), true));
+                self.steam.family = None;
                 self.steam.family_note = None;
                 self.store.forget(Shop::Steam);
                 self.fetch_owned(Shop::Steam)
@@ -189,12 +149,14 @@ impl Zendo {
             Ok(SteamFetch::Games {
                 games,
                 renewed,
+                family,
                 family_error,
             }) => {
                 if let Some(session) = renewed {
                     // Kept for the next start; the list stands either way.
                     self.store_steam_session(Some(&session));
                 }
+                self.steam.family = family;
                 self.steam.family_note = family_error;
                 Ok(games)
             }
@@ -230,16 +192,8 @@ impl Zendo {
 
     /// The signed-in account's name: Steam's own on this computer when it
     /// knows it, else the Steam ID.
-    fn steam_name(&self, session: &Session) -> String {
-        owned::steam_user_named(&session.steamid)
-            .or_else(|| {
-                self.steam
-                    .user
-                    .as_ref()
-                    .filter(|user| user.id == session.steamid)
-                    .map(|user| user.name.clone())
-            })
-            .unwrap_or_else(|| session.steamid.clone())
+    fn steam_name(session: &Session) -> String {
+        owned::steam_user_named(&session.steamid).unwrap_or_else(|| session.steamid.clone())
     }
 
     pub(super) fn steam_card(&self) -> Element<'_, Message> {
@@ -254,7 +208,7 @@ impl Zendo {
         let session = self.steam_session();
         match (&session, &self.steam.signing_in) {
             (Some(session), _) => {
-                let name = self.steam_name(session);
+                let name = Self::steam_name(session);
                 body = body.push(
                     row![
                         text(t!("accounts-signed-in-as", name = name.as_str()))
@@ -273,6 +227,16 @@ impl Zendo {
                         .size(13)
                         .color(colors().dim),
                 );
+                if let Some(family) = &self.steam.family {
+                    body = body.push(
+                        text(t!(
+                            "steam-family",
+                            name = family.name.as_str(),
+                            count = family.members
+                        ))
+                        .size(13),
+                    );
+                }
             }
             (None, Some(_)) => {
                 body = body.push(text(t!("steam-sign-in-about")).size(13).color(colors().dim));
@@ -313,24 +277,6 @@ impl Zendo {
             );
         }
         body = body.push(kept_note(self.config.kept(Key::SteamSession)));
-        if self.config.steam_key.is_some() {
-            let line = if session.is_some() {
-                t!("steam-old-key-unused")
-            } else {
-                t!("steam-old-key-used")
-            };
-            body = body.push(
-                row![
-                    text(line).size(13).color(colors().dim).width(Length::Fill),
-                    button(text(t!("steam-remove-key")).size(13))
-                        .padding([6, 12])
-                        .style(style::secondary)
-                        .on_press(Message::Steam(SteamMessage::RemoveKey)),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center),
-            );
-        }
         container(body)
             .padding(20)
             .width(Length::Fill)
@@ -346,13 +292,6 @@ pub(super) fn fetch_steam_signed_in(session: Session) -> Task<Message> {
         blocking(move || fetch_signed_in(session).map_err(|err| format!("{err:#}"))),
         |result| Message::Steam(SteamMessage::Fetched(result)),
     )
-}
-
-/// Seconds since 1970.
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs())
 }
 
 /// Steam's list with the sign-in: a new token from Steam's page first when
@@ -382,10 +321,12 @@ fn fetch_signed_in(session: Session) -> anyhow::Result<SteamFetch> {
     match answer {
         WebAnswer::Games {
             games,
+            family,
             family_error,
         } => Ok(SteamFetch::Games {
             games: steam_web::keep(games)?,
             renewed,
+            family,
             family_error,
         }),
         WebAnswer::Rejected => Ok(SteamFetch::SignedOut),
@@ -439,6 +380,7 @@ mod tests {
             SteamFetch::Games {
                 games,
                 renewed: Some(renewed.clone()),
+                family: None,
                 family_error: Some("Steam's family answered 401".into()),
             },
         ))));

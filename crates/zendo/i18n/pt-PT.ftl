@@ -216,10 +216,11 @@ steam-signed-in = Sessão iniciada: a Loja está a pedir os seus jogos ao Steam
 steam-signed-in-about = A Loja lista os jogos desta conta e os que a sua família Steam partilha.
 steam-signed-out = Sessão do Steam terminada
 steam-sign-in-again = A sessão do Steam terminou: inicie sessão de novo
+steam-family = Família Steam: { $name } · { $count ->
+    [one] { $count } membro
+   *[other] { $count } membros
+}
 steam-family-failed = Não foi possível listar os jogos da sua família: { $error }
-steam-old-key-used = A chave da Steam Web API definida antes é usada até iniciar sessão.
-steam-old-key-unused = A chave da Steam Web API definida antes já não é usada.
-steam-remove-key = Remover a chave
 store-shared = Partilhado pela sua família
 steam-asked = Pedido ao Steam para instalar { $title }: escolha onde na janela do Steam
 steam-installed = { $title } está instalado
@@ -419,6 +420,12 @@ fact-never = Nunca
 fact-play-time = Tempo de jogo
 fact-status = Estado
 fact-owner = De quem é
+fact-recent-time = Últimas duas semanas
+fact-played-on = Jogado em
+system-linux = Linux
+system-windows = Windows
+system-mac = macOS
+system-deck = Steam Deck
 fact-not-installed = Não instalado
 fact-started-from-zendo = Iniciado a partir do Zendo
 fact-launch-command = Comando de lançamento

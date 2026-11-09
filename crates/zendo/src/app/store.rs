@@ -4,8 +4,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use iced::widget::{button, checkbox, column, progress_bar, row, space, text, text_input};
+use iced::widget::{
+    button, checkbox, column, container, progress_bar, row, space, text, text_input,
+};
 use iced::{Alignment, Element, Task};
+use zendo_core::Sort;
 use zendo_core::downloads::{self, Job};
 use zendo_core::info::{self, Dlc, GameInfo};
 use zendo_core::owned::{self, Owned, Shop, StoreDetails};
@@ -14,7 +17,7 @@ use zendo_core::stores::Store;
 use super::accounts::Account;
 use super::downloads::DownloadMessage;
 use super::format;
-use super::library::{Card, GRID_PADDING, Window, card, cards_grid};
+use super::library::{Card, GRID_PADDING, Window, card, cards_grid, chip};
 use super::steam_installs::{Following, SteamInstallMessage, percent, progress_line};
 use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, blocking, centered, store_search_id};
@@ -28,12 +31,23 @@ pub struct StoreState {
     pub search: String,
     source: Option<Shop>,
     hide_installed: bool,
+    sort: StoreSort,
     pub selected: usize,
     pub scroll_top: f32,
     /// Sizes and versions asked of the stores, by game id; once a session.
     pub info: HashMap<String, InfoState>,
     /// The games whose "Also install its DLC" was unticked.
     skip_dlc: HashSet<String>,
+}
+
+/// The Store grid's order: by title until another is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StoreSort(Sort);
+
+impl Default for StoreSort {
+    fn default() -> Self {
+        Self(Sort::Title)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +65,7 @@ pub enum StoreMessage {
     Search(String),
     Source(Option<Shop>),
     ToggleInstalled,
+    Sort(Sort),
     /// "Also install its DLC" ticked or unticked for a game.
     ToggleDlc(String),
     Clicked(usize),
@@ -149,6 +164,10 @@ impl Zendo {
                 self.store.hide_installed = !self.store.hide_installed;
                 self.store_filter_changed()
             }
+            StoreMessage::Sort(sort) => {
+                self.store.sort = StoreSort(sort);
+                self.store_filter_changed()
+            }
             StoreMessage::Clicked(index) => {
                 self.store.selected = index;
                 self.open_owned()
@@ -240,8 +259,8 @@ impl Zendo {
         )
     }
 
-    /// The stores signed in, and Steam when its key is set: the ones whose
-    /// games the page shows and Refresh asks for.
+    /// The stores signed in, Steam among them: the ones whose games the
+    /// page shows and Refresh asks for.
     pub(super) fn connected(&self) -> Vec<Shop> {
         Shop::ALL
             .into_iter()
@@ -252,7 +271,7 @@ impl Zendo {
     fn is_connected(&self, shop: Shop) -> bool {
         match shop.store() {
             Some(store) => matches!(self.accounts.get(store), Account::SignedIn(_)),
-            None => self.config.steam_session.is_some() || self.config.steam_key.is_some(),
+            None => self.config.steam_session.is_some(),
         }
     }
 
@@ -262,15 +281,16 @@ impl Zendo {
         if !self.persist || !self.store.asking.insert(shop) {
             return Task::none();
         }
-        // Signed in to Steam: the sign-in's token, renewed when it ran out.
-        if shop == Shop::Steam
-            && let Some(session) = self.steam_session()
-        {
-            return super::steam::fetch_steam_signed_in(session);
-        }
-        let key = self.config.steam_key.clone();
+        let Some(store) = shop.store() else {
+            // Steam: the sign-in's token, renewed when it ran out.
+            if let Some(session) = self.steam_session() {
+                return super::steam::fetch_steam_signed_in(session);
+            }
+            self.store.asking.remove(&shop);
+            return Task::none();
+        };
         Task::perform(
-            blocking(move || fetch_list(shop, key.as_deref()).map_err(|err| format!("{err:#}"))),
+            blocking(move || owned::fetch(store).map_err(|err| format!("{err:#}"))),
             move |result| Message::Store(StoreMessage::Fetched(shop, result)),
         )
     }
@@ -315,7 +335,7 @@ impl Zendo {
         self.shown().count()
     }
 
-    /// The owned games the page shows, by title.
+    /// The owned games the page shows, in the order chosen.
     pub(super) fn store_visible(&self) -> Vec<&Owned> {
         let words: Vec<String> = self
             .store
@@ -332,7 +352,7 @@ impl Zendo {
                 words.iter().all(|word| title.contains(word.as_str()))
             })
             .collect();
-        games.sort_by_cached_key(|game| (game.title.to_lowercase(), game.id.clone()));
+        sort_owned(&mut games, self.store.sort.0);
         games
     }
 
@@ -460,7 +480,7 @@ impl Zendo {
     fn store_toolbar(&self, shown: &[&Owned], installed: usize) -> Element<'_, Message> {
         let mut chips: Vec<Element<'_, Message>> = vec![chip(
             t!("library-all"),
-            shown.len(),
+            Some(shown.len()),
             self.store.source.is_none(),
             Message::Store(StoreMessage::Source(None)),
         )];
@@ -469,7 +489,7 @@ impl Zendo {
             if count > 0 {
                 chips.push(chip(
                     shop.label().to_owned(),
-                    count,
+                    Some(count),
                     self.store.source == Some(shop),
                     Message::Store(StoreMessage::Source(Some(shop))),
                 ));
@@ -478,10 +498,24 @@ impl Zendo {
         chips.push(space::horizontal().width(16).into());
         chips.push(chip(
             t!("store-not-installed-only"),
-            shown.len() - installed,
+            Some(shown.len() - installed),
             self.store.hide_installed,
             Message::Store(StoreMessage::ToggleInstalled),
         ));
+        chips.push(space::horizontal().width(16).into());
+        chips.push(
+            container(text(t!("library-sort")).size(13).color(colors().dim))
+                .padding([6, 0])
+                .into(),
+        );
+        for sort in [Sort::Title, Sort::Recent, Sort::MostPlayed] {
+            chips.push(chip(
+                format::sort(sort),
+                None,
+                self.store.sort.0 == sort,
+                Message::Store(StoreMessage::Sort(sort)),
+            ));
+        }
         row(chips)
             .spacing(8)
             .padding([4.0, GRID_PADDING])
@@ -697,16 +731,21 @@ impl Zendo {
     }
 }
 
-/// A store's list of games owned; Steam's with the user's key, for the
-/// account Steam signed in last.
-fn fetch_list(shop: Shop, key: Option<&str>) -> anyhow::Result<Vec<Owned>> {
-    if let Some(store) = shop.store() {
-        return owned::fetch(store);
-    }
-    let key = key.ok_or_else(|| anyhow::anyhow!("no Steam key is set"))?;
-    let user = owned::steam_user()
-        .ok_or_else(|| anyhow::anyhow!("Steam has no account signed in on this computer"))?;
-    owned::fetch_steam(key, &user)
+/// The Store's order: by title, last played first, or longest played
+/// first; games with nothing to go by after the rest, by title.
+fn sort_owned(games: &mut [&Owned], sort: Sort) {
+    games.sort_by_cached_key(|game| {
+        let first = match sort {
+            Sort::Title => 0,
+            Sort::Recent => game.last_played.unwrap_or(0),
+            Sort::MostPlayed => game.minutes.unwrap_or(0),
+        };
+        (
+            std::cmp::Reverse(first),
+            game.title.to_lowercase(),
+            game.id.clone(),
+        )
+    });
 }
 
 /// The line under a card's title: the developer or platforms, or for a
@@ -735,25 +774,6 @@ pub fn store_of(id: &str) -> Option<(Store, &str)> {
         _ => return None,
     };
     Some((store, app))
-}
-
-fn chip<'a>(label: String, count: usize, chosen: bool, message: Message) -> Element<'a, Message> {
-    button(
-        row![
-            text(label).size(13),
-            text(count.to_string()).size(12).color(if chosen {
-                colors().accent
-            } else {
-                colors().dim
-            }),
-        ]
-        .spacing(6)
-        .align_y(Alignment::Center),
-    )
-    .padding([5, 12])
-    .style(style::chip(chosen))
-    .on_press(message)
-    .into()
 }
 
 #[cfg(test)]
@@ -831,9 +851,9 @@ mod tests {
     }
 
     #[test]
-    fn shows_steams_games_while_its_key_is_set() {
+    fn shows_steams_games_while_signed_in() {
         let mut zendo = zendo();
-        zendo.config.steam_key = Some("key".into());
+        zendo.config.steam_session = Some("session".into());
         assert_eq!(zendo.owned_count(), 5);
         assert_eq!(zendo.connected(), [Shop::Steam, Shop::Epic, Shop::Gog]);
         let _ = zendo.update(Message::Store(StoreMessage::Source(Some(Shop::Steam))));
@@ -842,6 +862,35 @@ mod tests {
             zendo.install_job("steam:620").is_none(),
             "Steam installs its own games"
         );
+    }
+
+    #[test]
+    fn sorts_by_title_last_played_or_time_played() {
+        let game = |id: &str, title: &str, last: Option<u64>, minutes: Option<u64>| {
+            let mut game = Owned::new(Shop::Steam, id, title.into());
+            game.last_played = last;
+            game.minutes = minutes;
+            game
+        };
+        let games = [
+            game("1", "Beta", Some(100), Some(5)),
+            game("2", "Alpha", None, None),
+            game("3", "Gamma", Some(300), Some(1)),
+        ];
+        let order = |sort| {
+            let mut list: Vec<&Owned> = games.iter().collect();
+            sort_owned(&mut list, sort);
+            list.iter()
+                .map(|game| game.title.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(order(Sort::Title), ["Alpha", "Beta", "Gamma"]);
+        assert_eq!(order(Sort::Recent), ["Gamma", "Beta", "Alpha"]);
+        assert_eq!(order(Sort::MostPlayed), ["Beta", "Gamma", "Alpha"]);
+        let mut zendo = zendo();
+        assert_eq!(zendo.store.sort.0, Sort::Title);
+        let _ = zendo.update(Message::Store(StoreMessage::Sort(Sort::Recent)));
+        assert_eq!(zendo.store.sort.0, Sort::Recent);
     }
 
     #[test]

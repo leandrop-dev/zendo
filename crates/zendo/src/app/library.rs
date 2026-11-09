@@ -330,7 +330,8 @@ pub fn cards_grid<'a>(
         .into()
 }
 
-fn chip<'a>(
+/// A toggle in a page's toolbar, with a count when given.
+pub(super) fn chip<'a>(
     label: String,
     count: Option<usize>,
     chosen: bool,

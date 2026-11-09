@@ -93,18 +93,19 @@ install it and give it its colours, but it runs on any Linux desktop.
   you paste back what it ends on. The engines are used from your `PATH`, or from
   Heroic's own copies.
 - Shows every game those stores say you own on the Store page, with the
-  installed ones marked, a search, store chips and "Not installed only",
-  and a page for each.
+  installed ones marked, a search, store chips, "Not installed only", an
+  order (A–Z, recently played or most played) and a page for each.
 - Lists the Steam games you own there too, installed or not, with the time
-  Steam counted, and the games your Steam family shares with you, once you
+  Steam counted (when last played, the last two weeks, and on which
+  systems), and the games your Steam family shares with you, once you
   sign in with Steam on the Accounts page. You sign in on Steam's own page,
   in Zendo's sign-in window, with your password and Steam Guard or the
   Steam app's QR code; Zendo never sees the password. It keeps the Web API
   token Steam's page gives in the system keyring, and gets a new one from
   Steam's page, in a window that never shows, when it runs out (Steam's
-  page remembers the sign-in in `~/.local/share/zendo/steam-web`). A
-  Steam Web API key set before the sign-in existed is used until you sign
-  in, and can be removed on Accounts. A Steam game's page has the
+  page remembers the sign-in in `~/.local/share/zendo/steam-web`). The
+  Steam Web API key Zendo took before is no longer used: Zendo removes it
+  from the settings file and the keyring. A Steam game's page has the
   description, makers, genres and release date from Steam's store. Install
   opens Steam's own install dialog (`steam -silent steam://install/<app>`);
   Steam downloads the game, Zendo shows how far it is on the Downloads page
@@ -352,8 +353,7 @@ The keys and the Steam sign-in go in the system keyring when one answers
 when none does; Settings (Accounts for Steam's) says where each is. A key
 written in the file by hand moves into the keyring the next time Zendo
 starts. In the keyring they are items with `application` `zendo` and `key`
-`steamgriddb`, `nexus`, `steam` (the old Steam Web API key) or
-`steam-session`, so
+`steamgriddb`, `nexus` or `steam-session`, so
 `secret-tool lookup application zendo key nexus` prints one. A key written
 `""` means none, without asking the keyring.
 

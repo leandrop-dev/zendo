@@ -18,25 +18,18 @@ use secret_service::{EncryptionType, Error};
 pub enum Key {
     SteamGridDb,
     Nexus,
-    Steam,
     /// The Steam sign-in: its Steam ID and Web API token, as JSON.
     SteamSession,
 }
 
 impl Key {
-    pub const ALL: [Self; 4] = [
-        Self::SteamGridDb,
-        Self::Nexus,
-        Self::Steam,
-        Self::SteamSession,
-    ];
+    pub const ALL: [Self; 3] = [Self::SteamGridDb, Self::Nexus, Self::SteamSession];
 
     /// Its name in the keyring and in `config.toml`.
     fn name(self) -> &'static str {
         match self {
             Self::SteamGridDb => "steamgriddb",
             Self::Nexus => "nexus",
-            Self::Steam => "steam",
             Self::SteamSession => "steam-session",
         }
     }
@@ -46,14 +39,21 @@ impl Key {
         match self {
             Self::SteamGridDb => "Zendo: SteamGridDB API key",
             Self::Nexus => "Zendo: Nexus Mods API key",
-            Self::Steam => "Zendo: Steam Web API key",
             Self::SteamSession => "Zendo: Steam sign-in",
         }
     }
 
     fn attributes(self) -> HashMap<&'static str, &'static str> {
-        HashMap::from([("application", "zendo"), ("key", self.name())])
+        attributes(self.name())
     }
+}
+
+/// Keys Zendo no longer takes, removed from the keyring: the Steam Web API
+/// key, replaced by the Steam sign-in.
+const RETIRED: [&str; 1] = ["steam"];
+
+fn attributes(name: &str) -> HashMap<&'static str, &str> {
+    HashMap::from([("application", "zendo"), ("key", name)])
 }
 
 /// Where the keys are kept; the system keyring, or another in tests.
@@ -62,6 +62,8 @@ pub(crate) trait Keyring {
     fn get(&self, key: Key) -> anyhow::Result<Option<String>>;
     /// Keeps the key, or removes it with `None`.
     fn set(&self, key: Key, value: Option<&str>) -> anyhow::Result<()>;
+    /// Removes the keys Zendo no longer takes ([`RETIRED`]).
+    fn forget_retired(&self) -> anyhow::Result<()>;
 }
 
 /// The keyring the desktop provides.
@@ -108,6 +110,19 @@ impl Keyring for System {
             if !found.locked.is_empty() {
                 bail!("the keyring is locked");
             }
+            for item in found.unlocked {
+                item.delete().map_err(said)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Never asks to unlock: a locked keyring keeps them until the next
+    /// start.
+    fn forget_retired(&self) -> anyhow::Result<()> {
+        let service = connect()?;
+        for name in RETIRED {
+            let found = service.search_items(attributes(name)).map_err(said)?;
             for item in found.unlocked {
                 item.delete().map_err(said)?;
             }
@@ -161,6 +176,17 @@ pub(crate) mod tests {
                 Some(value) => keys.insert(key.name(), value.to_owned()),
                 None => keys.remove(key.name()),
             };
+            Ok(())
+        }
+
+        fn forget_retired(&self) -> anyhow::Result<()> {
+            if let Some(why) = self.broken.get() {
+                bail!(why);
+            }
+            let mut keys = self.keys.borrow_mut();
+            for name in RETIRED {
+                keys.remove(name);
+            }
             Ok(())
         }
     }

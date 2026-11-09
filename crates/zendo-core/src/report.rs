@@ -348,7 +348,6 @@ fn settings(lines: &mut Vec<String>, config: &Config) {
     for (key, name) in [
         (Key::SteamGridDb, "SteamGridDB key"),
         (Key::Nexus, "Nexus Mods key"),
-        (Key::Steam, "Steam Web API key"),
         (Key::SteamSession, "Steam sign-in"),
     ] {
         let set = if config.key(key).is_some() {

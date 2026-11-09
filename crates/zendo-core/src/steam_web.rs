@@ -31,6 +31,7 @@ const FAMILY_GROUP: &str =
     "https://api.steampowered.com/IFamilyGroupsService/GetFamilyGroupForUser/v1/";
 const FAMILY_APPS: &str =
     "https://api.steampowered.com/IFamilyGroupsService/GetSharedLibraryApps/v1/";
+const FAMILY_DETAILS: &str = "https://api.steampowered.com/IFamilyGroupsService/GetFamilyGroup/v1/";
 
 /// The folder where the sign-in window keeps Steam's cookies, so Steam's
 /// page remembers the sign-in: `$XDG_DATA_HOME/zendo/steam-web`.
@@ -133,10 +134,20 @@ pub enum WebAnswer {
     /// the family's could not be listed, when they could not.
     Games {
         games: Vec<Owned>,
+        /// The account's Steam family, when it is in one.
+        family: Option<Family>,
         family_error: Option<String>,
     },
     /// Steam does not take the token: it ended, or the user signed out.
     Rejected,
+}
+
+/// A Steam family, as its members see it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Family {
+    pub name: String,
+    /// How many accounts are in it, the user's among them.
+    pub members: usize,
 }
 
 /// Asks Steam for the games the account owns and those its family shares.
@@ -145,21 +156,23 @@ pub enum WebAnswer {
 ///
 /// When Steam cannot be reached or answers oddly.
 pub fn ask(session: &Session) -> anyhow::Result<WebAnswer> {
-    let mut games = match owned::ask_owned(("access_token", &session.token), &session.steamid)? {
+    let mut games = match owned::ask_owned(&session.token, &session.steamid)? {
         SteamAnswer::Games(games) => games,
         SteamAnswer::Nothing => Vec::new(),
         SteamAnswer::Rejected => return Ok(WebAnswer::Rejected),
     };
-    let family_error = match family(session) {
-        Ok(shared) => {
+    let (family, family_error) = match family(session) {
+        Ok(None) => (None, None),
+        Ok(Some((family, shared))) => {
             let owned: HashSet<String> = games.iter().map(|game| game.id.clone()).collect();
             games.extend(shared.into_iter().filter(|game| !owned.contains(&game.id)));
-            None
+            (family, None)
         }
-        Err(err) => Some(format!("{err:#}")),
+        Err(err) => (None, Some(format!("{err:#}"))),
     };
     Ok(WebAnswer::Games {
         games,
+        family,
         family_error,
     })
 }
@@ -173,9 +186,10 @@ pub fn keep(games: Vec<Owned>) -> anyhow::Result<Vec<Owned>> {
     owned::keep(Shop::Steam, games)
 }
 
-/// The games the account's Steam family shares with it; none when it is in
-/// no family.
-fn family(session: &Session) -> anyhow::Result<Vec<Owned>> {
+/// The account's Steam family and the games it shares with it; `None` when
+/// it is in no family. The family's name is left out when only it could
+/// not be read.
+fn family(session: &Session) -> anyhow::Result<Option<(Option<Family>, Vec<Owned>)>> {
     let agent = crate::http::agent(Duration::from_secs(30));
     let read = |response: Result<ureq::http::Response<ureq::Body>, ureq::Error>| match response {
         Ok(response) => Ok(response.into_body().read_to_string()?),
@@ -190,7 +204,7 @@ fn family(session: &Session) -> anyhow::Result<Vec<Owned>> {
             .call(),
     )?;
     let Some(group) = parse_group(&group)? else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let apps = read(
         agent
@@ -204,7 +218,36 @@ fn family(session: &Session) -> anyhow::Result<Vec<Owned>> {
             .query("language", "english")
             .call(),
     )?;
-    parse_shared(&apps, &session.steamid)
+    let shared = parse_shared(&apps, &session.steamid)?;
+    let details = read(
+        agent
+            .get(FAMILY_DETAILS)
+            .query("access_token", &session.token)
+            .query("family_groupid", &group)
+            .call(),
+    );
+    let family = details.ok().and_then(|text| parse_family(&text));
+    Ok(Some((family, shared)))
+}
+
+/// The family's name and how many are in it.
+fn parse_family(text: &str) -> Option<Family> {
+    #[derive(Deserialize)]
+    struct Reply {
+        response: Group,
+    }
+    #[derive(Deserialize)]
+    struct Group {
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        members: Vec<serde::de::IgnoredAny>,
+    }
+    let group = serde_json::from_str::<Reply>(text).ok()?.response;
+    Some(Family {
+        name: group.name.trim().to_owned(),
+        members: group.members.len(),
+    })
 }
 
 /// The family group's id; `None` when the account is in none.
@@ -249,6 +292,9 @@ fn parse_shared(text: &str, steamid: &str) -> anyhow::Result<Vec<Owned>> {
         /// The account's own minutes in it.
         #[serde(default)]
         rt_playtime: u64,
+        /// 0 when never played.
+        #[serde(default)]
+        rt_last_played: u64,
     }
     let reply: Reply = serde_json::from_str(text).context("Steam's family library: not JSON")?;
     Ok(reply
@@ -260,6 +306,7 @@ fn parse_shared(text: &str, steamid: &str) -> anyhow::Result<Vec<Owned>> {
         .map(|app| {
             let mut game = owned::steam_game(app.appid, app.name, app.rt_playtime);
             game.shared = true;
+            game.last_played = Some(app.rt_last_played).filter(|time| *time > 0);
             game
         })
         .collect())
@@ -306,12 +353,22 @@ mod tests {
         assert_eq!(parse_group(group).unwrap().as_deref(), Some("20782235"));
         let none = r#"{"response":{"is_not_member_of_any_group":true}}"#;
         assert_eq!(parse_group(none).unwrap(), None);
+        let details = r#"{"response":{"name":" The Family ","members":[
+            {"steamid":"76561198000000001","role":1},{"steamid":"76561198000000002","role":2}
+        ],"free_spots":4}}"#;
+        assert_eq!(
+            parse_family(details),
+            Some(Family {
+                name: "The Family".into(),
+                members: 2
+            })
+        );
     }
 
     #[test]
     fn lists_the_games_the_family_shares() {
         let library = r#"{"response":{"apps":[
-            {"appid":4704690,"name":"MECCHA CHAMELEON","owner_steamids":["76561198000000002"],"exclude_reason":0,"rt_playtime":42},
+            {"appid":4704690,"name":"MECCHA CHAMELEON","owner_steamids":["76561198000000002"],"exclude_reason":0,"rt_playtime":42,"rt_last_played":1700000000},
             {"appid":620,"name":"Portal 2","owner_steamids":["76561198000000001","76561198000000002"],"exclude_reason":0},
             {"appid":10,"name":"Kept back","owner_steamids":["76561198000000002"],"exclude_reason":2}
         ],"owner_steamid":"76561198000000001"}}"#;
@@ -320,6 +377,7 @@ mod tests {
         assert_eq!(shared[0].id, "steam:4704690");
         assert_eq!(shared[0].title, "MECCHA CHAMELEON");
         assert_eq!(shared[0].minutes, Some(42));
+        assert_eq!(shared[0].last_played, Some(1_700_000_000));
         assert!(shared[0].shared);
         assert_eq!(parse_shared(r#"{"response":{}}"#, ME).unwrap(), Vec::new());
     }

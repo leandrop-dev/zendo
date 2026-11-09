@@ -55,6 +55,17 @@ pub struct Owned {
     /// The minutes played, where the store counts them (Steam).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minutes: Option<u64>,
+    /// When it was last played, in seconds since 1970, where the store
+    /// says (Steam).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_played: Option<u64>,
+    /// The minutes played in the last two weeks (Steam).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub recent_minutes: u64,
+    /// The minutes played on each system, as Steam counts them since it
+    /// began to; older time is in `minutes` only.
+    #[serde(default, skip_serializing_if = "PlayedOn::is_empty")]
+    pub played_on: PlayedOn,
     /// Shared by the user's Steam family, not owned.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub shared: bool,
@@ -67,6 +78,32 @@ pub struct Owned {
     pub cover: Option<PathBuf>,
     #[serde(skip)]
     pub hero: Option<PathBuf>,
+}
+
+/// The minutes Steam counted on each system.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayedOn {
+    pub linux: u64,
+    pub windows: u64,
+    pub mac: u64,
+    /// On a Steam Deck.
+    pub deck: u64,
+}
+
+impl PlayedOn {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde's skip_serializing_if passes a reference"
+)]
+fn is_zero(minutes: &u64) -> bool {
+    *minutes == 0
 }
 
 /// Where an owned game comes from: a store Zendo installs from, or Steam,
@@ -178,6 +215,9 @@ impl Owned {
             cover_url: None,
             hero_url: None,
             minutes: None,
+            last_played: None,
+            recent_minutes: 0,
+            played_on: PlayedOn::default(),
             shared: false,
             space: None,
             cover: None,
@@ -304,45 +344,26 @@ fn steam_image(kind: Kind) -> &'static str {
     }
 }
 
-pub use crate::steam::User as SteamUser;
-
-/// The Steam account signed in last on this computer, whose games Steam's
-/// Web API is asked for.
-#[must_use]
-pub fn steam_user() -> Option<SteamUser> {
-    steam::user(&steam::roots())
-}
-
 /// The name Steam on this computer knows an account by, by its Steam ID.
 #[must_use]
 pub fn steam_user_named(id: &str) -> Option<String> {
     steam::user_named(&steam::roots(), id)
 }
 
-/// What Steam's Web API says of a key and an account.
+/// What Steam's Web API says of a sign-in's token.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SteamAnswer {
+pub(crate) enum SteamAnswer {
     /// The games the account owns.
     Games(Vec<Owned>),
-    /// Steam does not take the key.
+    /// Steam does not take the token.
     Rejected,
-    /// Steam took the key but lists nothing: the account's game details
-    /// are not public, or it owns no games.
+    /// Steam took the token but lists nothing: the account owns no games.
     Nothing,
 }
 
-/// Asks Steam for the games an account owns, with the user's key.
-///
-/// # Errors
-///
-/// When Steam cannot be reached or answers oddly.
-pub fn ask_steam(key: &str, user: &SteamUser) -> anyhow::Result<SteamAnswer> {
-    ask_owned(("key", key), &user.id)
-}
-
-/// Asks Steam's Web API for the games an account owns, with a key or a
-/// sign-in's access token: `("key", …)` or `("access_token", …)`.
-pub(crate) fn ask_owned(auth: (&str, &str), steamid: &str) -> anyhow::Result<SteamAnswer> {
+/// Asks Steam's Web API for the games an account owns, with a sign-in's
+/// access token.
+pub(crate) fn ask_owned(token: &str, steamid: &str) -> anyhow::Result<SteamAnswer> {
     let agent = crate::http::agent(Duration::from_secs(30));
     // Steam's Web API answers 429 now and then even to a first request in
     // hours; a few tries a moment apart get through.
@@ -351,7 +372,7 @@ pub(crate) fn ask_owned(auth: (&str, &str), steamid: &str) -> anyhow::Result<Ste
         tries += 1;
         let response = agent
             .get(STEAM_OWNED)
-            .query(auth.0, auth.1)
+            .query("access_token", token)
             .query("steamid", steamid)
             .query("include_appinfo", "1")
             .query("include_played_free_games", "1")
@@ -368,22 +389,6 @@ pub(crate) fn ask_owned(auth: (&str, &str), steamid: &str) -> anyhow::Result<Ste
         }
     };
     parse_steam(&response.into_body().read_to_string()?)
-}
-
-/// Asks Steam for the games owned, keeps the list and returns it.
-///
-/// # Errors
-///
-/// When Steam cannot be reached, refuses the key or lists nothing.
-pub fn fetch_steam(key: &str, user: &SteamUser) -> anyhow::Result<Vec<Owned>> {
-    match ask_steam(key, user)? {
-        SteamAnswer::Games(games) => keep(Shop::Steam, games),
-        SteamAnswer::Rejected => bail!("Steam does not take the key set in Accounts"),
-        SteamAnswer::Nothing => bail!(
-            "Steam lists no games for {}: its profile's game details may be private",
-            user.name
-        ),
-    }
 }
 
 /// What Steam's store says about a game, for its page.
@@ -569,6 +574,19 @@ fn parse_steam(text: &str) -> anyhow::Result<SteamAnswer> {
         name: Option<String>,
         #[serde(default)]
         playtime_forever: u64,
+        #[serde(default)]
+        playtime_2weeks: u64,
+        #[serde(default)]
+        playtime_linux_forever: u64,
+        #[serde(default)]
+        playtime_windows_forever: u64,
+        #[serde(default)]
+        playtime_mac_forever: u64,
+        #[serde(default)]
+        playtime_deck_forever: u64,
+        /// 0 when never played.
+        #[serde(default)]
+        rtime_last_played: u64,
     }
     let reply: Reply = serde_json::from_str(text).context("Steam's list of games: not JSON")?;
     let Some(games) = reply.response.games.filter(|games| !games.is_empty()) else {
@@ -577,7 +595,18 @@ fn parse_steam(text: &str) -> anyhow::Result<SteamAnswer> {
     Ok(SteamAnswer::Games(
         games
             .into_iter()
-            .map(|game| steam_game(game.appid, game.name, game.playtime_forever))
+            .map(|game| {
+                let mut owned = steam_game(game.appid, game.name, game.playtime_forever);
+                owned.last_played = Some(game.rtime_last_played).filter(|time| *time > 0);
+                owned.recent_minutes = game.playtime_2weeks;
+                owned.played_on = PlayedOn {
+                    linux: game.playtime_linux_forever,
+                    windows: game.playtime_windows_forever,
+                    mac: game.playtime_mac_forever,
+                    deck: game.playtime_deck_forever,
+                };
+                owned
+            })
             .collect(),
     ))
 }
@@ -1070,8 +1099,10 @@ mod tests {
     #[test]
     fn reads_steams_owned_games() {
         let json = r#"{"response": {"game_count": 2, "games": [
-            {"appid": 620, "name": "Portal 2", "playtime_forever": 754, "img_icon_url": "x"},
-            {"appid": 4000, "name": " ", "playtime_forever": 0}]}}"#;
+            {"appid": 620, "name": "Portal 2", "playtime_forever": 754, "img_icon_url": "x",
+             "playtime_2weeks": 30, "playtime_linux_forever": 500, "playtime_windows_forever": 4,
+             "playtime_mac_forever": 0, "playtime_deck_forever": 0, "rtime_last_played": 1700000000},
+            {"appid": 4000, "name": " ", "playtime_forever": 0, "rtime_last_played": 0}]}}"#;
         let SteamAnswer::Games(games) = parse_steam(json).unwrap() else {
             panic!("games expected");
         };
@@ -1080,6 +1111,18 @@ mod tests {
         assert_eq!(games[0].shop, Shop::Steam);
         assert_eq!(games[0].store(), None);
         assert_eq!(games[0].minutes, Some(754));
+        assert_eq!(games[0].last_played, Some(1_700_000_000));
+        assert_eq!(games[0].recent_minutes, 30);
+        assert_eq!(
+            games[0].played_on,
+            PlayedOn {
+                linux: 500,
+                windows: 4,
+                ..PlayedOn::default()
+            }
+        );
+        assert_eq!(games[1].last_played, None);
+        assert!(games[1].played_on.is_empty());
         assert_eq!(
             games[0].cover_url.as_deref(),
             Some(

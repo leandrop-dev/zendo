@@ -56,10 +56,6 @@ pub struct Config {
     /// The user's personal Nexus Mods API key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nexus_key: Option<String>,
-    /// The user's Steam Web API key, for the games owned; replaced by the
-    /// Steam sign-in, used only until the user signs in.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub steam_key: Option<String>,
     /// The Steam sign-in ([`crate::steam_web::Session`] as JSON), in the
     /// keyring like the keys.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,7 +77,21 @@ pub struct Config {
     pub theme: Option<String>,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
-    held: [Held; 4],
+    held: [Held; 3],
+    /// The Steam Web API key Zendo once took, replaced by the Steam
+    /// sign-in: an old file with it still loads, and loses it.
+    #[serde(rename = "steam_key", skip_serializing)]
+    retired_steam_key: Option<Retired>,
+}
+
+/// A setting Zendo no longer takes; its value is not even kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Retired;
+
+impl<'de> Deserialize<'de> for Retired {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        serde::de::IgnoredAny::deserialize(deserializer).map(|_| Self)
+    }
 }
 
 /// Where a key is kept.
@@ -111,7 +121,6 @@ impl std::fmt::Debug for Config {
         f.debug_struct("Config")
             .field("steamgriddb_key", &hidden(&self.steamgriddb_key))
             .field("nexus_key", &hidden(&self.nexus_key))
-            .field("steam_key", &hidden(&self.steam_key))
             .field("steam_session", &hidden(&self.steam_session))
             .field("download_covers", &self.download_covers)
             .field("install_dir", &self.install_dir)
@@ -120,7 +129,6 @@ impl std::fmt::Debug for Config {
             .field("theme", &self.theme)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
-            .field("steam_kept", self.kept(Key::Steam))
             .field("steam_session_kept", self.kept(Key::SteamSession))
             .finish_non_exhaustive()
     }
@@ -131,7 +139,6 @@ impl Default for Config {
         Self {
             steamgriddb_key: None,
             nexus_key: None,
-            steam_key: None,
             steam_session: None,
             download_covers: true,
             install_dir: None,
@@ -139,6 +146,7 @@ impl Default for Config {
             language: None,
             theme: None,
             held: Default::default(),
+            retired_steam_key: None,
         }
     }
 }
@@ -169,7 +177,6 @@ impl Config {
         match key {
             Key::SteamGridDb => self.steamgriddb_key.as_deref(),
             Key::Nexus => self.nexus_key.as_deref(),
-            Key::Steam => self.steam_key.as_deref(),
             Key::SteamSession => self.steam_session.as_deref(),
         }
     }
@@ -178,7 +185,6 @@ impl Config {
         match key {
             Key::SteamGridDb => &mut self.steamgriddb_key,
             Key::Nexus => &mut self.nexus_key,
-            Key::Steam => &mut self.steam_key,
             Key::SteamSession => &mut self.steam_session,
         }
     }
@@ -252,6 +258,12 @@ impl Config {
         };
         let mut config = Self::read(path)?;
         let mut moved = false;
+        if move_keys {
+            // The old Steam key goes from the file and the keyring; a
+            // keyring that cannot be asked keeps it until the next start.
+            moved = config.retired_steam_key.take().is_some();
+            let _ = keyring.forget_retired();
+        }
         for key in Key::ALL {
             let value = config.key(key).map(str::to_owned);
             let held = &mut config.held[key as usize];
@@ -366,7 +378,6 @@ mod tests {
         let config = Config {
             steamgriddb_key: Some("sgdb-secret".into()),
             nexus_key: Some("nexus-secret".into()),
-            steam_key: Some("steam-secret".into()),
             ..Config::default()
         };
         let shown = format!("{config:?}");
@@ -462,6 +473,24 @@ mod tests {
         assert_eq!(keyring.keys.borrow()["nexus"], "nx");
         assert!(!scratch.text().contains("nexus_key"), "{}", scratch.text());
         assert!(scratch.text().contains("download_covers = false"));
+    }
+
+    #[test]
+    fn the_old_steam_key_goes_from_the_file_and_the_keyring() {
+        let scratch = Scratch::new("retired");
+        fs::write(&scratch.0, "steam_key = \"old\"\ndownload_covers = false\n").unwrap();
+        let keyring = Memory::default();
+        keyring.keys.borrow_mut().insert("steam", "old".into());
+        keyring.keys.borrow_mut().insert("nexus", "nx".into());
+        let config = scratch.load(&keyring);
+        assert!(!config.download_covers);
+        assert!(!format!("{config:?}").contains("old"));
+        assert!(!scratch.text().contains("steam_key"), "{}", scratch.text());
+        assert!(scratch.text().contains("download_covers = false"));
+        assert_eq!(
+            keyring.keys.borrow().keys().copied().collect::<Vec<_>>(),
+            ["nexus"]
+        );
     }
 
     #[test]

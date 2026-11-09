@@ -1490,9 +1490,10 @@ Features:
       family failing keeps the owned list and says why on Accounts.
     - The account's name comes from `loginusers.vdf` by Steam ID, else
       the Steam ID is shown.
-    - Sign out removes the session and Steam's cookies. The old key is
-      used until the user signs in, and Accounts can remove it; the
-      key's code goes once the sign-in works for the user.
+    - Sign out removes the session and Steam's cookies.
+    - The Web API key is gone (the user asked, 2026-11-09): an old
+      `steam_key` in `config.toml` is read and dropped, and the keyring's
+      `steam` item removed, as Zendo starts (`secrets::RETIRED`).
     Code: core `steam_web.rs`, `secrets.rs`, `config.rs`, `owned.rs`
     (`ask_owned`, `steam_game`, `shared`), `steam.rs` (`user_named`); the
     window's `sign_in_window.rs` (`steam` module), `app/steam.rs` (the
@@ -1515,13 +1516,55 @@ Features:
     - `IWishlistService/GetWishlist`: app id, date added, priority.
     - Not with the token: `ISteamUserStats/GetPlayerAchievements`
       answers 400.
-    The last played times serve item 24 (and a "recently played" sort);
-    the wishlist could be a Store filter later [idea].
+    The wishlist could be a Store filter later [idea].
+11c. Steam's extra details [firm: the user asked 2026-11-09, all but the
+    achievements and the wishlist], built the same day:
+    - The Store's Steam games keep `last_played`, `recent_minutes` (two
+      weeks) and `played_on` (Linux, Windows, macOS, Steam Deck) from
+      `GetOwnedGames`; shared games their `rt_last_played`. Their page
+      shows "Last played", "Last two weeks" and "Played on". On the
+      user's account the per-system minutes add up to the total for
+      about half the games played, less for the rest (time from before
+      Steam counted by system), and no Deck time, so whether Steam counts
+      Deck time inside Linux is not known: shown as Steam gives it.
+    - The Store has an order like the library's: A–Z (the default), Recent
+      and Most played; games with nothing to go by come last, by title.
+    - Accounts shows the Steam family's name and how many are in it
+      (`GetFamilyGroup`); the members' names are not shown, as Steam
+      gives only their Steam IDs.
+    - Left out: `has_dlc`, `has_workshop` and the like (nothing in Zendo
+      uses them yet); first played times (`ClientGetLastPlayedTimes`).
+    - Installed Steam games already had their last played time and
+      minutes from Steam's own files (`localconfig.vdf`), so the library
+      is unchanged. This covers item 24's "last played time of games not
+      installed".
 12. Searching Nexus Mods in Zendo instead of the browser. Nexus's v1 API
     has no search; its GraphQL v2 API is to check. Downloading still
     needs the site's Mod manager download for accounts without Premium:
     the API gives free accounts a link only with the key in an `nxm://`
     link.
+    Checked 2026-11-09, no key sent: `POST
+    https://api.nexusmods.com/v2/graphql` answers `mods(filter, sort,
+    count, offset)` without a key. Filter `gameDomainName` EQUALS the
+    game's Nexus name, `name` WILDCARD the words, `adultContent` EQUALS
+    false; each `Mod` has `modId`, `name`, `summary`, `author`,
+    `version`, `endorsements`, `downloads`, `fileSize` (KB), `updatedAt`,
+    `adultContent`, `thumbnailUrl`, `modCategory.name`, and the result
+    `totalCount`. Sorts: `relevance`, `endorsements`, `downloads`,
+    `updatedAt`, `createdAt`, `name`. Tried on Stardew Valley and Skyrim
+    SE: `name` WILDCARD sorted by endorsements puts the mod people mean
+    first ("content patcher", "smapi", "skyui", "skse"); `relevance`
+    (with `nameStemmed`) does not ("smapi" gave SMAPI Templates, "skse"
+    a mod with one endorsement), so endorsements is the default order.
+    Proposed [tentative, to confirm with the user]: "Search Nexus" on the
+    Mods card (beside Find mods on Nexus) opens a search view on the
+    game page: a search box, orders (Most endorsed, Most downloaded,
+    Recently updated), results with thumbnail, name, author, summary,
+    category, version, endorsements and downloads, 20 at a time with
+    More; mods already in the game's list marked. A result opens its
+    files (v1 `files`, with the key): Download for Premium, or the file's
+    page for the Mod manager download, which comes back through the
+    `nxm://` handler as now. Adult mods left out unless a toggle is on.
 
 Later:
 
@@ -1585,8 +1628,8 @@ From the survey (item 8), order confirmed by the user 2026-11-07 [firm]:
 From Playnite, agreed by the user 2026-11-07, order [tentative]:
 
 24. Steam, more [tentative, less wanted]: Steam's launch menu as a
-    choice (`steam://launch/<id>/Dialog`), the last played time of games
-    not installed, extra accounts. Family sharing moved to 11b.
+    choice (`steam://launch/<id>/Dialog`), extra accounts. Family sharing
+    moved to 11b, the last played time of games not installed to 11c.
 25. Descriptions and facts for every game, local ones too: Steam's store
     for any game already matched to a Steam app id (as for ProtonDB).
     Pairs with 21.

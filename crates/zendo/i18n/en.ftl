@@ -205,10 +205,11 @@ steam-signed-in = Signed in: the Store is asking Steam for your games
 steam-signed-in-about = The Store lists the games this account owns and those its Steam family shares.
 steam-signed-out = Signed out of Steam
 steam-sign-in-again = Steam's sign-in has ended: sign in again
+steam-family = Steam family: { $name } · { $count ->
+    [one] { $count } member
+   *[other] { $count } members
+}
 steam-family-failed = Your family's games could not be listed: { $error }
-steam-old-key-used = The Steam Web API key set before is used until you sign in.
-steam-old-key-unused = The Steam Web API key set before is no longer used.
-steam-remove-key = Remove the key
 store-shared = Shared by your family
 steam-asked = Asked Steam to install { $title }: choose where in Steam's dialog
 steam-installed = { $title } is installed
@@ -405,6 +406,12 @@ fact-never = Never
 fact-play-time = Play time
 fact-status = Status
 fact-owner = Owned by
+fact-recent-time = Last two weeks
+fact-played-on = Played on
+system-linux = Linux
+system-windows = Windows
+system-mac = macOS
+system-deck = Steam Deck
 fact-not-installed = Not installed
 fact-started-from-zendo = Started from Zendo
 fact-launch-command = Launch command

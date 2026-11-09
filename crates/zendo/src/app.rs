@@ -743,8 +743,7 @@ impl Zendo {
                 }
                 Task::batch([self.want_protons(), self.want_runtimes()])
             }
-            Page::Accounts => self.want_steam_user(),
-            Page::Downloads | Page::About => Task::none(),
+            Page::Accounts | Page::Downloads | Page::About => Task::none(),
         }
     }
 
