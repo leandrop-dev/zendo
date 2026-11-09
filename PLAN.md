@@ -2284,6 +2284,34 @@ brackets):
     Rocket League and Killing Floor 2 (Supported) on Epic; Rust
     (Denied), 7 Days to Die and Cry of Fear (Supported) on Steam.
     Tried by the user 2026-11-09: it works [firm].
+    18b, built 2026-11-09 (`steam_deck.rs`, the window's
+    `steam_deck.rs`). Checked first: Heroic shows only an icon per
+    category (0 and 1 grey, 2 yellow, 3 green); Steam's own strings
+    (`steamui/localization/shared_<language>-json.js` in a Steam
+    install) name 0 to 3 Unknown, Unsupported, Playable and Verified and
+    hold 41 test results, as JSON in a webpack script with JavaScript
+    escapes; Half-Life: Alyx (VR) is 1, Fallout 3 2, Cyberpunk 2077 3.
+    `display_type` 4 is a passed test, 3 a warning, 2 why a game is
+    unsupported, 1 something to know; a game Valve has not reviewed
+    answers `"results": []`. Zendo [tentative]: a pill beside
+    ProtonDB's, DECK VERIFIED (good), DECK PLAYABLE (ProtonDB's gold)
+    or DECK UNSUPPORTED (dim), none for Unknown or no review; its
+    tooltip says what the category means and lists the notes that are
+    not passed tests, in Zendo's own words for the 37 such tests in
+    English and Portuguese (Portugal), not Valve's text; a test Zendo
+    does not know shows its name as words ("Reads like this VR").
+    Clicking opens the game's Steam store page. Asked by the Steam app
+    id once ProtonDB's lookup found one, kept a week in
+    `$XDG_CACHE_HOME/zendo/steamdeck.json`. The hero's one pill slot
+    became a row of pills. Checked: clippy, tests (Fallout 3's and
+    Half-Life: Alyx's shapes, kinds and tokens Zendo does not know left
+    out, no review, a failed answer, the pill and its lookup after
+    ProtonDB, a test's name as words); an ignored test against the real
+    store (Cyberpunk 2077 Verified, an unknown app none); in a throwaway
+    home with only Rocket League's Epic record, the page showed
+    PROTONDB PLATINUM and DECK VERIFIED. Of the 55 games the user had
+    looked up, 22 are Verified, 13 Playable, 9 Unsupported and 11 have
+    no review. Tried by the user 2026-11-09: it works [firm].
 19. (was 22) The library: categories of the user's own, beyond pins and hiding.
 20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
@@ -2360,7 +2388,8 @@ by the user 2026-11-09:
   and tried by the user the same day. Item 17 is done. Item 18, what
   the game page tells, checked and split by the user (18a to 18e) the
   same day; 18a, the anti-cheat status, built and tried by the user
-  the same day. Next: 18b, the Steam Deck rating.
+  the same day; 18b, the Steam Deck rating, built and tried by the
+  user the same day. Next: 18c, the requirements.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

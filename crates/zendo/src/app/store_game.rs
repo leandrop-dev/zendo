@@ -51,7 +51,7 @@ impl Zendo {
                 .map(|minutes| t!("played-time", time = format::play_time(minutes)))
                 .into_iter()
                 .collect(),
-            rating: self.rating_pill(&game.id),
+            pills: self.hero_pills(&game.id),
             id: &game.id,
         });
 

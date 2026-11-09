@@ -82,7 +82,7 @@ impl Zendo {
         );
         let mut page = column![
             trail,
-            game_hero(game, update, self.rating_pill(&game.id)),
+            game_hero(game, update, self.hero_pills(&game.id)),
             self.action_bar(game, update),
         ]
         .spacing(20)
@@ -496,8 +496,8 @@ pub struct Hero<'a> {
     pub badges: Vec<(String, Color)>,
     pub developer: Option<&'a str>,
     pub facts: Vec<String>,
-    /// The `ProtonDB` pill, beside the badges.
-    pub rating: Option<Element<'a, Message>>,
+    /// The `ProtonDB` and Steam Deck pills, beside the badges.
+    pub pills: Vec<Element<'a, Message>>,
     /// The game whose art "Change art" picks.
     pub id: &'a str,
 }
@@ -505,7 +505,7 @@ pub struct Hero<'a> {
 fn game_hero<'a>(
     game: &'a Game,
     update: bool,
-    rating: Option<Element<'a, Message>>,
+    pills: Vec<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     let mut badges = Vec::new();
     if update {
@@ -528,7 +528,7 @@ fn game_hero<'a>(
         badges,
         developer: game.details.developer.as_deref(),
         facts: facts(game),
-        rating,
+        pills,
         id: &game.id,
     })
 }
@@ -588,9 +588,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
     for (label, color) in hero.badges {
         badges = badges.push(style::badge(label, color));
     }
-    if let Some(rating) = hero.rating {
-        badges = badges.push(rating);
-    }
+    badges = badges.extend(hero.pills);
     let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
     if let Some(developer) = hero.developer {
         info = info.push(text(developer).size(15).color(colors().dim));

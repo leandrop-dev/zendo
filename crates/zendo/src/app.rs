@@ -31,6 +31,7 @@ mod runtimes;
 mod settings;
 mod sidebar;
 mod steam;
+mod steam_deck;
 mod steam_installs;
 mod store;
 mod store_game;
@@ -244,6 +245,11 @@ enum Message {
     Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
+    /// Valve's Steam Deck review of a game.
+    Deck(
+        String,
+        Result<Option<zendo_core::steam_deck::Report>, String>,
+    ),
     /// What `AreWeAntiCheatYet` says of a game.
     AntiCheat(
         String,
@@ -333,6 +339,8 @@ struct Zendo {
     ratings: std::collections::HashMap<String, RatingState>,
     /// `AreWeAntiCheatYet`'s word on each game whose page was opened.
     anti_cheat: std::collections::HashMap<String, anti_cheat::AntiCheatState>,
+    /// Valve's Steam Deck review of each game whose page was opened.
+    decks: std::collections::HashMap<String, steam_deck::DeckState>,
     /// The tools run in the Windows games' prefixes.
     prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
@@ -390,6 +398,7 @@ impl Zendo {
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),
             anti_cheat: std::collections::HashMap::new(),
+            decks: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
             changelogs: std::collections::HashMap::new(),
@@ -523,6 +532,14 @@ impl Zendo {
         self.reveal()
     }
 
+    /// Remembers the window, and whether it has focus: the controller
+    /// moves Zendo only while it does.
+    fn focus_changed(&mut self, id: window::Id, focused: bool) -> Task<Message> {
+        self.window = Some(id);
+        self.focused = focused;
+        Task::none()
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
         if let Some(task) = self.overlay_takes(&message) {
             return task;
@@ -533,11 +550,7 @@ impl Zendo {
             Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),
             Message::Resized(id, size) => self.resized(id, size),
-            Message::Focused(id, focused) => {
-                self.window = Some(id);
-                self.focused = focused;
-                Task::none()
-            }
+            Message::Focused(id, focused) => self.focus_changed(id, focused),
             Message::Scrolled(viewport) => {
                 *self.cursor().1 = viewport.absolute_offset().y;
                 self.viewport_height = viewport.bounds().height;
@@ -619,6 +632,7 @@ impl Zendo {
             Message::Prefix(message) => self.update_prefix(message),
             Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
             Message::AntiCheat(id, result) => self.anti_cheat_arrived(id, result),
+            Message::Deck(id, result) => self.deck_arrived(id, result),
             Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),

@@ -49,9 +49,10 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer, then looks the game up on `AreWeAntiCheatYet` by
-    /// the Steam app id found; a failure (offline, say) is forgotten, so
-    /// the page asks again next time it opens.
+    /// Keeps the answer, then looks the game up on `AreWeAntiCheatYet` and
+    /// asks for its Steam Deck review by the Steam app id found; a failure
+    /// (offline, say) is forgotten, so the page asks again next time it
+    /// opens.
     pub(super) fn rating_arrived(
         &mut self,
         id: String,
@@ -62,9 +63,21 @@ impl Zendo {
             return Task::none();
         };
         let app = rating.as_ref().map(|rating| rating.app);
-        let task = self.want_anti_cheat(&id, app);
+        let mut tasks = vec![self.want_anti_cheat(&id, app)];
+        if let Some(app) = app {
+            tasks.push(self.want_deck(&id, app));
+        }
         self.ratings.insert(id, RatingState::Got(rating));
-        task
+        Task::batch(tasks)
+    }
+
+    /// The pills beside the badges on a game's page: `ProtonDB`'s, then
+    /// the Steam Deck's.
+    pub(super) fn hero_pills(&self, id: &str) -> Vec<Element<'_, Message>> {
+        self.rating_pill(id)
+            .into_iter()
+            .chain(self.deck_pill(id))
+            .collect()
     }
 
     /// The pill for the game's page: nothing when `ProtonDB` cannot know the
