@@ -9,6 +9,11 @@
 //! and gives a new token later in a window that never shows
 //! (`steam-renew`).
 //!
+//! Nexus Mods' is another ([`nexus_site`], `zendo nexus-window <url>
+//! <folder>`): a mod's page, signed in with cookies kept like Steam's,
+//! which ends with the mod manager link the site gives or the file it
+//! downloads, for Zendo to add.
+//!
 //! It watches the addresses the page goes to. On the page the store's
 //! sign-in ends on ([`stores::code_at`]) it writes the code to stdout and
 //! closes; Zendo's window, waiting on it, finishes the sign-in. Closing it
@@ -17,6 +22,7 @@
 
 use std::cell::RefCell;
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{ChildStdin, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -107,6 +113,54 @@ pub fn main(store: &str, url: &str) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// `zendo nexus-window <url> <folder>`: shows a page of Nexus Mods until it
+/// gives a mod manager link or downloads a file into `folder`, then writes
+/// the link, or `file:` and the file's path.
+pub fn nexus_main(url: &str, folder: &Path) -> ExitCode {
+    match nexus_site::show(url, folder) {
+        Ok(Some(found)) => {
+            let mut stdout = std::io::stdout();
+            if writeln!(stdout, "{found}")
+                .and_then(|()| stdout.flush())
+                .is_err()
+            {
+                return ExitCode::FAILURE;
+            }
+            ExitCode::SUCCESS
+        }
+        Ok(None) => ExitCode::from(CLOSED),
+        Err(err) => {
+            eprintln!("zendo: {err:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// What Nexus's page gave.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FromSite {
+    /// A Mod manager download's `nxm://` link.
+    Link(String),
+    /// A file the page downloaded.
+    File(PathBuf),
+}
+
+/// Opens a page of Nexus Mods in a window of Zendo's and waits for it: the
+/// link or file it gave, or `None` when it was closed first. It blocks;
+/// the window calls it on a thread.
+///
+/// # Errors
+///
+/// When the window cannot be started or fails.
+pub fn open_nexus(url: &str, folder: &Path, handle: &Handle) -> anyhow::Result<Option<FromSite>> {
+    let folder = folder.to_string_lossy();
+    let text = run_with(&["nexus-window", url, &folder], handle)?;
+    Ok(text.map(|text| match text.strip_prefix("file:") {
+        Some(path) => FromSite::File(PathBuf::from(path)),
+        None => FromSite::Link(text),
+    }))
 }
 
 fn show(store: Store, url: &str) -> anyhow::Result<Option<String>> {
@@ -317,10 +371,16 @@ fn steam_session(text: Option<String>) -> anyhow::Result<Option<Session>> {
 
 /// Runs `zendo sign-in-window <name> <url>` and reads what it writes.
 fn run(name: &str, url: &str, handle: &Handle) -> anyhow::Result<Option<String>> {
+    run_with(&["sign-in-window", name, url], handle)
+}
+
+/// Runs Zendo with these arguments as a window of its own, and reads what
+/// it writes.
+fn run_with(args: &[&str], handle: &Handle) -> anyhow::Result<Option<String>> {
     let exe = std::env::current_exe().context("could not find Zendo's own program")?;
     let mut command = Command::new(exe);
     command
-        .args(["sign-in-window", name, url])
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -473,6 +533,158 @@ window.addEventListener('DOMContentLoaded', () => {
         drop(webview);
         let session = session.borrow_mut().take();
         Ok(session)
+    }
+}
+
+/// A page of Nexus Mods, for the downloads the site gives accounts without
+/// Premium: its Mod manager download's `nxm://` link, or its manual
+/// download's file, taken into the folder given.
+mod nexus_site {
+    use std::path::{Path, PathBuf};
+
+    use super::{
+        Context, NewWindowResponse, Rc, Read, RefCell, WebContext, WebViewBuilder,
+        WebViewBuilderExtUnix,
+    };
+    use gtk::prelude::*;
+    use zendo_core::nexus;
+
+    /// Whether an address is the mod manager link the site hands over.
+    fn is_link(address: &str) -> bool {
+        address
+            .get(..6)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("nxm://"))
+    }
+
+    /// Where a download goes: in `folder`, by the name the site gave it
+    /// (only the name: no folder of the site's choosing).
+    fn destination(folder: &Path, suggested: &Path) -> PathBuf {
+        let name = suggested
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .filter(|name| !name.starts_with('.'))
+            .unwrap_or_else(|| "nexus-download.zip".to_owned());
+        folder.join(name)
+    }
+
+    pub fn show(url: &str, folder: &Path) -> anyhow::Result<Option<String>> {
+        gtk::glib::set_prgname(Some(crate::app::APP_ID));
+        gtk::glib::set_application_name("Zendo");
+        gtk::init().context("could not start GTK")?;
+        crate::i18n::set_from_settings();
+        let profile = nexus::web_profile_dir().context("no home folder for Nexus's page")?;
+        zendo_core::steam_web::make_profile_dir(&profile)?;
+        std::fs::create_dir_all(folder)
+            .with_context(|| format!("could not make {}", folder.display()))?;
+        let mut context = WebContext::new(Some(profile));
+
+        let window = gtk::Window::new(gtk::WindowType::Toplevel);
+        window.set_title(&crate::i18n::t!("nexus-window-title"));
+        window.set_default_size(1100, 860);
+        let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        window.add(&container);
+
+        let found: Rc<RefCell<Option<String>>> = Rc::default();
+        let failed: Rc<RefCell<Option<String>>> = Rc::default();
+        let take_link = {
+            let found = Rc::clone(&found);
+            move |address: &str| {
+                if !is_link(address) {
+                    return false;
+                }
+                *found.borrow_mut() = Some(address.to_owned());
+                gtk::main_quit();
+                true
+            }
+        };
+        let take_link = Rc::new(take_link);
+        let folder = folder.to_path_buf();
+        let webview = WebViewBuilder::new_with_web_context(&mut context)
+            .with_url(url)
+            // The link is never followed: Zendo takes it.
+            .with_navigation_handler({
+                let take_link = Rc::clone(&take_link);
+                move |address| !take_link(&address)
+            })
+            .with_new_window_req_handler({
+                let take_link = Rc::clone(&take_link);
+                move |address, _| {
+                    take_link(&address);
+                    NewWindowResponse::Deny
+                }
+            })
+            .with_download_started_handler({
+                let window = window.clone();
+                move |_, suggested: &mut PathBuf| {
+                    *suggested = destination(&folder, suggested);
+                    window.set_title(&crate::i18n::t!("nexus-window-downloading"));
+                    true
+                }
+            })
+            .with_download_completed_handler({
+                let found = Rc::clone(&found);
+                let failed = Rc::clone(&failed);
+                move |_, path, success| {
+                    match path.filter(|_| success) {
+                        Some(path) => {
+                            *found.borrow_mut() = Some(format!("file:{}", path.display()));
+                        }
+                        None => {
+                            *failed.borrow_mut() =
+                                Some(crate::i18n::t!("nexus-window-download-failed"));
+                        }
+                    }
+                    gtk::main_quit();
+                }
+            })
+            .build_gtk(&container)
+            .context("could not open Nexus's page")?;
+
+        window.connect_delete_event(|_, _| {
+            gtk::main_quit();
+            gtk::glib::Propagation::Proceed
+        });
+        // Zendo's window holds the other end; it closes on exit.
+        std::thread::spawn(|| {
+            let mut stdin = std::io::stdin();
+            let mut sink = [0_u8; 64];
+            while matches!(stdin.read(&mut sink), Ok(read) if read > 0) {}
+            gtk::glib::idle_add_once(gtk::main_quit);
+        });
+        window.show_all();
+        gtk::main();
+        drop(webview);
+        if let Some(why) = failed.borrow_mut().take() {
+            anyhow::bail!(why);
+        }
+        let found = found.borrow_mut().take();
+        Ok(found)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn takes_only_the_mod_manager_link_and_safe_names() {
+            assert!(is_link(
+                "nxm://stardewvalley/mods/1915/files/1?key=k&expires=1"
+            ));
+            assert!(is_link("NXM://x"));
+            assert!(!is_link("https://www.nexusmods.com/"));
+            let folder = Path::new("/games/mods/downloads");
+            assert_eq!(
+                destination(
+                    folder,
+                    Path::new("/home/me/Downloads/Content Patcher-1915-2-1735.zip")
+                ),
+                folder.join("Content Patcher-1915-2-1735.zip")
+            );
+            assert_eq!(
+                destination(folder, Path::new("/home/me/Downloads/.hidden")),
+                folder.join("nexus-download.zip")
+            );
+        }
     }
 }
 

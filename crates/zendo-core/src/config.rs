@@ -61,6 +61,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steam_session: Option<String>,
     pub download_covers: bool,
+    /// Whether Nexus searches show mods marked adult.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub nexus_adult: bool,
     /// Where store games are installed; `~/Games` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_dir: Option<PathBuf>,
@@ -123,6 +126,7 @@ impl std::fmt::Debug for Config {
             .field("nexus_key", &hidden(&self.nexus_key))
             .field("steam_session", &hidden(&self.steam_session))
             .field("download_covers", &self.download_covers)
+            .field("nexus_adult", &self.nexus_adult)
             .field("install_dir", &self.install_dir)
             .field("default_proton", &self.default_proton)
             .field("language", &self.language)
@@ -141,6 +145,7 @@ impl Default for Config {
             nexus_key: None,
             steam_session: None,
             download_covers: true,
+            nexus_adult: false,
             install_dir: None,
             default_proton: None,
             language: None,

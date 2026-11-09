@@ -14,7 +14,8 @@ use zendo_core::mods::{self, Added, Applied, ModInfo, Overview, Plugins, Profile
 use zendo_core::nexus;
 use zendo_core::plugins::{self, Plugin, Rank, Style};
 
-use super::nexus::{NexusMessage, download_row};
+use super::nexus::{NexusMessage, added_note, download_row};
+use super::nexus_search::SearchMessage;
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -274,7 +275,11 @@ impl Zendo {
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 let note = t!("mods-added", name = name);
+                let key = self.config.nexus_key.clone();
                 self.add_mods(id, t!("mods-unpacking"), move |game| {
+                    if let Some(added) = add_as_from_nexus(game, key.as_deref(), &archive) {
+                        return Ok(added);
+                    }
                     mods::add(game, &archive).map(|added| (added, note))
                 })
             }
@@ -390,7 +395,7 @@ impl Zendo {
     }
 
     /// Adds a mod, or reads an installer, on a thread; one change at a time.
-    fn add_mods(
+    pub(super) fn add_mods(
         &mut self,
         id: String,
         busy: String,
@@ -504,12 +509,19 @@ impl Zendo {
             .mods_overview(id)
             .and_then(|overview| overview.nexus.as_ref())
         {
-            header = header.push(
-                button(text(t!("mods-find-on-nexus")).size(14))
-                    .padding([8, 14])
-                    .style(style::secondary)
-                    .on_press(Message::Open(nexus::game_url(domain))),
-            );
+            header = header
+                .push(
+                    button(text(t!("mods-search-nexus")).size(14))
+                        .padding([8, 14])
+                        .style(style::secondary)
+                        .on_press(Message::NexusSearch(SearchMessage::Open(id.clone()))),
+                )
+                .push(
+                    button(text(t!("mods-find-on-nexus")).size(14))
+                        .padding([8, 14])
+                        .style(style::secondary)
+                        .on_press(Message::Open(nexus::game_url(domain))),
+                );
         }
         let mut card = column![header.push(add)].spacing(12);
         for download in self.nexus_downloads_for(id) {
@@ -1000,6 +1012,34 @@ fn plugin_row<'a>(
     .spacing(10)
     .align_y(Alignment::Center)
     .into()
+}
+
+/// An archive Nexus named (`<name>-<mod id>-<version>-<time>`), added by
+/// hand: as the file of its mod, so its updates are followed, when the
+/// game is on Nexus and the key finds it. The archive chosen stays where it
+/// is; a copy is taken in. `None` adds it as any other.
+fn add_as_from_nexus(
+    game: &Game,
+    key: Option<&str>,
+    archive: &std::path::Path,
+) -> Option<(mods::Added, String)> {
+    let key = key?;
+    let name = archive.file_name()?.to_string_lossy().into_owned();
+    if nexus::ids_in_name(&name).is_empty() {
+        return None;
+    }
+    let domain = mods::nexus_domain(game)?;
+    let (mod_id, mut fetched) = nexus::identify(key, &domain, archive, None).ok()??;
+    let folder = mods::downloads_dir(game).ok()?;
+    std::fs::create_dir_all(&folder).ok()?;
+    let copy = folder.join(&name);
+    std::fs::copy(archive, &copy).ok()?;
+    fetched.archive = copy;
+    if let Ok((added, updated)) = mods::add_from_nexus(game, &fetched, &domain, mod_id) {
+        return Some((added, added_note(updated, &fetched, &game.title)));
+    }
+    let _ = std::fs::remove_file(&fetched.archive);
+    None
 }
 
 #[cfg(test)]

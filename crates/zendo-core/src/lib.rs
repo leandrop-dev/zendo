@@ -23,6 +23,7 @@ pub mod launch_options;
 pub mod local;
 pub mod mods;
 pub mod nexus;
+pub mod nexus_search;
 pub mod owned;
 mod paths;
 pub mod plugins;

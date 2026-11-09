@@ -45,6 +45,10 @@ fn main() -> ExitCode {
     if let ["sign-in-window", store, url] = args.as_slice() {
         return sign_in_window::main(store, url);
     }
+    // Started by the window for a mod's page on Nexus Mods.
+    if let ["nexus-window", url, folder] = args.as_slice() {
+        return sign_in_window::nexus_main(url, std::path::Path::new(folder));
+    }
     // Started by the window to choose a file.
     if let ["pick-file", kind, title] = args.as_slice()
         && let Some(kind) = file_dialog::Kind::from_name(kind)

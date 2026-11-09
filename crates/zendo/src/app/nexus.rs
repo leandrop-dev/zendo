@@ -129,6 +129,17 @@ impl Zendo {
         Task::batch(tasks)
     }
 
+    /// Whether the key's account has Premium; `None` before Nexus said.
+    pub(super) fn nexus_premium(&self) -> Option<bool> {
+        self.nexus.user.as_ref().map(|user| user.is_premium)
+    }
+
+    /// Downloads a file of a mod into a game's mods, as a Premium account
+    /// may without the site's button.
+    pub(super) fn download_nexus_file(&mut self, id: &str, link: Link) -> Task<Message> {
+        self.download_mod(id, link, false)
+    }
+
     /// A link opened before the window: taken once the library is read.
     pub(super) fn nexus_pending(&mut self, link: String) {
         self.nexus.pending.push(link);
@@ -826,6 +837,27 @@ fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
 
 /// Downloads a file from Nexus and adds it to the game's mods, on a thread,
 /// saying how far it got.
+/// What the status line says of a file from Nexus taken in.
+pub(super) fn added_note(updated: bool, fetched: &nexus::Fetched, title: &str) -> String {
+    let version = fetched
+        .file
+        .version
+        .as_deref()
+        .filter(|version| !version.is_empty());
+    let name = fetched.mod_name.as_str();
+    match (updated, version) {
+        (true, Some(version)) => t!("nexus-updated-to", name = name, version = version),
+        (true, None) => t!("nexus-updated", name = name),
+        (false, Some(version)) => t!(
+            "nexus-added-version",
+            name = name,
+            version = version,
+            title = title
+        ),
+        (false, None) => t!("nexus-added", name = name, title = title),
+    }
+}
+
 fn fetch_mod(
     id: u64,
     game: Game,
@@ -850,27 +882,7 @@ fn fetch_mod(
                 let fetched = nexus::fetch(&key, &link, &folder, &stop, &mut progress)?;
                 let (added, updated) =
                     mods::add_from_nexus(&game, &fetched, &link.domain, link.mod_id)?;
-                let version = fetched
-                    .file
-                    .version
-                    .as_deref()
-                    .filter(|version| !version.is_empty());
-                let name = fetched.mod_name.as_str();
-                let title = game.title.as_str();
-                let note = match (updated, version) {
-                    (true, Some(version)) => {
-                        t!("nexus-updated-to", name = name, version = version)
-                    }
-                    (true, None) => t!("nexus-updated", name = name),
-                    (false, Some(version)) => t!(
-                        "nexus-added-version",
-                        name = name,
-                        version = version,
-                        title = title
-                    ),
-                    (false, None) => t!("nexus-added", name = name, title = title),
-                };
-                anyhow::Ok((added, note))
+                anyhow::Ok((added, added_note(updated, &fetched, &game.title)))
             })()
             .map_err(|err| format!("{err:#}"));
             let _ = sender.unbounded_send(NexusMessage::Finished(id, game_id, result));

@@ -280,8 +280,14 @@ impl Zendo {
         if wanted.is_empty() || !self.persist {
             return Task::none();
         }
-        let (task, handle) =
-            Task::run(thumbnails(picker.generation, wanted), |message| message).abortable();
+        let generation = picker.generation;
+        let (task, handle) = Task::run(
+            thumbnails(wanted, move |id, bytes| {
+                Message::Art(ArtMessage::Thumb(generation, id, bytes))
+            }),
+            |message| message,
+        )
+        .abortable();
         // A later page's thumbnails join the earlier ones still coming.
         picker.downloading.push(handle.abort_on_drop());
         task
@@ -423,13 +429,20 @@ impl Zendo {
 }
 
 /// Downloads thumbnails a few at a time, each sent as it comes.
-fn thumbnails(generation: u64, wanted: Vec<(u64, String)>) -> impl Stream<Item = Message> {
+/// Downloads images a few at a time, each into the message `made` makes of
+/// its id and bytes (`None` when it could not be had); dropped, it stops.
+pub(super) fn thumbnails(
+    wanted: Vec<(u64, String)>,
+    made: impl Fn(u64, Option<Vec<u8>>) -> Message + Send + Sync + 'static,
+) -> impl Stream<Item = Message> {
+    let made = Arc::new(made);
     iced::stream::channel(16, async move |mut output| {
         let (sender, mut receiver) = mpsc::unbounded();
         let queue = Arc::new(Mutex::new(wanted.into_iter()));
         for _ in 0..WORKERS {
             let queue = Arc::clone(&queue);
             let sender = sender.clone();
+            let made = Arc::clone(&made);
             thread::spawn(move || {
                 loop {
                     let next = queue.lock().ok().and_then(|mut queue| queue.next());
@@ -437,7 +450,7 @@ fn thumbnails(generation: u64, wanted: Vec<(u64, String)>) -> impl Stream<Item =
                         return;
                     };
                     let bytes = steamgriddb::thumbnail(&url).ok();
-                    let message = Message::Art(ArtMessage::Thumb(generation, id, bytes));
+                    let message = made(id, bytes);
                     // Closed when the picker moved on.
                     if sender.unbounded_send(message).is_err() {
                         return;

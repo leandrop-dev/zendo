@@ -17,6 +17,7 @@ mod library;
 mod local;
 mod mods;
 mod nexus;
+mod nexus_search;
 mod protondb;
 mod protons;
 mod running;
@@ -57,6 +58,7 @@ use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
 use mods::{ModsMessage, ModsState};
 use nexus::{NexusMessage, NexusState};
+use nexus_search::{Search, SearchMessage};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
 use running::{RunMessage, Running};
@@ -216,6 +218,8 @@ enum Message {
     Art(ArtMessage),
     Mods(ModsMessage),
     Nexus(NexusMessage),
+    /// The Nexus search sheet.
+    NexusSearch(SearchMessage),
     Installer(InstallerMessage),
     Proton(ProtonMessage),
     Runtime(RuntimeMessage),
@@ -283,6 +287,8 @@ struct Zendo {
     local: LocalState,
     /// The art picker, open over a game's page.
     picker: Option<Picker>,
+    /// The Nexus search, open over a game's page.
+    mod_search: Option<Search>,
     /// Each game's mods, on its page.
     mods: ModsState,
     /// Nexus Mods: the key, links coming in and mods downloading.
@@ -335,6 +341,7 @@ impl Zendo {
             sheet: None,
             local: LocalState::default(),
             picker: None,
+            mod_search: None,
             mods: ModsState::default(),
             nexus: NexusState::default(),
             installer: InstallerState::default(),
@@ -461,6 +468,7 @@ impl Zendo {
         self.sheet_takes(message)
             .or_else(|| self.form_takes(message))
             .or_else(|| self.picker_takes(message))
+            .or_else(|| self.search_takes(message))
             .or_else(|| self.chooser_takes(message))
             .or_else(|| self.installer_takes(message))
     }
@@ -556,6 +564,7 @@ impl Zendo {
             Message::Sheet(message) => self.update_sheet(message),
             Message::Local(message) => self.update_local(message),
             Message::Art(message) => self.update_art(message),
+            Message::NexusSearch(message) => self.update_search(message),
             Message::Mods(message) => self.update_mods(message),
             Message::Nexus(message) => self.update_nexus(message),
             Message::Installer(message) => self.update_installer(message),
@@ -1062,7 +1071,9 @@ impl Zendo {
         };
         let main = column![page, self.footer()].width(Length::Fill);
         let page = self.with_sheet(row![self.sidebar(), main].into());
-        self.with_installer(self.with_chooser(self.with_picker(self.with_form(page))))
+        self.with_installer(
+            self.with_chooser(self.with_search(self.with_picker(self.with_form(page)))),
+        )
     }
 
     fn footer(&self) -> Element<'_, Message> {

@@ -411,6 +411,91 @@ pub fn fetch(
     })
 }
 
+/// The mod a downloaded archive is a file of, and which file: by its
+/// mod when known, else by the ids its name holds as Nexus names its
+/// files ([`ids_in_name`]), the file being the one with the archive's
+/// name. `None` when none matches.
+///
+/// # Errors
+///
+/// When Nexus cannot be asked.
+pub fn identify(
+    key: &str,
+    domain: &str,
+    archive: &Path,
+    mod_id: Option<u64>,
+) -> anyhow::Result<Option<(u64, Fetched)>> {
+    let name = archive
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let candidates = match mod_id {
+        Some(id) => vec![id],
+        None => ids_in_name(&name).into_iter().take(3).collect(),
+    };
+    for id in candidates {
+        let files = match files(key, domain, id) {
+            Ok(files) => files,
+            // Not a mod of this game: the next id, maybe.
+            Err(_) if mod_id.is_none() => continue,
+            Err(err) => return Err(err),
+        };
+        let Some(file) = files
+            .files
+            .iter()
+            .find(|file| file.file_name == name)
+            .cloned()
+        else {
+            continue;
+        };
+        let page = mod_page(key, domain, id)?;
+        let fetched = Fetched {
+            archive: archive.to_path_buf(),
+            mod_name: page
+                .name
+                .filter(|name| !name.is_empty())
+                .unwrap_or(file.name.clone()),
+            file,
+            files,
+        };
+        return Ok(Some((id, fetched)));
+    }
+    Ok(None)
+}
+
+/// The mod ids a name could hold, as Nexus names its files
+/// (`<name>-<mod id>-<version>-<upload time>.<ext>`): the parts all digits
+/// between the name and the upload time, the likeliest first.
+#[must_use]
+pub fn ids_in_name(name: &str) -> Vec<u64> {
+    let stem = name
+        .rsplit_once('.')
+        .filter(|(_, ext)| ext.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map_or(name, |(stem, _)| stem);
+    let parts: Vec<&str> = stem.split('-').collect();
+    let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    // The upload time: Unix seconds, ten digits these days.
+    let Some((last, middle)) = parts.split_last() else {
+        return Vec::new();
+    };
+    if parts.len() < 3 || last.len() < 9 || !digits(last) {
+        return Vec::new();
+    }
+    middle[1..]
+        .iter()
+        .filter(|part| digits(part))
+        .filter_map(|part| part.parse().ok())
+        .filter(|id| *id > 0)
+        .collect()
+}
+
+/// The folder where Zendo's Nexus window keeps the site's cookies, so the
+/// site remembers the sign-in: `$XDG_DATA_HOME/zendo/nexus-web`.
+#[must_use]
+pub fn web_profile_dir() -> Option<PathBuf> {
+    paths::data_home().map(|data| data.join("zendo/nexus-web"))
+}
+
 fn games_path() -> Option<PathBuf> {
     paths::cache_home().map(|dir| dir.join("zendo/nexus-games.json"))
 }
@@ -592,6 +677,24 @@ fn handler_entry(exe: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_mod_id_in_a_nexus_file_name() {
+        assert_eq!(
+            ids_in_name("Content Patcher 2.5.3-1915-2-5-3-1735000000.zip"),
+            [1915, 2, 5, 3]
+        );
+        assert_eq!(
+            ids_in_name("SkyUI_5_2_SE-12604-5-2SE.7z"),
+            Vec::<u64>::new()
+        );
+        assert_eq!(
+            ids_in_name("BepInEx_win_x64_5.4.23.6.zip"),
+            Vec::<u64>::new()
+        );
+        assert_eq!(ids_in_name("Mod-1700000000"), Vec::<u64>::new());
+        assert_eq!(ids_in_name("Mod-77-1700000000"), [77]);
+    }
 
     #[test]
     fn tells_this_zendo_from_another_copy() {

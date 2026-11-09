@@ -1565,6 +1565,50 @@ Features:
     files (v1 `files`, with the key): Download for Premium, or the file's
     page for the Mod manager download, which comes back through the
     `nxm://` handler as now. Adult mods left out unless a toggle is on.
+    Confirmed by the user 2026-11-09 [firm]: on the game page, adult mods
+    hidden with a toggle remembered in the settings. Built the same day:
+    core `nexus_search.rs` (the GraphQL query, 20 at a time, summaries
+    made plain); the window's `nexus_search.rs`, a sheet over the game's
+    page from Search Nexus on the Mods card (when the game's Nexus name
+    is known): search box (Enter searches, empty lists every mod), the
+    three orders, Adult mods (`nexus_adult` in `config.toml`), each mod
+    with its thumbnail (fetched as the art picker's are, kept in memory),
+    version, "In your mods" when a mod from Nexus in the game's list has
+    its id, author, category, updated date, summary, endorsements,
+    downloads and size; Files lists the files not old or archived,
+    newest first (v1 `files`, with the key), each with Download
+    (Premium: the usual Nexus download into the game's mods) or Get on
+    Nexus (the file's page); Page on Nexus; More; Escape closes. A late
+    answer to an earlier search is dropped. Checked: clippy, tests (the
+    request and reply read, files offered, the sheet's searches, orders
+    and closing) and an ignored test against the real Nexus ("smapi"
+    gives SMAPI first). Not seen in the window yet (no mouse tool here to
+    open it): for the user to try.
+    The user's first try (2026-11-09), and the changes the same day:
+    - The sheet opened half way down; it is now window-tall from the
+      start, so it stays put as results come.
+    - Get on Nexus and Page on Nexus open in Zendo's own Nexus window
+      (`zendo nexus-window <url> <folder>`, as the sign-in window runs),
+      not the browser [firm: the user asked to keep it in Zendo]. Its
+      cookies are kept in `~/.local/share/zendo/nexus-web` (0700), so the
+      site's sign-in and cookie choice stay. Get on Nexus opens the
+      file's Mod manager download (`&nmm=1`). The window ends with what
+      the site gives: an `nxm://` link (caught as a navigation or a new
+      window, never followed), taken as any Mod manager download; or a
+      manual download, saved into the game's `downloads/` folder and
+      added as that mod's file (found by its name among the mod's files
+      with the key) or, without the key, as a mod of its own; the
+      archive is removed once unpacked. Checked: the window loads Nexus's
+      mod page in a throwaway home (no Cloudflare stop; the cookie
+      consent shows once).
+    - A mod's files the game already has say "You have this file"
+      instead of a button. Mods added by hand from an archive Nexus
+      named (`<name>-<mod id>-<version>-<time>`) count as that mod in
+      the search, and Add mod now takes such an archive as the mod's
+      file when the key finds it (`nexus::identify`, `ids_in_name`),
+      so its updates are followed; the archive picked stays where it is.
+    Tried by the user 2026-11-09 [firm]: the search, the Nexus window and
+    the download taken in work; 11c's Steam details too.
 
 Later:
 
@@ -1661,7 +1705,9 @@ From Playnite, agreed by the user 2026-11-07, order [tentative]:
   day. Item 11, Steam's owned games, built the same day,
   and changed after the user's two tries (2026-11-08). Item 11b, the
   Steam sign-in with the family's games, built 2026-11-08, tried by the
-  user with the QR code 2026-11-09. Next, item 12, searching Nexus Mods in Zendo.
+  user with the QR code 2026-11-09; the old key dropped and item 11c,
+  Steam's extra details, the same day. Item 12, searching Nexus Mods in
+  Zendo, built and tried by the user 2026-11-09. Next, item 13.
 - To try when the user is back home (item 3): start Zendo, which moves
   both keys from `config.toml` into the keyring; Settings should say
   "Kept in the system keyring" under each; `grep -c "_key"

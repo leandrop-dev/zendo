@@ -174,6 +174,16 @@ install it and give it its colours, but it runs on any Linux desktop.
   tells when a mod has a newer file; Update downloads it with Premium,
   or opens its page for the button there. Collections are not supported
   yet.
+- Searches a game's mods on Nexus from its Mods card (Search Nexus): by
+  name, most endorsed, most downloaded or recently updated, with their
+  pictures, and the mods and files you have marked. A mod's files
+  download into the game's mods with Premium; without it, Get on Nexus
+  opens the file's page in a Nexus window of Zendo's (signed in once; it
+  keeps the site's cookies in `~/.local/share/zendo/nexus-web`), and
+  what Slow download gives there, the mod manager link or the file, goes
+  into the game's mods with no copy left behind. An archive Nexus named,
+  added by hand with Add mod, is known as that mod's file too. Adult
+  mods are left out unless you switch them on there.
 - Shows a game's [ProtonDB](https://www.protondb.com) rating on its page,
   Platinum to Borked, or Native for a game with a Linux version on Steam,
   and opens its ProtonDB page when clicked. Games
@@ -314,6 +324,8 @@ nexus_key = "…"
 steam_session = "…"
 # false to never download covers.
 download_covers = true
+# Whether Nexus searches show mods marked adult.
+nexus_adult = false
 # Where store games are installed, each in a folder of its own.
 install_dir = "~/Games"
 # The Proton Windows games run with unless their launch options choose one
@@ -413,9 +425,9 @@ count their own.
 
 | Path | What |
 |------|------|
-| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods, `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
+| `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods (`nexus_search.rs` searches it), `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `tone.rs` reads hyprmonk's tone, `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `steam.rs` for Accounts' Steam card and the sign-in's token, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal), the `sidebar.rs` and the colours (`style.rs`) |
+| `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `nexus_search.rs` for its search sheet, `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `steam.rs` for Accounts' Steam card and the sign-in's token, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal), the `sidebar.rs` and the colours (`style.rs`) |
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`zendo.svg`) |
 | `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
 | `PLAN.md` | What Zendo is for, the decisions so far and the phases |
