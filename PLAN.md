@@ -1710,6 +1710,39 @@ brackets):
     Checked: clippy, tests (the tasks read from both stores' records,
     gogdl's index, the program as each engine takes it, the scripts'
     environment and failure, the sheet). Not yet seen in the window.
+    13c, built 2026-11-09 (`steam_runtime.rs`, the sheet's
+    `launch_options/gamescope.rs`). Checked first:
+    - gamescope 3.17.0's `--help`: `-b` borderless, `-w`/`-h` the
+      game's size beside `-W`/`-H`, `-S` auto, integer, fit, fill,
+      stretch, `-F` linear, nearest, fsr, nis, pixel, sgsr,
+      `--sharpness` 0 (most) to 20, `-r` the game's refresh. The sheet
+      has Shows as (a window, without its frame, full screen), both
+      sizes, Fit and Scaling (sharpening for fsr, nis and sgsr), Frames
+      a second and More options (any others, split as a shell would).
+    - Proton without umu: both builds' `toolmanifest.vdf` ask for tool
+      4183110, Steam Linux Runtime 4.0 (`SteamLinuxRuntime_4` here;
+      umu keeps its own in `~/.local/share/umu/steamrt4`). What umu
+      gives Proton (read from the installed umu, facts only):
+      `STEAM_COMPAT_DATA_PATH` the prefix, an empty
+      `STEAM_COMPAT_CLIENT_INSTALL_PATH` (Proton reads it unguarded),
+      `STEAM_COMPAT_TOOL_PATHS` and `_MOUNTS` Proton's and the
+      runtime's folders, `UMU_ID` the game's id (protonfixes reads it),
+      the Steam app id from `umu-<number>` or 0. Zendo runs
+      `<runtime>/_v2-entry-point --verb=waitforexitandrun --
+      <proton>/proton waitforexitandrun` with those, and makes the
+      prefix's `pfx` link to itself first, as umu does (the prefixes
+      here have it), so Proton keeps using the same prefix.
+    - Native games: scout (`scout-on-soldier-entry-point-v2 --`, which
+      needs soldier), soldier, sniper and 4.0 (`_v2-entry-point
+      --verb=waitforexitandrun --`), after the other wrappers; scout,
+      soldier and 4.0 are installed here.
+    - The language: legendary's `launch --language`; gogdl's `launch`
+      takes none (a GOG game's language is chosen when installed), nile
+      neither. Checked as two or three letters, with a region.
+    Checked: clippy, tests (gamescope's words, the runtimes' words, the
+    environment without umu, the `pfx` link, the language, the sheet).
+    Not yet seen in the window, and no game started without umu or in a
+    runtime yet: for the user to try.
 14. (was 17) Epic and GOG while playing: offline mode (Epic games that allow it,
     legendary's `--offline`), cloud saves (upload and download by hand,
     and by itself before and after the game: Heroic's `autoSyncSaves`,

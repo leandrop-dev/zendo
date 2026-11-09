@@ -36,6 +36,7 @@ use anyhow::{Context, bail};
 use crate::config::Config;
 use crate::launch_options::LaunchOptions;
 use crate::runtimes::{self, Runtime};
+use crate::steam_runtime::Runtime as SteamRuntime;
 use crate::store_tasks::{self, Chosen};
 use crate::stores::Store;
 use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
@@ -156,7 +157,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         }
         Launch::Command { program, args, dir } => {
             let options = options_for(game)?;
-            let mut words = options.wrappers();
+            let mut words = wrappers_for(&options, false)?;
             words.push(program.clone());
             words.extend(args.iter().cloned());
             words.extend(options.arguments()?);
@@ -551,10 +552,11 @@ fn make_prefix(command: &Command) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// What umu-run needs for a Windows game: the path to umu-run, and the
-/// environment it reads.
+/// What runs a Windows game: umu-run, or Steam Linux Runtime 4.0 and
+/// Proton when the launch options leave umu out, and the environment
+/// they read.
 struct Umu {
-    program: String,
+    words: Vec<String>,
     env: Vec<(&'static str, std::ffi::OsString)>,
 }
 
@@ -563,33 +565,111 @@ fn umu_setup(
     options: &LaunchOptions,
     store: Option<(&str, &str)>,
 ) -> anyhow::Result<Umu> {
-    let umu = which("umu-run")
-        .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
     let prefix = prefix(game).context("no folder for the game's Wine prefix")?;
-    let mut env = vec![("WINEPREFIX", prefix.into_os_string())];
-    match store {
-        Some((store, app)) => {
-            env.push(("GAMEID", umu::game_id(store, app, &game.title).into()));
-            env.push(("STORE", store.into()));
-        }
-        None => env.push((
-            "GAMEID",
-            umu::game_id("local", &game.id, &game.title).into(),
-        )),
+    let game_id = match store {
+        Some((store, app)) => umu::game_id(store, app, &game.title),
+        None => umu::game_id("local", &game.id, &game.title),
+    };
+    let mut env = vec![
+        ("WINEPREFIX", prefix.clone().into_os_string()),
+        ("GAMEID", game_id.clone().into()),
+    ];
+    if let Some((store, _)) = store {
+        env.push(("STORE", store.into()));
     }
     // The one chosen, or the default when it is gone; without any, umu
     // downloads UMU-Proton on the first launch.
-    let chosen = options.proton.as_deref().and_then(proton::named);
-    if let Some(proton) = chosen.or_else(proton::default) {
-        env.push(("PROTONPATH", proton.path.into_os_string()));
-    }
+    let chosen = options
+        .proton
+        .as_deref()
+        .and_then(proton::named)
+        .or_else(proton::default);
+    let words = if options.no_umu {
+        let proton = chosen.context(
+            "no Proton is installed to run the game without umu: download GE-Proton in Settings",
+        )?;
+        let runtime = SteamRuntime::Four.find().context(
+            "Proton needs Steam Linux Runtime 4.0 to run without umu: install it in Steam, \
+             or start a game once with umu, which keeps its own",
+        )?;
+        link_pfx(&prefix)?;
+        env.extend(without_umu(game, &prefix, &game_id, &proton.path, &runtime));
+        let mut words = SteamRuntime::Four.words(&runtime);
+        words.push(proton.path.join("proton").to_string_lossy().into_owned());
+        words.push("waitforexitandrun".into());
+        words
+    } else {
+        let umu = which("umu-run")
+            .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
+        if let Some(proton) = chosen {
+            env.push(("PROTONPATH", proton.path.into_os_string()));
+        }
+        vec![umu.to_string_lossy().into_owned()]
+    };
     // umu leaves the anti-cheat runtimes to Steam; outside it, Proton
     // finds them only through these.
     env.extend(runtimes::environment());
-    Ok(Umu {
-        program: umu.to_string_lossy().into_owned(),
-        env,
-    })
+    Ok(Umu { words, env })
+}
+
+/// What umu would tell Proton, for Proton run without it: the prefix as
+/// Steam's data folder for the game (`pfx` in it leading back to it), no
+/// Steam client, Proton and the runtime as the tools to mount, umu's id
+/// for protonfixes, and the Steam app id that id holds (0 for none).
+fn without_umu(
+    game: &Game,
+    prefix: &Path,
+    game_id: &str,
+    proton: &Path,
+    runtime: &Path,
+) -> Vec<(&'static str, std::ffi::OsString)> {
+    let app = game_id
+        .strip_prefix("umu-")
+        .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+        .unwrap_or("0");
+    let tools = format!("{}:{}", proton.display(), runtime.display());
+    let folder = game
+        .details
+        .install_path
+        .clone()
+        .unwrap_or_default()
+        .into_os_string();
+    vec![
+        ("UMU_ID", game_id.into()),
+        ("STEAM_COMPAT_DATA_PATH", prefix.into()),
+        ("STEAM_COMPAT_CLIENT_INSTALL_PATH", "".into()),
+        ("STEAM_COMPAT_INSTALL_PATH", folder),
+        ("STEAM_COMPAT_TOOL_PATHS", tools.clone().into()),
+        ("STEAM_COMPAT_MOUNTS", tools.into()),
+        ("STEAM_COMPAT_APP_ID", app.into()),
+        ("SteamAppId", app.into()),
+        ("SteamGameId", app.into()),
+    ]
+}
+
+/// Makes the prefix with `pfx` in it leading back to itself, as umu does,
+/// so Proton, which keeps the prefix in `pfx` of its data folder, uses it.
+fn link_pfx(prefix: &Path) -> anyhow::Result<()> {
+    fs::create_dir_all(prefix).with_context(|| format!("could not make {}", prefix.display()))?;
+    let pfx = prefix.join("pfx");
+    if pfx.symlink_metadata().is_err() {
+        std::os::unix::fs::symlink(".", &pfx)
+            .with_context(|| format!("could not make {}", pfx.display()))?;
+    }
+    Ok(())
+}
+
+/// The game's wrappers, and for a native game the Steam Linux Runtime its
+/// launch options choose.
+fn wrappers_for(options: &LaunchOptions, windows: bool) -> anyhow::Result<Vec<String>> {
+    let mut words = options.wrappers();
+    if !windows && let Some(runtime) = options.steam_runtime {
+        let folder = runtime.find().with_context(|| {
+            format!("{} is not installed: install it in Steam", runtime.label())
+        })?;
+        words.extend(runtime.words(&folder));
+    }
+    Ok(words)
 }
 
 /// A game added by hand: its wrappers, umu-run for a Windows program, the
@@ -601,12 +681,12 @@ fn local_command(
     dir: Option<&Path>,
     options: &LaunchOptions,
 ) -> anyhow::Result<Command> {
-    let mut words = options.wrappers();
-    let mut env = Vec::new();
     let windows = needs_proton(game);
+    let mut words = wrappers_for(options, windows)?;
+    let mut env = Vec::new();
     if windows {
         let umu = umu_setup(game, options, None)?;
-        words.push(umu.program);
+        words.extend(umu.words);
         env = umu.env;
     }
     words.push(program.to_string_lossy().into_owned());
@@ -710,13 +790,13 @@ fn engine_command_with(
     options: &LaunchOptions,
     mut command: Command,
 ) -> anyhow::Result<Command> {
-    let mut wrapper = options.wrappers();
     let windows = needs_proton(game);
+    let mut wrapper = wrappers_for(options, windows)?;
     if windows {
         let store_key = umu::store_name(store_key(store));
         let umu = umu_setup(game, options, Some((store_key, app)))?;
         command.envs(umu.env);
-        wrapper.push(umu.program);
+        wrapper.extend(umu.words);
     }
     command.envs(options.environment_for(windows)?);
     let program = chosen_program(game, store, options)?;
@@ -729,6 +809,11 @@ fn engine_command_with(
             command.args(["launch", app]);
             if let Some(program) = &program {
                 command.args(["--override-exe", program]);
+            }
+            if store == Store::Epic
+                && let Some(language) = &options.language
+            {
+                command.args(["--language", language]);
             }
         }
         Store::Gog => {
@@ -939,6 +1024,91 @@ mod tests {
             engine_command_with(&game, "1", Store::Epic, &outside, Command::new("legendary"))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn tells_legendary_the_language() {
+        let mut game = Game::new(
+            "epic:Sugar".into(),
+            "Rocket League".into(),
+            Source::Epic,
+            Launch::Engine {
+                runner: "legendary".into(),
+                app: "Sugar".into(),
+            },
+        );
+        game.details.platform = Some("linux".into());
+        let options = LaunchOptions {
+            language: Some("pt-BR".into()),
+            ..LaunchOptions::default()
+        };
+        let command = engine_command_with(
+            &game,
+            "Sugar",
+            Store::Epic,
+            &options,
+            Command::new("legendary"),
+        )
+        .unwrap();
+        assert_eq!(
+            describe(&command),
+            "legendary launch Sugar --language pt-BR"
+        );
+    }
+
+    #[test]
+    fn tells_proton_what_umu_would_without_it() {
+        let mut game = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        game.details.install_path = Some("/games/Sugar".into());
+        let env = without_umu(
+            &game,
+            Path::new("/games/Prefixes/Sugar"),
+            "umu-252950",
+            Path::new("/proton"),
+            Path::new("/runtime"),
+        );
+        let value = |name: &str| {
+            env.iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| value.to_string_lossy().into_owned())
+        };
+        assert_eq!(
+            value("STEAM_COMPAT_DATA_PATH").as_deref(),
+            Some("/games/Prefixes/Sugar")
+        );
+        assert_eq!(
+            value("STEAM_COMPAT_CLIENT_INSTALL_PATH").as_deref(),
+            Some("")
+        );
+        assert_eq!(
+            value("STEAM_COMPAT_TOOL_PATHS").as_deref(),
+            Some("/proton:/runtime")
+        );
+        assert_eq!(value("SteamAppId").as_deref(), Some("252950"));
+        assert_eq!(value("UMU_ID").as_deref(), Some("umu-252950"));
+        let other = without_umu(
+            &game,
+            Path::new("/p"),
+            "umu-default",
+            Path::new("/a"),
+            Path::new("/b"),
+        );
+        assert!(other.contains(&("SteamAppId", "0".into())));
+
+        let dir = std::env::temp_dir().join(format!("zendo-pfx-{}", std::process::id()));
+        let prefix = dir.join("Prefixes/Sugar");
+        link_pfx(&prefix).unwrap();
+        link_pfx(&prefix).unwrap();
+        assert_eq!(fs::read_link(prefix.join("pfx")).unwrap(), Path::new("."));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

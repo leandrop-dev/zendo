@@ -7,6 +7,8 @@
 //! ways to start it the store lists. Only for the games Zendo starts
 //! itself; Steam and Heroic keep their own settings.
 
+mod gamescope;
+
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +18,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Color, Element, Length, Task};
 use zendo_core::launch_options::{self, LaunchOptions};
+use zendo_core::steam_runtime::{self, Runtime};
 use zendo_core::store_tasks::{self, StoreTask};
 use zendo_core::{Game, Launch, Source, launch, proton};
 
@@ -41,14 +44,79 @@ pub struct Sheet {
     tools: Tools,
     /// An Epic or GOG game: its engine runs another program when asked,
     /// and its store may list other ways to start it.
-    store_game: bool,
+    store: Option<StoreKind>,
     /// The game's folder, which a program picked is kept relative to.
     folder: Option<PathBuf>,
     executable: String,
     /// The store's own way first.
     tasks: Vec<TaskChoice>,
     picking: bool,
+    language: String,
+    gamescope: gamescope::Fields,
+    /// For a native game: none, then the runtimes installed.
+    runtimes: Vec<Pick<Runtime>>,
     error: Option<String>,
+}
+
+/// The stores whose engines take a program and list other ways to start
+/// a game; legendary takes a language too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StoreKind {
+    Epic,
+    Gog,
+}
+
+/// An entry of a list whose first entry leaves the setting unset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pick<T> {
+    value: Option<T>,
+    label: String,
+}
+
+impl<T> fmt::Display for Pick<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
+}
+
+impl<T: Copy + PartialEq> Pick<T> {
+    /// `none` first, then each value with its label.
+    fn list(none: String, values: impl IntoIterator<Item = (T, String)>) -> Vec<Self> {
+        let mut list = vec![Self {
+            value: None,
+            label: none,
+        }];
+        list.extend(values.into_iter().map(|(value, label)| Self {
+            value: Some(value),
+            label,
+        }));
+        list
+    }
+
+    /// The entry for the value set.
+    fn chosen(list: &[Self], value: Option<T>) -> Option<Self> {
+        list.iter().find(|pick| pick.value == value).cloned()
+    }
+}
+
+/// The runtimes for a native game: none, those installed, and the one
+/// chosen when it is not.
+fn runtime_choices(installed: &[Runtime], chosen: Option<Runtime>) -> Vec<Pick<Runtime>> {
+    let mut list = Pick::list(
+        t!("options-runtime-none"),
+        installed
+            .iter()
+            .map(|runtime| (*runtime, runtime.label().to_owned())),
+    );
+    if let Some(chosen) = chosen
+        && !installed.contains(&chosen)
+    {
+        list.push(Pick {
+            value: Some(chosen),
+            label: t!("options-runtime-missing", name = chosen.label()),
+        });
+    }
+    list
 }
 
 /// An entry of the list of ways to start the game: the store's own
@@ -169,6 +237,8 @@ struct Tools {
     gamescope: bool,
     /// Not a program: an NVIDIA card beside another.
     offload: bool,
+    /// Steam Linux Runtime 4.0, which Proton runs in without umu.
+    runtime_4: bool,
 }
 
 impl Tools {
@@ -179,6 +249,7 @@ impl Tools {
             gamemode: on_path("gamemoderun"),
             gamescope: on_path("gamescope"),
             offload: offload_possible(),
+            runtime_4: Runtime::Four.find().is_some(),
         }
     }
 }
@@ -209,7 +280,10 @@ pub enum SheetMessage {
     MangoHud(bool),
     GameMode(bool),
     Gamescope(bool),
-    Fullscreen(bool),
+    GamescopeSet(gamescope::Setting),
+    NoUmu(bool),
+    SteamRuntime(Pick<Runtime>),
+    Language(String),
     Width(String),
     Height(String),
     XboxControllers(bool),
@@ -293,7 +367,10 @@ impl Zendo {
             SheetMessage::MangoHud(on) => options.mangohud = on,
             SheetMessage::GameMode(on) => options.gamemode = on,
             SheetMessage::Gamescope(on) => options.gamescope = on,
-            SheetMessage::Fullscreen(on) => options.gamescope_fullscreen = on,
+            SheetMessage::GamescopeSet(setting) => sheet.gamescope.set(options, setting),
+            SheetMessage::NoUmu(on) => options.no_umu = on,
+            SheetMessage::SteamRuntime(pick) => options.steam_runtime = pick.value,
+            SheetMessage::Language(language) => sheet.language = language,
             SheetMessage::Width(width) => {
                 sheet.width = width.chars().filter(char::is_ascii_digit).collect();
             }
@@ -415,8 +492,11 @@ impl Zendo {
         };
         let windows = matches!(game.launch, Launch::Engine { .. } | Launch::Local { .. })
             && launch::needs_proton(&game);
-        let store_game = matches!(game.launch, Launch::Engine { .. })
-            && matches!(game.source, Source::Epic | Source::Gog);
+        let store = match (&game.launch, game.source) {
+            (Launch::Engine { .. }, Source::Epic) => Some(StoreKind::Epic),
+            (Launch::Engine { .. }, Source::Gog) => Some(StoreKind::Gog),
+            _ => None,
+        };
         self.sheet = Some(Sheet {
             id: game.id.clone(),
             title: game.title.clone(),
@@ -440,15 +520,22 @@ impl Zendo {
             } else {
                 None
             },
-            store_game,
+            store,
             folder: game.details.install_path.clone(),
             executable: options.executable.clone().unwrap_or_default(),
-            tasks: if store_game {
+            tasks: if store.is_some() {
                 task_choices(store_tasks::listed(&game), options.task.as_deref())
             } else {
                 Vec::new()
             },
             picking: false,
+            language: options.language.clone().unwrap_or_default(),
+            gamescope: gamescope::Fields::of(&options),
+            runtimes: if windows {
+                Vec::new()
+            } else {
+                runtime_choices(&steam_runtime::installed(), options.steam_runtime)
+            },
             options,
             tools: Tools::find(),
             error: None,
@@ -465,7 +552,13 @@ impl Zendo {
         options.gamescope_height = number(&sheet.height);
         options.frame_cap = number(&sheet.frame_cap);
         options.executable = Some(sheet.executable.trim().to_owned())
-            .filter(|program| sheet.store_game && !program.is_empty());
+            .filter(|program| sheet.store.is_some() && !program.is_empty());
+        options.language = Some(sheet.language.trim().to_owned())
+            .filter(|language| sheet.store == Some(StoreKind::Epic) && !language.is_empty());
+        if let Err(err) = sheet.gamescope.keep(&mut options) {
+            sheet.error = Some(err);
+            return Task::none();
+        }
         if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
             sheet.error = Some(t!("options-size-both"));
             return Task::none();
@@ -534,39 +627,24 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         ));
     }
 
-    if sheet.store_game {
+    if sheet.store.is_some() {
         body = body.push(starting(sheet));
     }
 
-    let mangohud_ready = if options.gamescope {
-        tools.mangoapp
-    } else {
-        tools.mangohud
-    };
-    let missing = |installed: bool| (!installed).then(|| t!("options-not-installed"));
-    body = body.push(switch(
-        "MangoHud".to_owned(),
-        t!("options-mangohud-about"),
-        options.mangohud,
-        missing(mangohud_ready),
-        SheetMessage::MangoHud,
-    ));
-    body = body.push(switch(
-        "GameMode".to_owned(),
-        t!("options-gamemode-about"),
-        options.gamemode,
-        missing(tools.gamemode),
-        SheetMessage::GameMode,
-    ));
-    body = body.push(switch(
-        "Gamescope".to_owned(),
-        t!("options-gamescope-about"),
-        options.gamescope,
-        missing(tools.gamescope),
-        SheetMessage::Gamescope,
-    ));
-    if options.gamescope {
-        body = body.push(gamescope_options(sheet));
+    body = body.push(tool_switches(sheet));
+    if !sheet.windows {
+        body = body.push(field(
+            t!("options-runtime"),
+            t!("options-runtime-about"),
+            pick_list(
+                sheet.runtimes.as_slice(),
+                Pick::chosen(&sheet.runtimes, options.steam_runtime),
+                |pick| Message::Sheet(SheetMessage::SteamRuntime(pick)),
+            )
+            .text_size(14)
+            .padding([8, 12])
+            .width(Length::Fill),
+        ));
     }
     body = body.push(switch(
         t!("options-offload"),
@@ -698,7 +776,54 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
             None,
             SheetMessage::NoSync,
         ))
+        .push(switch(
+            t!("options-no-umu"),
+            t!("options-no-umu-about"),
+            options.no_umu,
+            (!sheet.tools.runtime_4).then(|| t!("options-no-umu-runtime")),
+            SheetMessage::NoUmu,
+        ))
         .into()
+}
+
+/// `MangoHud`, `GameMode` and gamescope, with gamescope's settings when on.
+fn tool_switches(sheet: &Sheet) -> Element<'_, Message> {
+    let options = &sheet.options;
+    let tools = sheet.tools;
+    let mangohud_ready = if options.gamescope {
+        tools.mangoapp
+    } else {
+        tools.mangohud
+    };
+    let missing = |installed: bool| (!installed).then(|| t!("options-not-installed"));
+    let mut switches = column![
+        switch(
+            "MangoHud".to_owned(),
+            t!("options-mangohud-about"),
+            options.mangohud,
+            missing(mangohud_ready),
+            SheetMessage::MangoHud,
+        ),
+        switch(
+            "GameMode".to_owned(),
+            t!("options-gamemode-about"),
+            options.gamemode,
+            missing(tools.gamemode),
+            SheetMessage::GameMode,
+        ),
+        switch(
+            "Gamescope".to_owned(),
+            t!("options-gamescope-about"),
+            options.gamescope,
+            missing(tools.gamescope),
+            SheetMessage::Gamescope,
+        ),
+    ]
+    .spacing(18);
+    if options.gamescope {
+        switches = switches.push(gamescope::view(sheet));
+    }
+    switches.into()
 }
 
 /// What starts: the store's way or another it lists, and the program run
@@ -727,7 +852,7 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
         .padding([8, 14])
         .style(style::secondary)
         .on_press_maybe((!sheet.picking).then_some(Message::Sheet(SheetMessage::BrowseExecutable)));
-    column![
+    let mut starting = column![
         field(t!("options-task"), t!("options-task-about"), tasks),
         field(
             t!("options-executable"),
@@ -745,8 +870,21 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
             .align_y(Alignment::Center),
         ),
     ]
-    .spacing(18)
-    .into()
+    .spacing(18);
+    if sheet.store == Some(StoreKind::Epic) {
+        starting = starting.push(field(
+            t!("options-language"),
+            t!("options-language-about"),
+            text_input(&t!("options-language-empty"), &sheet.language)
+                .on_input(|value| Message::Sheet(SheetMessage::Language(value)))
+                .on_submit(Message::Sheet(SheetMessage::Save))
+                .size(14)
+                .padding([8, 12])
+                .width(200)
+                .style(style::input),
+        ));
+    }
+    starting.into()
 }
 
 /// Commands before the game starts and after it ends.
@@ -796,32 +934,6 @@ fn fsr_sharpening(options: &LaunchOptions) -> Element<'_, Message> {
     ]
     .spacing(10)
     .align_y(Alignment::Center)
-    .padding([0, 20])
-    .into()
-}
-
-/// Full screen and the size, under gamescope's switch.
-fn gamescope_options(sheet: &Sheet) -> Element<'_, Message> {
-    let size = row![
-        text(t!("options-size"))
-            .size(14)
-            .color(colors().dim)
-            .width(60),
-        size_input(&t!("options-width"), &sheet.width, SheetMessage::Width),
-        text("×").size(14).color(colors().dim),
-        size_input(&t!("options-height"), &sheet.height, SheetMessage::Height),
-        text(t!("options-size-empty")).size(13).color(colors().dim),
-    ]
-    .spacing(10)
-    .align_y(Alignment::Center);
-    column![
-        toggler(sheet.options.gamescope_fullscreen)
-            .label(t!("options-full-screen"))
-            .text_size(14)
-            .on_toggle(|on| Message::Sheet(SheetMessage::Fullscreen(on))),
-        size,
-    ]
-    .spacing(12)
     .padding([0, 20])
     .into()
 }
@@ -1020,7 +1132,7 @@ mod tests {
         let mut zendo = zendo_with(gog_game());
         let _ = zendo.update(Message::Sheet(SheetMessage::Open));
         let sheet = zendo.sheet.as_ref().unwrap();
-        assert!(sheet.store_game);
+        assert_eq!(sheet.store, Some(StoreKind::Gog));
         assert_eq!(sheet.tasks.len(), 1, "the store's own only");
         for message in [
             SheetMessage::Executable("  bin/x64/game.exe ".into()),
@@ -1058,6 +1170,51 @@ mod tests {
             kept_program(Some(Path::new("/games/Sugar")), Path::new("/opt/x")),
             "/opt/x"
         );
+    }
+
+    #[test]
+    fn offers_runtimes_to_native_games_and_a_language_to_epics() {
+        let mut native = gog_game();
+        native.details.platform = Some("linux".into());
+        let mut zendo = zendo_with(native);
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        let sheet = zendo.sheet.as_ref().unwrap();
+        assert!(!sheet.windows);
+        assert_eq!(sheet.runtimes[0].value, None, "none first");
+        let choices = runtime_choices(&[Runtime::Soldier], Some(Runtime::Sniper));
+        let labels: Vec<String> = choices.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            labels,
+            [
+                "None: the system's libraries",
+                "Steam Linux Runtime 2.0 (soldier)",
+                "Steam Linux Runtime 3.0 (sniper) (not installed)"
+            ]
+        );
+
+        let mut epic = gog_game();
+        epic.id = "epic:Sugar".into();
+        epic.source = Source::Epic;
+        let mut zendo = zendo_with(epic);
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        assert_eq!(
+            zendo.sheet.as_ref().map(|sheet| sheet.store),
+            Some(Some(StoreKind::Epic))
+        );
+        let _ = zendo.update(Message::Sheet(SheetMessage::Language("french".into())));
+        let _ = zendo.update(Message::Activate);
+        assert!(
+            zendo
+                .sheet
+                .as_ref()
+                .and_then(|sheet| sheet.error.as_ref())
+                .is_some(),
+            "not a code"
+        );
+        let _ = zendo.update(Message::Sheet(SheetMessage::Language(" fr ".into())));
+        let _ = zendo.update(Message::Sheet(SheetMessage::NoUmu(true)));
+        let _ = zendo.update(Message::Activate);
+        assert!(zendo.sheet.is_none(), "saved");
     }
 
     #[test]

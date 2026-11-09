@@ -30,6 +30,7 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::paths;
+use crate::steam_runtime::Runtime;
 
 const HEADER: &str = "\
 # Each game's launch options, as set on its page in Zendo, which rewrites
@@ -61,6 +62,31 @@ pub struct LaunchOptions {
     pub gamescope_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gamescope_height: Option<u32>,
+    /// A window without its frame (`-b`), when not full screen.
+    #[serde(skip_serializing_if = "is_false")]
+    pub gamescope_borderless: bool,
+    /// The size the game draws at (`-w`, `-h`), which gamescope scales
+    /// to its own; the same when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_game_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_game_height: Option<u32>,
+    /// How the game's frames fit gamescope's (`-S`); gamescope's own
+    /// choice when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_scaler: Option<Scaler>,
+    /// What scales them (`-F`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_filter: Option<Filter>,
+    /// The filter's sharpening, 0 (the most) to 20 (`--sharpness`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_sharpness: Option<u8>,
+    /// The game's frames a second (`-r`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamescope_fps: Option<u32>,
+    /// More of gamescope's options, split as a shell would.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub gamescope_more: String,
     /// Proton's `PROTON_PREFER_SDL`: every controller reaches the game as
     /// an Xbox pad, for games that read nothing else (a `PlayStation`
     /// controller's touchpad, motion and triggers are then not passed on).
@@ -100,6 +126,16 @@ pub struct LaunchOptions {
     /// offload).
     #[serde(skip_serializing_if = "is_false")]
     pub nvidia_offload: bool,
+    /// Proton run by Zendo in Steam Linux Runtime 4.0, not by umu.
+    #[serde(skip_serializing_if = "is_false")]
+    pub no_umu: bool,
+    /// The Steam Linux Runtime a native game runs in; none when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steam_runtime: Option<Runtime>,
+    /// The game's language for an Epic game (legendary's `--language`):
+    /// `fr`, `pt-BR`; the system's when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     /// The program run instead of the store's (Epic and GOG games): a
     /// path in the game's folder, relative to it or whole.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -125,10 +161,96 @@ pub struct LaunchOptions {
     pub environment: String,
 }
 
+/// How gamescope fits the game's frames to its own (`-S`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scaler {
+    Auto,
+    /// Whole multiples only, for pixel art.
+    Integer,
+    Fit,
+    Fill,
+    Stretch,
+}
+
+impl Scaler {
+    pub const ALL: [Self; 5] = [
+        Self::Auto,
+        Self::Integer,
+        Self::Fit,
+        Self::Fill,
+        Self::Stretch,
+    ];
+
+    /// gamescope's word for it.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Integer => "integer",
+            Self::Fit => "fit",
+            Self::Fill => "fill",
+            Self::Stretch => "stretch",
+        }
+    }
+}
+
+/// What gamescope scales with (`-F`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Filter {
+    Linear,
+    Nearest,
+    /// AMD's FSR 1.
+    Fsr,
+    /// NVIDIA Image Scaling.
+    Nis,
+    Pixel,
+    /// Snapdragon Game Super Resolution.
+    Sgsr,
+}
+
+impl Filter {
+    pub const ALL: [Self; 6] = [
+        Self::Linear,
+        Self::Nearest,
+        Self::Fsr,
+        Self::Nis,
+        Self::Pixel,
+        Self::Sgsr,
+    ];
+
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Linear => "linear",
+            Self::Nearest => "nearest",
+            Self::Fsr => "fsr",
+            Self::Nis => "nis",
+            Self::Pixel => "pixel",
+            Self::Sgsr => "sgsr",
+        }
+    }
+
+    /// Whether it sharpens, so `--sharpness` applies.
+    #[must_use]
+    pub fn sharpens(self) -> bool {
+        matches!(self, Self::Fsr | Self::Nis | Self::Sgsr)
+    }
+}
+
+/// gamescope's least sharpening.
+pub const GAMESCOPE_SOFTEST: u8 = 20;
+
 /// FSR's least sharpening.
 pub const MOST_SOFT: u8 = 5;
 /// The sharpening Wine gives FSR when none is set.
 pub const WINE_SHARPENING: u8 = 2;
+
+/// Two or three ASCII letters, as in `fr` or `BR`.
+fn is_code(code: &str) -> bool {
+    (2..=3).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_alphabetic())
+}
 
 #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
 fn is_false(value: &bool) -> bool {
@@ -205,6 +327,22 @@ impl LaunchOptions {
         }
         if self.frame_cap == Some(0) {
             bail!("a frame cap of 0 would stop the game");
+        }
+        if self
+            .gamescope_sharpness
+            .is_some_and(|sharpness| sharpness > GAMESCOPE_SOFTEST)
+        {
+            bail!("gamescope's sharpening goes from 0 to {GAMESCOPE_SOFTEST}");
+        }
+        self.gamescope_more()?;
+        if let Some(language) = &self.language {
+            let valid = match language.split_once('-') {
+                Some((code, region)) => is_code(code) && is_code(region),
+                None => is_code(language),
+            };
+            if !valid {
+                bail!("\"{language}\" is not a language code such as fr or pt-BR");
+            }
         }
         Ok(())
     }
@@ -306,6 +444,15 @@ impl LaunchOptions {
             .collect()
     }
 
+    /// gamescope's other options.
+    ///
+    /// # Errors
+    ///
+    /// When a quote is left open.
+    pub fn gamescope_more(&self) -> anyhow::Result<Vec<String>> {
+        shlex::split(&self.gamescope_more).context("gamescope's options have a quote left open")
+    }
+
     /// The wrappers the game runs inside, outermost first, before umu-run
     /// for a Windows game: `gamemoderun`, then gamescope (with
     /// `--mangoapp` for the overlay, as `MangoHud` does not draw inside
@@ -320,6 +467,8 @@ impl LaunchOptions {
             words.push("gamescope".into());
             if self.gamescope_fullscreen {
                 words.push("-f".into());
+            } else if self.gamescope_borderless {
+                words.push("-b".into());
             }
             if self.hdr {
                 words.push("--hdr-enabled".into());
@@ -330,6 +479,28 @@ impl LaunchOptions {
                     words.push(value.to_string());
                 }
             }
+            if let (Some(width), Some(height)) =
+                (self.gamescope_game_width, self.gamescope_game_height)
+            {
+                for (flag, value) in [("-w", width), ("-h", height)] {
+                    words.push(flag.into());
+                    words.push(value.to_string());
+                }
+            }
+            if let Some(scaler) = self.gamescope_scaler {
+                words.extend(["-S".into(), scaler.word().into()]);
+            }
+            if let Some(filter) = self.gamescope_filter {
+                words.extend(["-F".into(), filter.word().into()]);
+                if let Some(sharpness) = self.gamescope_sharpness.filter(|_| filter.sharpens()) {
+                    words.extend(["--sharpness".into(), sharpness.to_string()]);
+                }
+            }
+            if let Some(fps) = self.gamescope_fps {
+                words.extend(["-r".into(), fps.to_string()]);
+            }
+            // Checked when saved; a file changed by hand since gives none.
+            words.extend(self.gamescope_more().unwrap_or_default());
             if self.mangohud {
                 words.push("--mangoapp".into());
             }
@@ -478,6 +649,14 @@ mod tests {
             gamescope_fullscreen: true,
             gamescope_width: Some(1920),
             gamescope_height: Some(1080),
+            gamescope_borderless: true,
+            gamescope_game_width: Some(1280),
+            gamescope_game_height: Some(720),
+            gamescope_scaler: Some(Scaler::Fit),
+            gamescope_filter: Some(Filter::Fsr),
+            gamescope_sharpness: Some(5),
+            gamescope_fps: Some(60),
+            gamescope_more: "--adaptive-sync".into(),
             hdr: true,
             ..LaunchOptions::default()
         };
@@ -492,10 +671,48 @@ mod tests {
                 "1920",
                 "-H",
                 "1080",
+                "-w",
+                "1280",
+                "-h",
+                "720",
+                "-S",
+                "fit",
+                "-F",
+                "fsr",
+                "--sharpness",
+                "5",
+                "-r",
+                "60",
+                "--adaptive-sync",
                 "--mangoapp",
                 "--"
             ]
         );
+        // Borderless only when not full screen; no sharpening for a
+        // filter without it.
+        let window = LaunchOptions {
+            gamescope: true,
+            gamescope_borderless: true,
+            gamescope_filter: Some(Filter::Nearest),
+            gamescope_sharpness: Some(5),
+            ..LaunchOptions::default()
+        };
+        assert_eq!(
+            window.wrappers(),
+            ["gamescope", "-b", "-F", "nearest", "--"]
+        );
+        for (language, valid) in [
+            ("fr", true),
+            ("pt-BR", true),
+            ("french", false),
+            ("p", false),
+        ] {
+            let options = LaunchOptions {
+                language: Some(language.into()),
+                ..LaunchOptions::default()
+            };
+            assert_eq!(options.check().is_ok(), valid, "{language}");
+        }
         let alone = LaunchOptions {
             mangohud: true,
             ..LaunchOptions::default()
