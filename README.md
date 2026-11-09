@@ -135,6 +135,12 @@ install it and give it its colours, but it runs on any Linux desktop.
   folder deleted. Stopping or a failure leaves the game where it was. The
   store's record, applied mods and GOG's setup (run again at the next
   start) follow it.
+- Imports an Epic, GOG or Amazon game already on disk (Import from a
+  folder… on its Store page): the store's engine checks the files, and
+  Zendo then updates, repairs and starts it as one it installed. A GOG
+  game keeps its language, and gets the list of files gogdl compares
+  against, so its first update downloads only what changed. Nothing in
+  the folder is changed.
 - Installs DLC: the Store asks whether to install a game's DLC with it,
   and the DLC card on an Epic or GOG game's page installs or uninstalls
   each, or all. Heroic's games show their DLC; Heroic installs those.

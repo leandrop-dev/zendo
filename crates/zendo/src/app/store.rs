@@ -15,7 +15,7 @@ use zendo_core::owned::{self, Owned, Shop, StoreDetails};
 use zendo_core::stores::Store;
 
 use super::accounts::Account;
-use super::downloads::DownloadMessage;
+use super::downloads::{DownloadMessage, FolderFor, action_doing_alone};
 use super::format;
 use super::library::{Card, GRID_PADDING, Window, card, cards_grid, chip};
 use super::steam_installs::{Following, SteamInstallMessage, percent, progress_line};
@@ -596,7 +596,7 @@ impl Zendo {
             return self.steam_actions(game, app);
         } else if let Some((job, running)) = self.downloads.job_for(&game.id) {
             let (label, press) = match (running, job.paused) {
-                (true, _) => (t!("installing"), None),
+                (true, _) => (action_doing_alone(job.action), None),
                 (false, true) => (
                     t!("resume"),
                     Some(Message::Download(DownloadMessage::Resume(game.id.clone()))),
@@ -641,6 +641,13 @@ impl Zendo {
                     .padding([10, 32])
                     .style(style::primary)
                     .on_press_maybe(job.map(|job| Message::Download(DownloadMessage::Queue(job)))),
+                button(text(t!("downloads-import")).size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::Download(DownloadMessage::ChooseFolder(
+                        FolderFor::Import,
+                        game.id.clone()
+                    ))),
                 space::horizontal(),
                 text(note).size(14).color(colors().dim),
             ]

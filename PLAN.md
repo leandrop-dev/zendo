@@ -2112,6 +2112,43 @@ brackets):
     prefix and mods record changed, old folders gone; a stopped copy left
     the old folder and record as they were and no hidden copy. Tried by
     the user 2026-11-09: it works [firm].
+    17b, built 2026-11-09 (`gog_import.rs`, an Import job in
+    `downloads.rs`). Checked first (gogdl in Heroic 2.22.4's bundle, nile's
+    source, Heroic's bundle; facts only): without its manifest in
+    `heroic_gogdl/manifests/<id>`, gogdl's update downloads every file
+    again (its diff counts all as new) and its repair refuses ("No manifest
+    stored locally"), so Heroic remakes it: GOG's builds for the system
+    (`content-system.gog.com/products/<id>/os/<os>/builds?generation=2`),
+    the folder's build (or the latest outside a branch), its manifest
+    (zlib for generation 2), with `HGLPlatform`, `HGLInstallLanguage` and
+    `HGLdlcs` added. GOG lists public builds without a token and gives a
+    `link` instead of `urls` then. nile's import verifies every file
+    against Amazon's list and refuses otherwise; legendary's refuses with
+    no files found or no executable, and switches a first update to a
+    repair when it must.
+    Zendo [tentative]: an owned Epic, GOG or Amazon game's Store page has
+    Import from a folder… beside Install; the folder dialog asks where the
+    game is and an Import job is queued. Refused: a game Zendo has
+    installed, a folder inside or around one of Zendo's games. Epic:
+    `legendary import <app> <folder> --with-dlcs --platform Windows`;
+    Amazon: `nile import --path <folder> <id>`; both end well when they
+    refuse, so the record is read back and the engine's last error said
+    (nile's `ERROR [IMPORT]:` lines read too). GOG: `gogdl import` must name
+    this game; the manifest is remade as Heroic does (with the token when
+    signed in), then Zendo's record written with the folder's build,
+    version, language, DLC and size. gogdl's updates and repairs now use
+    the record's language. Nothing in the folder is changed. Checked:
+    clippy, tests (what gogdl reads, the build picked, a packed manifest
+    and the fields added, the job, the engines' error lines); for real,
+    GOG's manifest for Cyberpunk 2077's build fetched and unpacked is the
+    one gogdl stored when Zendo installed it, bar its own fields; in a
+    throwaway home, importing the real Cyberpunk 2077 folder wrote the
+    same record Zendo's install had (build, version, language, Phantom
+    Liberty) and a manifest equal to gogdl's, the folder untouched; a
+    folder of another game, one without GOG's files, and Epic's and
+    Amazon's imports without a sign-in refused with why. Not tried yet
+    in the window: no store game is on disk outside Zendo (the two
+    folders in `~/Games/Heroic` are Wine prefixes).
 18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
@@ -2186,7 +2223,8 @@ by the user 2026-11-09:
   (comet), built the same day and tried by the user.
   Item 17, managing installs, split by the user (17a to 17d) the same
   day; 17a, moving a game, built the same day and tried by the user.
-  Next: 17b, importing a game from a folder.
+  17b, importing a game from a folder, built the same day, for the user
+  to try. Next: 17c, the download workers and automatic updates.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

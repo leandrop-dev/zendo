@@ -143,6 +143,15 @@ fn copy_whole(
     Ok(true)
 }
 
+/// The bytes of the files under `dir`.
+///
+/// # Errors
+///
+/// When a folder cannot be read.
+pub(crate) fn size(dir: &Path) -> anyhow::Result<u64> {
+    Ok(count(dir)?.bytes)
+}
+
 /// Files (links among them) and their bytes under `dir`.
 fn count(dir: &Path) -> anyhow::Result<Count> {
     let mut total = Count::default();

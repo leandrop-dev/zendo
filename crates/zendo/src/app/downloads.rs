@@ -57,6 +57,7 @@ fn action_tag(action: Action) -> &'static str {
         Action::AddDlc => "add-dlc",
         Action::RemoveDlc => "remove-dlc",
         Action::Move => "move",
+        Action::Import => "import",
     }
 }
 
@@ -124,10 +125,20 @@ pub enum DownloadMessage {
     AskUninstall(String),
     CheckUpdate(String),
     UpdatesChecked(Vec<(String, Result<Update, String>)>),
-    /// Move pressed on a game's page: the folder dialog opens.
-    ChooseMove(String),
-    /// The folder chosen to move the game into, if one was.
-    MoveChosen(String, Result<Option<PathBuf>, String>),
+    /// Move pressed on a game's page, or Import on a store game's: the
+    /// folder dialog opens.
+    ChooseFolder(FolderFor, String),
+    /// The folder chosen, if one was.
+    FolderChosen(FolderFor, String, Result<Option<PathBuf>, String>),
+}
+
+/// What a folder is chosen for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderFor {
+    /// The folder a game Zendo installed goes into.
+    Move,
+    /// The folder a store game already is in.
+    Import,
 }
 
 /// The queue left from last time, read on a thread.
@@ -139,6 +150,18 @@ pub fn load() -> Task<Message> {
 }
 
 impl DownloadsState {
+    /// Keeps what the stores said of each game's updates.
+    fn keep_updates(&mut self, results: Vec<(String, Result<Update, String>)>) {
+        for (id, result) in results {
+            let state = match result {
+                Ok(Update::UpToDate) => UpdateState::UpToDate,
+                Ok(Update::Available { version }) => UpdateState::Available(version),
+                Err(err) => UpdateState::Failed(err),
+            };
+            self.updates.insert(id, state);
+        }
+    }
+
     /// The job for this game in the queue, and whether it is the one
     /// running.
     pub fn job_for(&self, id: &str) -> Option<(&Job, bool)> {
@@ -280,51 +303,71 @@ impl Zendo {
             }
             DownloadMessage::CheckUpdate(id) => self.check_updates(&[id]),
             DownloadMessage::UpdatesChecked(results) => {
-                for (id, result) in results {
-                    let state = match result {
-                        Ok(Update::UpToDate) => UpdateState::UpToDate,
-                        Ok(Update::Available { version }) => UpdateState::Available(version),
-                        Err(err) => UpdateState::Failed(err),
-                    };
-                    self.downloads.updates.insert(id, state);
-                }
+                self.downloads.keep_updates(results);
                 Task::none()
             }
-            DownloadMessage::ChooseMove(id) => self.choose_move(id),
-            DownloadMessage::MoveChosen(id, result) => self.move_chosen(&id, result),
+            DownloadMessage::ChooseFolder(purpose, id) => self.choose_folder(purpose, id),
+            DownloadMessage::FolderChosen(purpose, id, result) => {
+                self.folder_chosen(purpose, &id, result)
+            }
         }
     }
 
-    /// Opens the folder dialog for moving a game, unless it is running.
-    fn choose_move(&mut self, id: String) -> Task<Message> {
-        let Some(game) = self.game(&id) else {
-            return Task::none();
-        };
+    /// Opens the folder dialog to move a game (unless it is running) or to
+    /// say where a store game already is.
+    fn choose_folder(&mut self, purpose: FolderFor, id: String) -> Task<Message> {
         if !self.persist {
             return Task::none();
         }
-        if self.running.is_running(&id) {
-            self.status = Some(t!("downloads-move-running", title = game.title.as_str()));
-            return Task::none();
-        }
-        let title = t!("downloads-move-to", title = game.title.as_str());
+        let title = match purpose {
+            FolderFor::Move => {
+                let Some(game) = self.game(&id) else {
+                    return Task::none();
+                };
+                if self.running.is_running(&id) {
+                    self.status = Some(t!("downloads-move-running", title = game.title.as_str()));
+                    return Task::none();
+                }
+                t!("downloads-move-to", title = game.title.as_str())
+            }
+            FolderFor::Import => {
+                let Some(game) = self.store.owned(&id) else {
+                    return Task::none();
+                };
+                t!("downloads-import-where", title = game.title.as_str())
+            }
+        };
         Task::perform(
             blocking(move || {
                 crate::file_dialog::pick(crate::file_dialog::Kind::Folder, &title)
                     .map_err(|err| format!("{err:#}"))
             }),
-            move |result| Message::Download(DownloadMessage::MoveChosen(id.clone(), result)),
+            move |result| {
+                Message::Download(DownloadMessage::FolderChosen(purpose, id.clone(), result))
+            },
         )
     }
 
-    /// Queues the move to the folder chosen.
-    fn move_chosen(&mut self, id: &str, chosen: Result<Option<PathBuf>, String>) -> Task<Message> {
+    /// Queues the move or the import with the folder chosen.
+    fn folder_chosen(
+        &mut self,
+        purpose: FolderFor,
+        id: &str,
+        chosen: Result<Option<PathBuf>, String>,
+    ) -> Task<Message> {
         match chosen {
             Ok(Some(folder)) => {
-                let Some(job) = self.game(id).and_then(|game| Job::for_move(game, folder)) else {
-                    return Task::none();
+                let job = match purpose {
+                    FolderFor::Move => self.game(id).and_then(|game| Job::for_move(game, folder)),
+                    FolderFor::Import => self
+                        .store
+                        .owned(id)
+                        .and_then(|game| Job::import(game, folder)),
                 };
-                self.update(Message::Download(DownloadMessage::Queue(job)))
+                match job {
+                    Some(job) => self.update(Message::Download(DownloadMessage::Queue(job))),
+                    None => Task::none(),
+                }
             }
             Ok(None) => Task::none(),
             Err(err) => {

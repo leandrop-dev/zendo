@@ -15,7 +15,7 @@ use zendo_core::launch;
 use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source};
 
-use super::downloads::{DownloadMessage, UpdateState, action_doing_alone, update_line};
+use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alone, update_line};
 use super::steam_installs::SteamInstallMessage;
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
@@ -237,15 +237,17 @@ impl Zendo {
                     .on_press_maybe(free.then(|| queue(game, Action::Repair)).flatten()),
             );
             let movable = free && !self.running.is_running(&game.id);
-            more =
-                more.push(
-                    button(text(t!("downloads-move")).size(14))
-                        .padding([8, 14])
-                        .style(style::secondary)
-                        .on_press_maybe(movable.then(|| {
-                            Message::Download(DownloadMessage::ChooseMove(game.id.clone()))
-                        })),
-                );
+            more = more.push(
+                button(text(t!("downloads-move")).size(14))
+                    .padding([8, 14])
+                    .style(style::secondary)
+                    .on_press_maybe(movable.then(|| {
+                        Message::Download(DownloadMessage::ChooseFolder(
+                            FolderFor::Move,
+                            game.id.clone(),
+                        ))
+                    })),
+            );
             let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
             more =
                 more.push(if confirming {

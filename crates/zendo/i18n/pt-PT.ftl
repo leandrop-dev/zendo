@@ -840,6 +840,7 @@ action-label = { $action ->
     [add-dlc] Instalar DLC
     [remove-dlc] Desinstalar DLC
     [move] Mover
+    [import] Importar
    *[uninstall] Desinstalar
 }
 action-doing = { $action ->
@@ -851,6 +852,7 @@ action-doing = { $action ->
     [add-dlc-alone] A instalar DLC
     [remove-dlc-alone] A desinstalar DLC
     [move] A mover
+    [import] A importar
    *[uninstall] A desinstalar
 }
 downloads-paused-count = { $count ->
@@ -906,6 +908,8 @@ downloads-move = Mover…
 downloads-move-to = Mover { $title } para…
 downloads-move-running = { $title } está aberto; feche-o e depois mova-o
 downloads-moving-wait = { $title } está a ser movido; espere que termine
+downloads-import = Importar de uma pasta…
+downloads-import-where = Onde está { $title }?
 downloads-left = faltam { $time }
 downloads-starting = A iniciar { $engine }…
 downloads-failed = Falhou: { $error }

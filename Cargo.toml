@@ -16,6 +16,9 @@ base64 = "0.23.1"
 # names the languages, sys-locale finds the system's (cosmic-text already
 # brings it).
 fluent-bundle = "0.16.0"
+# GOG's zlib-packed manifests, remade when a game is imported; already in
+# the build through ureq.
+flate2 = "1.1.10"
 gilrs = "0.11.2"
 # GTK 3, the version wry builds its Linux web view on.
 gtk = "0.18"

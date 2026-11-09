@@ -826,6 +826,7 @@ action-label = { $action ->
     [add-dlc] Install DLC
     [remove-dlc] Uninstall DLC
     [move] Move
+    [import] Import
    *[uninstall] Uninstall
 }
 action-doing = { $action ->
@@ -837,6 +838,7 @@ action-doing = { $action ->
     [add-dlc-alone] Installing DLC
     [remove-dlc-alone] Uninstalling DLC
     [move] Moving
+    [import] Importing
    *[uninstall] Uninstalling
 }
 downloads-paused-count = { $count ->
@@ -892,6 +894,8 @@ downloads-move = Move…
 downloads-move-to = Move { $title } to…
 downloads-move-running = { $title } is running; close it, then move it
 downloads-moving-wait = { $title } is moving; wait for it to finish
+downloads-import = Import from a folder…
+downloads-import-where = Where is { $title }?
 downloads-left = { $time } left
 downloads-starting = Starting { $engine }…
 downloads-failed = Failed: { $error }

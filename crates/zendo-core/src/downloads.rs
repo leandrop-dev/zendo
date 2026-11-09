@@ -36,7 +36,7 @@ use crate::moving::{self, Moved};
 use crate::owned::{self, Owned, StoreKey};
 use crate::stores::Store;
 use crate::{Details, Game, Launch, Scan, Source, paths};
-use crate::{gog_setup, info, mods};
+use crate::{gog_import, gog_setup, info, mods};
 
 /// The language gogdl downloads; Heroic asks the user, Zendo does not yet.
 pub(crate) const GOG_LANGUAGE: &str = "en-US";
@@ -60,6 +60,8 @@ pub enum Action {
     RemoveDlc,
     /// Moving a game Zendo installed to another folder ([`Job::to`]).
     Move,
+    /// Taking a game already on disk, in [`Job::path`], as Zendo's own.
+    Import,
 }
 
 impl Action {
@@ -73,6 +75,7 @@ impl Action {
             Self::AddDlc => "Install DLC",
             Self::RemoveDlc => "Uninstall DLC",
             Self::Move => "Move",
+            Self::Import => "Import",
         }
     }
 
@@ -86,6 +89,7 @@ impl Action {
             Self::AddDlc => "Installing DLC",
             Self::RemoveDlc => "Uninstalling DLC",
             Self::Move => "Moving",
+            Self::Import => "Importing",
         }
     }
 }
@@ -102,7 +106,7 @@ pub struct Job {
     /// `windows`, `linux` or `osx` for gogdl.
     pub platform: String,
     /// For an install, the folder the game's own folder is made in;
-    /// otherwise the game's folder.
+    /// otherwise the game's folder (for an import, the one chosen).
     pub path: PathBuf,
     /// For an install, the game's own folder, once the job has started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,6 +165,15 @@ impl Job {
             dlc,
             to: None,
         })
+    }
+
+    /// Importing a store game from `folder`, the game's own folder, with
+    /// the DLC the engine finds there.
+    #[must_use]
+    pub fn import(game: &Owned, folder: PathBuf) -> Option<Self> {
+        let mut job = Self::install(game, folder, Vec::new())?;
+        job.action = Action::Import;
+        Some(job)
     }
 
     /// Installing or uninstalling DLC of a game Zendo installed from Epic
@@ -359,6 +372,7 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
     let store = job.store();
     let ended = match (store, job.action) {
         (_, Action::Move) => move_game(job, stop, report)?,
+        (_, Action::Import) => import_game(job, stop, report)?,
         (Store::Gog, Action::Install) => gog_install(job, stop, report)?,
         (Store::Gog, Action::Update | Action::Repair | Action::AddDlc | Action::RemoveDlc) => {
             gog_refresh(job, stop, report)?
@@ -512,8 +526,9 @@ fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
         (Store::Amazon, Action::Update) => vec!["update", &app],
         (Store::Amazon, Action::Repair) => vec!["verify", &app],
         (Store::Amazon, Action::Uninstall) => vec!["uninstall", &app],
-        (Store::Gog, _) | (_, Action::AddDlc | Action::RemoveDlc | Action::Move) => {
-            unreachable!("gogdl's jobs, DLC jobs and moves have their own steps")
+        (Store::Gog, _)
+        | (_, Action::AddDlc | Action::RemoveDlc | Action::Move | Action::Import) => {
+            unreachable!("gogdl's jobs, DLC jobs, moves and imports have their own steps")
         }
     };
     words.into_iter().map(str::to_owned).collect()
@@ -528,6 +543,17 @@ fn engine(
     stop: &Stop,
     report: &mut dyn FnMut(Event),
 ) -> anyhow::Result<Ended> {
+    Ok(engine_told(store, args, stop, report)?.0)
+}
+
+/// As [`engine`], with the last error the engine logged when it ended
+/// well: legendary and nile end well when they refuse.
+fn engine_told(
+    store: Store,
+    args: &[String],
+    stop: &Stop,
+    report: &mut dyn FnMut(Event),
+) -> anyhow::Result<(Ended, Option<String>)> {
     let mut command = store.command()?;
     command
         .args(args)
@@ -607,7 +633,7 @@ fn engine(
         .wait()
         .with_context(|| format!("{} did not end cleanly", store.engine_name()))?;
     if stop.asked() {
-        return Ok(Ended::Stopped);
+        return Ok((Ended::Stopped, None));
     }
     if !status.success() {
         bail!(
@@ -616,7 +642,7 @@ fn engine(
             reason(&tail, &status.to_string())
         );
     }
-    Ok(Ended::Done)
+    Ok((Ended::Done, last_error(&tail)))
 }
 
 /// Sends a signal to the engine's process group: `-INT` as Ctrl+C in a
@@ -633,23 +659,33 @@ fn signal_group(pid: u32, signal: &str) {
 /// The line that says why an engine failed: the last error it logged, or
 /// else its last line.
 fn reason(tail: &VecDeque<String>, status: &str) -> String {
-    let line = tail
-        .iter()
+    last_error(tail)
+        .or_else(|| tail.back().map(|line| clean(line)))
+        .unwrap_or_else(|| format!("failed ({status})"))
+}
+
+/// The last error line in an engine's log, without its level and module.
+fn last_error(tail: &VecDeque<String>) -> Option<String> {
+    tail.iter()
         .rev()
         .find(|line| line.contains("ERROR") || line.contains("CRITICAL") || line.contains("Error"))
-        .or_else(|| tail.back())
-        .map_or_else(
-            || format!("failed ({status})"),
-            |line| line.trim().to_owned(),
-        );
-    // legendary and gogdl start each line with `[module] LEVEL: `.
-    let line = line
-        .split_once("] ")
-        .map_or(line.as_str(), |(_, rest)| rest);
+        .map(|line| clean(line))
+}
+
+/// A log line without what comes before the message: legendary and
+/// gogdl's `[module] LEVEL: `, nile's `LEVEL [MODULE]:\t`.
+fn clean(line: &str) -> String {
+    let line = line.trim();
+    let line = line.split_once("] ").map_or(line, |(_, rest)| rest);
     let line = ["ERROR: ", "CRITICAL: "]
         .iter()
         .find_map(|level| line.strip_prefix(level))
         .unwrap_or(line);
+    let line = ["ERROR [", "CRITICAL ["]
+        .iter()
+        .find_map(|level| line.strip_prefix(level))
+        .and_then(|rest| rest.split_once("]:"))
+        .map_or(line, |(_, message)| message.trim());
     line.chars().take(240).collect()
 }
 
@@ -660,6 +696,9 @@ fn gog_args(job: &Job, verb: &str, path: &Path, dlc: &[String]) -> anyhow::Resul
         .context("no home folder for gogdl's files")?
         .join("support")
         .join(&job.app);
+    // An imported game keeps the language it was installed in.
+    let language =
+        gog_record_field(&job.app, "language").unwrap_or_else(|| GOG_LANGUAGE.to_owned());
     let mut args: Vec<String> = [
         verb,
         &job.app,
@@ -670,7 +709,7 @@ fn gog_args(job: &Job, verb: &str, path: &Path, dlc: &[String]) -> anyhow::Resul
         "--support",
         &support.to_string_lossy(),
         "--lang",
-        GOG_LANGUAGE,
+        &language,
     ]
     .into_iter()
     .map(str::to_owned)
@@ -805,12 +844,17 @@ fn forget_gog_manifest(app: &str) {
 
 /// The GOG build Zendo installed, from its record.
 pub(crate) fn gog_build(app: &str) -> Option<String> {
+    gog_record_field(app, "buildId")
+}
+
+/// One text field of Zendo's record of a GOG game.
+fn gog_record_field(app: &str, field: &str) -> Option<String> {
     read_gog_records()
         .ok()?
         .1
         .iter()
         .find(|record| is_record_of(record, app))?
-        .get("buildId")?
+        .get(field)?
         .as_str()
         .map(str::to_owned)
 }
@@ -1153,6 +1197,92 @@ fn record_move(job: &Job, new: &Path, report: &mut dyn FnMut(Event)) -> anyhow::
         );
     }
     Ok(())
+}
+
+/// Takes the game in [`Job::path`] as Zendo's own: legendary's and nile's
+/// `import`, which check the files against the store's list; for GOG,
+/// what gogdl reads in the folder, the manifest of that build and Zendo's
+/// record. Nothing in the folder is changed or deleted, whatever happens.
+fn import_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
+    let store = job.store();
+    let folder = &job.path;
+    if !folder.is_dir() {
+        bail!("{} is not a folder", folder.display());
+    }
+    if installs(store).iter().any(|game| game.app == job.app) {
+        bail!("Zendo has {} installed already", job.title);
+    }
+    let taken = Store::ALL
+        .into_iter()
+        .flat_map(installs)
+        .filter_map(|game| game.install.path)
+        .find(|path| path.starts_with(folder) || folder.starts_with(path));
+    if let Some(taken) = taken {
+        bail!("{} holds another game of Zendo's", taken.display());
+    }
+    report(Event::Step("Checking the game's files…".to_owned()));
+    let path = folder.to_string_lossy().into_owned();
+    let words: Vec<&str> = match store {
+        Store::Epic => vec![
+            "import",
+            &job.app,
+            &path,
+            "--with-dlcs",
+            "--platform",
+            &job.platform,
+            "-y",
+        ],
+        Store::Amazon => vec!["import", "--path", &path, &job.app],
+        Store::Gog => {
+            gog_import(job, folder, report)?;
+            return Ok(Ended::Done);
+        }
+    };
+    let args: Vec<String> = words.into_iter().map(str::to_owned).collect();
+    let (ended, error) = engine_told(store, &args, stop, report)?;
+    if ended == Ended::Done && !installs(store).iter().any(|game| game.app == job.app) {
+        bail!(
+            "{} did not import {}: {}",
+            store.engine_name(),
+            job.title,
+            error.unwrap_or_else(|| "it gave no reason".to_owned())
+        );
+    }
+    Ok(ended)
+}
+
+/// Imports a GOG game: the folder must hold this game, then gogdl's
+/// manifest is remade and Zendo's record written with the folder's build,
+/// language and DLC.
+fn gog_import(job: &Job, folder: &Path, report: &mut dyn FnMut(Event)) -> anyhow::Result<()> {
+    let found = gog_import::read_folder(folder)?;
+    if found.app.as_deref() != Some(job.app.as_str()) {
+        bail!(
+            "{} holds {}, not {}",
+            folder.display(),
+            found.title.as_deref().unwrap_or("another game"),
+            job.title
+        );
+    }
+    report(Event::Step(
+        "Asking GOG for the game's list of files…".to_owned(),
+    ));
+    gog_import::restore_manifest(&job.app, &found)?;
+    let size = moving::size(folder).ok().filter(|size| *size > 0);
+    let (file, mut records) = read_gog_records()?;
+    records.retain(|record| !is_record_of(record, &job.app));
+    records.push(serde_json::json!({
+        "appName": job.app,
+        "platform": found.platform,
+        "install_path": folder,
+        "install_size": size,
+        "version": found.version,
+        "buildId": found.build,
+        "language": found.language.as_deref().unwrap_or(GOG_LANGUAGE),
+        "is_dlc": false,
+        "installedDLCs": found.dlcs,
+    }));
+    write_gog_records(&file, &records)
 }
 
 /// legendary's apps installed in a folder: the game and its DLC, which
@@ -1556,6 +1686,49 @@ mod tests {
         assert_eq!(progress.written, Some((256 << 20, 1 << 30)));
         // An empty game is done at once.
         assert_eq!(copy_progress(0, 0, Duration::ZERO).percent, Some(100.0));
+    }
+
+    #[test]
+    fn an_import_takes_the_folder_chosen_as_the_games() {
+        let game = Owned::new(Store::Epic, "Sugar", "Sugar Rush".into());
+        let job = Job::import(&game, "/mnt/old/Sugar Rush".into()).unwrap();
+        assert_eq!(job.action, Action::Import);
+        assert_eq!(job.path, Path::new("/mnt/old/Sugar Rush"));
+        assert_eq!(job.platform, "Windows");
+        assert!(job.dlc.is_empty() && job.to.is_none());
+        let json = serde_json::to_string(&job).unwrap();
+        assert!(json.contains(r#""action":"import""#), "{json}");
+    }
+
+    #[test]
+    fn says_why_an_engine_refused() {
+        let tail: VecDeque<String> = [
+            "[cli] INFO: Loading installed games...",
+            "[cli] ERROR: Game executable could not be found at \"/g/Game.exe\", please verify that the specified path is correct.",
+            "[cli] INFO: Goodbye",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        assert_eq!(
+            last_error(&tail).as_deref(),
+            Some(
+                "Game executable could not be found at \"/g/Game.exe\", please verify that the specified path is correct."
+            )
+        );
+        // nile's own shape.
+        let nile: VecDeque<String> =
+            ["ERROR [IMPORT]:\tThere are missing or corrupted files for Sugar. Failed import."]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+        assert_eq!(
+            last_error(&nile).as_deref(),
+            Some("There are missing or corrupted files for Sugar. Failed import.")
+        );
+        let quiet: VecDeque<String> = ["[cli] INFO: Finished.".to_owned()].into();
+        assert_eq!(last_error(&quiet), None);
+        assert_eq!(reason(&quiet, "exit 1"), "INFO: Finished.");
     }
 
     #[test]

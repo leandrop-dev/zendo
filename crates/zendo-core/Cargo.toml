@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 base64.workspace = true
+flate2.workspace = true
 keyvalues-parser.workspace = true
 roxmltree.workspace = true
 secret-service.workspace = true
