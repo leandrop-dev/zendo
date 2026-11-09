@@ -19,6 +19,7 @@ pub mod eos_overlay;
 pub mod fomod;
 pub mod galaxy;
 pub mod ge_proton;
+pub mod gog_changelog;
 mod gog_import;
 pub mod gog_playtime;
 pub mod gog_setup;

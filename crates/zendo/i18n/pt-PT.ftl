@@ -831,6 +831,14 @@ dlc-not-installed = Não instalado
 dlc-in-heroic = O Heroic instala e remove estes.
 dlc-sign-in = Inicie sessão na { $store } em Contas para ver todos os DLC que tem.
 dlc-asking = A perguntar à loja pelos DLC que tem…
+
+## The changelog card on a GOG game's page
+
+changelog-title = Registo de alterações
+changelog-earlier = { $count ->
+    [one] Mostrar a atualização anterior
+   *[other] Mostrar atualizações anteriores (mais { $count })
+}
 store-no-home = Não há pasta pessoal onde instalar
 store-back = ← Loja
 

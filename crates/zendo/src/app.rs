@@ -13,6 +13,7 @@ mod downloads;
 mod eos_overlay;
 mod format;
 mod game;
+mod gog_changelog;
 mod gog_playtime;
 mod installer;
 mod launch_options;
@@ -242,6 +243,11 @@ enum Message {
     Prefix(prefix::PrefixMessage),
     /// GOG's total for a game, in minutes.
     GogTotal(String, Result<Option<u64>, String>),
+    /// GOG's changelog for a game.
+    GogChangelog(
+        String,
+        Result<Vec<zendo_core::gog_changelog::Entry>, String>,
+    ),
     Store(StoreMessage),
     GameView(GameViewMessage),
     /// Ctrl+V with no field focused: the clipboard goes to the field the
@@ -323,6 +329,8 @@ struct Zendo {
     prefix: prefix::PrefixState,
     /// The GOG games whose total GOG was asked for, this session.
     gog_totals: std::collections::HashSet<String>,
+    /// GOG's changelogs asked for this session, by game.
+    changelogs: std::collections::HashMap<String, gog_changelog::Changelog>,
     config: Config,
     /// The window's colours and where they come from.
     themes: Themes,
@@ -375,6 +383,7 @@ impl Zendo {
             ratings: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
+            changelogs: std::collections::HashMap::new(),
             config: Config::default(),
             themes: Themes::default(),
             key: KeyForm::default(),
@@ -600,6 +609,7 @@ impl Zendo {
             Message::Rating(id, result) => self.rating_arrived(id, result),
             Message::Prefix(message) => self.update_prefix(message),
             Message::GogTotal(id, result) => self.gog_total_arrived(&id, &result),
+            Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),
             Message::Pasted(Some(pasted)) => self.pasted(&pasted),
             Message::Pad(_) if !self.focused => Task::none(),
@@ -678,6 +688,7 @@ impl Zendo {
                     self.want_info(&id),
                     self.want_rating(&id),
                     self.want_gog_total(&id),
+                    self.want_changelog(&id),
                     self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])
@@ -765,6 +776,7 @@ impl Zendo {
                     self.want_info(&id),
                     self.want_rating(&id),
                     self.want_gog_total(&id),
+                    self.want_changelog(&id),
                     self.want_known_fixes(&id),
                     self.want_mods(&id),
                 ])

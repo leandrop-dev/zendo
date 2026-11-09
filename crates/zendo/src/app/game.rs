@@ -1,6 +1,6 @@
 //! A game's page: its wide art with the title over it, one bar of actions,
-//! then what it is about, its DLC and mods beside a short panel of details,
-//! with the technical ones folded under it.
+//! then what it is about, its DLC, mods and GOG changelog beside a short
+//! panel of details, with the technical ones folded under it.
 
 use std::f32::consts::{FRAC_PI_2, PI};
 use std::path::Path;
@@ -39,6 +39,8 @@ pub struct GameView {
     pub(super) technical: bool,
     /// The DLC whose Uninstall was pressed once.
     pub(super) confirm_dlc: Option<String>,
+    /// How many changelog entries are shown beyond the newest.
+    pub(super) changelog_more: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +49,8 @@ pub enum GameViewMessage {
     ToggleTechnical,
     /// Uninstall pressed once on a DLC: pressed again, it goes.
     AskRemoveDlc(String),
+    /// Show earlier updates, on the changelog card.
+    MoreChangelog,
 }
 
 impl Zendo {
@@ -56,6 +60,7 @@ impl Zendo {
             GameViewMessage::ToggleMore => view.more = !view.more,
             GameViewMessage::ToggleTechnical => view.technical = !view.technical,
             GameViewMessage::AskRemoveDlc(id) => view.confirm_dlc = Some(id),
+            GameViewMessage::MoreChangelog => view.changelog_more += super::gog_changelog::MORE,
         }
         Task::none()
     }
@@ -99,6 +104,9 @@ impl Zendo {
         }
         if let Some(prefix) = self.prefix_card(game) {
             main.push(prefix);
+        }
+        if let Some(changelog) = self.changelog_card(game) {
+            main.push(changelog);
         }
         let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
 

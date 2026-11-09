@@ -2173,6 +2173,33 @@ brackets):
     running game waiting and starting once it is closed). Not tried yet
     in the window; no game has an update now (Cyberpunk 2077's newest GOG
     build is the one installed).
+    17d, built 2026-11-09 (`gog_changelog.rs` in both crates). Checked
+    first (Heroic 2.22.4's bundle, GOG's answers; facts only): Heroic asks
+    `api.gog.com/products/<id>?expand=changelog&locale=…` with the game's
+    extra info and shows the HTML as it is in a dialog (Show Changelog).
+    GOG answers without a token; `changelog` is `null` for 54 of the
+    user's 113 GOG games and 68 bytes to 250 KB of HTML for the rest
+    (Cyberpunk 2077's). In all 59, entries are split by `<hr>` and open
+    with an `<h4>` naming the update; later `<h4>`/`<h5>` and paragraphs
+    all in bold name parts of an entry; the rest is `<p>`, `<ul>`/`<li>`,
+    `<br>`, inline tags, and some developers write one change a line in a
+    paragraph (Jupiter Hell). An unknown product answers 404.
+    Zendo [tentative]: a Changelog card on a GOG game's page, after the
+    other cards of the main column, asked once a session as the page
+    opens and not shown when GOG has none (a 404 counts as none; a
+    failure is forgotten, so the page asks again). The HTML is read into
+    entries (title, part headings, paragraphs, list items; line breaks in
+    a paragraph kept, character references written out, other tags
+    dropped with their text kept), not shown as HTML. The newest entry
+    shows; Show earlier updates adds three each time, back to the newest
+    one when the page opens again. No locale is sent: the changelogs are
+    the developers' own text. Checked: clippy, tests (Cyberpunk's,
+    Frostpunk's, Bō's and Jupiter Hell's shapes, references, stray `<key>`
+    text, the card's states); all 59 real changelogs read with a title
+    for every entry and no tags left; fetched for real (Cyberpunk 2077:
+    28 entries, Fallout: none, an unknown id: none); in a throwaway home
+    with Cyberpunk 2077's record, a build with the card moved up for the
+    screenshot showed Patch 2.5 with its parts and lists.
 18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
@@ -2248,8 +2275,10 @@ by the user 2026-11-09:
   Item 17, managing installs, split by the user (17a to 17d) the same
   day; 17a, moving a game, built the same day and tried by the user.
   17b, importing a game from a folder, built the same day. 17c, the
-  download workers and automatic updates, built the same day, for the
-  user to try. Next: 17d, GOG's changelog on the game page.
+  download workers and automatic updates, built the same day and taken
+  as working by the user. 17d, GOG's changelog on the game page, built
+  the same day, for the user to try. Next: item 18, what the game page
+  tells.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

@@ -150,6 +150,8 @@ install it and give it its colours, but it runs on any Linux desktop.
   and the DLC card on an Epic or GOG game's page installs or uninstalls
   each, or all. Heroic's games show their DLC; Heroic installs those.
   Amazon's engine, nile, has no DLC.
+- Shows GOG's changelog on a GOG game's page, when the developer wrote
+  one: the newest update first, earlier ones on asking.
 - Starts the games it installed through their engine, Windows games with
   Proton through umu-launcher, each in a Wine prefix of its own
   (`<install_dir>/Prefixes/<title>`), with each launch's output kept in a
