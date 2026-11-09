@@ -1,11 +1,14 @@
 //! A game's launch options sheet, over its page: the Proton it runs with,
 //! `MangoHud`, `GameMode`, gamescope, NVIDIA offload, Proton's switches
 //! (controllers as Xbox pads, Wine's Wayland driver, HDR, FSR, `WoW64`,
-//! esync and fsync off, DXVK's counter and frame cap), and the game's
-//! arguments and environment. Only for the games Zendo starts itself;
-//! Steam and Heroic keep their own settings.
+//! esync and fsync off, DXVK's counter and frame cap), the game's
+//! arguments and environment, and scripts before and after it; for Epic
+//! and GOG games, the program run instead of the store's and the other
+//! ways to start it the store lists. Only for the games Zendo starts
+//! itself; Steam and Heroic keep their own settings.
 
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 use iced::widget::{
     button, center, column, container, opaque, pick_list, row, scrollable, space, text, text_input,
@@ -13,10 +16,11 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Color, Element, Length, Task};
 use zendo_core::launch_options::{self, LaunchOptions};
-use zendo_core::{Game, Launch, launch, proton};
+use zendo_core::store_tasks::{self, StoreTask};
+use zendo_core::{Game, Launch, Source, launch, proton};
 
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo};
+use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
 #[derive(Debug)]
@@ -35,7 +39,67 @@ pub struct Sheet {
     /// script never reads.
     build: Option<(String, Vec<&'static str>)>,
     tools: Tools,
+    /// An Epic or GOG game: its engine runs another program when asked,
+    /// and its store may list other ways to start it.
+    store_game: bool,
+    /// The game's folder, which a program picked is kept relative to.
+    folder: Option<PathBuf>,
+    executable: String,
+    /// The store's own way first.
+    tasks: Vec<TaskChoice>,
+    picking: bool,
     error: Option<String>,
+}
+
+/// An entry of the list of ways to start the game: the store's own
+/// (`None`) or another it lists, by its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskChoice {
+    key: Option<String>,
+    label: String,
+}
+
+impl fmt::Display for TaskChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
+}
+
+/// The store's own way, then the others it lists, then the one chosen
+/// when the store no longer lists it.
+fn task_choices(listed: Vec<StoreTask>, chosen: Option<&str>) -> Vec<TaskChoice> {
+    let mut choices = vec![TaskChoice {
+        key: None,
+        label: t!("options-task-default"),
+    }];
+    choices.extend(listed.into_iter().map(|task| TaskChoice {
+        label: if task.detail.is_empty() {
+            task.name
+        } else {
+            format!("{} ({})", task.name, task.detail)
+        },
+        key: Some(task.key),
+    }));
+    if let Some(chosen) = chosen
+        && !choices
+            .iter()
+            .any(|choice| choice.key.as_deref() == Some(chosen))
+    {
+        choices.push(TaskChoice {
+            key: Some(chosen.to_owned()),
+            label: t!("options-task-gone", name = chosen),
+        });
+    }
+    choices
+}
+
+/// A program picked, as kept: relative to the game's folder when in it.
+fn kept_program(folder: Option<&Path>, picked: &Path) -> String {
+    folder
+        .and_then(|folder| picked.strip_prefix(folder).ok())
+        .unwrap_or(picked)
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// The variables of Proton's switches its script reads, checked against
@@ -160,6 +224,12 @@ pub enum SheetMessage {
     NvidiaOffload(bool),
     Arguments(String),
     Environment(String),
+    StoreTask(TaskChoice),
+    Executable(String),
+    BrowseExecutable,
+    Browsed(Result<Option<PathBuf>, String>),
+    Before(String),
+    After(String),
     Save,
     Close,
 }
@@ -246,8 +316,55 @@ impl Zendo {
             SheetMessage::NvidiaOffload(on) => options.nvidia_offload = on,
             SheetMessage::Arguments(arguments) => options.arguments = arguments,
             SheetMessage::Environment(environment) => options.environment = environment,
+            SheetMessage::StoreTask(_)
+            | SheetMessage::Executable(_)
+            | SheetMessage::BrowseExecutable
+            | SheetMessage::Browsed(_)
+            | SheetMessage::Before(_)
+            | SheetMessage::After(_) => return self.update_starting(message),
             SheetMessage::Save => return self.save_sheet(),
             SheetMessage::Close => self.sheet = None,
+        }
+        Task::none()
+    }
+
+    /// The program, the store's way to start the game, and the scripts.
+    fn update_starting(&mut self, message: SheetMessage) -> Task<Message> {
+        let Some(sheet) = self.sheet.as_mut() else {
+            return Task::none();
+        };
+        match message {
+            SheetMessage::StoreTask(choice) => sheet.options.task = choice.key,
+            SheetMessage::Executable(program) => sheet.executable = program,
+            SheetMessage::BrowseExecutable => {
+                if sheet.picking {
+                    return Task::none();
+                }
+                sheet.picking = true;
+                return Task::perform(
+                    blocking(|| {
+                        crate::file_dialog::pick(
+                            crate::file_dialog::Kind::Program,
+                            &t!("options-executable-choose"),
+                        )
+                        .map_err(|err| format!("{err:#}"))
+                    }),
+                    |result| Message::Sheet(SheetMessage::Browsed(result)),
+                );
+            }
+            SheetMessage::Browsed(result) => {
+                sheet.picking = false;
+                match result {
+                    Ok(Some(path)) => {
+                        sheet.executable = kept_program(sheet.folder.as_deref(), &path);
+                    }
+                    Ok(None) => {}
+                    Err(err) => sheet.error = Some(err),
+                }
+            }
+            SheetMessage::Before(line) => sheet.options.before = line,
+            SheetMessage::After(line) => sheet.options.after = line,
+            _ => {}
         }
         Task::none()
     }
@@ -298,6 +415,8 @@ impl Zendo {
         };
         let windows = matches!(game.launch, Launch::Engine { .. } | Launch::Local { .. })
             && launch::needs_proton(&game);
+        let store_game = matches!(game.launch, Launch::Engine { .. })
+            && matches!(game.source, Source::Epic | Source::Gog);
         self.sheet = Some(Sheet {
             id: game.id.clone(),
             title: game.title.clone(),
@@ -321,6 +440,15 @@ impl Zendo {
             } else {
                 None
             },
+            store_game,
+            folder: game.details.install_path.clone(),
+            executable: options.executable.clone().unwrap_or_default(),
+            tasks: if store_game {
+                task_choices(store_tasks::listed(&game), options.task.as_deref())
+            } else {
+                Vec::new()
+            },
+            picking: false,
             options,
             tools: Tools::find(),
             error: None,
@@ -336,6 +464,8 @@ impl Zendo {
         options.gamescope_width = number(&sheet.width);
         options.gamescope_height = number(&sheet.height);
         options.frame_cap = number(&sheet.frame_cap);
+        options.executable = Some(sheet.executable.trim().to_owned())
+            .filter(|program| sheet.store_game && !program.is_empty());
         if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
             sheet.error = Some(t!("options-size-both"));
             return Task::none();
@@ -404,6 +534,10 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         ));
     }
 
+    if sheet.store_game {
+        body = body.push(starting(sheet));
+    }
+
     let mangohud_ready = if options.gamescope {
         tools.mangoapp
     } else {
@@ -445,6 +579,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         body = body.push(proton_switches(sheet));
     }
     body = body.push(text_fields(options));
+    body = body.push(scripts(options));
     if let Some(error) = &sheet.error {
         body = body.push(text(error).size(13).color(colors().bad));
     }
@@ -564,6 +699,82 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
             SheetMessage::NoSync,
         ))
         .into()
+}
+
+/// What starts: the store's way or another it lists, and the program run
+/// instead of the store's.
+fn starting(sheet: &Sheet) -> Element<'_, Message> {
+    let tasks: Element<'_, Message> = if sheet.tasks.len() > 1 {
+        let selected = sheet
+            .tasks
+            .iter()
+            .find(|choice| choice.key == sheet.options.task)
+            .cloned();
+        pick_list(sheet.tasks.as_slice(), selected, |choice| {
+            Message::Sheet(SheetMessage::StoreTask(choice))
+        })
+        .text_size(14)
+        .padding([8, 12])
+        .width(Length::Fill)
+        .into()
+    } else {
+        text(t!("options-task-none"))
+            .size(14)
+            .color(colors().dim)
+            .into()
+    };
+    let browse = button(text(t!("options-executable-browse")).size(14))
+        .padding([8, 14])
+        .style(style::secondary)
+        .on_press_maybe((!sheet.picking).then_some(Message::Sheet(SheetMessage::BrowseExecutable)));
+    column![
+        field(t!("options-task"), t!("options-task-about"), tasks),
+        field(
+            t!("options-executable"),
+            t!("options-executable-about"),
+            row![
+                text_input(&t!("options-executable-empty"), &sheet.executable)
+                    .on_input(|value| Message::Sheet(SheetMessage::Executable(value)))
+                    .on_submit(Message::Sheet(SheetMessage::Save))
+                    .size(14)
+                    .padding([8, 12])
+                    .style(style::input),
+                browse,
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
+        ),
+    ]
+    .spacing(18)
+    .into()
+}
+
+/// Commands before the game starts and after it ends.
+fn scripts(options: &LaunchOptions) -> Element<'_, Message> {
+    column![
+        field(
+            t!("options-before"),
+            t!("options-before-about"),
+            text_input("notify-send 'Starting'", &options.before)
+                .on_input(|value| Message::Sheet(SheetMessage::Before(value)))
+                .on_submit(Message::Sheet(SheetMessage::Save))
+                .size(14)
+                .padding([8, 12])
+                .style(style::input),
+        ),
+        field(
+            t!("options-after"),
+            t!("options-after-about"),
+            text_input("~/bin/back-up-saves", &options.after)
+                .on_input(|value| Message::Sheet(SheetMessage::After(value)))
+                .on_submit(Message::Sheet(SheetMessage::Save))
+                .size(14)
+                .padding([8, 12])
+                .style(style::input),
+        ),
+    ]
+    .spacing(18)
+    .into()
 }
 
 /// FSR's sharpening, under its switch.
@@ -802,6 +1013,51 @@ mod tests {
         let _ = zendo.update(Message::Activate);
         assert!(zendo.sheet.is_none(), "saved");
         assert_eq!(Sharpening(0).to_string(), "0 (sharpest)");
+    }
+
+    #[test]
+    fn keeps_the_program_the_way_to_start_and_the_scripts() {
+        let mut zendo = zendo_with(gog_game());
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        let sheet = zendo.sheet.as_ref().unwrap();
+        assert!(sheet.store_game);
+        assert_eq!(sheet.tasks.len(), 1, "the store's own only");
+        for message in [
+            SheetMessage::Executable("  bin/x64/game.exe ".into()),
+            SheetMessage::Before("notify-send hi".into()),
+            SheetMessage::After("true".into()),
+        ] {
+            let _ = zendo.update(Message::Sheet(message));
+        }
+        let _ = zendo.update(Message::Activate);
+        assert!(zendo.sheet.is_none(), "saved");
+
+        let listed = vec![StoreTask {
+            key: "bin\\x64\\game.exe".into(),
+            name: "Game".into(),
+            detail: "bin/x64/game.exe".into(),
+        }];
+        let choices = task_choices(listed, Some("old.exe"));
+        let labels: Vec<String> = choices.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            labels,
+            [
+                "The store's own",
+                "Game (bin/x64/game.exe)",
+                "old.exe (no longer listed; the store's own runs)"
+            ]
+        );
+        assert_eq!(
+            kept_program(
+                Some(Path::new("/games/Sugar")),
+                Path::new("/games/Sugar/bin/sugar")
+            ),
+            "bin/sugar"
+        );
+        assert_eq!(
+            kept_program(Some(Path::new("/games/Sugar")), Path::new("/opt/x")),
+            "/opt/x"
+        );
     }
 
     #[test]

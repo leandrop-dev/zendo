@@ -150,8 +150,15 @@ install it and give it its colours, but it runs on any Linux desktop.
   others, Wine's Wayland driver, HDR, Wine's FSR with its sharpening,
   DXVK's FPS counter, a frame cap, WoW64, and esync and fsync off. A
   switch the chosen Proton build does not read says so (CachyOS's
-  Proton has no `PROTON_NO_ESYNC`). Steam and Heroic games keep their
-  launcher's own settings.
+  Proton has no `PROTON_NO_ESYNC`). A command can run before the game
+  (which waits for it, and does not start if it fails) and after it
+  ends, with `ZENDO_GAME_ID`, `ZENDO_GAME_TITLE`, `ZENDO_GAME_FOLDER` and
+  the game's `WINEPREFIX`. Epic and GOG games can run another program in
+  their folder instead of the store's, and start another way their store
+  lists: GOG's play tasks (Cyberpunk 2077's game without its launcher)
+  and Epic's extra launch options (Rocket League without its
+  anti-cheat). Steam and Heroic games keep their launcher's own
+  settings.
 - Downloads GE-Proton from Settings: the latest releases, and older ones
   on asking, checked against their checksums, into Steam's compatibility
   tools folder, where Steam and Heroic find them too; removes the ones
@@ -412,6 +419,10 @@ frame_cap = 60                  # DXVK_FRAME_RATE and VKD3D_FRAME_RATE
 nvidia_offload = true           # __NV_PRIME_RENDER_OFFLOAD=1 and the rest
 arguments = "-windowed"
 environment = "DXVK_HUD=fps"    # after the switches', so it wins
+executable = "bin/x64/Cyberpunk2077.exe"   # Epic and GOG: in the game's folder
+task = "bin\\x64\\Cyberpunk2077.exe" # GOG: a play task's file; Epic: an option's name
+before = "notify-send 'Starting'"          # sh -c; the game waits for it
+after = "~/bin/back-up-saves"              # once the game has ended
 ```
 
 What Zendo keeps itself:

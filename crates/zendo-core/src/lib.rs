@@ -37,6 +37,7 @@ pub mod state;
 pub mod steam;
 pub mod steam_web;
 pub mod steamgriddb;
+pub mod store_tasks;
 pub mod stores;
 pub mod theme;
 mod time;

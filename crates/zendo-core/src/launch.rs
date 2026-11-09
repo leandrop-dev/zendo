@@ -36,6 +36,7 @@ use anyhow::{Context, bail};
 use crate::config::Config;
 use crate::launch_options::LaunchOptions;
 use crate::runtimes::{self, Runtime};
+use crate::store_tasks::{self, Chosen};
 use crate::stores::Store;
 use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
 
@@ -140,6 +141,12 @@ impl Group {
 /// When the program, or `xdg-open` for a link, cannot be started. Failing
 /// to note the launch is not an error: the game is already running.
 pub fn start(game: &Game) -> anyhow::Result<Started> {
+    if !matches!(game.launch, Launch::Uri { .. }) {
+        let before = LaunchOptions::load(&game.id)?.before;
+        if !before.trim().is_empty() {
+            run_script(game, &before, Script::Before)?;
+        }
+    }
     let (mut command, log, folder) = match &game.launch {
         Launch::Uri { uri } => {
             let mut command = Command::new("xdg-open");
@@ -206,6 +213,126 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         let _ = child.wait();
     });
     Ok(Started { watch, log })
+}
+
+/// Runs the command the game's launch options give for after it ends.
+///
+/// # Errors
+///
+/// When the options cannot be read, or the command fails.
+pub fn after(game: &Game) -> anyhow::Result<()> {
+    if matches!(game.launch, Launch::Uri { .. }) {
+        return Ok(());
+    }
+    let after = LaunchOptions::load(&game.id)?.after;
+    if after.trim().is_empty() {
+        return Ok(());
+    }
+    run_script(game, &after, Script::After)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Script {
+    Before,
+    After,
+}
+
+/// A script from the game's launch options, through `sh -c`: from the
+/// game's folder, with its id, title, folder and Wine prefix in its
+/// environment.
+fn script_command(game: &Game, line: &str) -> Command {
+    let mut command = Command::new("sh");
+    command
+        .args(["-c", line])
+        .stdin(Stdio::null())
+        .env("ZENDO_GAME_ID", &game.id)
+        .env("ZENDO_GAME_TITLE", &game.title);
+    match game
+        .details
+        .install_path
+        .as_ref()
+        .filter(|dir| dir.is_dir())
+    {
+        Some(folder) => {
+            command.env("ZENDO_GAME_FOLDER", folder).current_dir(folder);
+        }
+        None => {
+            if let Some(home) = paths::home() {
+                command.current_dir(home);
+            }
+        }
+    }
+    let proton = matches!(game.launch, Launch::Engine { .. } | Launch::Local { .. });
+    if proton
+        && needs_proton(game)
+        && let Some(prefix) = prefix(game)
+    {
+        command.env("WINEPREFIX", prefix);
+    }
+    command
+}
+
+/// Runs a script and waits for it; a failure says how it ended and the
+/// last thing it wrote to its errors.
+fn run_script(game: &Game, line: &str, when: Script) -> anyhow::Result<()> {
+    let when = match when {
+        Script::Before => "before",
+        Script::After => "after",
+    };
+    let output = script_command(game, line)
+        .output()
+        .with_context(|| format!("could not run the script {when} {}", game.title))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    match stderr.lines().rev().find(|line| !line.trim().is_empty()) {
+        Some(last) => bail!(
+            "the script {when} {} failed ({}): {}",
+            game.title,
+            output.status,
+            last.trim()
+        ),
+        None => bail!(
+            "the script {when} {} failed ({})",
+            game.title,
+            output.status
+        ),
+    }
+}
+
+/// The program the launch options choose instead of the store's, as the
+/// engine takes it: legendary a path in the game's folder, relative to
+/// it; gogdl a whole path.
+fn chosen_program(
+    game: &Game,
+    store: Store,
+    options: &LaunchOptions,
+) -> anyhow::Result<Option<String>> {
+    let Some(program) = options
+        .executable
+        .as_deref()
+        .map(str::trim)
+        .filter(|program| !program.is_empty())
+    else {
+        return Ok(None);
+    };
+    let folder = game
+        .details
+        .install_path
+        .as_deref()
+        .context("no record of where the game is")?;
+    let path = Path::new(program);
+    Ok(Some(match store {
+        Store::Epic if path.is_absolute() => path
+            .strip_prefix(folder)
+            .with_context(|| format!("legendary runs only a program in {}'s folder", game.title))?
+            .to_string_lossy()
+            .into_owned(),
+        Store::Epic => program.to_owned(),
+        Store::Gog => folder.join(path).to_string_lossy().into_owned(),
+        Store::Amazon => return Ok(None),
+    }))
 }
 
 /// Starts the game and leaves it running, for `zendo launch`.
@@ -592,9 +719,17 @@ fn engine_command_with(
         wrapper.push(umu.program);
     }
     command.envs(options.environment_for(windows)?);
+    let program = chosen_program(game, store, options)?;
+    let task = options
+        .task
+        .as_deref()
+        .and_then(|key| store_tasks::chosen(game, key));
     match store {
         Store::Epic | Store::Amazon => {
             command.args(["launch", app]);
+            if let Some(program) = &program {
+                command.args(["--override-exe", program]);
+            }
         }
         Store::Gog => {
             let path = game
@@ -612,6 +747,12 @@ fn engine_command_with(
                 .arg("launch")
                 .arg(path)
                 .args([app, "--platform", &platform]);
+            if let Some(program) = &program {
+                command.args(["--override-exe", program]);
+            }
+            if let Some(Chosen::Index(index)) = task {
+                command.args(["--prefer-task", &index.to_string()]);
+            }
         }
     }
     if windows {
@@ -621,7 +762,11 @@ fn engine_command_with(
         let line: Vec<String> = wrapper.iter().map(|word| quote(word)).collect();
         command.args(["--wrapper", &line.join(" ")]);
     }
-    // The engines pass on what they do not know to the game.
+    // The engines pass on what they do not know to the game: Epic's
+    // option's arguments, then the game's own.
+    if let Some(Chosen::Arguments(arguments)) = &task {
+        command.args(shlex::split(arguments).unwrap_or_default());
+    }
     command.args(options.arguments()?);
     Ok(command)
 }
@@ -746,6 +891,95 @@ mod tests {
             describe(&command),
             "DXVK_HUD=fps gogdl launch /games/Sugar 1 --platform linux \
              --wrapper 'gamemoderun mangohud' -windowed --name 'Lea P'"
+        );
+    }
+
+    #[test]
+    fn runs_the_program_chosen_instead_of_the_stores() {
+        let mut game = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        game.details.platform = Some("linux".into());
+        game.details.install_path = Some("/games/Sugar".into());
+        let options = LaunchOptions {
+            executable: Some("bin/sugar".into()),
+            ..LaunchOptions::default()
+        };
+        let command =
+            engine_command_with(&game, "1", Store::Gog, &options, Command::new("gogdl")).unwrap();
+        assert_eq!(
+            describe(&command),
+            "gogdl launch /games/Sugar 1 --platform linux --override-exe /games/Sugar/bin/sugar"
+        );
+        // legendary takes it relative to the game's folder, and nothing
+        // outside it.
+        game.source = Source::Epic;
+        let whole = LaunchOptions {
+            executable: Some("/games/Sugar/bin/sugar".into()),
+            ..LaunchOptions::default()
+        };
+        let command =
+            engine_command_with(&game, "1", Store::Epic, &whole, Command::new("legendary"))
+                .unwrap();
+        assert_eq!(
+            describe(&command),
+            "legendary launch 1 --override-exe bin/sugar"
+        );
+        let outside = LaunchOptions {
+            executable: Some("/elsewhere/sugar".into()),
+            ..LaunchOptions::default()
+        };
+        assert!(
+            engine_command_with(&game, "1", Store::Epic, &outside, Command::new("legendary"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn runs_the_scripts_with_the_game_in_their_environment() {
+        let mut game = Game::new(
+            "local:game".into(),
+            "Game".into(),
+            Source::Local,
+            Launch::Command {
+                program: "game".into(),
+                args: Vec::new(),
+                dir: None,
+            },
+        );
+        game.details.install_path = Some(std::env::temp_dir());
+        let command = script_command(&game, "echo hi");
+        let env: Vec<String> = command
+            .get_envs()
+            .map(|(name, value)| {
+                format!(
+                    "{}={}",
+                    name.to_string_lossy(),
+                    value.unwrap_or_default().to_string_lossy()
+                )
+            })
+            .collect();
+        assert!(
+            env.contains(&"ZENDO_GAME_ID=local:game".to_owned()),
+            "{env:?}"
+        );
+        assert!(env.contains(&"ZENDO_GAME_TITLE=Game".to_owned()), "{env:?}");
+        assert!(!env.iter().any(|pair| pair.starts_with("WINEPREFIX=")));
+        assert_eq!(
+            command.get_current_dir(),
+            Some(std::env::temp_dir().as_path())
+        );
+        assert!(run_script(&game, "true", Script::Before).is_ok());
+        let error = run_script(&game, "echo nope >&2; exit 3", Script::After).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "the script after Game failed (exit status: 3): nope"
         );
     }
 

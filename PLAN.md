@@ -1682,6 +1682,34 @@ brackets):
     `--hdr-enabled`. Checked: clippy, tests (the environment, its order,
     the check of a build's script, the sheet's switches). Not yet seen in
     the window.
+    13b, built 2026-11-09 (`store_tasks.rs`). Checked first: legendary's
+    and gogdl's `launch --help` (Heroic's bundled copies) both take
+    `--override-exe`; nile has none, so Amazon games get no program
+    choice. gogdl (facts read from its source, no code taken):
+    `--prefer-task` is a 0-based index into every task of
+    `playTasks`; without it the primary task runs, with its arguments
+    and working folder; `--override-exe` is used as given (so Zendo
+    passes it whole) and its folder becomes the working one; words after
+    are passed to the game. legendary takes `--override-exe` relative to
+    the game's folder (Zendo strips the folder, and refuses a program
+    outside it). The stores' records here, read only: GOG's
+    `goggame-<id>.info` (Cyberpunk 2077: REDprelauncher primary, the
+    game itself hidden), Epic's metadata `extraLaunchOption_NNN_Name`
+    and `_Args` (one of 172 games: Rocket League, "Launch without
+    Anti-Cheat", `-noeac`; `AdditionalCommandLine` legendary applies
+    itself). The sheet's Start with lists GOG's other file tasks (by
+    their file, as names repeat) and Epic's options (by name), says when
+    the store lists none, and keeps one no longer listed as such (the
+    store's own runs). Program has Browse (the file dialog; kept relative
+    to the game's folder when in it). The scripts run through `sh -c`
+    from the game's folder with `ZENDO_GAME_ID`, `ZENDO_GAME_TITLE`,
+    `ZENDO_GAME_FOLDER` and the game's `WINEPREFIX`: before, for every
+    game Zendo starts itself, waited for, a failure stopping the launch
+    with its status and last error line; after, once its process group
+    is gone, only while the window followed it (not `zendo launch`).
+    Checked: clippy, tests (the tasks read from both stores' records,
+    gogdl's index, the program as each engine takes it, the scripts'
+    environment and failure, the sheet). Not yet seen in the window.
 14. (was 17) Epic and GOG while playing: offline mode (Epic games that allow it,
     legendary's `--offline`), cloud saves (upload and download by hand,
     and by itself before and after the game: Heroic's `autoSyncSaves`,

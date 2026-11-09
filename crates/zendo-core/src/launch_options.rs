@@ -14,6 +14,8 @@
 //! frame_cap = 60
 //! arguments = "-windowed"
 //! environment = "DXVK_ASYNC=1"
+//! executable = "bin/x64/Cyberpunk2077.exe"
+//! before = "notify-send 'Starting'"
 //! ```
 //!
 //! Games left as they come are not written. Steam and Heroic games keep
@@ -98,6 +100,22 @@ pub struct LaunchOptions {
     /// offload).
     #[serde(skip_serializing_if = "is_false")]
     pub nvidia_offload: bool,
+    /// The program run instead of the store's (Epic and GOG games): a
+    /// path in the game's folder, relative to it or whole.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
+    /// Another way to start the game its store lists, by its key
+    /// ([`crate::store_tasks`]); the store's own when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// A command run through `sh -c` before the game starts; the game
+    /// waits for it, and does not start when it fails.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub before: String,
+    /// A command run through `sh -c` once the game has ended, when
+    /// Zendo's window followed it.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub after: String,
     /// Passed to the game, split as a shell would.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub arguments: String,

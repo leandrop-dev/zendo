@@ -73,6 +73,8 @@ pub enum RunMessage {
     /// They did not, in time.
     Missed(String),
     Ended(String),
+    /// The script after the game failed: how.
+    AfterFailed(String),
     Stop(String),
 }
 
@@ -172,6 +174,10 @@ impl Zendo {
                 }
                 let title = self.title_of(&id);
                 self.status = Some(t!("run-closed", title = title, minutes = minutes));
+                Task::none()
+            }
+            RunMessage::AfterFailed(err) => {
+                self.status = Some(err);
                 Task::none()
             }
             RunMessage::Stop(id) => {
@@ -291,6 +297,7 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
             let watch = result.as_ref().ok().map(|started| started.watch.clone());
             let _ = sender.unbounded_send(RunMessage::Started(id.clone(), result));
             let send = |message| sender.unbounded_send(message).is_ok();
+            let own = matches!(watch, Some(Watch::Group(_)));
             match watch {
                 Some(watch @ Watch::Group(_)) => {
                     while launch::running(&watch) {
@@ -317,7 +324,14 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
                 }
                 _ => return,
             }
-            send(RunMessage::Ended(id));
+            if !send(RunMessage::Ended(id.clone())) {
+                return;
+            }
+            // Only for a game Zendo started (its group): the others'
+            // launchers have their own.
+            if own && let Err(err) = launch::after(&game) {
+                send(RunMessage::AfterFailed(format!("{err:#}")));
+            }
         });
         while let Some(message) = receiver.next().await {
             if output.send(message).await.is_err() {
