@@ -2199,7 +2199,8 @@ brackets):
     for every entry and no tags left; fetched for real (Cyberpunk 2077:
     28 entries, Fallout: none, an unknown id: none); in a throwaway home
     with Cyberpunk 2077's record, a build with the card moved up for the
-    screenshot showed Patch 2.5 with its parts and lists.
+    screenshot showed Patch 2.5 with its parts and lists. Tried by the
+    user 2026-11-09: it works [firm].
 18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
@@ -2277,8 +2278,8 @@ by the user 2026-11-09:
   17b, importing a game from a folder, built the same day. 17c, the
   download workers and automatic updates, built the same day and taken
   as working by the user. 17d, GOG's changelog on the game page, built
-  the same day, for the user to try. Next: item 18, what the game page
-  tells.
+  and tried by the user the same day. Item 17 is done. Next: item 18,
+  what the game page tells.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].
