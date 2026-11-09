@@ -839,6 +839,7 @@ action-label = { $action ->
     [repair] Reparar
     [add-dlc] Instalar DLC
     [remove-dlc] Desinstalar DLC
+    [move] Mover
    *[uninstall] Desinstalar
 }
 action-doing = { $action ->
@@ -849,6 +850,7 @@ action-doing = { $action ->
     [remove-dlc] A desinstalar DLC de
     [add-dlc-alone] A instalar DLC
     [remove-dlc-alone] A desinstalar DLC
+    [move] A mover
    *[uninstall] A desinstalar
 }
 downloads-paused-count = { $count ->
@@ -899,6 +901,11 @@ downloads-running-about = Fechar põe-na em pausa, com o que já tem; retome-a d
 downloads-close-anyway = Fechar mesmo assim
 downloads-keep = Continuar a transferir
 downloads-downloaded = { $size } transferidos
+downloads-copied = { $done } de { $total } copiados
+downloads-move = Mover…
+downloads-move-to = Mover { $title } para…
+downloads-move-running = { $title } está aberto; feche-o e depois mova-o
+downloads-moving-wait = { $title } está a ser movido; espere que termine
 downloads-left = faltam { $time }
 downloads-starting = A iniciar { $engine }…
 downloads-failed = Falhou: { $error }

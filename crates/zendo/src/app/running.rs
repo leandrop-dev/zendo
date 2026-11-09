@@ -114,6 +114,10 @@ impl Zendo {
         if self.running.games.contains_key(&game.id) {
             return Task::none();
         }
+        if self.moving(&game.id) {
+            self.status = Some(t!("downloads-moving-wait", title = game.title.as_str()));
+            return Task::none();
+        }
         self.status = Some(t!("run-starting-game", title = game.title.as_str()));
         // Tests start nothing: as if the game went to its launcher.
         if !self.persist {

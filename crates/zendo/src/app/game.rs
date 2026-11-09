@@ -200,7 +200,8 @@ impl Zendo {
     }
 
     /// The less used actions: Hide, and for a game Zendo installed Check for
-    /// updates, Repair and Uninstall; for one added by hand Edit and Remove.
+    /// updates, Repair, Move and Uninstall; for one added by hand Edit and
+    /// Remove.
     fn more_row<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
         let mut more = row![
             button(
@@ -235,6 +236,16 @@ impl Zendo {
                     .style(style::secondary)
                     .on_press_maybe(free.then(|| queue(game, Action::Repair)).flatten()),
             );
+            let movable = free && !self.running.is_running(&game.id);
+            more =
+                more.push(
+                    button(text(t!("downloads-move")).size(14))
+                        .padding([8, 14])
+                        .style(style::secondary)
+                        .on_press_maybe(movable.then(|| {
+                            Message::Download(DownloadMessage::ChooseMove(game.id.clone()))
+                        })),
+                );
             let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
             more =
                 more.push(if confirming {

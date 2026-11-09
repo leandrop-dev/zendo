@@ -2052,6 +2052,66 @@ brackets):
     `move`), importing a game already on disk (legendary's `import`),
     updating games by themselves (Heroic's `autoUpdateGames`), the
     download workers (`maxWorkers`), GOG's changelog.
+    Checked first (2026-11-09; legendary and gogdl in Heroic 2.22.4's
+    bundle, nile's source on GitHub, Heroic's bundle; facts only):
+    - legendary `move <app> <new base> [--skip-move]` only renames: across
+      drives it logs an error and returns, exit 0 (as on every refusal).
+      gogdl and nile have no move. Heroic moves the files itself (rsync
+      `--archive --remove-source-files`, then `rm -rf` the old folder, or
+      `mv`), then tells the engine: legendary `move --skip-move`, its own
+      GOG record, nile's `installed.json` `path`. After a GOG Windows
+      game's move it runs GOG's setup again.
+    - Import: legendary `import <app> <path>` checks the files against the
+      manifest (no files found, or no executable, refuses; under 95 %
+      warns) and may need a repair before updating; nile `import --path
+      <path> <id>`; gogdl `import <path>` only prints what the folder's
+      `goggame-*.info` says (id, build, language, DLC), the launcher
+      keeps the record, and Heroic remakes gogdl's manifest from it.
+    - Workers: legendary `install --max-workers` (default min(2 × CPUs,
+      16)), gogdl `--max-workers` on download, update, repair and redist
+      (default the CPUs), nile `install`/`update`/`verify --max-workers`.
+      Heroic's `maxWorkers`, 0 meaning the engine's own.
+    - Updates: Heroic's `autoUpdateGames` (off by default) queues each
+      update its check finds, unless the game's `ignoreGameUpdates` or
+      the game is not on disk.
+    - GOG's changelog: `api.gog.com/products/<id>?expand=changelog`, HTML.
+    Decided by the user 2026-11-09 [firm]: the order 17a moving, 17b
+    importing, 17c the workers and automatic updates (two settings), 17d
+    GOG's changelog; moves to other drives too (copied, then the old
+    folder deleted); import from a folder the user picks, not Heroic's
+    installs (both would keep records of one folder); automatic updates
+    on by default, a setting turns them off.
+    17a, built 2026-11-09 (`moving.rs`, a Move job in `downloads.rs`).
+    Zendo [tentative]: the game page's More row has Move…, which opens the
+    desktop's folder dialog (`zendo pick-file folder`, through the portal)
+    and queues a job on the Downloads page; the game's folder keeps its
+    name in the folder chosen. Not while the game runs: the button is off,
+    a move queued for a game started since waits paused with why, and Play
+    waits while the files move. On the same drive the folder is renamed;
+    across drives it is copied into a hidden `.<name>.zendo-move` beside
+    the new place (permissions, modified times and links kept, Stop
+    checked each MiB, progress, speed and time left as a download's),
+    checked to hold as many files and bytes, then named. Then the record:
+    legendary `move --skip-move` for the game and each DLC in its folder
+    (read back, as legendary ends well when it refuses), Zendo's GOG
+    record, nile's `installed.json`; if that fails, the files go back.
+    Then the old folder is deleted (only when it holds no other game and
+    passes the uninstall's checks); applied mods' record (`applied.json`,
+    the game's folder and a plugin list kept in it) names the new folder;
+    a GOG Windows game's prefix forgets GOG's setup, so it runs again at
+    the next start, as Heroic does (16a's "after a move"). Stopping or a
+    failure deletes the hidden copy and leaves the game where it was; a
+    move resumed after a crash carries on from the step it reached. A
+    full drive says so; there is no free-space check first (std has no
+    `statvfs`). Checked: clippy, tests (rename, a copy keeping files,
+    links, modes and times, stopping, a place taken or inside the game,
+    the job in the queue, the progress, Back to vanilla after a move);
+    for real in a throwaway home, from btrfs to tmpfs so copies crossed
+    drives: Epic's by rename with the real legendary rewriting its
+    record, GOG's and Amazon's copied (40 MiB, checksums equal), records,
+    prefix and mods record changed, old folders gone; a stopped copy left
+    the old folder and record as they were and no hidden copy. Tried by
+    the user 2026-11-09: it works [firm].
 18. (was 21) What the game page tells: anti-cheat status before installing
     (Heroic keeps areweanticheatyet.com's list, 1167 games, and warns;
     pairs with 10), PCGamingWiki, HowLongToBeat, the Steam Deck rating,
@@ -2124,7 +2184,9 @@ by the user 2026-11-09:
   known fixes, built the same day and taken as working by the user; the
   desktop entry and Steam shortcut dropped. 16c, GOG Galaxy for GOG games
   (comet), built the same day and tried by the user.
-  Next: item 17, managing installs.
+  Item 17, managing installs, split by the user (17a to 17d) the same
+  day; 17a, moving a game, built the same day and tried by the user.
+  Next: 17b, importing a game from a folder.
 - Items 3 (keys in the keyring), 4 (diagnostics), 5 (languages), 6
   (themes) and 9 (the game page and DLC) tried by the user at home,
   2026-11-09: they work [firm].

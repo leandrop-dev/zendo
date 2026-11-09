@@ -32,10 +32,11 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::heroic::{self, Installed};
-use crate::info;
+use crate::moving::{self, Moved};
 use crate::owned::{self, Owned, StoreKey};
 use crate::stores::Store;
 use crate::{Details, Game, Launch, Scan, Source, paths};
+use crate::{gog_setup, info, mods};
 
 /// The language gogdl downloads; Heroic asks the user, Zendo does not yet.
 pub(crate) const GOG_LANGUAGE: &str = "en-US";
@@ -57,6 +58,8 @@ pub enum Action {
     /// Uninstalling DLC from a game Zendo installed.
     #[serde(rename = "remove-dlc")]
     RemoveDlc,
+    /// Moving a game Zendo installed to another folder ([`Job::to`]).
+    Move,
 }
 
 impl Action {
@@ -69,6 +72,7 @@ impl Action {
             Self::Uninstall => "Uninstall",
             Self::AddDlc => "Install DLC",
             Self::RemoveDlc => "Uninstall DLC",
+            Self::Move => "Move",
         }
     }
 
@@ -81,6 +85,7 @@ impl Action {
             Self::Uninstall => "Uninstalling",
             Self::AddDlc => "Installing DLC",
             Self::RemoveDlc => "Uninstalling DLC",
+            Self::Move => "Moving",
         }
     }
 }
@@ -110,6 +115,10 @@ pub struct Job {
     /// removed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dlc: Vec<String>,
+    /// For [`Action::Move`], the folder the game's folder goes into; it
+    /// keeps its name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<PathBuf>,
 }
 
 /// The build Zendo installs from a store: GOG's Linux build when there is
@@ -150,6 +159,7 @@ impl Job {
             folder: None,
             paused: false,
             dlc,
+            to: None,
         })
     }
 
@@ -194,7 +204,23 @@ impl Job {
             folder: None,
             paused: false,
             dlc: Vec::new(),
+            to: None,
         })
+    }
+
+    /// Moving a game Zendo installed into the folder `to`, where its own
+    /// folder goes under the same name.
+    #[must_use]
+    pub fn for_move(game: &Game, to: PathBuf) -> Option<Self> {
+        let mut job = Self::for_game(game, Action::Move)?;
+        job.to = Some(to);
+        Some(job)
+    }
+
+    /// Where a move puts the game's folder.
+    #[must_use]
+    pub fn moved_to(&self) -> Option<PathBuf> {
+        Some(self.to.as_ref()?.join(self.path.file_name()?))
     }
 }
 
@@ -332,6 +358,7 @@ impl Stop {
 pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
     let store = job.store();
     let ended = match (store, job.action) {
+        (_, Action::Move) => move_game(job, stop, report)?,
         (Store::Gog, Action::Install) => gog_install(job, stop, report)?,
         (Store::Gog, Action::Update | Action::Repair | Action::AddDlc | Action::RemoveDlc) => {
             gog_refresh(job, stop, report)?
@@ -485,8 +512,8 @@ fn engine_args(job: &Job, folder: &Path) -> Vec<String> {
         (Store::Amazon, Action::Update) => vec!["update", &app],
         (Store::Amazon, Action::Repair) => vec!["verify", &app],
         (Store::Amazon, Action::Uninstall) => vec!["uninstall", &app],
-        (Store::Gog, _) | (_, Action::AddDlc | Action::RemoveDlc) => {
-            unreachable!("gogdl's jobs and DLC jobs have their own steps")
+        (Store::Gog, _) | (_, Action::AddDlc | Action::RemoveDlc | Action::Move) => {
+            unreachable!("gogdl's jobs, DLC jobs and moves have their own steps")
         }
     };
     words.into_iter().map(str::to_owned).collect()
@@ -936,6 +963,223 @@ fn safe_to_delete(path: &Path) -> bool {
     deep_enough && !near_home && !path.is_symlink()
 }
 
+/// Moves a game's folder into [`Job::to`], then has the engine's record
+/// say the new place, then deletes the old folder when it was copied.
+/// A move carried on after a stop or a crash picks up where it was: the
+/// folder moved and the record not yet, or the record changed and the old
+/// copy still there.
+fn move_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
+    let old = &job.path;
+    let new = job.moved_to().context("the move has no folder to go to")?;
+    if new == *old {
+        bail!("{} is in that folder already", job.title);
+    }
+    let recorded = recorded_path(job.store(), &job.app);
+    if recorded.as_ref() == Some(&new) {
+        if old.exists() {
+            delete_old(job, old, report)?;
+        }
+        return Ok(Ended::Done);
+    }
+    if recorded.as_ref() != Some(old) {
+        bail!(
+            "{} records {} in another folder than the move's",
+            job.store().engine_name(),
+            job.title
+        );
+    }
+    let moved = if !old.exists() && new.is_dir() {
+        Moved::Renamed
+    } else {
+        report(Event::Step("Moving the game's files…".to_owned()));
+        let started = Instant::now();
+        moving::move_folder(old, &new, &|| stop.asked(), &mut |done, total| {
+            report(Event::Progress(copy_progress(
+                done,
+                total,
+                started.elapsed(),
+            )));
+        })?
+    };
+    if moved == Moved::Stopped {
+        return Ok(Ended::Stopped);
+    }
+    report(Event::Step("Writing down the new folder…".to_owned()));
+    if let Err(err) = record_move(job, &new, report) {
+        let put_back = match moved {
+            Moved::Renamed => fs::rename(&new, old).map_err(anyhow::Error::from),
+            _ => fs::remove_dir_all(&new).map_err(anyhow::Error::from),
+        };
+        return Err(match put_back {
+            Ok(()) => err,
+            Err(back) => err.context(format!(
+                "and the files are left in {} ({back:#})",
+                new.display()
+            )),
+        });
+    }
+    // What else knows the folder; the game is in its new place whatever
+    // they say, so they do not fail the move.
+    let _ = mods::moved(&job.id(), old, &new);
+    if let Some(game) = scan().games.into_iter().find(|game| game.id == job.id()) {
+        let _ = gog_setup::forget(&game);
+    }
+    if moved == Moved::Copied {
+        delete_old(job, old, report)?;
+    }
+    Ok(Ended::Done)
+}
+
+/// Deletes the folder a game was copied out of, once nothing records it.
+fn delete_old(job: &Job, old: &Path, report: &mut dyn FnMut(Event)) -> anyhow::Result<()> {
+    let holds_a_game = Store::ALL
+        .into_iter()
+        .flat_map(installs)
+        .filter_map(|game| game.install.path)
+        .any(|path| path.starts_with(old) || old.starts_with(&path));
+    if holds_a_game || !safe_to_delete(old) {
+        bail!(
+            "{} moved, but its old folder {} was left: it does not look like only this game's",
+            job.title,
+            old.display()
+        );
+    }
+    report(Event::Step("Deleting the old folder…".to_owned()));
+    fs::remove_dir_all(old).with_context(|| {
+        format!(
+            "{} moved, but its old folder {} could not be deleted",
+            job.title,
+            old.display()
+        )
+    })
+}
+
+/// A copy's progress in the shape a download's has.
+fn copy_progress(done: u64, total: u64, elapsed: Duration) -> Progress {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a percentage and a speed to one decimal; the precision lost is far below"
+    )]
+    let (done_f, total_f) = (done as f64, total as f64);
+    let percent = if total == 0 {
+        100.0
+    } else {
+        done_f / total_f * 100.0
+    };
+    let seconds = elapsed.as_secs_f64();
+    let speed = (seconds > 0.0).then(|| done_f / seconds);
+    let eta = speed.filter(|speed| *speed > 0.0).map(|speed| {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "seconds left, positive and far below u64's limit"
+        )]
+        let left = ((total_f - done_f) / speed) as u64;
+        format!("{:02}:{:02}:{:02}", left / 3600, left / 60 % 60, left % 60)
+    });
+    #[expect(clippy::cast_possible_truncation, reason = "shown to one decimal")]
+    Progress {
+        percent: Some(percent as f32),
+        downloaded_mib: None,
+        speed_mib: speed.map(|speed| (speed / 1_048_576.0) as f32),
+        eta,
+        written: Some((done, total)),
+    }
+}
+
+/// The folder the engine records the game in.
+fn recorded_path(store: Store, app: &str) -> Option<PathBuf> {
+    installs(store)
+        .into_iter()
+        .find(|game| game.app == app)
+        .and_then(|game| game.install.path)
+}
+
+/// Has the engine's record say the game's new folder: legendary's
+/// `move --skip-move` for the game and each DLC in its folder, Zendo's own
+/// record for gogdl, nile's `installed.json`.
+fn record_move(job: &Job, new: &Path, report: &mut dyn FnMut(Event)) -> anyhow::Result<()> {
+    let store = job.store();
+    match store {
+        Store::Epic => {
+            let base = new.parent().context("the new folder has no parent")?;
+            // Not stopped halfway: the records change together.
+            let stop = Stop::default();
+            for app in legendary_apps_in(&job.path)? {
+                let args: Vec<String> = ["move", &app, &base.to_string_lossy(), "--skip-move"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect();
+                engine(store, &args, &stop, report)?;
+            }
+        }
+        Store::Gog => {
+            let (file, mut records) = read_gog_records()?;
+            let record = records
+                .iter_mut()
+                .find(|record| is_record_of(record, &job.app))
+                .context("Zendo has no record of installing this game")?;
+            record["install_path"] = serde_json::json!(new);
+            write_gog_records(&file, &records)?;
+        }
+        Store::Amazon => {
+            let file = store
+                .dir()
+                .context("no home folder for nile's files")?
+                .join("nile/installed.json");
+            let text = fs::read_to_string(&file)
+                .with_context(|| format!("could not read {}", file.display()))?;
+            let mut records: Vec<serde_json::Value> = serde_json::from_str(&text)
+                .with_context(|| format!("could not read {}", file.display()))?;
+            let record = records
+                .iter_mut()
+                .find(|record| {
+                    record.get("id").and_then(serde_json::Value::as_str) == Some(&job.app)
+                })
+                .context("nile has no record of installing this game")?;
+            record["path"] = serde_json::json!(new);
+            let json = serde_json::to_vec_pretty(&records)?;
+            paths::write_atomic(&file, &json)
+                .with_context(|| format!("could not write {}", file.display()))?;
+        }
+    }
+    // legendary ends well when it refuses, so its record is read back.
+    if recorded_path(store, &job.app).as_deref() != Some(new) {
+        bail!(
+            "{} still records {} in {}",
+            store.engine_name(),
+            job.title,
+            job.path.display()
+        );
+    }
+    Ok(())
+}
+
+/// legendary's apps installed in a folder: the game and its DLC, which
+/// legendary records in the game's folder too.
+fn legendary_apps_in(folder: &Path) -> anyhow::Result<Vec<String>> {
+    let file = Store::Epic
+        .dir()
+        .context("no home folder for legendary's files")?
+        .join("installed.json");
+    let text =
+        fs::read_to_string(&file).with_context(|| format!("could not read {}", file.display()))?;
+    let records: HashMap<String, serde_json::Value> = serde_json::from_str(&text)
+        .with_context(|| format!("could not read {}", file.display()))?;
+    let mut apps: Vec<String> = records
+        .into_iter()
+        .filter(|(_, record)| {
+            record
+                .get("install_path")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|path| Path::new(path) == folder)
+        })
+        .map(|(app, _)| app)
+        .collect();
+    apps.sort();
+    Ok(apps)
+}
+
 /// Clears away what a cancelled install left: the game's folder and what
 /// the engine kept to carry on. Nothing is removed for a game the engine
 /// records as installed, nor a folder outside the one the job installs
@@ -1187,6 +1431,7 @@ mod tests {
             folder: None,
             paused: false,
             dlc: Vec::new(),
+            to: None,
         };
         let folder = Path::new("/home/me/Games/Sugar Rush");
         assert_eq!(
@@ -1221,6 +1466,7 @@ mod tests {
             folder: None,
             paused: false,
             dlc: vec!["Wings".into()],
+            to: None,
         };
         assert!(
             engine_args(&job, Path::new("/home/me/Games/Sugar"))
@@ -1253,6 +1499,7 @@ mod tests {
             folder: None,
             paused: false,
             dlc: vec!["17".into()],
+            to: None,
         };
         let json = serde_json::to_string(&job).unwrap();
         assert!(
@@ -1266,6 +1513,49 @@ mod tests {
             serde_json::from_str::<Job>(old).unwrap().dlc,
             Vec::<String>::new()
         );
+    }
+
+    #[test]
+    fn a_move_keeps_its_folder_in_the_queue_and_its_name() {
+        let mut game = Game::new(
+            "epic:Sugar".into(),
+            "Sugar Rush".into(),
+            Source::Epic,
+            Launch::Engine {
+                runner: "legendary".into(),
+                app: "Sugar".into(),
+            },
+        );
+        game.details.install_path = Some("/home/me/Games/Sugar Rush".into());
+        let job = Job::for_move(&game, "/mnt/games".into()).unwrap();
+        assert_eq!(job.action, Action::Move);
+        assert_eq!(job.path, Path::new("/home/me/Games/Sugar Rush"));
+        assert_eq!(
+            job.moved_to().as_deref(),
+            Some(Path::new("/mnt/games/Sugar Rush"))
+        );
+        let json = serde_json::to_string(&job).unwrap();
+        assert!(
+            json.contains(r#""action":"move""#) && json.contains(r#""to":"/mnt/games""#),
+            "{json}"
+        );
+        assert_eq!(serde_json::from_str::<Job>(&json).unwrap(), job);
+        // Not for a game Zendo did not install.
+        game.launch = Launch::Uri {
+            uri: "heroic://launch/Sugar".into(),
+        };
+        assert!(Job::for_move(&game, "/mnt/games".into()).is_none());
+    }
+
+    #[test]
+    fn a_copy_tells_its_progress_as_a_download_does() {
+        let progress = copy_progress(256 << 20, 1 << 30, Duration::from_secs(2));
+        assert_eq!(progress.percent, Some(25.0));
+        assert_eq!(progress.speed_mib, Some(128.0));
+        assert_eq!(progress.eta.as_deref(), Some("00:00:06"));
+        assert_eq!(progress.written, Some((256 << 20, 1 << 30)));
+        // An empty game is done at once.
+        assert_eq!(copy_progress(0, 0, Duration::ZERO).percent, Some(100.0));
     }
 
     #[test]

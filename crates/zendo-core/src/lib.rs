@@ -29,6 +29,7 @@ pub mod launch;
 pub mod launch_options;
 pub mod local;
 pub mod mods;
+mod moving;
 pub mod nexus;
 pub mod nexus_search;
 pub mod owned;

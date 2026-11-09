@@ -1,7 +1,8 @@
 //! Choosing a file in the desktop's own dialog:
 //! `zendo pick-file <kind> <title>`, where the kind is `program` (from
-//! `~/Games`), `mod` (an archive, from `~/Downloads`) or `installer` (a
-//! Windows program for a game's prefix, from `~/Downloads`);
+//! `~/Games`), `mod` (an archive, from `~/Downloads`), `installer` (a
+//! Windows program for a game's prefix, from `~/Downloads`) or `folder`
+//! (a folder to move a game into, from `~/Games`);
 //! a second process like the sign-in window, since GTK needs its own loop
 //! apart from Iced's. GTK's native chooser goes through the desktop portal
 //! when there is one, so it is the dialog every other app shows. The path
@@ -24,6 +25,8 @@ pub enum Kind {
     Mod,
     /// A Windows program to run in a game's prefix: an installer, a patch.
     Installer,
+    /// A folder to move a game into.
+    Folder,
 }
 
 impl Kind {
@@ -32,18 +35,19 @@ impl Kind {
             Self::Program => "program",
             Self::Mod => "mod",
             Self::Installer => "installer",
+            Self::Folder => "folder",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        [Self::Program, Self::Mod, Self::Installer]
+        [Self::Program, Self::Mod, Self::Installer, Self::Folder]
             .into_iter()
             .find(|kind| kind.name() == name)
     }
 
     fn start(self) -> &'static str {
         match self {
-            Self::Program => "Games",
+            Self::Program | Self::Folder => "Games",
             Self::Mod | Self::Installer => "Downloads",
         }
     }
@@ -78,7 +82,11 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
     let dialog = gtk::FileChooserNative::new(
         Some(title),
         None::<&gtk::Window>,
-        gtk::FileChooserAction::Open,
+        if kind == Kind::Folder {
+            gtk::FileChooserAction::SelectFolder
+        } else {
+            gtk::FileChooserAction::Open
+        },
         Some(&crate::i18n::t!("dialog-choose")),
         Some(&crate::i18n::t!("cancel")),
     );
@@ -97,7 +105,7 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
             crate::i18n::t!("dialog-windows-programs"),
             &WINDOWS_PROGRAMS[..],
         )),
-        Kind::Program => None,
+        Kind::Program | Kind::Folder => None,
     };
     if let Some((name, patterns)) = shown {
         let files = gtk::FileFilter::new();

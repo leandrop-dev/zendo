@@ -12,6 +12,7 @@
 //! asked of its store once a session and after each job.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::thread;
 
 use iced::futures::channel::mpsc;
@@ -55,6 +56,7 @@ fn action_tag(action: Action) -> &'static str {
         Action::Uninstall => "uninstall",
         Action::AddDlc => "add-dlc",
         Action::RemoveDlc => "remove-dlc",
+        Action::Move => "move",
     }
 }
 
@@ -122,6 +124,10 @@ pub enum DownloadMessage {
     AskUninstall(String),
     CheckUpdate(String),
     UpdatesChecked(Vec<(String, Result<Update, String>)>),
+    /// Move pressed on a game's page: the folder dialog opens.
+    ChooseMove(String),
+    /// The folder chosen to move the game into, if one was.
+    MoveChosen(String, Result<Option<PathBuf>, String>),
 }
 
 /// The queue left from last time, read on a thread.
@@ -284,7 +290,55 @@ impl Zendo {
                 }
                 Task::none()
             }
+            DownloadMessage::ChooseMove(id) => self.choose_move(id),
+            DownloadMessage::MoveChosen(id, result) => self.move_chosen(&id, result),
         }
+    }
+
+    /// Opens the folder dialog for moving a game, unless it is running.
+    fn choose_move(&mut self, id: String) -> Task<Message> {
+        let Some(game) = self.game(&id) else {
+            return Task::none();
+        };
+        if !self.persist {
+            return Task::none();
+        }
+        if self.running.is_running(&id) {
+            self.status = Some(t!("downloads-move-running", title = game.title.as_str()));
+            return Task::none();
+        }
+        let title = t!("downloads-move-to", title = game.title.as_str());
+        Task::perform(
+            blocking(move || {
+                crate::file_dialog::pick(crate::file_dialog::Kind::Folder, &title)
+                    .map_err(|err| format!("{err:#}"))
+            }),
+            move |result| Message::Download(DownloadMessage::MoveChosen(id.clone(), result)),
+        )
+    }
+
+    /// Queues the move to the folder chosen.
+    fn move_chosen(&mut self, id: &str, chosen: Result<Option<PathBuf>, String>) -> Task<Message> {
+        match chosen {
+            Ok(Some(folder)) => {
+                let Some(job) = self.game(id).and_then(|game| Job::for_move(game, folder)) else {
+                    return Task::none();
+                };
+                self.update(Message::Download(DownloadMessage::Queue(job)))
+            }
+            Ok(None) => Task::none(),
+            Err(err) => {
+                self.status = Some(err);
+                Task::none()
+            }
+        }
+    }
+
+    /// Whether the game's files are being moved now, so it must not start.
+    pub(super) fn moving(&self, id: &str) -> bool {
+        self.downloads
+            .job_for(id)
+            .is_some_and(|(job, running)| running && job.action == Action::Move)
     }
 
     /// Stops the game's job when it runs, to do `then` after; otherwise
@@ -390,6 +444,27 @@ impl Zendo {
     fn next_job(&mut self) -> Task<Message> {
         if !self.persist || self.downloads.running.is_some() || self.downloads.closing {
             return Task::none();
+        }
+        // A game started since its move was queued holds the move.
+        let running: Vec<String> = self
+            .downloads
+            .queue
+            .iter()
+            .filter(|job| !job.paused && job.action == Action::Move)
+            .map(Job::id)
+            .filter(|id| self.running.is_running(id))
+            .collect();
+        for job in &mut self.downloads.queue {
+            if running.contains(&job.id()) && job.action == Action::Move {
+                job.paused = true;
+                self.downloads.errors.insert(
+                    job.id(),
+                    t!("downloads-move-running", title = job.title.as_str()),
+                );
+            }
+        }
+        if !running.is_empty() {
+            self.save_queue();
         }
         let Some(index) = self.downloads.queue.iter().position(|job| !job.paused) else {
             return Task::none();
@@ -738,6 +813,13 @@ fn progress_line(job: &Job, progress: &Progress) -> String {
     if let Some(mib) = progress.downloaded_mib {
         parts.push(t!("downloads-downloaded", size = mebibytes(mib)));
     }
+    if job.action == Action::Move
+        && let Some((done, total)) = progress.written
+    {
+        #[expect(clippy::cast_precision_loss, reason = "sizes shown to two decimals")]
+        let mib = |bytes: u64| mebibytes(bytes as f32 / 1_048_576.0);
+        parts.push(t!("downloads-copied", done = mib(done), total = mib(total)));
+    }
     if let Some(speed) = progress.speed_mib {
         parts.push(format!("{}/s", mebibytes(speed)));
     }
@@ -894,6 +976,7 @@ mod tests {
             folder: None,
             paused: false,
             dlc: Vec::new(),
+            to: None,
         }
     }
 

@@ -946,6 +946,56 @@ pub fn restore(game: &Game) -> anyhow::Result<Overview> {
     place.overview()
 }
 
+/// After a game's folder moved from `from` to `to`: the record of what
+/// Apply placed names the new folder, so Back to vanilla finds its files
+/// there. Nothing to do for a game without mods applied.
+///
+/// # Errors
+///
+/// When the record cannot be read or written.
+pub fn moved(game_id: &str, from: &Path, to: &Path) -> anyhow::Result<()> {
+    let _lock = lock();
+    let Some(data) = paths::data_home() else {
+        return Ok(());
+    };
+    let path = data
+        .join("zendo/mods")
+        .join(paths::safe_name(game_id))
+        .join("applied.json");
+    rebase_manifest(&path, from, to)
+}
+
+/// Has the record at `path` name `to` where it named `from`.
+fn rebase_manifest(path: &Path, from: &Path, to: &Path) -> anyhow::Result<()> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err).with_context(|| format!("could not read {}", path.display())),
+    };
+    let mut manifest: Manifest = serde_json::from_slice(&bytes)
+        .with_context(|| format!("could not read {}", path.display()))?;
+    // Joining nothing would end the path with a slash.
+    let rebase = |old: &Path| {
+        let rest = old.strip_prefix(from).ok()?;
+        Some(if rest.as_os_str().is_empty() {
+            to.to_path_buf()
+        } else {
+            to.join(rest)
+        })
+    };
+    if let Some(dir) = rebase(&manifest.game_dir) {
+        manifest.game_dir = dir;
+    }
+    // Oblivion's plugin list can be in the game's folder.
+    for list in &mut manifest.lists {
+        if let Some(moved) = rebase(&list.path) {
+            list.path = moved;
+        }
+    }
+    paths::write_atomic(path, &serde_json::to_vec_pretty(&manifest)?)
+        .with_context(|| format!("could not write {}", path.display()))
+}
+
 impl Place {
     fn list_path(&self) -> PathBuf {
         self.data.join("mods.toml")

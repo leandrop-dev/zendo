@@ -910,3 +910,31 @@ fn names_mods_from_their_archives() {
     assert!(check_relative(Path::new("../x")).is_err());
     assert!(check_relative(Path::new("/x")).is_err());
 }
+
+#[test]
+fn back_to_vanilla_finds_a_moved_game() {
+    let scratch = Scratch::new("moved");
+    let place = scratch.place(None, true);
+    write(&place.game_dir.join("Data/sky.dds"), "vanilla sky");
+    add_unpacked(
+        &place,
+        "sky",
+        &[("Data/sky.dds", "modded sky"), ("new.dll", "dll")],
+    );
+    place.apply().unwrap();
+
+    let moved = scratch.0.join("elsewhere");
+    fs::rename(&place.game_dir, &moved).unwrap();
+    rebase_manifest(&place.manifest_path(), &place.game_dir, &moved).unwrap();
+    assert_eq!(place.manifest().unwrap().unwrap().game_dir, moved);
+    let place = Place {
+        game_dir: moved.clone(),
+        ..scratch.place(None, true)
+    };
+    place.restore().unwrap();
+    assert_eq!(
+        read(&moved.join("Data/sky.dds")).as_deref(),
+        Some("vanilla sky")
+    );
+    assert!(!moved.join("new.dll").exists());
+}

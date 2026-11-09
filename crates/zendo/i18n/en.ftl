@@ -825,6 +825,7 @@ action-label = { $action ->
     [repair] Repair
     [add-dlc] Install DLC
     [remove-dlc] Uninstall DLC
+    [move] Move
    *[uninstall] Uninstall
 }
 action-doing = { $action ->
@@ -835,6 +836,7 @@ action-doing = { $action ->
     [remove-dlc] Uninstalling DLC from
     [add-dlc-alone] Installing DLC
     [remove-dlc-alone] Uninstalling DLC
+    [move] Moving
    *[uninstall] Uninstalling
 }
 downloads-paused-count = { $count ->
@@ -885,6 +887,11 @@ downloads-running-about = Closing pauses it, with what it has so far; resume it 
 downloads-close-anyway = Close anyway
 downloads-keep = Keep downloading
 downloads-downloaded = { $size } downloaded
+downloads-copied = { $done } of { $total } copied
+downloads-move = Move…
+downloads-move-to = Move { $title } to…
+downloads-move-running = { $title } is running; close it, then move it
+downloads-moving-wait = { $title } is moving; wait for it to finish
 downloads-left = { $time } left
 downloads-starting = Starting { $engine }…
 downloads-failed = Failed: { $error }

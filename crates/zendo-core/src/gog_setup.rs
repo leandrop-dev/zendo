@@ -158,6 +158,28 @@ pub fn needed(game: &Game) -> bool {
         && launch::prefix(game).is_some_and(|prefix| !done_in(&prefix).contains(app))
 }
 
+/// Has GOG's setup run again at the game's next start, as Heroic does
+/// after a move: the game's own steps write its folder into the prefix.
+///
+/// # Errors
+///
+/// When the prefix's record cannot be written.
+pub fn forget(game: &Game) -> anyhow::Result<()> {
+    let Launch::Engine { app, .. } = &game.launch else {
+        return Ok(());
+    };
+    let Some(prefix) = launch::prefix(game).filter(|_| applies(game)) else {
+        return Ok(());
+    };
+    let mut done = done_in(&prefix);
+    if !done.remove(app) {
+        return Ok(());
+    }
+    let file = prefix.join(DONE_FILE);
+    paths::write_atomic(&file, &serde_json::to_vec_pretty(&done)?)
+        .with_context(|| format!("could not write {}", file.display()))
+}
+
 /// Runs GOG's setup in the game's prefix, saying each step to `report`
 /// (a redistributable's name, or the game's title for its own steps).
 /// A step that fails does not stop the others; the prefix then counts it

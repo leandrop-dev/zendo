@@ -129,6 +129,12 @@ install it and give it its colours, but it runs on any Linux desktop.
   for next time. A game's page shows its download size, size on disk and
   latest version, and for the games Zendo installed whether an update is
   waiting.
+- Moves a game Zendo installed to another folder (More, then Move…, in
+  the desktop's folder dialog): renamed at once on the same drive, copied
+  with its progress on the Downloads page to another drive, then the old
+  folder deleted. Stopping or a failure leaves the game where it was. The
+  store's record, applied mods and GOG's setup (run again at the next
+  start) follow it.
 - Installs DLC: the Store asks whether to install a game's DLC with it,
   and the DLC card on an Epic or GOG game's page installs or uninstalls
   each, or all. Heroic's games show their DLC; Heroic installs those.
