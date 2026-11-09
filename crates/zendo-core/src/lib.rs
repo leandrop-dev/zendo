@@ -10,6 +10,7 @@
 //! images it downloaded).
 
 pub mod appinfo;
+pub mod cloud_saves;
 pub mod config;
 pub mod covers;
 mod desktop;

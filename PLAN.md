@@ -1778,6 +1778,61 @@ brackets):
       and does not stop the game.
     Checked: clippy, tests (the flags, reading `user.reg`, Settings'
     Remove). Tried by the user 2026-11-09 [firm].
+    14b, built 2026-11-09 (`cloud_saves.rs`). Checked first (legendary's
+    and gogdl's help, their source for facts only, no code taken; GOG's
+    remote config for Cyberpunk 2077):
+    - legendary: `sync-saves <app>` with `--skip-upload`,
+      `--skip-download`, `--force-upload`, `--force-download`; it finds
+      the save folder from the game's `CloudSaveFolder` and the prefix in
+      `WINEPREFIX`, so the prefix must have been started once.
+    - gogdl: `save-sync <path> <id> --ts <time> --name <location> --os
+      windows` with the same four flags; it prints the time of this sync
+      (0 before the first), which Zendo keeps per game and location in
+      `~/.local/share/zendo/cloud-saves.json`. On a conflict (both sides
+      changed) it logs "Files in conflict", moves nothing and still
+      prints a time: Zendo keeps the old time and asks for Upload or
+      Download.
+    - GOG's save locations: `remote-config.gog.com/components/
+      galaxy_client/clients/<clientId>` (the `clientId` in
+      `goggame-<id>.info`), `content.Windows.cloudStorage.locations`,
+      each a path with placeholders (`<?SAVED_GAMES?>/CD Projekt
+      Red/Cyberpunk 2077`). Zendo puts them into the prefix as Proton
+      makes it (user `steamuser`: Documents, Saved Games, AppData's
+      Local, LocalLow, Roaming; `<?INSTALL?>` the game's folder) and
+      refuses a placeholder it does not know rather than guess.
+    The sheet's Cloud saves, for Windows games from Epic and GOG: the
+    switch fetches the cloud's newer saves before the game (a failure is
+    shown and does not stop it) and sends the newer ones after it ends;
+    Sync now syncs each way; Upload and Download replace one side, each
+    asked twice. Not run against a real game here, as it would move the
+    user's saves. Checked: clippy, tests (the locations, the
+    placeholders, the flags, the sheet's buttons).
+    Tried by the user 2026-11-09: the syncs work; asked for them on by
+    default, as Steam has them, and their state on the game's page.
+    Then [firm]:
+    - On unless the game's launch options say `cloud_saves = false`
+      (unset is on, so the files written before still read).
+    - Before a prefix's first start nothing syncs (nothing to sync
+      into); after it the game's end syncs.
+    - legendary 0.21.1 (Heroic's fork, the installed `cli.py` read):
+      `-y` skips a game whose save folder it has not kept ("Save path
+      for this title has not been set, skipping due to --yes"), and exits
+      well; the hidden `--accept-path` has it work the folder out from
+      `CloudSaveFolder` and the prefix's `user.reg` and keep it. Cat
+      Quest's `save_path` was still null, so Epic's syncs had done
+      nothing before this. legendary also exits well for a game without
+      cloud saves (not named in its log: no `Checking "…"` line) and
+      skips a folder it cannot work out ("unprocessed variables":
+      `{UserProfile}`, 1 of the 64 Epic games here with a save folder),
+      so Zendo reads its log. It takes unknown flags without a word
+      (`parse_known_args`).
+    - GOG: no client id or no Windows locations is "no cloud saves", not
+      an error.
+    - Each sync's outcome (in sync, no cloud saves, failed and why) and
+      time in `~/.local/share/zendo/cloud-saves-status.json`; the game
+      page's Details says it ("In sync, 5 min ago", "Failed 2 h ago:
+      …", "Syncing the saves…" as the game ends, "Off" when turned off).
+    Tried by the user 2026-11-09 [firm]: the syncs and the page's line work.
 15. (was 18) The prefix's tools: winecfg, winetricks, running an `.exe` in the
     game's prefix (installers, patches), and opening the prefix's
     folder.

@@ -11,6 +11,7 @@ use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, row, text};
 use iced::{Alignment, Element, Task};
+use zendo_core::cloud_saves;
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
 
@@ -73,8 +74,11 @@ pub enum RunMessage {
     /// They did not, in time.
     Missed(String),
     Ended(String),
-    /// The script after the game failed: how.
-    AfterFailed(String),
+    /// Its saves are syncing, after it ended.
+    SavesSyncing(String),
+    /// What follows the game (its saves' sync, its script) is done: how it
+    /// went.
+    AfterDone(String, Result<(), String>),
     Stop(String),
 }
 
@@ -138,8 +142,13 @@ impl Zendo {
                 }
                 Task::none()
             }
-            RunMessage::Started(id, Ok(started)) => self.started(&id, started),
+            RunMessage::Started(id, Ok(started)) => {
+                // Its saves were fetched as it started.
+                self.cloud.reload();
+                self.started(&id, started)
+            }
             RunMessage::Started(id, Err(err)) => {
+                self.cloud.reload();
                 self.running.games.remove(&id);
                 self.status = Some(err);
                 Task::none()
@@ -177,8 +186,16 @@ impl Zendo {
                 self.status = Some(t!("run-closed", title = title, minutes = minutes));
                 Task::none()
             }
-            RunMessage::AfterFailed(err) => {
-                self.status = Some(err);
+            RunMessage::SavesSyncing(id) => {
+                self.cloud.syncing.insert(id);
+                Task::none()
+            }
+            RunMessage::AfterDone(id, result) => {
+                self.cloud.syncing.remove(&id);
+                self.cloud.reload();
+                if let Err(err) = result {
+                    self.status = Some(err);
+                }
                 Task::none()
             }
             RunMessage::Stop(id) => {
@@ -332,8 +349,12 @@ fn follow(game: Game) -> impl Stream<Item = RunMessage> {
             }
             // Only for a game Zendo started (its group): the others'
             // launchers have their own.
-            if own && let Err(err) = launch::after(&game) {
-                send(RunMessage::AfterFailed(format!("{err:#}")));
+            if own {
+                if cloud_saves::wanted_for(&game) {
+                    send(RunMessage::SavesSyncing(id.clone()));
+                }
+                let result = launch::after(&game).map_err(|err| format!("{err:#}"));
+                send(RunMessage::AfterDone(id, result));
             }
         });
         while let Some(message) = receiver.next().await {

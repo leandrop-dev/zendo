@@ -7,6 +7,7 @@
 mod about;
 mod accounts;
 mod artwork;
+mod cloud_saves;
 mod dlc;
 mod downloads;
 mod eos_overlay;
@@ -302,6 +303,7 @@ struct Zendo {
     protons: Protons,
     runtimes: RuntimesState,
     overlay: OverlayState,
+    cloud: cloud_saves::CloudState,
     steam: SteamState,
     steam_installs: SteamInstalls,
     /// `ProtonDB`'s rating of each game whose page was opened.
@@ -352,6 +354,7 @@ impl Zendo {
             protons: Protons::default(),
             runtimes: RuntimesState::default(),
             overlay: OverlayState::default(),
+            cloud: cloud_saves::CloudState::load(),
             steam: SteamState::default(),
             steam_installs: SteamInstalls::default(),
             ratings: std::collections::HashMap::new(),

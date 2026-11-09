@@ -316,6 +316,9 @@ impl Zendo {
                 add(t!("fact-updates"), text(line).size(14).color(color).into());
             }
         }
+        if let Some(line) = self.cloud_line(game) {
+            add(t!("fact-cloud-saves"), line);
+        }
         let facts = store_facts(
             self.store.owned(&game.id),
             self.store.info.get(&game.id),

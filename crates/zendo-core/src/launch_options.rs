@@ -140,6 +140,11 @@ pub struct LaunchOptions {
     /// (`--skip-version-check`); legendary refuses otherwise.
     #[serde(skip_serializing_if = "is_false")]
     pub skip_update_check: bool,
+    /// The game's cloud saves brought before it starts and sent after it
+    /// ends ([`crate::cloud_saves`]), for Epic and GOG games: on unless
+    /// `false`, as Steam has them. See [`LaunchOptions::syncs_saves`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloud_saves: Option<bool>,
     /// Epic's EOS overlay on in the game's prefix ([`crate::eos_overlay`]);
     /// off when unset.
     #[serde(skip_serializing_if = "is_false")]
@@ -270,6 +275,18 @@ fn is_false(value: &bool) -> bool {
 }
 
 impl LaunchOptions {
+    /// Whether the game's cloud saves sync before and after it: unless
+    /// turned off.
+    #[must_use]
+    pub fn syncs_saves(&self) -> bool {
+        self.cloud_saves != Some(false)
+    }
+
+    /// Turns the cloud saves' sync on (the default, so left unset) or off.
+    pub fn set_syncs_saves(&mut self, on: bool) {
+        self.cloud_saves = (!on).then_some(false);
+    }
+
     #[must_use]
     pub fn path() -> Option<PathBuf> {
         paths::config_home().map(|dir| dir.join("zendo/games.toml"))

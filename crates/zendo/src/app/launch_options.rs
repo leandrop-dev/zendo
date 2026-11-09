@@ -17,6 +17,7 @@ use iced::widget::{
     toggler,
 };
 use iced::{Alignment, Background, Color, Element, Length, Task};
+use zendo_core::cloud_saves::{self, Done, How};
 use zendo_core::launch_options::{self, LaunchOptions};
 use zendo_core::steam_runtime::{self, Runtime};
 use zendo_core::store_tasks::{self, StoreTask};
@@ -54,10 +55,20 @@ pub struct Sheet {
     language: String,
     /// Whether Epic approves the game for offline play, when it says.
     offline_approved: Option<bool>,
+    saves: Saves,
     gamescope: gamescope::Fields,
     /// For a native game: none, then the runtimes installed.
     runtimes: Vec<Pick<Runtime>>,
     error: Option<String>,
+}
+
+/// The cloud saves part: the sync running, the Upload or Download pressed
+/// once, and how the last went.
+#[derive(Debug, Default)]
+struct Saves {
+    syncing: bool,
+    confirm: Option<How>,
+    note: Option<(String, bool)>,
 }
 
 /// The stores whose engines take a program and list other ways to start
@@ -290,6 +301,9 @@ pub enum SheetMessage {
     Offline(bool),
     SkipUpdateCheck(bool),
     EosOverlay(bool),
+    CloudSaves(bool),
+    SyncSaves(How),
+    SavesSynced(Result<Done, String>),
     SteamRuntime(Pick<Runtime>),
     Language(String),
     Width(String),
@@ -380,6 +394,10 @@ impl Zendo {
             SheetMessage::Offline(on) => options.offline = on,
             SheetMessage::SkipUpdateCheck(on) => options.skip_update_check = on,
             SheetMessage::EosOverlay(on) => options.eos_overlay = on,
+            SheetMessage::CloudSaves(on) => options.set_syncs_saves(on),
+            SheetMessage::SyncSaves(_) | SheetMessage::SavesSynced(_) => {
+                return self.update_saves(message);
+            }
             SheetMessage::SteamRuntime(pick) => options.steam_runtime = pick.value,
             SheetMessage::Language(language) => sheet.language = language,
             SheetMessage::Width(width) => {
@@ -412,6 +430,67 @@ impl Zendo {
             | SheetMessage::After(_) => return self.update_starting(message),
             SheetMessage::Save => return self.save_sheet(),
             SheetMessage::Close => self.sheet = None,
+        }
+        Task::none()
+    }
+
+    /// Syncing the game's saves by hand: Upload and Download replace one
+    /// side, so they ask once more.
+    fn update_saves(&mut self, message: SheetMessage) -> Task<Message> {
+        let game = self
+            .sheet
+            .as_ref()
+            .and_then(|sheet| self.game(&sheet.id))
+            .cloned();
+        let Some(sheet) = self.sheet.as_mut() else {
+            return Task::none();
+        };
+        let saves = &mut sheet.saves;
+        match message {
+            SheetMessage::SyncSaves(how) => {
+                if saves.syncing {
+                    return Task::none();
+                }
+                let forced = matches!(how, How::ForceUpload | How::ForceDownload);
+                if forced && saves.confirm != Some(how) {
+                    saves.confirm = Some(how);
+                    return Task::none();
+                }
+                saves.confirm = None;
+                saves.note = None;
+                let Some(game) = game else {
+                    return Task::none();
+                };
+                saves.syncing = true;
+                if !self.persist {
+                    return Task::none();
+                }
+                return Task::perform(
+                    blocking(move || {
+                        cloud_saves::sync(&game, how).map_err(|err| format!("{err:#}"))
+                    }),
+                    |result| Message::Sheet(SheetMessage::SavesSynced(result)),
+                );
+            }
+            SheetMessage::SavesSynced(result) => {
+                saves.syncing = false;
+                saves.note = Some(match result {
+                    Ok(Done::Synced) => (t!("saves-synced"), true),
+                    Ok(Done::NoCloudSaves) => (
+                        t!(
+                            "cloud-none",
+                            store = game
+                                .as_ref()
+                                .map(|game| super::format::source(game.source))
+                                .unwrap_or_default()
+                        ),
+                        true,
+                    ),
+                    Err(err) => (err, false),
+                });
+                self.cloud.reload();
+            }
+            _ => {}
         }
         Task::none()
     }
@@ -542,6 +621,7 @@ impl Zendo {
             picking: false,
             language: options.language.clone().unwrap_or_default(),
             offline_approved: store_tasks::epic_offline(&game),
+            saves: Saves::default(),
             gamescope: gamescope::Fields::of(&options),
             runtimes: if windows {
                 Vec::new()
@@ -584,6 +664,7 @@ impl Zendo {
             Ok(()) => {
                 self.status = Some(t!("options-saved", title = sheet.title.as_str()));
                 self.sheet = None;
+                self.cloud.reload();
             }
             Err(err) => sheet.error = Some(format!("{err:#}")),
         }
@@ -641,6 +722,9 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
 
     if sheet.store.is_some() {
         body = body.push(starting(sheet));
+        if sheet.windows {
+            body = body.push(cloud_saves_part(sheet));
+        }
     }
 
     body = body.push(tool_switches(sheet));
@@ -814,6 +898,51 @@ fn runner_switches(sheet: &Sheet) -> Element<'_, Message> {
             SheetMessage::NoUmu,
         ))
         .into()
+}
+
+/// The game's cloud saves: kept in sync around the game, or synced now.
+fn cloud_saves_part(sheet: &Sheet) -> Element<'_, Message> {
+    let saves = &sheet.saves;
+    let action = |label: String, how: How| {
+        let label = if saves.confirm == Some(how) {
+            t!("saves-really", action = label)
+        } else {
+            label
+        };
+        button(text(label).size(14))
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press_maybe(
+                (!saves.syncing).then_some(Message::Sheet(SheetMessage::SyncSaves(how))),
+            )
+    };
+    let mut part = column![
+        switch(
+            t!("saves-around"),
+            t!("saves-around-about"),
+            sheet.options.syncs_saves(),
+            None,
+            SheetMessage::CloudSaves,
+        ),
+        row![
+            action(t!("saves-sync-now"), How::Both),
+            action(t!("saves-upload"), How::ForceUpload),
+            action(t!("saves-download"), How::ForceDownload),
+        ]
+        .spacing(10),
+    ]
+    .spacing(12);
+    if saves.syncing {
+        part = part.push(text(t!("saves-syncing")).size(13).color(colors().dim));
+    } else if let Some((note, good)) = &saves.note {
+        part =
+            part.push(
+                text(note)
+                    .size(13)
+                    .color(if *good { colors().good } else { colors().bad }),
+            );
+    }
+    part.into()
 }
 
 /// `MangoHud`, `GameMode` and gamescope, with gamescope's settings when on.
@@ -1266,6 +1395,45 @@ mod tests {
         );
         let _ = zendo.update(Message::Sheet(SheetMessage::Language(" fr ".into())));
         let _ = zendo.update(Message::Sheet(SheetMessage::NoUmu(true)));
+        let _ = zendo.update(Message::Activate);
+        assert!(zendo.sheet.is_none(), "saved");
+    }
+
+    #[test]
+    fn syncs_saves_by_hand_and_asks_before_replacing_a_side() {
+        let mut zendo = zendo_with(gog_game());
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        let saves = |zendo: &Zendo| {
+            let saves = &zendo.sheet.as_ref().unwrap().saves;
+            (saves.syncing, saves.confirm)
+        };
+        let _ = zendo.update(Message::Sheet(SheetMessage::SyncSaves(How::ForceUpload)));
+        assert_eq!(saves(&zendo), (false, Some(How::ForceUpload)), "asks first");
+        let _ = zendo.update(Message::Sheet(SheetMessage::SyncSaves(How::ForceUpload)));
+        assert_eq!(saves(&zendo), (true, None), "uploading");
+        let _ = zendo.update(Message::Sheet(SheetMessage::SyncSaves(How::Both)));
+        assert_eq!(saves(&zendo), (true, None), "one at a time");
+        let _ = zendo.update(Message::Sheet(SheetMessage::SavesSynced(Err(
+            "conflict".into()
+        ))));
+        let sheet = zendo.sheet.as_ref().unwrap();
+        assert!(!sheet.saves.syncing);
+        assert_eq!(sheet.saves.note, Some(("conflict".to_owned(), false)));
+        assert!(
+            zendo.sheet.as_ref().unwrap().options.syncs_saves(),
+            "on by default"
+        );
+        let _ = zendo.update(Message::Sheet(SheetMessage::CloudSaves(false)));
+        assert_eq!(
+            zendo.sheet.as_ref().unwrap().options.cloud_saves,
+            Some(false)
+        );
+        let _ = zendo.update(Message::Sheet(SheetMessage::CloudSaves(true)));
+        assert_eq!(
+            zendo.sheet.as_ref().unwrap().options.cloud_saves,
+            None,
+            "the default is not written"
+        );
         let _ = zendo.update(Message::Activate);
         assert!(zendo.sheet.is_none(), "saved");
     }

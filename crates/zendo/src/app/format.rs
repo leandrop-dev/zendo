@@ -45,6 +45,17 @@ pub fn ago(then: u64, now: u64) -> String {
     }
 }
 
+/// How long before `now` a time was, to the minute while it is recent:
+/// "just now", "5 min ago", "3 h ago", then as [`ago`].
+pub fn since(then: u64, now: u64) -> String {
+    match now.saturating_sub(then) {
+        0..60 => t!("ago-now"),
+        seconds @ 60..3_600 => t!("ago-minutes", count = seconds / 60),
+        seconds @ 3_600..86_400 => t!("ago-hours", count = seconds / 3_600),
+        _ => ago(then, now),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +71,9 @@ mod tests {
         assert_eq!(ago(0, 20 * day), "2 weeks ago");
         assert_eq!(ago(0, 90 * day), "3 months ago");
         assert_eq!(ago(0, 800 * day), "2 years ago");
+        assert_eq!(since(100, 130), "just now");
+        assert_eq!(since(0, 300), "5 min ago");
+        assert_eq!(since(0, 3 * 3_600 + 5), "3 h ago");
+        assert_eq!(since(0, 2 * day), "2 days ago");
     }
 }

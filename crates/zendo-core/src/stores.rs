@@ -163,6 +163,23 @@ impl Store {
         Ok(output)
     }
 
+    /// [`Store::run_checked`] with more in the engine's environment.
+    pub(crate) fn run_checked_with(
+        self,
+        args: &[&str],
+        env: &[(&str, &std::ffi::OsStr)],
+    ) -> anyhow::Result<Output> {
+        let mut command = self.command()?;
+        command.args(args).envs(env.iter().copied());
+        let output = command
+            .output()
+            .with_context(|| format!("could not run {}", self.engine_name()))?;
+        if !output.status.success() {
+            bail!("{}", failure(self.engine_name(), &output));
+        }
+        Ok(output)
+    }
+
     /// Who is signed in: `Ok(None)` when no one is.
     ///
     /// # Errors

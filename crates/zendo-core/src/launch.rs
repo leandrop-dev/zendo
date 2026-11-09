@@ -34,13 +34,13 @@ use std::thread;
 use anyhow::{Context, bail};
 
 use crate::config::Config;
-use crate::eos_overlay;
 use crate::launch_options::LaunchOptions;
 use crate::runtimes::{self, Runtime};
 use crate::steam_runtime::Runtime as SteamRuntime;
 use crate::store_tasks::{self, Chosen};
 use crate::stores::Store;
 use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
+use crate::{cloud_saves, eos_overlay};
 
 /// A game just started.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,7 +183,7 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         Launch::Engine { app, .. } => {
             let command = engine_command(game, app)?;
             make_prefix(&command)?;
-            warning = apply_overlay(game);
+            warning = before_engine(game);
             let log = log_path(&game.id);
             (command, log, None)
         }
@@ -225,15 +225,26 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
     })
 }
 
+/// What a store game's launch options ask before it starts: its cloud
+/// saves brought, Epic's overlay on or off; what went wrong, which does
+/// not stop the game.
+fn before_engine(game: &Game) -> Option<String> {
+    let options = LaunchOptions::load(&game.id).ok()?;
+    let saves = cloud_saves::wanted(game, &options)
+        .then(|| cloud_saves::sync(game, cloud_saves::How::Fetch).err())
+        .flatten()
+        .map(|err| format!("{}'s cloud saves: {err:#}", game.title));
+    saves.or_else(|| apply_overlay(game, &options))
+}
+
 /// Turns Epic's overlay on or off in a Windows Epic game's prefix, as its
-/// launch options say; what went wrong, which does not stop the game.
-fn apply_overlay(game: &Game) -> Option<String> {
+/// launch options say.
+fn apply_overlay(game: &Game, options: &LaunchOptions) -> Option<String> {
     if game.source != Source::Epic || !needs_proton(game) {
         return None;
     }
-    let on = LaunchOptions::load(&game.id).ok()?.eos_overlay;
     let prefix = prefix(game)?;
-    eos_overlay::set_in(&prefix, on)
+    eos_overlay::set_in(&prefix, options.eos_overlay)
         .err()
         .map(|err| format!("{}: the EOS overlay: {err:#}", game.title))
 }
@@ -247,11 +258,21 @@ pub fn after(game: &Game) -> anyhow::Result<()> {
     if matches!(game.launch, Launch::Uri { .. }) {
         return Ok(());
     }
-    let after = LaunchOptions::load(&game.id)?.after;
-    if after.trim().is_empty() {
-        return Ok(());
-    }
-    run_script(game, &after, Script::After)
+    let options = LaunchOptions::load(&game.id)?;
+    // The saves first, so the script finds them as they are.
+    let saves = if cloud_saves::wanted(game, &options) {
+        cloud_saves::sync(game, cloud_saves::How::Send)
+            .map(drop)
+            .with_context(|| format!("{}'s cloud saves", game.title))
+    } else {
+        Ok(())
+    };
+    let script = if options.after.trim().is_empty() {
+        Ok(())
+    } else {
+        run_script(game, &options.after, Script::After)
+    };
+    saves.and(script)
 }
 
 #[derive(Debug, Clone, Copy)]
