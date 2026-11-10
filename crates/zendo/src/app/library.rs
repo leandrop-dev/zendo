@@ -70,7 +70,7 @@ impl Zendo {
             Some(_) if visible.is_empty() && !self.search.is_empty() => centered(
                 text(t!("library-no-match", search = self.search.as_str())).color(colors().dim),
             ),
-            Some(_) if visible.is_empty() && self.source.is_some() => {
+            Some(_) if visible.is_empty() && (self.source.is_some() || self.category.is_some()) => {
                 centered(text(t!("library-none-here")).color(colors().dim))
             }
             Some(_) if visible.is_empty() => {
@@ -151,7 +151,8 @@ impl Zendo {
         .into()
     }
 
-    /// Store chips, then the sort and the hidden games.
+    /// Store chips, then the sort, the hidden games and the user's
+    /// categories.
     fn toolbar(&self) -> Element<'_, Message> {
         let games: Vec<&Game> = self
             .library
@@ -169,8 +170,8 @@ impl Zendo {
         let mut chips: Vec<Element<'_, Message>> = vec![chip(
             t!("library-all"),
             Some(games.len()),
-            self.source.is_none(),
-            Message::SetSource(None),
+            self.source.is_none() && self.category.is_none(),
+            Message::ClearFilters,
         )];
         for source in SOURCES {
             let count = games.iter().filter(|game| game.source == source).count();
@@ -205,6 +206,21 @@ impl Zendo {
                 self.show_hidden,
                 Message::ShowHidden,
             ));
+        }
+        if !self.categories.is_empty() {
+            chips.push(space::horizontal().width(16).into());
+            for category in &self.categories {
+                let count = games
+                    .iter()
+                    .filter(|game| game.categories.contains(&category.name))
+                    .count();
+                chips.push(chip(
+                    category.name.clone(),
+                    Some(count),
+                    self.category.as_deref() == Some(category.name.as_str()),
+                    Message::SetCategory(Some(category.name.clone())),
+                ));
+            }
         }
         chips.push(space::horizontal().width(16).into());
         chips.push(chip(

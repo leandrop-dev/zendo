@@ -202,6 +202,10 @@ enum Message {
     SetSort(Sort),
     CycleSort,
     SetSource(Option<Source>),
+    /// A category chip; the one already chosen is left.
+    SetCategory(Option<String>),
+    /// Back to every game: no store, no category.
+    ClearFilters,
     /// Hides the current game, or brings it back when it is hidden.
     ToggleHidden,
     TogglePinned,
@@ -317,6 +321,8 @@ struct Zendo {
     search: String,
     /// The store chip chosen; `None` is "All".
     source: Option<Source>,
+    /// The category chip chosen; `None` is every category.
+    category: Option<String>,
     /// Index into the games the filters let through.
     selected: usize,
     columns: usize,
@@ -396,6 +402,7 @@ impl Zendo {
             page: Page::Library,
             search: String::new(),
             source: None,
+            category: None,
             selected: 0,
             columns: library::columns_for(START_SIZE.width),
             window_width: START_SIZE.width,
@@ -487,6 +494,11 @@ impl Zendo {
             .iter()
             .filter(|game| self.show_hidden || !game.hidden)
             .filter(|game| self.source.is_none_or(|source| game.source == source))
+            .filter(|game| {
+                self.category
+                    .as_ref()
+                    .is_none_or(|name| game.categories.contains(name))
+            })
             .filter(|game| {
                 let title = game.title.to_lowercase();
                 words.iter().all(|word| title.contains(word.as_str()))
@@ -583,11 +595,7 @@ impl Zendo {
             Message::ImagesDone => self.images_done(),
             Message::Resized(id, size) => self.resized(id, size),
             Message::Focused(id, focused) => self.focus_changed(id, focused),
-            Message::Scrolled(viewport) => {
-                *self.cursor().1 = viewport.absolute_offset().y;
-                self.viewport_height = viewport.bounds().height;
-                Task::none()
-            }
+            Message::Scrolled(viewport) => self.scrolled(viewport),
             Message::Navigate(page) => self.navigate(page),
             Message::Move(step) if matches!(self.page, Page::Library | Page::Store) => {
                 self.step(step)
@@ -613,18 +621,21 @@ impl Zendo {
             Message::Play => self.play(),
             Message::SetSort(sort) => self.set_sort(sort),
             Message::CycleSort if self.page == Page::Library => self.set_sort(self.sort.next()),
-            Message::SetSource(source) => {
-                let id = self.selected_id();
-                self.source = source;
-                self.select(id.as_deref())
-            }
+            Message::SetSource(source) => self.filter(|zendo| zendo.source = source),
+            Message::SetCategory(category) => self.filter(|zendo| {
+                zendo.category = if zendo.category == category {
+                    None
+                } else {
+                    category
+                };
+            }),
+            Message::ClearFilters => self.filter(|zendo| {
+                zendo.source = None;
+                zendo.category = None;
+            }),
             Message::ToggleHidden => self.toggle_hidden(),
             Message::TogglePinned => self.toggle_pinned(),
-            Message::ShowHidden => {
-                let id = self.selected_id();
-                self.show_hidden = !self.show_hidden;
-                self.select(id.as_deref())
-            }
+            Message::ShowHidden => self.filter(|zendo| zendo.show_hidden = !zendo.show_hidden),
             Message::ToggleFullscreen => self.toggle_fullscreen(),
             // From another page the search is not on screen to focus yet;
             // typing reaches it there all the same.
@@ -884,10 +895,22 @@ impl Zendo {
     }
 
     fn set_sort(&mut self, sort: Sort) -> Task<Message> {
-        let id = self.selected_id();
-        self.sort = sort;
         self.save(|state| state.sort = sort);
+        self.filter(|zendo| zendo.sort = sort)
+    }
+
+    /// Changes what the grid shows, keeping the cursor on its game.
+    fn filter(&mut self, change: impl FnOnce(&mut Self)) -> Task<Message> {
+        let id = self.selected_id();
+        change(self);
         self.select(id.as_deref())
+    }
+
+    /// How far the page's grid is scrolled, and how tall its window is.
+    fn scrolled(&mut self, viewport: Viewport) -> Task<Message> {
+        *self.cursor().1 = viewport.absolute_offset().y;
+        self.viewport_height = viewport.bounds().height;
+        Task::none()
     }
 
     fn toggle_fullscreen(&mut self) -> Task<Message> {
@@ -1487,6 +1510,68 @@ mod tests {
             .iter()
             .map(|game| game.title.as_str())
             .collect()
+    }
+
+    /// Puts games in a category, on the window and on the games themselves.
+    fn in_category(zendo: &mut Zendo, name: &str, ids: &[&str]) {
+        zendo.categories = vec![Category {
+            name: name.to_owned(),
+            games: ids.iter().map(|id| (*id).to_owned()).collect(),
+        }];
+        for id in ids {
+            if let Some(game) = zendo.game_mut(id) {
+                game.categories = vec![name.to_owned()];
+            }
+        }
+    }
+
+    #[test]
+    fn a_category_narrows_with_the_store_and_the_search() {
+        let mut zendo = zendo_with(3, 3);
+        in_category(&mut zendo, "Co-op", &["desktop:0", "desktop:1"]);
+        let titles = |zendo: &Zendo| {
+            zendo
+                .visible()
+                .iter()
+                .map(|g| g.title.clone())
+                .collect::<Vec<_>>()
+        };
+
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01"]);
+
+        let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
+        assert_eq!(titles(&zendo), ["Game 01"], "the store narrows it further");
+
+        let _ = zendo.update(Message::ClearFilters);
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
+        assert_eq!((zendo.source, zendo.category.clone()), (None, None));
+
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        let _ = zendo.update(Message::Type("02".into()));
+        assert_eq!(titles(&zendo), [] as [String; 0], "no match inside it");
+        let _ = zendo.update(Message::Back);
+        assert_eq!(titles(&zendo).len(), 2);
+    }
+
+    #[test]
+    fn a_chosen_category_chip_is_left_when_pressed_again() {
+        let mut zendo = zendo_with(2, 2);
+        in_category(&mut zendo, "Co-op", &["desktop:0"]);
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        assert_eq!(zendo.category.as_deref(), Some("Co-op"));
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        assert_eq!(zendo.category, None);
+    }
+
+    #[test]
+    fn the_cursor_stays_on_its_game_when_a_category_is_chosen() {
+        let mut zendo = zendo_with(4, 4);
+        in_category(&mut zendo, "Co-op", &["desktop:1", "desktop:3"]);
+        zendo.selected = 3;
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        assert_eq!(zendo.selected_id().as_deref(), Some("desktop:3"));
+        assert_eq!(zendo.selected, 1);
     }
 
     fn press(zendo: &mut Zendo, message: CategoriesMessage) {
