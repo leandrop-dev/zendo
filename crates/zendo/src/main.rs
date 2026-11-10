@@ -43,8 +43,16 @@ Usage:
 ";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    // A path on Linux need not be UTF-8: say so rather than panic.
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    let Some(args) = args
+        .iter()
+        .map(|arg| arg.to_str())
+        .collect::<Option<Vec<&str>>>()
+    else {
+        eprintln!("zendo: an argument is not valid UTF-8");
+        return ExitCode::from(2);
+    };
     // Started by the window for a store's sign-in; not for people.
     if let ["sign-in-window", store, url] = args.as_slice() {
         return sign_in_window::main(store, url);
