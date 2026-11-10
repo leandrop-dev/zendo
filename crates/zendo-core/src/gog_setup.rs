@@ -202,11 +202,18 @@ pub fn run(game: &Game, report: &mut dyn FnMut(&str)) -> anyhow::Result<Setup> {
     let folder = redist_folder().context("no home folder for GOG's redistributables")?;
     let wanted = manifest.redistributables();
     let mut setup = Setup::default();
-    if !wanted.is_empty() || manifest.script_interpreter {
+    // The list comes with the redistributables. A game that needs neither
+    // downloads nothing, and its own steps run without one.
+    let downloaded = !wanted.is_empty() || manifest.script_interpreter;
+    if downloaded {
         report("GOG's redistributables");
         download(&folder)?;
     }
-    let repository = read_repository(&folder)?;
+    let repository = if downloaded {
+        read_repository(&folder)?
+    } else {
+        Repository::default()
+    };
     let log = log_path(&game.id).context("no folder for the log")?;
     start_log(&log)?;
     for id in &wanted {
