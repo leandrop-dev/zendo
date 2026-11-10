@@ -1574,6 +1574,45 @@ mod tests {
         assert_eq!(zendo.selected, 1);
     }
 
+    #[test]
+    fn the_categories_button_targets_its_own_game() {
+        let zendo = zendo_with(2, 3);
+        let game = zendo.game("desktop:1").unwrap();
+        match game::change_categories(game) {
+            Message::Categories(CategoriesMessage::Open(targets)) => {
+                assert_eq!(targets.iter().collect::<Vec<_>>(), ["desktop:1"]);
+            }
+            other => panic!("not the categories sheet: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_game_page_opens_the_categories_of_that_game() {
+        let mut zendo = zendo_with(2, 3);
+        press(
+            &mut zendo,
+            CategoriesMessage::Open(BTreeSet::from(["desktop:1".to_owned()])),
+        );
+        assert_eq!(
+            zendo
+                .categories_sheet
+                .as_ref()
+                .unwrap()
+                .targets
+                .iter()
+                .collect::<Vec<_>>(),
+            ["desktop:1"]
+        );
+        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        assert_eq!(zendo.game("desktop:1").unwrap().categories, ["Book"]);
+        assert_eq!(
+            zendo.game("desktop:0").unwrap().categories,
+            [] as [String; 0],
+            "the other game was not the target"
+        );
+    }
+
     fn press(zendo: &mut Zendo, message: CategoriesMessage) {
         let _ = zendo.update(Message::Categories(message));
     }

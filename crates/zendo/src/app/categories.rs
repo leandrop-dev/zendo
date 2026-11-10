@@ -309,6 +309,12 @@ impl Zendo {
     }
 }
 
+/// Whether every game the sheet was opened for is in the category, which is
+/// what its checkbox shows.
+fn member(sheet: &Categories, category: &Category) -> bool {
+    !sheet.targets.is_empty() && sheet.targets.iter().all(|id| category.games.contains(id))
+}
+
 fn categories_card<'a>(sheet: &'a Categories, categories: &'a [Category]) -> Element<'a, Message> {
     let mut body = column![
         text(t!("categories-title")).size(20).font(BOLD),
@@ -369,7 +375,7 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
     let renaming = sheet.renaming.as_deref() == Some(name.as_str());
     let mut items: Vec<Element<'a, Message>> = Vec::new();
     if !sheet.targets.is_empty() {
-        let member = sheet.targets.iter().all(|id| category.games.contains(id));
+        let member = member(sheet, category);
         let ticked = name.clone();
         items.push(
             checkbox(member)
@@ -425,4 +431,31 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
             .into(),
     );
     row(items).spacing(10).align_y(Alignment::Center).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn category(name: &str, games: &[&str]) -> Category {
+        Category {
+            name: name.to_owned(),
+            games: games.iter().map(|id| (*id).to_owned()).collect(),
+        }
+    }
+
+    fn sheet(targets: &[&str]) -> Categories {
+        Categories {
+            targets: targets.iter().map(|id| (*id).to_owned()).collect(),
+            ..Categories::default()
+        }
+    }
+
+    #[test]
+    fn ticks_only_when_every_target_is_in_the_category() {
+        let co_op = category("Co-op", &["a"]);
+        assert!(!member(&sheet(&[]), &co_op), "no targets, nothing to tick");
+        assert!(!member(&sheet(&["a", "b"]), &co_op), "one of the two");
+        assert!(member(&sheet(&["a"]), &co_op));
+    }
 }

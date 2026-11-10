@@ -2,6 +2,7 @@
 //! then what it is about, its DLC, mods and GOG changelog beside a short
 //! panel of details, with the technical ones folded under it.
 
+use std::collections::BTreeSet;
 use std::f32::consts::{FRAC_PI_2, PI};
 use std::path::Path;
 
@@ -15,6 +16,7 @@ use zendo_core::launch;
 use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source};
 
+use super::categories::CategoriesMessage;
 use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alone, update_line};
 use super::steam_installs::SteamInstallMessage;
 use super::store::InfoState;
@@ -335,6 +337,25 @@ impl Zendo {
         };
         add(t!("fact-store"), plain(format::source(game.source)));
         add(t!("fact-started-by"), plain(game.launcher()));
+        let mut categories: Vec<Element<'a, Message>> = vec![if game.categories.is_empty() {
+            text(t!("categories-none"))
+                .size(14)
+                .color(colors().dim)
+                .into()
+        } else {
+            plain(game.categories.join(" · "))
+        }];
+        categories.push(
+            button(text(t!("categories-edit")).size(12))
+                .padding([4, 10])
+                .style(style::secondary)
+                .on_press(change_categories(game))
+                .into(),
+        );
+        add(
+            t!("fact-categories"),
+            row(categories).spacing(8).align_y(Alignment::Center).into(),
+        );
         if let Some(platform) = &game.details.platform {
             add(t!("fact-platform"), plain(platform_label(platform)));
         }
@@ -464,6 +485,11 @@ pub(super) fn label_row(label: String, value: Element<'_, Message>) -> Element<'
     ]
     .spacing(8)
     .into()
+}
+
+/// The Categories sheet, opened for one game: the details card's button.
+pub(super) fn change_categories(game: &Game) -> Message {
+    Message::Categories(CategoriesMessage::Open(BTreeSet::from([game.id.clone()])))
 }
 
 pub(super) fn plain<'a>(value: String) -> Element<'a, Message> {

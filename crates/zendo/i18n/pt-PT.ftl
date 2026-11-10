@@ -77,6 +77,10 @@ played-never = Ainda não jogado
 played-when = Jogado { $when }
 played-time = { $time } jogados
 
+fact-categories = Categorias
+categories-edit = Mudar…
+categories-none = Nenhuma
+
 ## Categorias
 
 categories-title = Categorias
