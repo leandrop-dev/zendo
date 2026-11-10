@@ -133,6 +133,13 @@ Stores (phase 4), read from legendary, gogdl and nile's source and Heroic
   counts as installed when the library has a game with the same id
   (`epic:<app name>`, `gog:<product id>`, `amazon:<product id>`, as
   Heroic's import names them).
+- Epic's save folder is `CloudSaveFolder` in legendary's metadata
+  (`metadata/<app name>.json` in Zendo's Epic folder); its variables are
+  `{AppData}` (Local AppData), `{InstallDir}`, `{UserDir}` (Documents),
+  `{UserSavedGames}`, `{EpicID}` and `{UserProfile}`. legendary 0.21.1
+  resolves all of them in a Wine prefix except `{UserProfile}`, which it
+  leaves unprocessed and then skips the game (Cat Quest II), so Zendo
+  works that folder out itself and passes `sync-saves --save-path`.
 
 Covers are kept at the size the store serves them. Iced decodes each to
 full-size RGBA (the Amazon one is about 6 MB in memory), which is fine for a

@@ -160,16 +160,155 @@ fn sync_now(game: &Game, how: How) -> anyhow::Result<Done> {
         );
     }
     match game.source {
-        Source::Epic => sync_epic(app, &prefix, how),
+        Source::Epic => sync_epic(game, app, &prefix, how),
         _ => sync_gog(game, app, &prefix, how),
     }
 }
 
-fn sync_epic(app: &str, prefix: &Path, how: How) -> anyhow::Result<Done> {
+fn sync_epic(game: &Game, app: &str, prefix: &Path, how: How) -> anyhow::Result<Done> {
+    let log = epic_sync(app, prefix, how, None)?;
+    if !log.contains("unprocessed variables") {
+        return epic_done(&log);
+    }
+    // legendary 0.21.1 works out {AppData}, {InstallDir}, {UserDir},
+    // {UserSavedGames} and {EpicID} in a Wine prefix, but not
+    // {UserProfile}: its Linux branch leaves that one out, so a game
+    // naming it (Cat Quest II) gets no save folder and is skipped. Work
+    // it out here and hand it the folder.
+    let path = epic_save_path(game, app, prefix)?;
+    fs::create_dir_all(&path).with_context(|| format!("could not make {}", path.display()))?;
+    let log = epic_sync(app, prefix, how, Some(&path))?;
+    epic_done(&log)
+}
+
+/// Runs legendary's `sync-saves`, with `save_path` when Zendo worked the
+/// folder out itself, and gives back its log.
+fn epic_sync(
+    app: &str,
+    prefix: &Path,
+    how: How,
+    save_path: Option<&Path>,
+) -> anyhow::Result<String> {
     let mut args = vec!["-y", "sync-saves", app, "--accept-path"];
+    let save_path = save_path.map(|path| path.to_string_lossy());
+    if let Some(path) = &save_path {
+        args.push("--save-path");
+        args.push(path);
+    }
     args.extend(how.flag());
     let output = Store::Epic.run_checked_with(&args, &[("WINEPREFIX", prefix.as_os_str())])?;
-    epic_done(&String::from_utf8_lossy(&output.stderr))
+    Ok(String::from_utf8_lossy(&output.stderr).into_owned())
+}
+
+/// The game's save folder from Epic's `CloudSaveFolder`, with its
+/// variables put into the prefix as Proton makes it (the user
+/// `steamuser`). Only asked for when legendary could not work it out.
+fn epic_save_path(game: &Game, app: &str, prefix: &Path) -> anyhow::Result<PathBuf> {
+    let metadata = crate::store_tasks::epic_metadata(app)
+        .with_context(|| format!("no record of Epic's saving {app}"))?;
+    let location = metadata
+        .pointer("/metadata/customAttributes/CloudSaveFolder/value")
+        .and_then(serde_json::Value::as_str)
+        .context("Epic names no save folder for the game")?;
+    epic_path(
+        location,
+        prefix,
+        game.details.install_path.as_deref(),
+        epic_account_id().as_deref(),
+    )
+}
+
+/// An Epic save folder, its variables put in. Epic writes them in either
+/// case (`{AppData}` and `{appdata}`), so they are matched that way.
+fn epic_path(
+    location: &str,
+    prefix: &Path,
+    install: Option<&Path>,
+    account: Option<&str>,
+) -> anyhow::Result<PathBuf> {
+    let user = prefix.join("drive_c/users/steamuser");
+    let mut places = vec![
+        ("userprofile", user.clone()),
+        ("userdir", user.join("Documents")),
+        ("usersavedgames", user.join("Saved Games")),
+        ("appdata", user.join("AppData/Local")),
+    ];
+    if let Some(install) = install {
+        places.push(("installdir", install.to_path_buf()));
+    }
+    if let Some(account) = account {
+        places.push(("epicid", PathBuf::from(account)));
+    }
+    let text = location.replace('\\', "/");
+    let mut swapped = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    while let Some(start) = rest.find('{') {
+        swapped.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            // Not a variable: leave it and the check below says so.
+            swapped.push_str(&rest[start..]);
+            rest = "";
+            break;
+        };
+        let name = after[..end].to_ascii_lowercase();
+        match places.iter().find(|(key, _)| *key == name) {
+            Some((_, place)) => swapped.push_str(&place.to_string_lossy()),
+            None => swapped.push_str(&rest[start..=start + 1 + end]),
+        }
+        rest = &after[end + 1..];
+    }
+    swapped.push_str(rest);
+    if let Some(start) = swapped.find('{') {
+        let unknown: String = swapped[start..]
+            .chars()
+            .take_while(|&c| c != '}')
+            .chain(std::iter::once('}'))
+            .collect();
+        bail!("Epic names a save folder Zendo does not know: {unknown}");
+    }
+    let path = PathBuf::from(swapped);
+    // Epic's own record is remote, so one that climbs out with `..`, or
+    // sits under neither the prefix nor the install, is not a folder
+    // Zendo makes or hands to legendary.
+    let Some(path) = normalise(&path) else {
+        bail!(
+            "Epic names a save folder outside the game's folder and prefix: {}",
+            path.display()
+        );
+    };
+    if !path.starts_with(prefix) && !install.is_some_and(|install| path.starts_with(install)) {
+        bail!(
+            "Epic names a save folder outside the game's folder and prefix: {}",
+            path.display()
+        );
+    }
+    Ok(path)
+}
+
+/// A path with its `.` and `..` worked out; `None` when a `..` climbs
+/// above the root.
+fn normalise(path: &Path) -> Option<PathBuf> {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::ParentDir => {
+                if !out.pop() {
+                    return None;
+                }
+            }
+            Component::CurDir => {}
+            part => out.push(part.as_os_str()),
+        }
+    }
+    Some(out)
+}
+
+/// legendary's account id, for `{EpicID}`.
+fn epic_account_id() -> Option<String> {
+    let file = Store::Epic.dir()?.join("user.json");
+    let user: serde_json::Value = serde_json::from_slice(&fs::read(file).ok()?).ok()?;
+    Some(user.get("account_id")?.as_str()?.to_owned())
 }
 
 /// What legendary did, from its log: it only names a game it checks, and
@@ -452,6 +591,63 @@ mod tests {
             error.to_string(),
             "GOG names a save folder Zendo does not know: <?APPLICATION_SUPPORT?>"
         );
+    }
+
+    #[test]
+    fn puts_epics_variables_into_the_prefix() {
+        let prefix = Path::new("/games/Prefixes/Cat Quest II");
+        let install = Path::new("/games/Cat Quest II");
+        assert_eq!(
+            epic_path(
+                "{UserProfile}/Documents/Cat Quest II/",
+                prefix,
+                Some(install),
+                None
+            )
+            .unwrap(),
+            Path::new(
+                "/games/Prefixes/Cat Quest II/drive_c/users/steamuser/Documents/Cat Quest II"
+            )
+        );
+        assert_eq!(
+            epic_path(
+                "{AppData}/../LocalLow/Studio/Game/",
+                prefix,
+                Some(install),
+                None
+            )
+            .unwrap(),
+            Path::new(
+                "/games/Prefixes/Cat Quest II/drive_c/users/steamuser/AppData/LocalLow/Studio/Game"
+            ),
+            "a relative step in Epic's folder is worked out"
+        );
+        assert_eq!(
+            epic_path("{InstallDir}/saves", prefix, Some(install), None).unwrap(),
+            Path::new("/games/Cat Quest II/saves")
+        );
+        assert_eq!(
+            epic_path(
+                "{usersavedgames}/Game/{EpicID}/",
+                prefix,
+                Some(install),
+                Some("abc")
+            )
+            .unwrap(),
+            Path::new("/games/Prefixes/Cat Quest II/drive_c/users/steamuser/Saved Games/Game/abc"),
+            "Epic writes the variables in either case"
+        );
+        let unknown = epic_path("{Weird}/x", prefix, Some(install), None).unwrap_err();
+        assert_eq!(
+            unknown.to_string(),
+            "Epic names a save folder Zendo does not know: {Weird}"
+        );
+        for outside in ["{UserProfile}/../../../../../../outside", "/tmp/x", ""] {
+            assert!(
+                epic_path(outside, prefix, Some(install), None).is_err(),
+                "{outside:?} was allowed"
+            );
+        }
     }
 
     #[test]
