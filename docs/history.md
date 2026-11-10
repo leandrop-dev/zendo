@@ -2180,8 +2180,10 @@ brackets):
     the user 2026-11-10: a flat list, not nested, and a game may be in
     several; chips in the library's toolbar beside the store chips, sorted
     by name, narrowing together with the store chip and the search words;
-    made, renamed and deleted in a sheet opened from the toolbar;
-    assigned from a game's page or from a selection in the grid; and
+    made, renamed and deleted in a sheet opened from the toolbar (a delete
+    asks once and drops the category on the second press, as removing a
+    game added by hand does); assigned from a game's page or from a
+    selection in the grid; and
     `zendo categorize` and `zendo uncategorize` for keybinds. Kept in
     `state.json` as `categories`, a name to the ids of the games in it:
     both the window and the command write it, as they write hidden and
@@ -2190,7 +2192,8 @@ brackets):
     left the library is kept. Selecting uses modifiers — Ctrl+Space, a
     check in each cover's corner, Esc to leave — since bare Space and `c`
     are typing keys for the filter (`app.rs`); a selection mode was offered
-    and declined. Built 2026-11-10 in seven commits: the model, the sheet,
+    and declined, and so was a controller binding: X, Y and Start are taken
+    in the library, so marks are keyboard and mouse only. Built 2026-11-10 in seven commits: the model, the sheet,
     the chips, the game page's row, the marks, the verbs, the documents.
     Checked: clippy, tests (13 new in the window, 7 in the core: the
     round trip and a file from before the field, blank and case-taken

@@ -24,6 +24,8 @@ pub struct Categories {
     /// The category being renamed, and what is typed in its field.
     pub(super) renaming: Option<String>,
     pub(super) rename_draft: String,
+    /// The category whose Delete was pressed once: pressed again, it goes.
+    pub(super) confirm_delete: Option<String>,
     /// What the last action did, and whether it worked.
     pub(super) note: Option<(String, bool)>,
 }
@@ -48,6 +50,12 @@ pub enum CategoriesMessage {
 
 impl Zendo {
     pub(super) fn update_categories(&mut self, message: CategoriesMessage) -> Task<Message> {
+        // Any other press takes back a delete that was only asking.
+        if !matches!(message, CategoriesMessage::Delete(_))
+            && let Some(sheet) = self.categories_sheet.as_mut()
+        {
+            sheet.confirm_delete = None;
+        }
         match message {
             CategoriesMessage::Open(targets) => self.open_categories(targets),
             CategoriesMessage::Close => self.categories_sheet = None,
@@ -186,7 +194,18 @@ impl Zendo {
         }
     }
 
+    /// Delete, pressed once to ask and again to drop the category with its
+    /// games, as removing a game added by hand does.
     fn delete_category(&mut self, name: &str) {
+        let Some(sheet) = self.categories_sheet.as_mut() else {
+            return;
+        };
+        if sheet.confirm_delete.as_deref() != Some(name) {
+            sheet.confirm_delete = Some(name.to_owned());
+            sheet.note = None;
+            return;
+        }
+        sheet.confirm_delete = None;
         let mut deleted = false;
         if !self.change_state(|state| deleted = state.delete_category(name)) {
             return;
@@ -423,12 +442,24 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
                 .into(),
         );
     }
+    let confirming = sheet.confirm_delete.as_deref() == Some(name.as_str());
     items.push(
-        button(text(t!("categories-delete")).size(13))
-            .padding([6, 14])
-            .style(style::danger)
-            .on_press(Message::Categories(CategoriesMessage::Delete(name)))
-            .into(),
+        button(
+            text(if confirming {
+                t!("categories-really-delete")
+            } else {
+                t!("categories-delete")
+            })
+            .size(13),
+        )
+        .padding([6, 14])
+        .style(if confirming {
+            style::danger
+        } else {
+            style::secondary
+        })
+        .on_press(Message::Categories(CategoriesMessage::Delete(name)))
+        .into(),
     );
     row(items).spacing(10).align_y(Alignment::Center).into()
 }

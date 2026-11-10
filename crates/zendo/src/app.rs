@@ -1795,11 +1795,36 @@ mod tests {
         );
 
         press(&mut zendo, CategoriesMessage::Delete("Co-op nights".into()));
+        assert_eq!(
+            category_names(&zendo),
+            ["Co-op nights"],
+            "a delete asks first"
+        );
+        assert_eq!(note(&zendo), None);
+        press(&mut zendo, CategoriesMessage::Delete("Co-op nights".into()));
         assert_eq!(category_names(&zendo), [] as [&str; 0]);
         assert_eq!(
             note(&zendo),
             Some(("Deleted Co-op nights".to_owned(), true))
         );
+    }
+
+    #[test]
+    fn a_delete_asks_first_and_another_press_takes_it_back() {
+        let mut zendo = zendo_with(1, 3);
+        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CategoriesMessage::Delete("Book".into()));
+        assert_eq!(category_names(&zendo), ["Book"], "it only asked");
+        press(&mut zendo, CategoriesMessage::Typed("Other".into()));
+        assert_eq!(
+            zendo.categories_sheet.as_ref().unwrap().confirm_delete,
+            None,
+            "typing elsewhere takes the ask back"
+        );
+        press(&mut zendo, CategoriesMessage::Delete("Book".into()));
+        assert_eq!(category_names(&zendo), ["Book"], "it asks again");
     }
 
     #[test]

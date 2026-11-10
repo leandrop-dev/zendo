@@ -97,6 +97,7 @@ categories-new = Create
 categories-new-placeholder = New category
 categories-rename = Rename
 categories-delete = Delete
+categories-really-delete = Really delete
 categories-ok = OK
 categories-cancel = Cancel
 categories-created = Made { $name }
