@@ -78,6 +78,14 @@ struct Record {
     minutes: u64,
 }
 
+/// One of the user's categories, as the window shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Category {
+    pub name: String,
+    /// The games in it, by id.
+    pub games: BTreeSet<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State {
     #[serde(default)]
@@ -86,6 +94,10 @@ pub struct State {
     hidden: BTreeSet<String>,
     #[serde(default)]
     pinned: BTreeSet<String>,
+    /// The user's categories, each by the name it was given to the ids of the
+    /// games in it. A game may be in several.
+    #[serde(default)]
+    categories: BTreeMap<String, BTreeSet<String>>,
     #[serde(default)]
     pub sort: Sort,
 }
@@ -180,6 +192,103 @@ impl State {
                 launches: record.launches,
             })
     }
+
+    /// Every category, by name, each with the games in it.
+    #[must_use]
+    pub fn categories(&self) -> Vec<Category> {
+        let mut categories: Vec<Category> = self
+            .categories
+            .iter()
+            .map(|(name, games)| Category {
+                name: name.clone(),
+                games: games.clone(),
+            })
+            .collect();
+        categories
+            .sort_by_cached_key(|category| (category.name.to_lowercase(), category.name.clone()));
+        categories
+    }
+
+    /// The names of the categories holding a game, sorted.
+    #[must_use]
+    pub fn categories_of(&self, id: &str) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .categories
+            .iter()
+            .filter(|(_, games)| games.contains(id))
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.sort_by_cached_key(|name| (name.to_lowercase(), name.clone()));
+        names
+    }
+
+    /// Makes a category, empty. False when the name is blank or already
+    /// taken, whatever its case. The name is kept as the user typed it.
+    pub fn add_category(&mut self, name: &str) -> bool {
+        let name = name.trim();
+        if name.is_empty() || self.category_key(name).is_some() {
+            return false;
+        }
+        self.categories.insert(name.to_owned(), BTreeSet::new());
+        true
+    }
+
+    /// Gives a category another name, keeping its games. False when it is
+    /// unknown, the new name is blank, or it names another category; a
+    /// change of case only is allowed.
+    pub fn rename_category(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        let Some(from) = self.category_key(from) else {
+            return false;
+        };
+        if to.is_empty() {
+            return false;
+        }
+        if let Some(taken) = self.category_key(to)
+            && taken != from
+        {
+            return false;
+        }
+        let Some(games) = self.categories.remove(&from) else {
+            return false;
+        };
+        self.categories.insert(to.to_owned(), games);
+        true
+    }
+
+    /// Drops a category and which games were in it.
+    pub fn delete_category(&mut self, name: &str) -> bool {
+        self.category_key(name)
+            .and_then(|name| self.categories.remove(&name))
+            .is_some()
+    }
+
+    /// Puts a game in a category, or takes it out. False when the category
+    /// does not exist: a game is never made to fit a name by accident.
+    pub fn set_category(&mut self, name: &str, id: &str, member: bool) -> bool {
+        let Some(name) = self.category_key(name) else {
+            return false;
+        };
+        let Some(games) = self.categories.get_mut(&name) else {
+            return false;
+        };
+        if member {
+            games.insert(id.to_owned());
+        } else {
+            games.remove(id);
+        }
+        true
+    }
+
+    /// A category's name as it is stored, found whatever the case or the
+    /// spaces around it.
+    fn category_key(&self, name: &str) -> Option<String> {
+        let name = name.trim();
+        self.categories
+            .keys()
+            .find(|key| key.eq_ignore_ascii_case(name))
+            .cloned()
+    }
 }
 
 #[cfg(test)]
@@ -260,5 +369,118 @@ mod tests {
         let state: State = serde_json::from_str(r#"{"hidden": ["a"]}"#).unwrap();
         assert!(state.is_hidden("a"));
         assert_eq!(state.sort, Sort::Recent);
+        assert_eq!(state.categories(), [] as [Category; 0]);
+    }
+
+    #[test]
+    fn keeps_categories_through_a_round_trip() {
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(state.add_category("Backlog"));
+        assert!(state.set_category("Co-op", "steam:620", true));
+        assert!(state.set_category("Backlog", "steam:620", true));
+
+        let state: State = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state.categories_of("steam:620"), ["Backlog", "Co-op"]);
+        let categories = state.categories();
+        assert_eq!(
+            categories
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Backlog", "Co-op"]
+        );
+        assert_eq!(
+            categories[1].games.iter().collect::<Vec<_>>(),
+            ["steam:620"]
+        );
+        assert_eq!(state.categories_of("steam:1"), [] as [String; 0]);
+    }
+
+    #[test]
+    fn adds_no_empty_or_duplicate_category() {
+        let mut state = State::default();
+        assert!(!state.add_category(""));
+        assert!(!state.add_category("   "));
+        assert!(state.add_category("Co-op"));
+        assert!(!state.add_category("co-op"));
+        assert_eq!(state.categories().len(), 1);
+        assert_eq!(state.categories()[0].name, "Co-op");
+    }
+
+    #[test]
+    fn renames_keeps_games_and_refuses_a_clash() {
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(state.set_category("Co-op", "steam:620", true));
+
+        assert!(state.rename_category("Co-op", "Co-op nights"));
+        assert_eq!(state.categories_of("steam:620"), ["Co-op nights"]);
+        assert!(
+            state
+                .categories_of("steam:620")
+                .contains(&"Co-op nights".to_owned())
+        );
+
+        assert!(state.add_category("Backlog"));
+        assert!(!state.rename_category("Co-op nights", "Backlog"));
+        assert_eq!(state.categories().len(), 2, "the clash changed nothing");
+        assert!(
+            state
+                .categories_of("steam:620")
+                .contains(&"Co-op nights".to_owned())
+        );
+
+        assert!(!state.rename_category("unknown", "Elsewhere"));
+        assert!(!state.rename_category("Backlog", "  "));
+
+        // A rename that only changes the case is not a clash with itself.
+        assert!(state.rename_category("Backlog", "backlog"));
+        assert_eq!(state.categories()[0].name, "backlog");
+    }
+
+    #[test]
+    fn deletes_a_category_with_its_games() {
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(state.set_category("Co-op", "steam:620", true));
+        assert!(state.delete_category("Co-op"));
+        assert_eq!(state.categories(), [] as [Category; 0]);
+        assert_eq!(state.categories_of("steam:620"), [] as [String; 0]);
+        assert!(!state.delete_category("Co-op"));
+        assert!(!state.delete_category("never there"));
+    }
+
+    #[test]
+    fn sets_a_category_only_where_it_exists() {
+        let mut state = State::default();
+        assert!(!state.set_category("Co-op", "steam:620", true));
+        assert_eq!(state.categories(), [] as [Category; 0], "nothing was made");
+        assert!(state.add_category("Co-op"));
+        assert!(state.set_category("Co-op", "steam:620", true));
+        assert_eq!(state.categories_of("steam:620"), ["Co-op"]);
+        assert!(state.set_category("Co-op", "steam:620", false));
+        assert_eq!(state.categories_of("steam:620"), [] as [String; 0]);
+        // The names are found whatever their case or spaces around them.
+        assert!(state.set_category("co-op", "steam:730", true));
+        assert_eq!(state.categories_of("steam:730"), ["Co-op"]);
+        assert!(state.set_category(" Co-op ", "steam:740", true));
+        assert_eq!(state.categories_of("steam:740"), ["Co-op"]);
+    }
+
+    #[test]
+    fn categories_sorts_by_lowercase_name() {
+        let mut state = State::default();
+        assert!(state.add_category("beta"));
+        assert!(state.add_category("Alpha"));
+        assert!(state.add_category("alpha 2"));
+        assert_eq!(
+            state
+                .categories()
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Alpha", "alpha 2", "beta"]
+        );
     }
 }

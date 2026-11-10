@@ -66,7 +66,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 
 pub use launch::launch;
-pub use state::{Sort, State};
+pub use state::{Category, Sort, State};
 
 /// Where a game was found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -229,6 +229,8 @@ pub struct Game {
     pub hidden: bool,
     /// Pinned by the user: pinned games lead the grid in every order.
     pub pinned: bool,
+    /// The user's categories holding it, by name, sorted.
+    pub categories: Vec<String>,
 }
 
 impl Game {
@@ -248,6 +250,7 @@ impl Game {
             played: Played::default(),
             hidden: false,
             pinned: false,
+            categories: Vec::new(),
         }
     }
 
@@ -394,6 +397,7 @@ impl Library {
             game.played = game.played.merge(state.played(&game.id));
             game.hidden = state.is_hidden(&game.id);
             game.pinned = state.is_pinned(&game.id);
+            game.categories = state.categories_of(&game.id);
         }
     }
 
@@ -476,5 +480,30 @@ mod tests {
             },
         );
         assert_eq!(desktop.command_line(), "xonotic -basedir \"/opt/x data\"");
+    }
+
+    #[test]
+    fn puts_the_states_categories_on_each_game() {
+        let game = |id: &str| {
+            Game::new(
+                id.into(),
+                id.into(),
+                Source::Desktop,
+                Launch::Uri { uri: String::new() },
+            )
+        };
+        let mut library = Library {
+            games: vec![game("desktop:a"), game("desktop:b")],
+            problems: Vec::new(),
+        };
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(state.add_category("Book"));
+        assert!(state.set_category("Co-op", "desktop:a", true));
+        assert!(state.set_category("Book", "desktop:a", true));
+
+        library.apply(&state);
+        assert_eq!(library.games[0].categories, ["Book", "Co-op"]);
+        assert_eq!(library.games[1].categories, [] as [String; 0]);
     }
 }
