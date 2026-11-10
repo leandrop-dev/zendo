@@ -1,4 +1,4 @@
-# Zendo — the backlog
+# Zendo: the backlog
 
 The remaining work, in the user's firm order. Read only the item you are
 starting. Items 1 to 19 are built; their detail is in history.md.

@@ -1,4 +1,4 @@
-# Zendo — build history
+# Zendo: build history
 
 What was built, when, and what was checked. Read this when you need to
 know why something is the way it is, or before changing an area whose
@@ -6,7 +6,7 @@ history matters. For the plan itself see ../PLAN.md; for the remaining
 work, backlog.md; for verified facts about the stores and tools,
 reference.md.
 
-## Journal, 2026-11-04 to 2026-11-09
+## Journal, 2026-11-04 to 2026-11-10
 
 Status: planned on 2026-11-04 from a hyprmonk session.
 2026-11-05: window default, Rust + Iced and optional tools decided; first
@@ -29,6 +29,11 @@ then asked for a default Proton setting and older releases, both built
 and checked. Phase 5 is done. The user asked to leave in-game quirks (controllers, full
 screen) for the settings sheet, and to get most features working first
 [firm].
+
+2026-11-10: item 19, the library's categories, planned with the user, built
+and tried the same day; a whole-workspace review (Rust and Iced, ten
+read-only passes) found 144 faults, 25 of them must fix, 24 of those fixed
+the same day.
 
 ## Phases
 
@@ -2118,14 +2123,88 @@ brackets):
     achievements with icons and their share of players. Tried by the
     user 2026-11-09: it works [firm].
 
-## Next session, as logged to 2026-11-10
 
-- Item 19, the library's categories, planned with the user and built
-  2026-11-10; tried by the user the same day: it works [firm]. Next: a
-  whole-workspace review (Rust and Iced) and its must-fix findings, then
-  item 20, the window
-  (minimise when a game starts, Discord presence, rescanning when a
-  launcher's files change, processes tracked by their start time).
+19. (was 22) The library's categories, the user's own groups. Planned with
+    the user 2026-11-10: a flat list, not nested, and a game may be in
+    several; chips in the library's toolbar beside the store chips, sorted
+    by name, narrowing together with the store chip and the search words;
+    made, renamed and deleted in a sheet opened from the toolbar (a delete
+    asks once and drops the category on the second press, as removing a
+    game added by hand does); assigned from a game's page or from a
+    selection in the grid; and
+    `zendo categorize` and `zendo uncategorize` for keybinds. Kept in
+    `state.json` as `categories`, a name to the ids of the games in it:
+    both the window and the command write it, as they write hidden and
+    pinned, and a name is the identity, so a rename is a key move. A name
+    is found trimmed and whatever its case, and a category whose games all
+    left the library is kept. Selecting uses modifiers (Ctrl+Space, a check
+    in each cover's corner, Esc to leave), since bare Space and `c` are
+    typing keys for the filter (`app.rs`); a selection mode was offered
+    and declined, and so was a controller binding: X, Y and Start are taken
+    in the library, so marks are keyboard and mouse only. Built 2026-11-10 in seven commits: the model, the sheet,
+    the chips, the game page's row, the marks, the verbs, the documents.
+    Checked: clippy, tests (13 new in the window, 7 in the core: the
+    round trip and a file from before the field, blank and case-taken
+    names, rename with a clash and a change of case only, delete, setting
+    only where the category exists, the sorted order, `Library::apply`,
+    the AND with the store and the search, the cursor kept, a chip
+    pressed twice, the sheet's create, rename, delete and refuse, the
+    assignment of several targets, the button's own game, the tick, and
+    the marks cleared by Esc, a rescan and a page change); the verbs by
+    hand in a throwaway home. Tried by the user 2026-11-10: it works
+    [firm]. After the trial the mark on each cover became a drawn square
+    instead of the `+` and `✓` glyphs, which the system font set at
+    different heights and, on some fonts, has no check mark for; the
+    square fills with the good colour when marked and is outlined when
+    not, with no glyph to misplace.
+
+## The whole-workspace review and its must-fix findings, 2026-11-10
+
+Read-only, ten passes over the two crates: five over `zendo-core` with the
+Rust review rules, five over `zendo` with the Rust and Iced rules. Every
+report is kept in `.mallet/reviews/2026-11-10/` (untracked). 144 findings:
+101 Rust, 43 Iced, 25 of them Must fix. The tooling at the time: `cargo fmt
+--check` clean, `cargo clippy --all-targets --all-features -- -W
+clippy::pedantic` with no warning, 119 window tests and 222 core tests
+green.
+
+The 25 Must fix, all built the same day:
+
+- Names read from files stay inside the folders they name: a mod id
+  (`mods.rs`), a GOG save location from remote config (`cloud_saves.rs`),
+  a local game's id and Steam's `installdir` (`launch.rs`, `steam.rs`).
+- A store record that cannot be read no longer reads as "nothing
+  installed": `discard`, a move's `delete_old` and `run`'s post-check
+  refuse instead of deleting a folder or blaming the engine
+  (`downloads.rs`); a move's Epic records are undone together
+  (`downloads.rs`); GOG's own setup steps run for games with no
+  redistributables (`gog_setup.rs`).
+- In the window: a queued mod's install waits for the slot instead of
+  being dropped (`installer.rs`, `mods.rs`); a checked key's account is
+  taken only when the key is the stored one (`nexus.rs`); an answer is
+  matched to its request for the SteamGridDB key (`settings.rs`,
+  `KeyChecked` carries the key), the art picker (`artwork.rs`) and a
+  sign-in (`accounts.rs`); starting a sign-in closes the previous window,
+  and one the engine finished after Cancel still counts.
+- On outside input: an image answer is capped at 16 MiB and a refused
+  status keeps its type, so the SteamGridDB fallback runs (`covers.rs`);
+  key-values in a Steam cache nest no deeper than 32 (`appinfo.rs`); a
+  date's year is bounded (`time.rs`); one vanished X window no longer
+  abandons the close sweep (`windows.rs`); `main` refuses a non-UTF-8
+  argument instead of panicking.
+- Settings are written into the file as it is now, under its lock
+  (`Config::update`), so a save no longer overwrites a hand edit or
+  another writer with a copy read at startup (`config.rs`, and its
+  callers).
+- Iced: overlays take keys in the order they are drawn, topmost first,
+  and Escape reaches the sheet before a focused field can keep it
+  (`app.rs`); the game page no longer stats the disk to draw its Open
+  buttons, and a failed `xdg-open` says so; a Proton or a runtime is
+  removed on a thread (`protons.rs`, `runtimes.rs`).
+
+Left open from the Must fix: `save_config` still reads the file and asks
+the keyring on the window thread, now without the data loss it had. The
+Should fix and Consider findings are in the reports above and not built.
 
 ## Next session, as logged to 2026-11-09
 
@@ -2177,36 +2256,12 @@ brackets):
   matched on Nexus by the part of the title before " - " or ":" too;
   the user confirmed the Nexus button shows.
 
-19. (was 22) The library's categories, the user's own groups. Planned with
-    the user 2026-11-10: a flat list, not nested, and a game may be in
-    several; chips in the library's toolbar beside the store chips, sorted
-    by name, narrowing together with the store chip and the search words;
-    made, renamed and deleted in a sheet opened from the toolbar (a delete
-    asks once and drops the category on the second press, as removing a
-    game added by hand does); assigned from a game's page or from a
-    selection in the grid; and
-    `zendo categorize` and `zendo uncategorize` for keybinds. Kept in
-    `state.json` as `categories`, a name to the ids of the games in it:
-    both the window and the command write it, as they write hidden and
-    pinned, and a name is the identity, so a rename is a key move. A name
-    is found trimmed and whatever its case, and a category whose games all
-    left the library is kept. Selecting uses modifiers — Ctrl+Space, a
-    check in each cover's corner, Esc to leave — since bare Space and `c`
-    are typing keys for the filter (`app.rs`); a selection mode was offered
-    and declined, and so was a controller binding: X, Y and Start are taken
-    in the library, so marks are keyboard and mouse only. Built 2026-11-10 in seven commits: the model, the sheet,
-    the chips, the game page's row, the marks, the verbs, the documents.
-    Checked: clippy, tests (13 new in the window, 7 in the core: the
-    round trip and a file from before the field, blank and case-taken
-    names, rename with a clash and a change of case only, delete, setting
-    only where the category exists, the sorted order, `Library::apply`,
-    the AND with the store and the search, the cursor kept, a chip
-    pressed twice, the sheet's create, rename, delete and refuse, the
-    assignment of several targets, the button's own game, the tick, and
-    the marks cleared by Esc, a rescan and a page change); the verbs by
-    hand in a throwaway home. Tried by the user 2026-11-10: it works
-    [firm]. After the trial the mark on each cover became a drawn square
-    instead of the `+` and `✓` glyphs, which the system font set at
-    different heights and, on some fonts, has no check mark for; the
-    square fills with the good colour when marked and is outlined when
-    not, with no glyph to misplace.
+## Next session, as logged to 2026-11-10
+
+- Item 19, the library's categories, planned with the user and built
+  2026-11-10; tried by the user the same day: it works [firm]. The
+  whole-workspace review and its must-fix findings followed the same day
+  (above); 24 of the 25 are built, the settings save on the window thread
+  is left open. Next: item 20, the window
+  (minimise when a game starts, Discord presence, rescanning when a
+  launcher's files change, processes tracked by their start time).

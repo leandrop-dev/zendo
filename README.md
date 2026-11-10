@@ -539,7 +539,7 @@ What Zendo keeps itself:
 | `~/.cache/zendo/nexus-games.json` | The games Nexus Mods has, to match yours by title, asked again after a week |
 | `~/.local/share/applications/zendo-nxm.desktop` | Written by Settings' "Open them with Zendo", so `nxm://` links open in Zendo; hidden from menus |
 | `$XDG_RUNTIME_DIR/zendo/links.sock` | Where `zendo nxm://…` hands a link to the open window |
-| `*.lock` beside `state.json`, `local.toml` and `games.toml`; `~/.local/share/zendo/mods.lock` | Empty files locked while a change is written, so two writers wait for each other |
+| `*.lock` beside `config.toml`, `state.json`, `local.toml` and `games.toml`; `~/.local/share/zendo/mods.lock` | Empty files locked while a change is written, so two writers wait for each other |
 
 Play time of games Zendo starts itself (the ones it installed or you
 added, `.desktop` ones) is counted until the game's last process ends; Steam and Heroic

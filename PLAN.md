@@ -24,7 +24,10 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 are built and checked, mods (phase 7) last on 2026-11-07 and
 tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 19 are built,
 most of them tried by the user. Item 19, the library's categories, was built
-on 2026-11-10 and tried by the user the same day: it works [firm].
+on 2026-11-10 and tried by the user the same day: it works [firm]. A
+whole-workspace review the same day (Rust and Iced) found 25 must-fix
+faults, 24 of them fixed and the last one, the settings save on the window
+thread, left open; its reports are in `.mallet/reviews/2026-11-10/`.
 
 Next is item 20, the window: minimise when a game starts, Discord presence,
 rescanning by itself when a launcher's files change. One gap is known from the

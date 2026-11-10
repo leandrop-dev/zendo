@@ -1,4 +1,4 @@
-# Zendo — verified reference
+# Zendo: verified reference
 
 Facts checked on this machine against the real tools and files, with the
 date each was checked. Read the part you need before changing anything that
@@ -88,9 +88,11 @@ the categories with the games in each),
 written by the window and the command alike; and `~/.cache/zendo/covers/`
 with `<id>.<ext>` covers, `<id>.hero.<ext>` wide images and a
 `misses.json` (keys `<id>` and `<id>#hero`) so a game without one is asked
-about again only after a week. One state file, not omarchy-games-menu's split by owner, since both
-sides write the same few things; each write reads, changes and renames the
-file into place.
+about again only after a week. One state file, not omarchy-games-menu's
+split by owner, since both sides write the same few things; each write holds
+`<file>.lock`, reads the file as it is now, changes it and renames it into
+place. `config.toml` is written the same way, since a save there must not
+lose a hand edit or another writer's change.
 
 Stores (phase 4), read from legendary, gogdl and nile's source and Heroic
 2.22.4's on 2026-11-06:
