@@ -25,7 +25,7 @@ pub struct ModsState {
     /// Each game's, read when its page opens.
     shown: HashMap<String, Shown>,
     /// The game whose mods are being changed, and what is happening.
-    busy: Option<(String, String)>,
+    pub(super) busy: Option<(String, String)>,
     /// A press that asks first: the game, and what it would do.
     confirm: Option<(String, Confirm)>,
     /// The mod folder as typed, before Save.
@@ -425,16 +425,17 @@ impl Zendo {
     ) -> Task<Message> {
         self.mods.busy = None;
         self.mods.confirm = None;
+        // The slot is free now: an installer that waited for it may run.
         match result {
             Ok((overview, note)) => {
                 if !note.is_empty() {
                     self.status = Some(note);
                 }
-                self.mods_ready(id, overview)
+                Task::batch([self.mods_ready(id, overview), self.next_installer()])
             }
             Err(err) => {
                 self.status = Some(err);
-                Task::none()
+                self.next_installer()
             }
         }
     }

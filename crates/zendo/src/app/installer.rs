@@ -47,7 +47,9 @@ impl Zendo {
     /// Opens a mod's installer, or keeps it for after the one open. One
     /// with no step to show installs straight away.
     pub(super) fn open_installer(&mut self, game: String, pending: Box<Pending>) -> Task<Message> {
-        if self.installer.open.is_some() {
+        // One installer at a time, and no other mods change in flight: the
+        // work waits for the slot rather than being dropped.
+        if self.installer.open.is_some() || self.mods.busy.is_some() {
             self.installer.waiting.push((game, pending));
             return Task::none();
         }
@@ -141,7 +143,7 @@ impl Zendo {
         }
     }
 
-    fn next_installer(&mut self) -> Task<Message> {
+    pub(super) fn next_installer(&mut self) -> Task<Message> {
         if self.installer.waiting.is_empty() {
             return Task::none();
         }
