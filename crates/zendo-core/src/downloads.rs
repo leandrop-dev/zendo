@@ -1180,14 +1180,32 @@ fn record_move(job: &Job, new: &Path, report: &mut dyn FnMut(Event)) -> anyhow::
     match store {
         Store::Epic => {
             let base = new.parent().context("the new folder has no parent")?;
-            // Not stopped halfway: the records change together.
             let stop = Stop::default();
-            for app in legendary_apps_in(&job.path)? {
-                let args: Vec<String> = ["move", &app, &base.to_string_lossy(), "--skip-move"]
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect();
-                engine(store, &args, &stop, report)?;
+            let apps = legendary_apps_in(&job.path)?;
+            // legendary moves one app at a time. A failure midway puts the
+            // records already written back where they were, so the folder
+            // rollback leaves no record pointing at a folder that is gone.
+            let mut changed: Vec<String> = Vec::new();
+            for app in &apps {
+                if let Err(err) = engine(store, &move_args(app, base), &stop, report) {
+                    for done in &changed {
+                        let _ = engine(store, &move_args(done, &job.path), &stop, report);
+                    }
+                    return Err(err);
+                }
+                changed.push(app.clone());
+            }
+            // legendary ends well when it refuses, so every record is read
+            // back, the DLC's as well as the game's.
+            for app in &apps {
+                if recorded_path(store, app).as_deref() != Some(new) {
+                    bail!(
+                        "{} still records {} in {}",
+                        store.engine_name(),
+                        app,
+                        job.path.display()
+                    );
+                }
             }
         }
         Store::Gog => {
@@ -1230,6 +1248,15 @@ fn record_move(job: &Job, new: &Path, report: &mut dyn FnMut(Event)) -> anyhow::
         );
     }
     Ok(())
+}
+
+/// One of legendary's `move` calls, the folder already copied.
+fn move_args(app: &str, to: &Path) -> Vec<String> {
+    let folder = to.to_string_lossy();
+    ["move", app, folder.as_ref(), "--skip-move"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Takes the game in [`Job::path`] as Zendo's own: legendary's and nile's
