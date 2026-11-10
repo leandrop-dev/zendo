@@ -28,6 +28,10 @@ Usage:
   zendo unhide <id>            bring it back
   zendo pin <id>               put a game first in every order
   zendo unpin <id>             stop
+  zendo categorize <id> <category>
+                               put a game in a category, made if new
+  zendo uncategorize <id> <category>
+                               take it out of one
   zendo covers                 download the covers and wide images missing
   zendo logs                   list the games' last launch logs, latest first
   zendo logs <id>              print a game's last launch log
@@ -73,6 +77,8 @@ fn main() -> ExitCode {
         ["unhide", id] => set_hidden(id, false),
         ["pin", id] => set_pinned(id, true),
         ["unpin", id] => set_pinned(id, false),
+        ["categorize", id, name] => set_category(id, name, true),
+        ["uncategorize", id, name] => set_category(id, name, false),
         ["covers"] => covers(),
         ["logs"] => {
             list_logs();
@@ -165,6 +171,50 @@ fn set_hidden(id: &str, hidden: bool) -> anyhow::Result<()> {
 fn set_pinned(id: &str, pinned: bool) -> anyhow::Result<()> {
     let game = find(id)?;
     State::update(|state| state.set_pinned(&game.id, pinned))?;
+    Ok(())
+}
+
+/// Puts a game in a category, made when it is new, or takes it out of one.
+fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        anyhow::bail!("a category needs a name");
+    }
+    let game = find(id)?;
+    // The name as it is stored, and whether the game was in it.
+    let mut category = name.to_owned();
+    let mut made = false;
+    let mut had = false;
+    State::update(|state| {
+        if let Some(found) = state
+            .categories()
+            .into_iter()
+            .find(|found| found.name.eq_ignore_ascii_case(name))
+        {
+            category = found.name;
+            had = found.games.contains(&game.id);
+        }
+        if member && !had {
+            made = state.add_category(name);
+            state.set_category(name, &game.id, true);
+        } else if !member {
+            state.set_category(name, &game.id, false);
+        }
+    })?;
+    if !member && !had {
+        anyhow::bail!("{id} is not in {category:?}");
+    }
+    if member {
+        if had {
+            println!("already in {category:?}");
+        } else if made {
+            println!("added {:?} to {category:?} (new category)", game.title);
+        } else {
+            println!("added {:?} to {category:?}", game.title);
+        }
+    } else {
+        println!("took {:?} out of {category:?}", game.title);
+    }
     Ok(())
 }
 

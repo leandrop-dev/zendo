@@ -384,6 +384,10 @@ zendo hide <id>              leave a game out of the window
 zendo unhide <id>            bring it back
 zendo pin <id>               put a game first in every order
 zendo unpin <id>             stop
+zendo categorize <id> <category>
+                             put a game in a category, made if new
+zendo uncategorize <id> <category>
+                             take it out of one
 zendo covers                 download the covers and wide images missing, saying what it found
 zendo nxm://…                download a mod from a Nexus Mods link, in the open window or a new one
 zendo logs                   list the games' last launch logs, latest first: when, size, id, title
