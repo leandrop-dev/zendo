@@ -19,7 +19,10 @@ pub fn parse_utc(text: &str) -> Option<u64> {
     let time = time.split_once('.').map_or(time, |(whole, _)| whole);
     let mut time = time.splitn(3, ':').map(str::parse::<i64>);
     let (hour, minute, second) = (time.next()?.ok()?, time.next()?.ok()?, time.next()?.ok()?);
-    if !(1..=12).contains(&month)
+    // A launcher's date is outside Zendo's control: a year it cannot mean
+    // would overflow the day count.
+    if !(1970..=9999).contains(&year)
+        || !(1..=12).contains(&month)
         || !(1..=31).contains(&day)
         || !(0..24).contains(&hour)
         || !(0..60).contains(&minute)
@@ -90,6 +93,9 @@ mod tests {
         assert_eq!(parse_utc("2026-11-06T01:08:40.436Z"), Some(1_793_927_320));
         assert_eq!(parse_utc(""), None);
         assert_eq!(parse_utc("2026-13-01T00:00:00Z"), None);
+        // A year no date can hold is refused, not overflowed.
+        assert_eq!(parse_utc("10000000000-01-01T00:00:00Z"), None);
+        assert_eq!(parse_utc("-2026-01-01T00:00:00Z"), None);
     }
 
     #[test]
