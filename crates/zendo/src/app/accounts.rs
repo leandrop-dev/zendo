@@ -138,8 +138,10 @@ impl Zendo {
                         .login_page()
                         .map(str::to_owned)
                         .or_else(|| sign_in.amazon.as_ref().map(|login| login.url.clone()));
-                    if let Some(page) = page.filter(|_| self.persist) {
-                        open(&page);
+                    if let Some(page) = page.filter(|_| self.persist)
+                        && let Err(err) = open(&page)
+                    {
+                        self.status = Some(err);
                     }
                 }
                 Task::none()
@@ -201,7 +203,9 @@ impl Zendo {
                 let url = login.url.clone();
                 sign_in.amazon = Some(login);
                 if sign_in.browser {
-                    open(&url);
+                    if let Err(err) = open(&url) {
+                        self.status = Some(err);
+                    }
                     Task::none()
                 } else {
                     self.open_window(Store::Amazon, url)

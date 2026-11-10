@@ -497,13 +497,12 @@ pub(super) fn plain<'a>(value: String) -> Element<'a, Message> {
 }
 
 fn open_button<'a>(label: String, path: &Path) -> Element<'a, Message> {
+    // Offered whether or not the folder is there: a `stat` here would run
+    // on every redraw, and opening a missing one says so on the status line.
     button(text(label).size(13))
         .padding([4, 10])
         .style(style::secondary)
-        .on_press_maybe(
-            path.exists()
-                .then(|| Message::Open(path.to_string_lossy().into_owned())),
-        )
+        .on_press(Message::Open(path.to_string_lossy().into_owned()))
         .into()
 }
 

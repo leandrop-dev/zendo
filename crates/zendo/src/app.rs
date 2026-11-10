@@ -567,14 +567,16 @@ impl Zendo {
     }
 
     /// What an open sheet, form, picker or chooser does with a key press.
+    /// Asked in the order `view` draws them, the topmost first, so the
+    /// surface the user sees is the one that hears the key.
     fn overlay_takes(&mut self, message: &Message) -> Option<Task<Message>> {
-        self.sheet_takes(message)
-            .or_else(|| self.form_takes(message))
-            .or_else(|| self.categories_takes(message))
-            .or_else(|| self.picker_takes(message))
-            .or_else(|| self.search_takes(message))
+        self.installer_takes(message)
             .or_else(|| self.chooser_takes(message))
-            .or_else(|| self.installer_takes(message))
+            .or_else(|| self.search_takes(message))
+            .or_else(|| self.picker_takes(message))
+            .or_else(|| self.categories_takes(message))
+            .or_else(|| self.form_takes(message))
+            .or_else(|| self.sheet_takes(message))
     }
 
     fn resized(&mut self, id: window::Id, size: Size) -> Task<Message> {
@@ -698,9 +700,11 @@ impl Zendo {
 
     /// Opens a link or a folder in the program the desktop chooses; tests
     /// open nothing.
-    fn open_target(&self, target: &str) -> Task<Message> {
-        if self.persist {
-            open(target);
+    fn open_target(&mut self, target: &str) -> Task<Message> {
+        if self.persist
+            && let Err(err) = open(target)
+        {
+            self.status = Some(err);
         }
         Task::none()
     }
@@ -1417,16 +1421,16 @@ fn fetch_images(mut fetcher: Fetcher, wanted: Vec<(Job, Kind)>) -> impl Stream<I
 }
 
 /// Opens a folder or a web page in the user's program for it.
-fn open(target: &str) {
-    let child = Command::new("xdg-open")
+fn open(target: &str) -> Result<(), String> {
+    let mut child = Command::new("xdg-open")
         .arg(target)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn();
-    if let Ok(mut child) = child {
-        thread::spawn(move || child.wait());
-    }
+        .spawn()
+        .map_err(|err| format!("could not open {target}: {err}"))?;
+    thread::spawn(move || child.wait());
+    Ok(())
 }
 
 fn now() -> u64 {
@@ -1444,7 +1448,12 @@ fn on_event(event: Event, status: event::Status, id: window::Id) -> Option<Messa
         Event::Window(window::Event::Resized(size)) => Some(Message::Resized(id, size)),
         Event::Window(window::Event::Focused) => Some(Message::Focused(id, true)),
         Event::Window(window::Event::Unfocused) => Some(Message::Focused(id, false)),
-        // A key a text field used (typing, its cursor, Escape) is its own.
+        // Escape closes what is open before a focused field can keep it.
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: Key::Named(Named::Escape),
+            ..
+        }) => Some(Message::Back),
+        // A key a text field used (typing, its cursor) is its own.
         Event::Keyboard(keyboard::Event::KeyPressed {
             key,
             modifiers,
