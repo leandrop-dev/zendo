@@ -75,7 +75,7 @@ fn read<S: BuildHasher>(
                 data: &data[..end],
                 at: at.at + APP_HEADER,
             };
-            if let Ok(tree) = body.map(strings.as_deref())
+            if let Ok(tree) = body.map(strings.as_deref(), 0)
                 && let Some(sizes) = app_sizes(&tree)
             {
                 found.insert(app, sizes);
@@ -176,8 +176,11 @@ impl Reader<'_> {
         Ok(text)
     }
 
-    /// A map's entries, up to its end mark.
-    fn map(&mut self, strings: Option<&[String]>) -> anyhow::Result<Value> {
+    /// A map's entries, up to its end mark. Nesting is bounded: a corrupt
+    /// cache must cost one game's size, not the whole app to a stack
+    /// overflow.
+    fn map(&mut self, strings: Option<&[String]>, depth: usize) -> anyhow::Result<Value> {
+        anyhow::ensure!(depth < 32, "key-values nested too deep");
         let mut entries = Vec::new();
         loop {
             let kind = self.u8()?;
@@ -195,7 +198,7 @@ impl Reader<'_> {
                 None => self.text()?,
             };
             let value = match kind {
-                0 => self.map(strings)?,
+                0 => self.map(strings, depth + 1)?,
                 1 => Value::Text(self.text()?),
                 // A 32-bit number, a pointer, a colour.
                 2 | 4 | 6 => Value::Number(u64::from(self.u32()?)),
