@@ -8,7 +8,6 @@ use iced::widget::{
     button, column, container, operation, row, scrollable, space, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, Task};
-use zendo_core::config::Config;
 use zendo_core::stores::{self, AmazonLogin, Store};
 
 use super::style::{self, BOLD, colors};
@@ -178,19 +177,13 @@ impl Zendo {
                 )
             }
             AccountMessage::SignedOut(store, result) => self.signed_out(store, result),
-            AccountMessage::SetGogPlaytime(on) => self.set_switch(on, |c| &mut c.gog_playtime),
-            AccountMessage::SetGogGalaxy(on) => self.set_switch(on, |c| &mut c.gog_galaxy),
+            AccountMessage::SetGogPlaytime(on) => {
+                self.save_setting(super::settings::Setting::GogPlaytime(on))
+            }
+            AccountMessage::SetGogGalaxy(on) => {
+                self.save_setting(super::settings::Setting::GogGalaxy(on))
+            }
         }
-    }
-
-    /// Turns one of the config's switches, kept as it was when the file
-    /// cannot be written.
-    fn set_switch(&mut self, on: bool, switch: fn(&mut Config) -> &mut bool) -> Task<Message> {
-        *switch(&mut self.config) = on;
-        if !self.save_config(|config| *switch(config) = on) {
-            *switch(&mut self.config) = !on;
-        }
-        Task::none()
     }
 
     fn amazon_ready(&mut self, result: Result<AmazonLogin, String>) -> Task<Message> {

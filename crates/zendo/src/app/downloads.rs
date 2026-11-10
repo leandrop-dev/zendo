@@ -499,24 +499,6 @@ impl Zendo {
         changes_files(job.action) && self.running.is_open(&job.id())
     }
 
-    /// Turns "Update games by themselves" on or off; turned on, the
-    /// updates found already are queued too.
-    pub(super) fn set_auto_update(&mut self, on: bool) -> Task<Message> {
-        self.config.auto_update = on;
-        if !self.save_config(|config| config.auto_update = on) {
-            self.config.auto_update = !on;
-            return Task::none();
-        }
-        let found: Vec<String> = self
-            .downloads
-            .updates
-            .iter()
-            .filter(|(_, state)| matches!(state, UpdateState::Available(_)))
-            .map(|(id, _)| id.clone())
-            .collect();
-        self.update_by_themselves(&found)
-    }
-
     /// Starts the first job not paused, unless one runs; it moves to the
     /// front of the queue. A job that changes a game's files waits while
     /// the game runs, and goes when it closes.
@@ -619,7 +601,7 @@ impl Zendo {
     /// Queues the updates just found, unless Settings says games update
     /// only when asked; a game already in the queue keeps its job. One
     /// running waits until it closes ([`Self::next_job`]).
-    fn update_by_themselves(&mut self, found: &[String]) -> Task<Message> {
+    pub(super) fn update_by_themselves(&mut self, found: &[String]) -> Task<Message> {
         if !self.config.auto_update {
             return Task::none();
         }

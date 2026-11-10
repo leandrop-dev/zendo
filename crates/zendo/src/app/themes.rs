@@ -142,7 +142,7 @@ impl Themes {
 
     /// Sets the window's colours from the choice, reading the tone again
     /// when it needs it.
-    fn apply(&mut self) {
+    pub(super) fn apply(&mut self) {
         self.modified = None;
         let id = match &self.choice {
             Choice::File(id) => id.clone(),
@@ -210,14 +210,12 @@ impl Themes {
 
 impl Zendo {
     pub(super) fn set_theme(&mut self, choice: &Choice) -> Task<Message> {
-        let theme = choice.tag().to_owned();
-        let previous = self.config.theme.replace(theme.clone());
-        if !self.save_config(|config| config.theme = Some(theme)) {
-            self.config.theme = previous;
-        }
+        let task = self.save_setting(super::settings::Setting::Theme(Some(
+            choice.tag().to_owned(),
+        )));
         self.themes.choice = Choice::chosen(self.config.theme.as_deref());
         self.themes.apply();
-        Task::none()
+        task
     }
 
     pub(super) fn look_at_tone(&mut self) -> Task<Message> {

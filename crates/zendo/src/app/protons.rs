@@ -13,7 +13,6 @@ use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, pick_list, progress_bar, row, text};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Size;
-use zendo_core::config::Config;
 use zendo_core::ge_proton::{self, Release};
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::proton::{self, Proton};
@@ -101,6 +100,15 @@ pub enum ProtonMessage {
     Remove(String),
     /// Remove finished, in a thread: the name, and what came of it.
     Removed(String, Result<(), String>),
+}
+
+impl Protons {
+    /// Says which Proton games without one of their own use now, once the
+    /// choice is in `config.toml`.
+    pub(super) fn default_set(&mut self) {
+        let shown = proton::default().map_or_else(|| t!("protons-umu"), |proton| proton.name);
+        self.note = Some((t!("protons-default-set", name = shown), true));
+    }
 }
 
 impl Zendo {
@@ -249,19 +257,7 @@ impl Zendo {
     /// Makes a Proton the default for games without one of their own, or
     /// goes back to Automatic with `None`, in `config.toml`.
     fn set_default_proton(&mut self, name: Option<String>) -> Task<Message> {
-        self.config.default_proton = name;
-        let setting = self.config.default_proton.clone();
-        let saved = if self.persist {
-            Config::update(|config| config.default_proton = setting).map(|_| ())
-        } else {
-            Ok(())
-        };
-        let shown = proton::default().map_or_else(|| t!("protons-umu"), |proton| proton.name);
-        self.protons.note = Some(match saved {
-            Ok(()) => (t!("protons-default-set", name = shown), true),
-            Err(err) => (format!("{err:#}"), false),
-        });
-        Task::none()
+        self.save_setting(super::settings::Setting::DefaultProton(name))
     }
 
     /// Automatic, each Proton found, and the one chosen even when gone.

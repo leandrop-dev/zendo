@@ -10,10 +10,13 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::config::{Config, Kept};
 use zendo_core::covers::{self, KeyCheck};
+use zendo_core::nexus::User;
 use zendo_core::secrets::Key;
 use zendo_core::{Source, State, launch, report};
 
+use super::downloads::UpdateState;
 use super::style::{self, BOLD, colors};
+use super::themes::Choice;
 use super::{Message, Zendo, blocking, key_id};
 use crate::i18n::{self, Language, t};
 
@@ -22,6 +25,68 @@ const KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
 /// The download workers Settings offers besides the engine's own choice,
 /// which is the computer's processors (legendary at most 16).
 const WORKERS: [u32; 4] = [2, 4, 8, 16];
+
+/// A change to the settings, written on a thread: asking the keyring can
+/// wait for the user, and the window must not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Setting {
+    DownloadCovers(bool),
+    Workers(Option<u32>),
+    Language(Option<String>),
+    AutoUpdate(bool),
+    Theme(Option<String>),
+    SteamGridDbKey {
+        key: Option<String>,
+        then: KeyThen,
+    },
+    NexusKey {
+        key: Option<String>,
+        then: NexusThen,
+    },
+    GogPlaytime(bool),
+    GogGalaxy(bool),
+    NexusAdult(bool),
+    DefaultProton(Option<String>),
+}
+
+/// What the Settings page says once the `SteamGridDB` key is written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum KeyThen {
+    Removed,
+    /// Saved after `SteamGridDB` accepted it.
+    Saved,
+    /// Saved although the check could not reach `SteamGridDB`.
+    Unchecked(String),
+}
+
+/// What the Settings page says once the Nexus key is written, and whose
+/// key it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum NexusThen {
+    Removed,
+    /// Saved after Nexus accepted it, as this account.
+    Saved(String, User),
+    /// Saved although the check could not reach Nexus.
+    Unchecked(String),
+}
+
+impl Setting {
+    fn apply(&self, config: &mut Config) {
+        match self {
+            Self::DownloadCovers(on) => config.download_covers = *on,
+            Self::Workers(workers) => config.download_workers = *workers,
+            Self::Language(language) => config.language.clone_from(language),
+            Self::AutoUpdate(on) => config.auto_update = *on,
+            Self::Theme(theme) => config.theme.clone_from(theme),
+            Self::SteamGridDbKey { key, .. } => config.steamgriddb_key.clone_from(key),
+            Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
+            Self::GogPlaytime(on) => config.gog_playtime = *on,
+            Self::GogGalaxy(on) => config.gog_galaxy = *on,
+            Self::NexusAdult(on) => config.nexus_adult = *on,
+            Self::DefaultProton(name) => config.default_proton.clone_from(name),
+        }
+    }
+}
 
 impl Zendo {
     pub(super) fn update_settings(&mut self, message: Message) -> Task<Message> {
@@ -39,10 +104,10 @@ impl Zendo {
                 let key = self.key.value.trim().to_owned();
                 self.key.value.clone_from(&key);
                 if key.is_empty() {
-                    if self.store_key(None) {
-                        self.key.note = Some((t!("key-removed"), true));
-                    }
-                    return Task::none();
+                    return self.save_setting(Setting::SteamGridDbKey {
+                        key: None,
+                        then: KeyThen::Removed,
+                    });
                 }
                 // Kept once SteamGridDB has answered, so a mistyped key is
                 // never saved.
@@ -54,26 +119,12 @@ impl Zendo {
                 self.check_key()
             }
             Message::KeyChecked(checked, result) => self.key_checked(checked, result),
-            Message::SetDownloadCovers(on) => {
-                self.config.download_covers = on;
-                if !self.save_config(|config| config.download_covers = on) {
-                    self.config.download_covers = !on;
-                    return Task::none();
-                }
-                if on {
-                    self.download_images()
-                } else {
-                    Task::none()
-                }
+            Message::ConfigSaved(previous, setting, result) => {
+                self.config_saved(previous, setting, result)
             }
-            Message::SetAutoUpdate(on) => self.set_auto_update(on),
-            Message::SetWorkers(workers) => {
-                let previous = std::mem::replace(&mut self.config.download_workers, workers);
-                if !self.save_config(|config| config.download_workers = workers) {
-                    self.config.download_workers = previous;
-                }
-                Task::none()
-            }
+            Message::SetDownloadCovers(on) => self.save_setting(Setting::DownloadCovers(on)),
+            Message::SetAutoUpdate(on) => self.save_setting(Setting::AutoUpdate(on)),
+            Message::SetWorkers(workers) => self.save_setting(Setting::Workers(workers)),
             Message::CopyReport => {
                 if self.diagnostics.gathering {
                     return Task::none();
@@ -106,17 +157,12 @@ impl Zendo {
                 }
             }
             Message::SetLanguage(language) => {
-                let previous = std::mem::replace(
-                    &mut self.config.language,
+                let task = self.save_setting(Setting::Language(
                     language.map(|language| language.tag().to_owned()),
-                );
-                if !self.save_config(|config| {
-                    config.language = language.map(|language| language.tag().to_owned());
-                }) {
-                    self.config.language = previous;
-                }
+                ));
+                // The page follows at once, not after the file is written.
                 i18n::set(Language::chosen(self.config.language.as_deref()));
-                Task::none()
+                task
             }
             Message::DownloadNow => {
                 let task = self.download_images();
@@ -152,14 +198,13 @@ impl Zendo {
         self.key.checking = None;
         let save = std::mem::take(&mut self.key.save_after_check);
         match result {
-            Ok(KeyCheck::Accepted) if save => {
-                if self.store_key(Some(key)) {
-                    self.key.note = Some((t!("steamgriddb-saved"), true));
-                    return self.download_images();
-                }
-            }
+            Ok(KeyCheck::Accepted) if save => self.save_setting(Setting::SteamGridDbKey {
+                key: Some(key),
+                then: KeyThen::Saved,
+            }),
             Ok(KeyCheck::Accepted) => {
                 self.key.note = Some((t!("steamgriddb-accepted"), true));
+                Task::none()
             }
             Ok(KeyCheck::Rejected) => {
                 let note = if save {
@@ -168,47 +213,107 @@ impl Zendo {
                     t!("steamgriddb-rejected")
                 };
                 self.key.note = Some((note, false));
+                Task::none()
             }
             // Offline is no reason to lose what the user pasted.
-            Err(err) if save => {
-                if self.store_key(Some(key)) {
-                    self.key.note = Some((t!("key-saved-unchecked", error = err), false));
-                }
+            Err(err) if save => self.save_setting(Setting::SteamGridDbKey {
+                key: Some(key),
+                then: KeyThen::Unchecked(err),
+            }),
+            Err(err) => {
+                self.key.note = Some((err, false));
+                Task::none()
             }
-            Err(err) => self.key.note = Some((err, false)),
-        }
-        Task::none()
-    }
-
-    /// Sets the key and writes the settings; on failure the old key stays.
-    fn store_key(&mut self, key: Option<String>) -> bool {
-        let setting = key.clone();
-        let previous = std::mem::replace(&mut self.config.steamgriddb_key, key);
-        if self.save_config(|config| config.steamgriddb_key = setting) {
-            true
-        } else {
-            self.config.steamgriddb_key = previous;
-            false
         }
     }
 
-    /// Writes a change to the settings, saying so on the page when it
-    /// fails. The change is applied to the file as it is now, under its
-    /// lock, so a hand edit or another writer is not overwritten.
-    pub(super) fn save_config(&mut self, change: impl FnOnce(&mut Config)) -> bool {
+    /// Applies a change to the window at once and writes it on a thread.
+    /// The page goes on as if it worked; one that fails comes back and
+    /// puts the settings, the language and the colours back.
+    pub(super) fn save_setting(&mut self, setting: Setting) -> Task<Message> {
+        let previous = self.config.clone();
+        setting.apply(&mut self.config);
         if !self.persist {
-            change(&mut self.config);
-            return true;
+            return self.after_saved(setting);
         }
-        match Config::update(change) {
+        let written = setting.clone();
+        Task::perform(
+            blocking(move || {
+                Config::update(|config| written.apply(config))
+                    .map(Box::new)
+                    .map_err(|err| format!("{err:#}"))
+            }),
+            move |result| Message::ConfigSaved(Box::new(previous), setting, result),
+        )
+    }
+
+    /// A write came back: the file's settings when it worked, or what went
+    /// wrong with the window back as the file has it.
+    fn config_saved(
+        &mut self,
+        previous: Box<Config>,
+        setting: Setting,
+        result: Result<Box<Config>, String>,
+    ) -> Task<Message> {
+        match result {
             Ok(config) => {
-                self.config = config;
-                true
+                self.config = *config;
+                self.config_changed();
+                self.after_saved(setting)
             }
             Err(err) => {
-                self.key.note = Some((format!("{err:#}"), false));
-                false
+                self.config = *previous;
+                self.config_changed();
+                self.status = Some(err);
+                Task::none()
             }
+        }
+    }
+
+    /// The window's language and colours follow the settings again.
+    fn config_changed(&mut self) {
+        i18n::set(Language::chosen(self.config.language.as_deref()));
+        self.themes.choice = Choice::chosen(self.config.theme.as_deref());
+        self.themes.apply();
+    }
+
+    /// What the page does once a change is in the file.
+    fn after_saved(&mut self, setting: Setting) -> Task<Message> {
+        match setting {
+            Setting::DownloadCovers(true) => self.download_images(),
+            Setting::AutoUpdate(_) => {
+                let found: Vec<String> = self
+                    .downloads
+                    .updates
+                    .iter()
+                    .filter(|(_, state)| matches!(state, UpdateState::Available(_)))
+                    .map(|(id, _)| id.clone())
+                    .collect();
+                self.update_by_themselves(&found)
+            }
+            Setting::SteamGridDbKey { then, .. } => match then {
+                KeyThen::Removed => {
+                    self.key.note = Some((t!("key-removed"), true));
+                    Task::none()
+                }
+                KeyThen::Saved => {
+                    self.key.note = Some((t!("steamgriddb-saved"), true));
+                    self.download_images()
+                }
+                KeyThen::Unchecked(error) => {
+                    self.key.note = Some((t!("key-saved-unchecked", error = error), false));
+                    Task::none()
+                }
+            },
+            Setting::NexusKey { then, .. } => {
+                self.nexus.key_stored(then);
+                Task::none()
+            }
+            Setting::DefaultProton(_) => {
+                self.protons.default_set();
+                Task::none()
+            }
+            _ => Task::none(),
         }
     }
 

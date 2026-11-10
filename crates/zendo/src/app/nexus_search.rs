@@ -11,7 +11,6 @@ use iced::widget::{
     Id, button, column, container, image, operation, row, scrollable, space, text, text_input,
 };
 use iced::{Alignment, Element, Length, Task};
-use zendo_core::config::Config;
 use zendo_core::nexus::{self, FileInfo, Files, Link};
 use zendo_core::nexus_search::{self, Found, Hit, Order, Query};
 use zendo_core::{Size, mods};
@@ -105,14 +104,9 @@ impl Zendo {
             return self.open_search(&id);
         }
         if let SearchMessage::ToggleAdult = message {
-            self.config.nexus_adult = !self.config.nexus_adult;
-            let adult = self.config.nexus_adult;
-            if self.persist
-                && let Err(err) = Config::update(|config| config.nexus_adult = adult)
-            {
-                self.status = Some(format!("{err:#}"));
-            }
-            return self.run_search(false);
+            let adult = !self.config.nexus_adult;
+            let saved = self.save_setting(super::settings::Setting::NexusAdult(adult));
+            return Task::batch([saved, self.run_search(false)]);
         }
         if let SearchMessage::Download(mod_id, file_id) = message {
             return self.download_found(mod_id, file_id);

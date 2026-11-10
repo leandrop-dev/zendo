@@ -15,13 +15,12 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
-use zendo_core::config::Config;
 use zendo_core::mods::{self, Added, Overview};
 use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
 use zendo_core::secrets::Key;
 
 use super::launch_options::overlay;
-use super::settings::{kept_note, section};
+use super::settings::{NexusThen, kept_note, section};
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -101,6 +100,28 @@ pub enum NexusMessage {
     Stop(u64),
     Updates(String, Result<Vec<(String, FileInfo)>, String>),
     Update(String, String),
+}
+
+impl NexusState {
+    /// Says in the Settings page what became of the key once it was
+    /// written, and whose key Zendo now has.
+    pub(super) fn key_stored(&mut self, then: NexusThen) {
+        match then {
+            NexusThen::Removed => {
+                self.user = None;
+                self.key.note = Some((t!("key-removed"), true));
+            }
+            NexusThen::Saved(who, user) => {
+                self.user = Some(user);
+                // Updates are asked again with the new key.
+                self.checked.clear();
+                self.key.note = Some((t!("nexus-key-saved", who = who), true));
+            }
+            NexusThen::Unchecked(error) => {
+                self.key.note = Some((t!("key-saved-unchecked", error = error), false));
+            }
+        }
+    }
 }
 
 impl Zendo {
@@ -225,11 +246,10 @@ impl Zendo {
                 let key = self.nexus.key.value.trim().to_owned();
                 self.nexus.key.value.clone_from(&key);
                 if key.is_empty() {
-                    if self.store_nexus_key(None) {
-                        self.nexus.user = None;
-                        self.nexus.key.note = Some((t!("key-removed"), true));
-                    }
-                    return Task::none();
+                    return self.save_setting(super::settings::Setting::NexusKey {
+                        key: None,
+                        then: super::settings::NexusThen::Removed,
+                    });
                 }
                 self.nexus.key.save_after_check = true;
                 self.check_nexus_key(key)
@@ -316,18 +336,18 @@ impl Zendo {
         match result {
             Ok(KeyCheck::Accepted(user)) => {
                 let who = signed_in(&user);
-                if save && self.store_nexus_key(Some(key)) {
-                    self.nexus.key.note = Some((t!("nexus-key-saved", who = who), true));
+                if save {
+                    return self.save_setting(super::settings::Setting::NexusKey {
+                        key: Some(key),
+                        then: super::settings::NexusThen::Saved(who, user),
+                    });
+                }
+                if stored {
                     self.nexus.user = Some(user);
                     // Updates are asked again with the new key.
                     self.nexus.checked.clear();
-                } else if !save {
-                    if stored {
-                        self.nexus.user = Some(user);
-                        self.nexus.checked.clear();
-                    }
-                    self.nexus.key.note = Some((t!("nexus-key-accepted", who = who), true));
                 }
+                self.nexus.key.note = Some((t!("nexus-key-accepted", who = who), true));
             }
             Ok(KeyCheck::Rejected) => {
                 let note = if save {
@@ -338,30 +358,14 @@ impl Zendo {
                 self.nexus.key.note = Some((note, false));
             }
             Err(err) if save => {
-                if self.store_nexus_key(Some(key)) {
-                    self.nexus.key.note = Some((t!("key-saved-unchecked", error = err), false));
-                }
+                return self.save_setting(super::settings::Setting::NexusKey {
+                    key: Some(key),
+                    then: super::settings::NexusThen::Unchecked(err),
+                });
             }
             Err(err) => self.nexus.key.note = Some((err, false)),
         }
         Task::none()
-    }
-
-    /// Sets the key and writes the settings; on failure the old key stays.
-    fn store_nexus_key(&mut self, key: Option<String>) -> bool {
-        let setting = key.clone();
-        let previous = std::mem::replace(&mut self.config.nexus_key, key);
-        if !self.persist {
-            return true;
-        }
-        match Config::update(|config| config.nexus_key = setting) {
-            Ok(_) => true,
-            Err(err) => {
-                self.config.nexus_key = previous;
-                self.nexus.key.note = Some((format!("{err:#}"), false));
-                false
-            }
-        }
     }
 
     /// A link from the browser: which game it is for, asked on a thread.

@@ -230,6 +230,9 @@ enum Message {
     /// How many files the engines download at once; `None` leaves it to
     /// them.
     SetWorkers(Option<u32>),
+    /// A settings change written on a thread: the settings as they were
+    /// before it, what the change was, and the file's settings now.
+    ConfigSaved(Box<Config>, settings::Setting, Result<Box<Config>, String>),
     DownloadNow,
     /// Settings' Copy report: gathered on a thread, then copied.
     CopyReport,
@@ -663,6 +666,7 @@ impl Zendo {
             | Message::DownloadNow
             | Message::CopyReport
             | Message::ReportReady(_)
+            | Message::ConfigSaved(..)
             | Message::SetLanguage(_) => self.update_settings(message),
             Message::SetTheme(choice) => self.set_theme(&choice),
             Message::LookAtTone => self.look_at_tone(),
