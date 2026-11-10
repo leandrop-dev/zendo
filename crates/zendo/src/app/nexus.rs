@@ -296,6 +296,10 @@ impl Zendo {
             return Task::none();
         };
         let save = std::mem::take(&mut self.nexus.key.save_after_check);
+        // The check proves the key in the field. That is Zendo's key only
+        // when it is the one stored, and only then does its account tell
+        // whether Premium applies.
+        let stored = self.config.nexus_key.as_deref() == Some(key.as_str());
         match result {
             Ok(KeyCheck::Accepted(user)) => {
                 let who = signed_in(&user);
@@ -305,6 +309,10 @@ impl Zendo {
                     // Updates are asked again with the new key.
                     self.nexus.checked.clear();
                 } else if !save {
+                    if stored {
+                        self.nexus.user = Some(user);
+                        self.nexus.checked.clear();
+                    }
                     self.nexus.key.note = Some((t!("nexus-key-accepted", who = who), true));
                 }
             }
