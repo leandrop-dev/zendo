@@ -152,30 +152,7 @@ impl Zendo {
                 Task::none()
             }
             AccountMessage::Finish => self.finish_sign_in(),
-            AccountMessage::Finished(store, result) => {
-                let Some(sign_in) = self.signing_in_to(store) else {
-                    return Task::none();
-                };
-                sign_in.busy = false;
-                match result {
-                    Ok(name) => {
-                        self.accounts.signing_in = None;
-                        self.status = Some(t!(
-                            "accounts-signed-in-to",
-                            store = store.label(),
-                            name = name.as_str()
-                        ));
-                        self.accounts.set(store, Account::SignedIn(name));
-                        self.fetch_owned(store)
-                    }
-                    Err(err) => {
-                        // A code works once; Amazon's sign-in starts over.
-                        sign_in.pasted.clear();
-                        sign_in.note = Some(err);
-                        Task::none()
-                    }
-                }
-            }
+            AccountMessage::Finished(store, result) => self.sign_in_finished(store, result),
             AccountMessage::Cancel => {
                 if let Some(window) = self
                     .accounts
@@ -263,7 +240,55 @@ impl Zendo {
         Task::none()
     }
 
+    /// The engine's answer to a sign-in, whether or not the sheet that
+    /// started it is still open.
+    fn sign_in_finished(&mut self, store: Store, result: Result<String, String>) -> Task<Message> {
+        let Some(sign_in) = self.signing_in_to(store) else {
+            // Cancel does not stop the engine, which writes its own
+            // credentials: an answer that arrives after it still says how
+            // the account stands.
+            return match result {
+                Ok(name) => {
+                    self.status = Some(t!(
+                        "accounts-signed-in-to",
+                        store = store.label(),
+                        name = name.as_str()
+                    ));
+                    self.accounts.set(store, Account::SignedIn(name));
+                    self.fetch_owned(store)
+                }
+                Err(_) => Task::none(),
+            };
+        };
+        sign_in.busy = false;
+        match result {
+            Ok(name) => {
+                self.accounts.signing_in = None;
+                self.status = Some(t!(
+                    "accounts-signed-in-to",
+                    store = store.label(),
+                    name = name.as_str()
+                ));
+                self.accounts.set(store, Account::SignedIn(name));
+                self.fetch_owned(store)
+            }
+            Err(err) => {
+                // A code works once; Amazon's sign-in starts over.
+                sign_in.pasted.clear();
+                sign_in.note = Some(err);
+                Task::none()
+            }
+        }
+    }
+
     fn start_sign_in(&mut self, store: Store) -> Task<Message> {
+        // One sign-in at a time: another store's window closes with it, so
+        // no window is left on screen that Zendo no longer tracks.
+        if let Some(previous) = self.accounts.signing_in.take()
+            && let Some(window) = previous.window
+        {
+            window.close();
+        }
         self.accounts.signing_in = Some(SignIn {
             store,
             pasted: String::new(),
