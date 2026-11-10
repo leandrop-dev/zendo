@@ -2121,8 +2121,9 @@ brackets):
 ## Next session, as logged to 2026-11-10
 
 - Item 19, the library's categories, planned with the user and built
-  2026-11-10 in seven commits; checked by clippy, its tests and the
-  command, not yet tried in the window. Next: item 20, the window
+  2026-11-10; tried by the user the same day: it works [firm]. Next: a
+  whole-workspace review (Rust and Iced) and its must-fix findings, then
+  item 20, the window
   (minimise when a game starts, Discord presence, rescanning when a
   launcher's files change, processes tracked by their start time).
 
@@ -2203,4 +2204,9 @@ brackets):
     pressed twice, the sheet's create, rename, delete and refuse, the
     assignment of several targets, the button's own game, the tick, and
     the marks cleared by Esc, a rescan and a page change); the verbs by
-    hand in a throwaway home. Not yet tried by the user.
+    hand in a throwaway home. Tried by the user 2026-11-10: it works
+    [firm]. After the trial the mark on each cover became a drawn square
+    instead of the `+` and `✓` glyphs, which the system font set at
+    different heights and, on some fonts, has no check mark for; the
+    square fills with the good colour when marked and is outlined when
+    not, with no glyph to misplace.

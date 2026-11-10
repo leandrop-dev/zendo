@@ -24,8 +24,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 are built and checked, mods (phase 7) last on 2026-11-07 and
 tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 19 are built,
 most of them tried by the user. Item 19, the library's categories, was built
-on 2026-11-10 and checked by clippy, its tests and the `zendo` verbs, but has
-not been tried in the window yet.
+on 2026-11-10 and tried by the user the same day: it works [firm].
 
 Next is item 20, the window: minimise when a game starts, Discord presence,
 rescanning by itself when a launcher's files change. One gap is known from the
