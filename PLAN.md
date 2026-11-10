@@ -6,7 +6,8 @@ later. A sister project of [hyprmonk](../hyprmonk), MIT like it.
 
 Status: planned on 2026-11-04 from a hyprmonk session; the whole of phases 1
 to 7 built by 2026-11-07, then items 1 to 19 of the list after them, the last
-of those (the library's categories) on 2026-11-10.
+of those (the library's categories) on 2026-11-10, and the 25 must-fix
+faults of that day's review closed the same day.
 
 ## Documents
 
@@ -26,8 +27,10 @@ tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 19 are built,
 most of them tried by the user. Item 19, the library's categories, was built
 on 2026-11-10 and tried by the user the same day: it works [firm]. A
 whole-workspace review the same day (Rust and Iced) found 25 must-fix
-faults, 24 of them fixed and the last one, the settings save on the window
-thread, left open; its reports are in `.mallet/reviews/2026-11-10/`.
+faults, all of them since fixed, the last one (the settings save) after the
+user's first tries the same day, which also fixed the category tick boxes'
+colour and Cat Quest II's cloud saves; its reports are in
+`.mallet/reviews/2026-11-10/`.
 
 Next is item 20, the window: minimise when a game starts, Discord presence,
 rescanning by itself when a launcher's files change. One gap is known from the

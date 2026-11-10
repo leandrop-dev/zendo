@@ -2202,9 +2202,37 @@ The 25 Must fix, all built the same day:
   buttons, and a failed `xdg-open` says so; a Proton or a runtime is
   removed on a thread (`protons.rs`, `runtimes.rs`).
 
-Left open from the Must fix: `save_config` still reads the file and asks
-the keyring on the window thread, now without the data loss it had. The
-Should fix and Consider findings are in the reports above and not built.
+Left open that day: `save_config` still read the file and asked the
+keyring on the window thread, now without the data loss it had. Closed
+later the same day, after the user's first tries: every settings write
+is now a `Setting` applied to the window at once and written by
+`Config::update` in a `blocking` task (`settings.rs`,
+`Message::ConfigSaved`); a write that fails puts the settings, the
+language and the colours back and says so in the status line. The Nexus
+key, Nexus's adult filter and the default Proton went through the same
+path, which used to read the keyring in `update` too. The other Should
+fix and Consider findings are in the reports above and not built.
+
+## The user's first tries after the review, 2026-11-10
+
+- The category sheet's tick boxes were green, Iced's success colour, not
+  the palette's. Every tick box now follows the window's colours
+  (`style::checkbox`: the accent when ticked, surface and line when not),
+  in the category sheet, the FOMOD options, a mod's and a plugin's
+  switch, and a store game's DLC list.
+- Cat Quest II's saves did not sync. legendary 0.21.1 works out
+  `{AppData}`, `{InstallDir}`, `{UserDir}`, `{UserSavedGames}` and
+  `{EpicID}` in a Wine prefix but not `{UserProfile}`, which Cat Quest II
+  names, so it warned of unprocessed variables and skipped the game.
+  Zendo now reads the game's `CloudSaveFolder` from legendary's own
+  metadata when that warning comes, puts the variables into the prefix as
+  Proton makes it and retries `sync-saves --save-path` once
+  (`cloud_saves.rs`). Checked against the real record: the folder worked
+  out is the one Cat Quest II writes to
+  (`Prefixes/Cat Quest II/drive_c/users/steamuser/Documents/Cat Quest
+  II`), and legendary then found the save (local newer, 2026-11-10). Run
+  with both skip flags, so no save moved.
+
 
 ## Next session, as logged to 2026-11-09
 
@@ -2261,7 +2289,8 @@ Should fix and Consider findings are in the reports above and not built.
 - Item 19, the library's categories, planned with the user and built
   2026-11-10; tried by the user the same day: it works [firm]. The
   whole-workspace review and its must-fix findings followed the same day
-  (above); 24 of the 25 are built, the settings save on the window thread
-  is left open. Next: item 20, the window
+  (above); all 25 are built, the settings save last, after the user's
+  first tries found the green tick boxes and Cat Quest II's saves
+  (above). Next: item 20, the window
   (minimise when a game starts, Discord presence, rescanning when a
   launcher's files change, processes tracked by their start time).
