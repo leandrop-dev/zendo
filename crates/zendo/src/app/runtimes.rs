@@ -39,6 +39,8 @@ pub enum RuntimeMessage {
     Download(Runtime),
     Done(Runtime, Result<(), String>),
     Remove(Runtime),
+    /// Remove finished, in a thread: the runtime, and what came of it.
+    Removed(Runtime, Result<(), String>),
 }
 
 impl RuntimesState {
@@ -77,6 +79,16 @@ impl RuntimesState {
 }
 
 impl Zendo {
+    /// What came of a Remove: the runtimes read again, and the note.
+    fn runtime_removed(&mut self, runtime: Runtime, result: Result<(), String>) -> Task<Message> {
+        self.runtimes.refresh();
+        self.runtimes.note = Some(match result {
+            Ok(()) => (t!("runtimes-removed", runtime = runtime.label()), true),
+            Err(err) => (err, false),
+        });
+        Task::none()
+    }
+
     /// Looks at the runtimes on the machine, and asks Lutris for its list
     /// once a session.
     pub(super) fn want_runtimes(&mut self) -> Task<Message> {
@@ -138,16 +150,17 @@ impl Zendo {
                     return Task::none();
                 }
                 state.confirm_remove = None;
-                let result = if self.persist {
-                    runtimes::remove(runtime)
-                } else {
-                    Ok(())
-                };
-                state.refresh();
-                state.note = Some(match result {
-                    Ok(()) => (t!("runtimes-removed", runtime = runtime.label()), true),
-                    Err(err) => (format!("{err:#}"), false),
-                });
+                if !self.persist {
+                    return self.runtime_removed(runtime, Ok(()));
+                }
+                // The folder can be large, so it goes on a thread.
+                return Task::perform(
+                    blocking(move || runtimes::remove(runtime).map_err(|err| format!("{err:#}"))),
+                    move |result| Message::Runtime(RuntimeMessage::Removed(runtime, result)),
+                );
+            }
+            RuntimeMessage::Removed(runtime, result) => {
+                return self.runtime_removed(runtime, result);
             }
         }
         Task::none()

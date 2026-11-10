@@ -99,6 +99,8 @@ pub enum ProtonMessage {
     Installed(String, Result<(), String>),
     Cancel,
     Remove(String),
+    /// Remove finished, in a thread: the name, and what came of it.
+    Removed(String, Result<(), String>),
 }
 
 impl Zendo {
@@ -197,6 +199,7 @@ impl Zendo {
                 }
             }
             ProtonMessage::Remove(name) => return self.remove_proton(name),
+            ProtonMessage::Removed(name, result) => return self.proton_removed(&name, result),
         }
         Task::none()
     }
@@ -212,25 +215,33 @@ impl Zendo {
         let Some(found) = protons.installed.iter().find(|p| p.name == name) else {
             return Task::none();
         };
-        let result = if self.persist {
-            ge_proton::remove(found)
-        } else {
-            Ok(())
-        };
-        protons.installed = proton::installed();
+        if !self.persist {
+            return self.proton_removed(&name, Ok(()));
+        }
+        // A Proton tree is hundreds of megabytes, so it goes on a thread.
+        let found = found.clone();
+        Task::perform(
+            blocking(move || ge_proton::remove(&found).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Proton(ProtonMessage::Removed(name.clone(), result)),
+        )
+    }
+
+    /// What came of a Remove: the list reads again, and a default that is
+    /// gone goes back to Automatic.
+    fn proton_removed(&mut self, name: &str, result: Result<(), String>) -> Task<Message> {
+        self.protons.installed = proton::installed();
         if let Err(err) = result {
-            protons.note = Some((format!("{err:#}"), false));
+            self.protons.note = Some((err, false));
             return Task::none();
         }
         // A default that is gone goes back to Automatic.
-        if self.config.default_proton.as_deref() == Some(name.as_str()) {
+        if self.config.default_proton.as_deref() == Some(name) {
             let _ = self.set_default_proton(None);
             if self.protons.note.as_ref().is_some_and(|(_, good)| *good) {
-                self.protons.note =
-                    Some((t!("protons-removed-default", name = name.as_str()), true));
+                self.protons.note = Some((t!("protons-removed-default", name = name), true));
             }
         } else {
-            self.protons.note = Some((t!("protons-removed", name = name.as_str()), true));
+            self.protons.note = Some((t!("protons-removed", name = name), true));
         }
         Task::none()
     }
