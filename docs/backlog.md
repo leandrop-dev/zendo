@@ -1,7 +1,7 @@
 # Zendo — the backlog
 
 The remaining work, in the user's firm order. Read only the item you are
-starting. Items 1 to 18 are built; their detail is in history.md.
+starting. Items 1 to 19 are built; their detail is in history.md.
 
 ## After phase 7: the list [firm order]
 
@@ -11,7 +11,6 @@ skipped today, what the keyring gains, Nexus downloads for free
 accounts, Steam's install link, Quiver's licence), the same day [firm].
 Each item is planned in detail when it starts.
 
-19. (was 22) The library: categories of the user's own, beyond pins and hiding.
 20. (was 23) The window: minimise when a game starts, Discord presence, and
     rescanning by itself when a launcher's files change (Hikari watches
     their modification times). Hikari also tracks a prefix's processes

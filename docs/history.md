@@ -747,7 +747,7 @@ screen) for the settings sheet, and to get most features working first
      order matters there. The user tried it in the window on Fallout 3
      GOTY (2026-11-07): it works.
 
-## The list after phase 7: items 1 to 18
+## The list after phase 7: items 1 to 19
 
 1. Phase 7's gaps, built 2026-11-07. Checked against LOOT's
    libloadorder (GPL-3.0, read for facts only: folders, file names,
@@ -2118,6 +2118,14 @@ brackets):
     achievements with icons and their share of players. Tried by the
     user 2026-11-09: it works [firm].
 
+## Next session, as logged to 2026-11-10
+
+- Item 19, the library's categories, planned with the user and built
+  2026-11-10 in seven commits; checked by clippy, its tests and the
+  command, not yet tried in the window. Next: item 20, the window
+  (minimise when a game starts, Discord presence, rescanning when a
+  launcher's files change, processes tracked by their start time).
+
 ## Next session, as logged to 2026-11-09
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
@@ -2167,3 +2175,29 @@ brackets):
   known (Steam ids 22300 and 22370, `Data`, `fallout3`) and games are
   matched on Nexus by the part of the title before " - " or ":" too;
   the user confirmed the Nexus button shows.
+
+19. (was 22) The library's categories, the user's own groups. Planned with
+    the user 2026-11-10: a flat list, not nested, and a game may be in
+    several; chips in the library's toolbar beside the store chips, sorted
+    by name, narrowing together with the store chip and the search words;
+    made, renamed and deleted in a sheet opened from the toolbar;
+    assigned from a game's page or from a selection in the grid; and
+    `zendo categorize` and `zendo uncategorize` for keybinds. Kept in
+    `state.json` as `categories`, a name to the ids of the games in it:
+    both the window and the command write it, as they write hidden and
+    pinned, and a name is the identity, so a rename is a key move. A name
+    is found trimmed and whatever its case, and a category whose games all
+    left the library is kept. Selecting uses modifiers — Ctrl+Space, a
+    check in each cover's corner, Esc to leave — since bare Space and `c`
+    are typing keys for the filter (`app.rs`); a selection mode was offered
+    and declined. Built 2026-11-10 in seven commits: the model, the sheet,
+    the chips, the game page's row, the marks, the verbs, the documents.
+    Checked: clippy, tests (13 new in the window, 7 in the core: the
+    round trip and a file from before the field, blank and case-taken
+    names, rename with a clash and a change of case only, delete, setting
+    only where the category exists, the sorted order, `Library::apply`,
+    the AND with the store and the search, the cursor kept, a chip
+    pressed twice, the sheet's create, rename, delete and refuse, the
+    assignment of several targets, the button's own game, the tick, and
+    the marks cleared by Esc, a rescan and a page change); the verbs by
+    hand in a throwaway home. Not yet tried by the user.

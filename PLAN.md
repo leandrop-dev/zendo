@@ -5,8 +5,8 @@ a full-screen mode for the couch, launched with the right tools, and mods
 later. A sister project of [hyprmonk](../hyprmonk), MIT like it.
 
 Status: planned on 2026-11-04 from a hyprmonk session; the whole of phases 1
-to 7 built by 2026-11-07, then items 1 to 18 of the list after them, the last
-of those 2026-11-09.
+to 7 built by 2026-11-07, then items 1 to 19 of the list after them, the last
+of those (the library's categories) on 2026-11-10.
 
 ## Documents
 
@@ -22,11 +22,14 @@ Read this file first. The rest is read on demand, not up front.
 ## Where it stands
 
 Phases 1 to 7 are built and checked, mods (phase 7) last on 2026-11-07 and
-tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 18 are built,
-most of them tried by the user; item 18e, a game's achievements, was the last
-commit, on 2026-11-09.
+tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 19 are built,
+most of them tried by the user. Item 19, the library's categories, was built
+on 2026-11-10 and checked by clippy, its tests and the `zendo` verbs, but has
+not been tried in the window yet.
 
-Next is item 19, the library's categories. One gap is known from the phases:
+Next is item 20, the window: minimise when a game starts, Discord presence,
+rescanning by itself when a launcher's files change. One gap is known from the
+phases:
 an Epic game has not yet been started through legendary (docs/history.md,
 phase 5a). The other "not checked" notes sit with the work they belong to in
 docs/history.md.
@@ -115,8 +118,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Item 19, the library's categories, then 20 to 26: docs/backlog.md, in the
-user's firm order. Each item is planned in detail when it starts.
+Item 20, the window, then 21 to 26: docs/backlog.md, in the user's firm
+order. Each item is planned in detail when it starts.
 
 ## On hyprmonk's side
 

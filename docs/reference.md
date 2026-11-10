@@ -76,15 +76,15 @@ current Steam client with one game from each store installed:
   `totalPlayed` (minutes) by app name; its store splits keys on dots, so
   Amazon ids (`amzn1.adg.product.…`) are nested objects to join back.
 
-Zendo's own files [tentative]: `~/.config/zendo/config.toml` for what the
-
 ## Zendo's own files, covers and stores
 
+Zendo's own files [tentative]: `~/.config/zendo/config.toml` for what the
 user sets (`steamgriddb_key`, `download_covers`), written by the Settings
 page with mode 0600 because it holds the key (comments added by hand are not
 kept; Hikari uses the system keyring first, which Zendo could add later
 [tentative]); `~/.local/state/zendo/state.json`
-for what Zendo remembers (launches, hidden and pinned games, the sort),
+for what Zendo remembers (launches, hidden and pinned games, the sort, and
+the categories with the games in each),
 written by the window and the command alike; and `~/.cache/zendo/covers/`
 with `<id>.<ext>` covers, `<id>.hero.<ext>` wide images and a
 `misses.json` (keys `<id>` and `<id>#hero`) so a game without one is asked
