@@ -550,7 +550,10 @@ count their own.
 | `crates/zendo/` | The `zendo` command (`main.rs`), the window's words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the controller (`gamepad.rs`), the file dialog (`file_dialog.rs`: programs, mods and installers), `nxm://` links handed to the open window (`links.rs`) and the window: `app.rs` holds its state and keys, `app/` a module per page (`library.rs`, `game.rs`, `store.rs`, `downloads.rs`, `accounts.rs`, `settings.rs`, `about.rs`), `running.rs` for the games running, `themes.rs` for the theme (the built-in ones are in `themes/`) and hyprmonk's tone, `launch_options.rs` for a game's launch options sheet (gamescope's part in `launch_options/gamescope.rs`), `cloud_saves.rs` for the game page's cloud saves line, `gog_playtime.rs` for GOG's total played time on a game's page, `prefix.rs` for its Wine prefix card, `local.rs` for the Add game sheet, `artwork.rs` for the art picker, `dlc.rs` for a game's DLC card, `mods.rs` for its Mods card, `nexus.rs` for Nexus (its Settings section, links, downloads, updates), `nexus_search.rs` for its search sheet, `installer.rs` for the FOMOD installer sheet, `protondb.rs` for its rating pill, `protons.rs` for Settings' Proton section, `runtimes.rs` for its Anti-cheat section, `eos_overlay.rs` for its Epic's overlay section, `steam.rs` for Accounts' Steam card and the sign-in's token, `steam_installs.rs` for following Steam's installs, `store_game.rs` for a store game's page, the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal), the `sidebar.rs` and the colours (`style.rs`) |
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`zendo.svg`) |
 | `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
-| `PLAN.md` | What Zendo is for, the decisions so far and the phases |
+| `PLAN.md` | What Zendo is for, the direction, the stack and where it stands |
+| `docs/backlog.md` | The work left, in order |
+| `docs/history.md` | What was built, when, and what was checked |
+| `docs/reference.md` | Verified facts about the stores, the engines and their files |
 
 ## Roadmap
 
@@ -561,7 +564,7 @@ count their own.
 3. **The shell** (done): Hikari's layout in hyprmonk's colours: the
    sidebar, the Library with store and sort chips and pins, a page per
    game, Settings with the SteamGridDB key, About.
-4. **Accounts, Store and Downloads** (built, waiting on a try with real
+4. **Accounts, Store and Downloads** (built, tried with real GOG and Amazon
    accounts): sign in to Epic, GOG and Amazon, the games owned but not
    installed, and install, update, repair and uninstall through legendary,
    gogdl and nile, with pause and resume, update status and sizes, and a
