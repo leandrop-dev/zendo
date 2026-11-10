@@ -229,12 +229,43 @@ impl Zendo {
             false,
             Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
         ));
+        self.selection_chips(&mut chips);
         row(chips)
             .spacing(8)
             .padding([4.0, GRID_PADDING])
             .wrap()
             .vertical_spacing(8)
             .into()
+    }
+
+    /// How many games are marked, the way to assign them all, and the way
+    /// to leave them, when any are.
+    fn selection_chips<'a>(&'a self, chips: &mut Vec<Element<'a, Message>>) {
+        if self.selected_games.is_empty() {
+            return;
+        }
+        chips.push(space::horizontal().width(16).into());
+        chips.push(
+            container(
+                text(t!("library-selected", count = self.selected_games.len()))
+                    .size(13)
+                    .color(colors().accent),
+            )
+            .padding([6, 0])
+            .into(),
+        );
+        chips.push(chip(
+            t!("categories-assign"),
+            None,
+            true,
+            Message::Categories(CategoriesMessage::Open(self.selected_games.clone())),
+        ));
+        chips.push(chip(
+            t!("library-clear-selection"),
+            None,
+            false,
+            Message::ClearSelection,
+        ));
     }
 
     fn grid<'a>(&'a self, visible: &[&'a Game]) -> Element<'a, Message> {
@@ -256,6 +287,10 @@ impl Zendo {
                 } else {
                     game.pinned.then(|| (t!("badge-pinned"), colors().accent))
                 },
+                check: Some((
+                    self.selected_games.contains(&game.id),
+                    Message::ToggleSelectedAt(index),
+                )),
                 line,
                 line_color,
                 selected: index == selected,
@@ -377,6 +412,24 @@ pub(super) fn chip<'a>(
         .into()
 }
 
+/// The small button in a cover's corner that marks the card.
+fn check_button<'a>(ticked: bool, message: Message) -> Element<'a, Message> {
+    button(
+        text(if ticked {
+            t!("library-checked")
+        } else {
+            t!("library-check")
+        })
+        .size(12),
+    )
+    .width(22)
+    .height(22)
+    .padding(0)
+    .style(style::chip(ticked))
+    .on_press(message)
+    .into()
+}
+
 /// The line under a card's title: how much it was played.
 fn played_line(game: &Game, now: u64) -> String {
     match (game.played.minutes, game.played.last) {
@@ -394,6 +447,9 @@ pub struct Card<'a> {
     pub faded: bool,
     /// A label in the cover's top right corner.
     pub badge: Option<(String, Color)>,
+    /// A tick in the cover's bottom right corner and the message that marks
+    /// the card, when the grid can mark.
+    pub check: Option<(bool, Message)>,
     pub line: String,
     pub line_color: Color,
     pub selected: bool,
@@ -407,11 +463,13 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         cover,
         faded,
         badge,
+        check,
         line,
         line_color,
         selected,
         on_press,
     } = card;
+    let ticked = check.as_ref().is_some_and(|(ticked, _)| *ticked);
     let cover: Element<'_, Message> = match cover {
         Some(path) => image(image::Handle::from_path(path))
             .width(COVER_WIDTH)
@@ -439,13 +497,24 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         format::source(source),
         style::source_color(source)
     )]
-    .width(COVER_WIDTH);
+    .width(Length::Fill);
     if let Some((label, color)) = badge {
         badges = badges
             .push(space::horizontal())
             .push(style::badge(label, color));
     }
-    let art = stack![cover, container(badges).padding(8).width(COVER_WIDTH)];
+    let mut over = column![badges, space::vertical()];
+    if let Some((ticked, message)) = check {
+        over =
+            over.push(row![space::horizontal(), check_button(ticked, message)].width(Length::Fill));
+    }
+    let art = stack![
+        cover,
+        container(over)
+            .padding(8)
+            .width(COVER_WIDTH)
+            .height(COVER_HEIGHT),
+    ];
 
     let caption = column![
         text(title).size(14).wrapping(text::Wrapping::None),
@@ -467,7 +536,9 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
             })),
             text_color: colors().text,
             border: Border {
-                color: if selected {
+                color: if ticked {
+                    colors().good
+                } else if selected {
                     colors().accent
                 } else {
                     Color::TRANSPARENT

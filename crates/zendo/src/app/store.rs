@@ -457,6 +457,7 @@ impl Zendo {
         cards_grid(
             visible.into_iter().enumerate().map(|(index, game)| {
                 card(Card {
+                    check: None,
                     title: &game.title,
                     source: game.source(),
                     cover: game.cover.as_deref(),

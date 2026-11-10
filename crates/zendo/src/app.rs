@@ -41,7 +41,7 @@ mod store_game;
 mod style;
 mod themes;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -206,6 +206,11 @@ enum Message {
     SetCategory(Option<String>),
     /// Back to every game: no store, no category.
     ClearFilters,
+    /// Marks the card under the cursor, or leaves it.
+    ToggleSelected,
+    /// Marks the card at this place in the grid, or leaves it.
+    ToggleSelectedAt(usize),
+    ClearSelection,
     /// Hides the current game, or brings it back when it is hidden.
     ToggleHidden,
     TogglePinned,
@@ -325,6 +330,8 @@ struct Zendo {
     category: Option<String>,
     /// Index into the games the filters let through.
     selected: usize,
+    /// The games marked in the grid, for assigning all at once.
+    selected_games: BTreeSet<String>,
     columns: usize,
     /// The window's width, for the game page's columns.
     window_width: f32,
@@ -404,6 +411,7 @@ impl Zendo {
             source: None,
             category: None,
             selected: 0,
+            selected_games: BTreeSet::new(),
             columns: library::columns_for(START_SIZE.width),
             window_width: START_SIZE.width,
             window: None,
@@ -614,10 +622,7 @@ impl Zendo {
             Message::Activate => self.activate(),
             Message::Store(message) => self.update_store(message),
             Message::GameView(message) => self.update_game_view(message),
-            Message::Clicked(index) => {
-                self.selected = index;
-                self.open_selected()
-            }
+            Message::Clicked(index) => self.clicked(index),
             Message::Play => self.play(),
             Message::SetSort(sort) => self.set_sort(sort),
             Message::CycleSort if self.page == Page::Library => self.set_sort(self.sort.next()),
@@ -633,6 +638,9 @@ impl Zendo {
                 zendo.source = None;
                 zendo.category = None;
             }),
+            Message::ToggleSelected | Message::ToggleSelectedAt(_) | Message::ClearSelection => {
+                self.selecting(&message)
+            }
             Message::ToggleHidden => self.toggle_hidden(),
             Message::TogglePinned => self.toggle_pinned(),
             Message::ShowHidden => self.filter(|zendo| zendo.show_hidden = !zendo.show_hidden),
@@ -703,6 +711,7 @@ impl Zendo {
             return Task::none();
         }
         self.scanning = true;
+        self.selected_games.clear();
         self.status = Some(t!("library-looking"));
         scan()
     }
@@ -713,6 +722,12 @@ impl Zendo {
         let after = self.local.after_scan.take();
         self.library = Some(library);
         self.categories = categories;
+        if let Some(library) = &self.library {
+            let present: HashSet<&str> =
+                library.games.iter().map(|game| game.id.as_str()).collect();
+            self.selected_games
+                .retain(|id| present.contains(id.as_str()));
+        }
         self.scanning = false;
         self.status = None;
         let mut nexus = Task::none();
@@ -833,6 +848,9 @@ impl Zendo {
         if self.page == page {
             return Task::none();
         }
+        if self.page == Page::Library {
+            self.selected_games.clear();
+        }
         self.page = page;
         self.status = None;
         self.downloads.confirm_uninstall = None;
@@ -869,6 +887,10 @@ impl Zendo {
 
     fn back(&mut self) -> Task<Message> {
         match self.page {
+            Page::Library if !self.selected_games.is_empty() => {
+                self.selected_games.clear();
+                Task::none()
+            }
             Page::Library if self.search.is_empty() => Task::none(),
             Page::Library => {
                 self.search.clear();
@@ -904,6 +926,40 @@ impl Zendo {
         let id = self.selected_id();
         change(self);
         self.select(id.as_deref())
+    }
+
+    /// Opens the game of the card clicked.
+    fn clicked(&mut self, index: usize) -> Task<Message> {
+        self.selected = index;
+        self.open_selected()
+    }
+
+    /// What the marks in the grid do: the cursor's card and a clicked one
+    /// are marked or left, and anything else clears them all.
+    fn selecting(&mut self, message: &Message) -> Task<Message> {
+        match message {
+            Message::ToggleSelected => {
+                let id = self.selected_id();
+                self.toggle_selected(id.as_deref());
+            }
+            Message::ToggleSelectedAt(index) => {
+                let id = self.visible().get(*index).map(|game| game.id.clone());
+                self.toggle_selected(id.as_deref());
+            }
+            _ => self.selected_games.clear(),
+        }
+        Task::none()
+    }
+
+    /// Marks a game for assigning, or unmarks it. Only the library's grid
+    /// marks.
+    fn toggle_selected(&mut self, id: Option<&str>) {
+        let Some(id) = id.filter(|_| self.page == Page::Library) else {
+            return;
+        };
+        if !self.selected_games.remove(id) {
+            self.selected_games.insert(id.to_owned());
+        }
     }
 
     /// How far the page's grid is scrolled, and how tall its window is.
@@ -1225,6 +1281,7 @@ impl Zendo {
             (None, n) => text(t!("footer-unreadable", count = n)),
         };
         let hints = match self.page {
+            Page::Library if !self.selected_games.is_empty() => t!("hints-selection"),
             Page::Library => t!("hints-library"),
             Page::Game(_) if self.sheet.is_some() => t!("hints-sheet"),
             Page::Game(_) => t!("hints-game"),
@@ -1417,6 +1474,7 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             Named::F11 => Message::ToggleFullscreen,
             Named::Tab => Message::CycleSort,
             Named::Delete => Message::ToggleHidden,
+            Named::Space if modifiers.control() => Message::ToggleSelected,
             Named::Space => Message::Type(" ".to_owned()),
             _ => return None,
         };
@@ -1572,6 +1630,83 @@ mod tests {
         let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
         assert_eq!(zendo.selected_id().as_deref(), Some("desktop:3"));
         assert_eq!(zendo.selected, 1);
+    }
+
+    #[test]
+    fn ctrl_space_marks_the_focused_card() {
+        let mut zendo = zendo_with(3, 3);
+        let _ = zendo.update(Message::ToggleSelected);
+        assert_eq!(
+            zendo.selected_games.iter().collect::<Vec<_>>(),
+            ["desktop:0"]
+        );
+        let _ = zendo.update(Message::ToggleSelected);
+        assert!(zendo.selected_games.is_empty(), "pressed again, it is left");
+        let _ = zendo.update(Message::ToggleSelectedAt(2));
+        assert_eq!(
+            zendo.selected_games.iter().collect::<Vec<_>>(),
+            ["desktop:2"]
+        );
+        let _ = zendo.update(Message::Move(Move::Right));
+        let _ = zendo.update(Message::ToggleSelected);
+        assert_eq!(zendo.selected_games.len(), 2);
+        assert!(zendo.selected_games.contains("desktop:2"));
+        let _ = zendo.update(Message::ClearSelection);
+        assert!(zendo.selected_games.is_empty());
+    }
+
+    #[test]
+    fn escape_clears_the_marks_before_the_search() {
+        let mut zendo = zendo_with(3, 3);
+        let _ = zendo.update(Message::Type("Game".into()));
+        let _ = zendo.update(Message::ToggleSelected);
+        assert_eq!(zendo.selected_games.len(), 1);
+        let _ = zendo.update(Message::Back);
+        assert!(zendo.selected_games.is_empty(), "the marks go first");
+        assert_eq!(zendo.search, "Game");
+        let _ = zendo.update(Message::Back);
+        assert_eq!(zendo.search, "");
+    }
+
+    #[test]
+    fn a_rescan_drops_marks_of_games_that_left() {
+        let mut zendo = zendo_with(3, 3);
+        let _ = zendo.update(Message::ToggleSelectedAt(0));
+        let _ = zendo.update(Message::ToggleSelectedAt(1));
+        let left = Game::new(
+            "desktop:1".into(),
+            "Game 01".into(),
+            Source::Steam,
+            zendo_core::Launch::Uri { uri: String::new() },
+        );
+        let library = Library {
+            games: vec![left],
+            problems: Vec::new(),
+        };
+        let _ = zendo.update(Message::Loaded(Box::new((
+            library,
+            Sort::default(),
+            Vec::new(),
+            Ok(Config::default()),
+        ))));
+        assert_eq!(
+            zendo.selected_games.iter().collect::<Vec<_>>(),
+            ["desktop:1"]
+        );
+    }
+
+    #[test]
+    fn assigning_reaches_every_marked_game() {
+        let mut zendo = zendo_with(2, 3);
+        let _ = zendo.update(Message::ToggleSelectedAt(0));
+        let _ = zendo.update(Message::ToggleSelectedAt(1));
+        let marked = zendo.selected_games.clone();
+        press(&mut zendo, CategoriesMessage::Open(marked));
+        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        for id in ["desktop:0", "desktop:1"] {
+            assert_eq!(zendo.game(id).unwrap().categories, ["Book"], "{id}");
+        }
     }
 
     #[test]
