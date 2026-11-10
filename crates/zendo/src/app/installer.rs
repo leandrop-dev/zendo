@@ -344,6 +344,7 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
                         .label(name)
                         .size(16)
                         .text_size(14)
+                        .style(style::checkbox)
                         .on_toggle_maybe((!fixed).then_some(move |on| {
                             Message::Installer(InstallerMessage::Pick(g, o, on))
                         }))

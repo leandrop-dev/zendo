@@ -5,7 +5,9 @@
 
 use std::sync::{PoisonError, RwLock};
 
-use iced::widget::{button, container, progress_bar, text, text_input};
+use iced::widget::{
+    button, checkbox as checkbox_widget, container, progress_bar, text, text_input,
+};
 use iced::{Background, Border, Color, Element, Font, Theme, font};
 use zendo_core::Source;
 use zendo_core::theme::Theme as ThemeFile;
@@ -393,6 +395,48 @@ pub fn nav(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
             },
             ..button::Style::default()
         }
+    }
+}
+
+/// A tick box: the accent when ticked, rather than Iced's green, which is
+/// not in the palette. Disabled keeps the state but fades it.
+pub fn checkbox(_: &Theme, status: checkbox_widget::Status) -> checkbox_widget::Style {
+    let colors = colors();
+    let (hovered, checked, disabled) = match status {
+        checkbox_widget::Status::Active { is_checked } => (false, is_checked, false),
+        checkbox_widget::Status::Hovered { is_checked } => (true, is_checked, false),
+        checkbox_widget::Status::Disabled { is_checked } => (false, is_checked, true),
+    };
+    let (background, border, icon) = if checked {
+        let accent = if disabled {
+            Color {
+                a: 0.4,
+                ..colors.accent
+            }
+        } else {
+            colors.accent
+        };
+        (accent, accent, colors.background)
+    } else {
+        (
+            if hovered {
+                colors.raised
+            } else {
+                colors.surface
+            },
+            colors.line,
+            colors.text,
+        )
+    };
+    checkbox_widget::Style {
+        background: Background::Color(background),
+        icon_color: icon,
+        border: Border {
+            color: border,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        text_color: Some(if disabled { colors.dim } else { colors.text }),
     }
 }
 

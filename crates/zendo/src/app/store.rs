@@ -573,6 +573,7 @@ impl Zendo {
                 .label(label)
                 .text_size(14)
                 .size(16)
+                .style(style::checkbox)
                 .on_toggle(move |_| Message::Store(StoreMessage::ToggleDlc(id.clone())))
                 .into(),
         )

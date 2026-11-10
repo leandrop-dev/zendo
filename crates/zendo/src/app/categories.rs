@@ -399,6 +399,7 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
         items.push(
             checkbox(member)
                 .size(16)
+                .style(style::checkbox)
                 .on_toggle(move |member| {
                     Message::Categories(CategoriesMessage::SetMembership {
                         name: ticked.clone(),

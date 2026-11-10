@@ -680,7 +680,8 @@ impl Zendo {
         row![
             checkbox(info.enabled)
                 .on_toggle_maybe(free.then_some(toggle))
-                .size(16),
+                .size(16)
+                .style(style::checkbox),
             column![
                 text(&info.name).size(14),
                 text(facts.join(" · ")).size(12).color(colors().dim),
@@ -1005,7 +1006,8 @@ fn plugin_row<'a>(
     row![
         checkbox(plugin.enabled)
             .on_toggle_maybe((free && plugin.rank != Rank::Implicit).then_some(toggle))
-            .size(16),
+            .size(16)
+            .style(style::checkbox),
         about,
         step("↑", true),
         step("↓", false),
