@@ -4,11 +4,13 @@
 use iced::widget::{
     button, column, container, image, row, scrollable, space, stack, text, text_input,
 };
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use iced::{Alignment, Background, Border, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
+use super::categories::CategoriesMessage;
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
 use crate::i18n::t;
@@ -204,6 +206,13 @@ impl Zendo {
                 Message::ShowHidden,
             ));
         }
+        chips.push(space::horizontal().width(16).into());
+        chips.push(chip(
+            t!("categories-open"),
+            (!self.categories.is_empty()).then_some(self.categories.len()),
+            false,
+            Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
+        ));
         row(chips)
             .spacing(8)
             .padding([4.0, GRID_PADDING])

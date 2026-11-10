@@ -77,6 +77,35 @@ played-never = Ainda não jogado
 played-when = Jogado { $when }
 played-time = { $time } jogados
 
+## Categorias
+
+categories-title = Categorias
+categories-open = Categorias
+categories-count = { $count ->
+    [one] { $count } categoria
+   *[other] { $count } categorias
+}
+categories-empty = Ainda não há categorias · dê um nome a uma abaixo
+categories-new = Criar
+categories-new-placeholder = Nova categoria
+categories-rename = Mudar nome
+categories-delete = Apagar
+categories-ok = OK
+categories-cancel = Cancelar
+categories-created = { $name } criada
+categories-renamed = { $name } é o novo nome
+categories-deleted = { $name } apagada
+categories-blank = Uma categoria precisa de um nome
+categories-taken = { $name } já é uma categoria
+categories-assigned = { $count ->
+    [one] Adicionada a { $count } jogo
+   *[other] Adicionada a { $count } jogos
+}
+categories-unassigned = { $count ->
+    [one] Retirada de { $count } jogo
+   *[other] Retirada de { $count } jogos
+}
+
 ## Sobre
 
 about-source-code = Código-fonte

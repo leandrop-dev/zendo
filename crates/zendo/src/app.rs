@@ -9,6 +9,7 @@ mod accounts;
 mod achievements;
 mod anti_cheat;
 mod artwork;
+mod categories;
 mod cloud_saves;
 mod dlc;
 mod downloads;
@@ -54,12 +55,13 @@ use iced::{Element, Event, Length, Size, Subscription, Task, event, window};
 use zendo_core::config::Config;
 use zendo_core::covers::{Artwork, Fetcher, KeyCheck, Kind};
 use zendo_core::owned::Owned;
-use zendo_core::{Game, Library, Sort, Source, State};
+use zendo_core::{Category, Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
 use crate::i18n::{self, Language, t};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
+use categories::CategoriesMessage;
 use downloads::{DownloadMessage, DownloadsState};
 use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
@@ -169,10 +171,14 @@ enum Move {
     Last,
 }
 
+/// The library read in a thread: the games, the saved sort, the user's
+/// categories and the settings.
+type Scanned = (Library, Sort, Vec<Category>, Result<Config, String>);
+
 #[derive(Debug, Clone)]
 enum Message {
     /// Boxed: the settings and the library are large.
-    Loaded(Box<(Library, Sort, Result<Config, String>)>),
+    Loaded(Box<Scanned>),
     Refresh,
     /// An image download finished: the file, none found, or what went wrong.
     Image(String, Kind, Result<Option<PathBuf>, String>),
@@ -230,6 +236,7 @@ enum Message {
     Run(RunMessage),
     Sheet(SheetMessage),
     Local(LocalMessage),
+    Categories(CategoriesMessage),
     Art(ArtMessage),
     Mods(ModsMessage),
     Nexus(NexusMessage),
@@ -330,6 +337,10 @@ struct Zendo {
     sheet: Option<Sheet>,
     /// Games added by hand: the Add game sheet and Remove.
     local: LocalState,
+    /// The Categories sheet, open over a page.
+    categories_sheet: Option<categories::Categories>,
+    /// The user's categories as last read or written, with their games.
+    categories: Vec<Category>,
     /// The art picker, open over a game's page.
     picker: Option<Picker>,
     /// The Nexus search, open over a game's page.
@@ -401,6 +412,8 @@ impl Zendo {
             running: Running::default(),
             sheet: None,
             local: LocalState::default(),
+            categories_sheet: None,
+            categories: Vec::new(),
             picker: None,
             mod_search: None,
             mods: ModsState::default(),
@@ -537,6 +550,7 @@ impl Zendo {
     fn overlay_takes(&mut self, message: &Message) -> Option<Task<Message>> {
         self.sheet_takes(message)
             .or_else(|| self.form_takes(message))
+            .or_else(|| self.categories_takes(message))
             .or_else(|| self.picker_takes(message))
             .or_else(|| self.search_takes(message))
             .or_else(|| self.chooser_takes(message))
@@ -636,6 +650,7 @@ impl Zendo {
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
             Message::Local(message) => self.update_local(message),
+            Message::Categories(message) => self.update_categories(message),
             Message::Art(message) => self.update_art(message),
             Message::NexusSearch(message) => self.update_search(message),
             Message::Mods(message) => self.update_mods(message),
@@ -681,14 +696,12 @@ impl Zendo {
         scan()
     }
 
-    fn loaded(
-        &mut self,
-        (library, sort, config): (Library, Sort, Result<Config, String>),
-    ) -> Task<Message> {
+    fn loaded(&mut self, (library, sort, categories, config): Scanned) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
         let after = self.local.after_scan.take();
         self.library = Some(library);
+        self.categories = categories;
         self.scanning = false;
         self.status = None;
         let mut nexus = Task::none();
@@ -1164,9 +1177,8 @@ impl Zendo {
         };
         let main = column![page, self.footer()].width(Length::Fill);
         let page = self.with_sheet(row![self.sidebar(), main].into());
-        self.with_installer(
-            self.with_chooser(self.with_search(self.with_picker(self.with_form(page)))),
-        )
+        let page = self.with_categories(self.with_form(page));
+        self.with_installer(self.with_chooser(self.with_search(self.with_picker(page))))
     }
 
     fn footer(&self) -> Element<'_, Message> {
@@ -1209,13 +1221,14 @@ impl Zendo {
     }
 }
 
-/// Reads every source in a thread, with the saved sort and settings.
+/// Reads every source in a thread, with the saved sort, categories and
+/// settings.
 fn scan() -> Task<Message> {
     Task::perform(
         blocking(|| {
-            let sort = State::load().map(|state| state.sort).unwrap_or_default();
+            let state = State::load().unwrap_or_default();
             let config = Config::load().map_err(|err| format!("{err:#}"));
-            (Library::scan(), sort, config)
+            (Library::scan(), state.sort, state.categories(), config)
         }),
         |loaded| Message::Loaded(Box::new(loaded)),
     )
@@ -1276,13 +1289,13 @@ impl<A: Fallback, B: Fallback> Fallback for (A, B) {
 }
 
 /// The library read at start: none, saying why, and the settings unread.
-impl Fallback for (Library, Sort, Result<Config, String>) {
+impl Fallback for Scanned {
     fn panicked() -> Self {
         let library = Library {
             problems: vec![panicked_note()],
             ..Library::default()
         };
-        (library, Sort::default(), Err(panicked_note()))
+        (library, Sort::default(), Vec::new(), Err(panicked_note()))
     }
 }
 
@@ -1414,6 +1427,8 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -1472,6 +1487,121 @@ mod tests {
             .iter()
             .map(|game| game.title.as_str())
             .collect()
+    }
+
+    fn press(zendo: &mut Zendo, message: CategoriesMessage) {
+        let _ = zendo.update(Message::Categories(message));
+    }
+
+    fn category_names(zendo: &Zendo) -> Vec<&str> {
+        zendo
+            .categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect()
+    }
+
+    fn note(zendo: &Zendo) -> Option<(String, bool)> {
+        zendo
+            .categories_sheet
+            .as_ref()
+            .and_then(|sheet| sheet.note.clone())
+    }
+
+    #[test]
+    fn the_sheet_creates_renames_and_deletes_a_category() {
+        let mut zendo = zendo_with(1, 3);
+        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CategoriesMessage::Create);
+        assert_eq!(category_names(&zendo), [] as [&str; 0], "nothing typed");
+        assert_eq!(
+            note(&zendo),
+            Some(("A category needs a name".to_owned(), false))
+        );
+        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        assert_eq!(category_names(&zendo), ["Co-op"]);
+        assert_eq!(note(&zendo), Some(("Made Co-op".to_owned(), true)));
+
+        press(&mut zendo, CategoriesMessage::Rename("Co-op".into()));
+        press(
+            &mut zendo,
+            CategoriesMessage::RenameTyped("Co-op nights".into()),
+        );
+        press(&mut zendo, CategoriesMessage::RenameDone);
+        assert_eq!(category_names(&zendo), ["Co-op nights"]);
+        assert_eq!(
+            note(&zendo),
+            Some(("Renamed to Co-op nights".to_owned(), true))
+        );
+
+        press(&mut zendo, CategoriesMessage::Delete("Co-op nights".into()));
+        assert_eq!(category_names(&zendo), [] as [&str; 0]);
+        assert_eq!(
+            note(&zendo),
+            Some(("Deleted Co-op nights".to_owned(), true))
+        );
+    }
+
+    #[test]
+    fn the_sheet_refuses_a_name_taken_in_another_case() {
+        let mut zendo = zendo_with(1, 3);
+        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CategoriesMessage::Create);
+        assert_eq!(category_names(&zendo), [] as [&str; 0], "nothing typed");
+        assert_eq!(
+            note(&zendo),
+            Some(("A category needs a name".to_owned(), false))
+        );
+        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CategoriesMessage::Typed("co-op".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        assert_eq!(category_names(&zendo), ["Co-op"], "one category, not two");
+        assert_eq!(
+            note(&zendo),
+            Some(("co-op is already a category".to_owned(), false))
+        );
+    }
+
+    #[test]
+    fn the_sheet_assigns_every_target() {
+        let mut zendo = zendo_with(2, 3);
+        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
+        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CategoriesMessage::Close);
+        let both = ["desktop:0".to_owned(), "desktop:1".to_owned()]
+            .into_iter()
+            .collect();
+        press(&mut zendo, CategoriesMessage::Open(both));
+
+        press(
+            &mut zendo,
+            CategoriesMessage::SetMembership {
+                name: "Co-op".into(),
+                member: true,
+            },
+        );
+        for id in ["desktop:0", "desktop:1"] {
+            assert_eq!(zendo.game(id).unwrap().categories, ["Co-op"], "{id}");
+        }
+        assert_eq!(note(&zendo), Some(("Added to 2 games".to_owned(), true)));
+
+        press(
+            &mut zendo,
+            CategoriesMessage::SetMembership {
+                name: "Co-op".into(),
+                member: false,
+            },
+        );
+        for id in ["desktop:0", "desktop:1"] {
+            assert!(zendo.game(id).unwrap().categories.is_empty(), "{id}");
+        }
+        assert_eq!(
+            note(&zendo),
+            Some(("Taken out of 2 games".to_owned(), true))
+        );
     }
 
     #[test]

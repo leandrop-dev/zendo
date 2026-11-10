@@ -75,6 +75,35 @@ played-never = Not played yet
 played-when = Played { $when }
 played-time = { $time } played
 
+## Categories
+
+categories-title = Categories
+categories-open = Categories
+categories-count = { $count ->
+    [one] { $count } category
+   *[other] { $count } categories
+}
+categories-empty = No categories yet · name one below
+categories-new = Create
+categories-new-placeholder = New category
+categories-rename = Rename
+categories-delete = Delete
+categories-ok = OK
+categories-cancel = Cancel
+categories-created = Made { $name }
+categories-renamed = Renamed to { $name }
+categories-deleted = Deleted { $name }
+categories-blank = A category needs a name
+categories-taken = { $name } is already a category
+categories-assigned = { $count ->
+    [one] Added to { $count } game
+   *[other] Added to { $count } games
+}
+categories-unassigned = { $count ->
+    [one] Taken out of { $count } game
+   *[other] Taken out of { $count } games
+}
+
 ## About
 
 about-source-code = Source code
