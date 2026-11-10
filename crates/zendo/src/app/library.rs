@@ -412,22 +412,15 @@ pub(super) fn chip<'a>(
         .into()
 }
 
-/// The small button in a cover's corner that marks the card.
+/// The small box in a cover's corner that marks the card.
 fn check_button<'a>(ticked: bool, message: Message) -> Element<'a, Message> {
-    button(
-        text(if ticked {
-            t!("library-checked")
-        } else {
-            t!("library-check")
-        })
-        .size(12),
-    )
-    .width(22)
-    .height(22)
-    .padding(0)
-    .style(style::chip(ticked))
-    .on_press(message)
-    .into()
+    button(space::horizontal().width(0))
+        .width(20)
+        .height(20)
+        .padding(0)
+        .style(style::square(ticked))
+        .on_press(message)
+        .into()
 }
 
 /// The line under a card's title: how much it was played.

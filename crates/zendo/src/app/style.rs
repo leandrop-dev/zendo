@@ -342,6 +342,32 @@ pub fn chip(chosen: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     }
 }
 
+/// The mark in a cover's corner: a box outlined when empty, filled when the
+/// card is marked. Drawn without a glyph, so no font can move it or turn it
+/// into a missing character.
+pub fn square(marked: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| {
+        let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+        let fill = if marked {
+            colors().good
+        } else if hovered {
+            colors().raised
+        } else {
+            Color::TRANSPARENT
+        };
+        button::Style {
+            background: Some(Background::Color(fill)),
+            text_color: colors().text,
+            border: Border {
+                color: if marked { colors().good } else { colors().line },
+                width: 1.5,
+                radius: 6.0.into(),
+            },
+            ..button::Style::default()
+        }
+    }
+}
+
 /// An entry in the sidebar.
 pub fn nav(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
