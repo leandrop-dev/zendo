@@ -63,24 +63,29 @@ fn on_display(display: &str, pids: &HashSet<u32>) -> anyhow::Result<usize> {
     }
     let mut asked = 0;
     for window in windows {
-        let Ok(attributes) = conn.get_window_attributes(window)?.reply() else {
+        // A window that went between the tree walk and the read is skipped,
+        // not a reason to leave the others unasked.
+        let Ok(cookie) = conn.get_window_attributes(window) else {
+            continue;
+        };
+        let Ok(attributes) = cookie.reply() else {
             continue;
         };
         if attributes.map_state != MapState::VIEWABLE {
             continue;
         }
         let pid = conn
-            .get_property(false, window, net_pid, AtomEnum::CARDINAL, 0, 1)?
-            .reply()
+            .get_property(false, window, net_pid, AtomEnum::CARDINAL, 0, 1)
             .ok()
+            .and_then(|cookie| cookie.reply().ok())
             .and_then(|reply| reply.value32().and_then(|mut values| values.next()));
         if !pid.is_some_and(|pid| pids.contains(&pid)) {
             continue;
         }
         let supports_delete = conn
-            .get_property(false, window, protocols, AtomEnum::ATOM, 0, 32)?
-            .reply()
+            .get_property(false, window, protocols, AtomEnum::ATOM, 0, 32)
             .ok()
+            .and_then(|cookie| cookie.reply().ok())
             .and_then(|reply| reply.value32().map(|mut atoms| atoms.any(|a| a == delete)))
             .unwrap_or(false);
         if !supports_delete {
@@ -92,7 +97,12 @@ fn on_display(display: &str, pids: &HashSet<u32>) -> anyhow::Result<usize> {
             protocols,
             [delete, x11rb::CURRENT_TIME, 0, 0, 0],
         );
-        conn.send_event(false, window, EventMask::NO_EVENT, event)?;
+        if conn
+            .send_event(false, window, EventMask::NO_EVENT, event)
+            .is_err()
+        {
+            continue;
+        }
         asked += 1;
     }
     conn.flush()?;
