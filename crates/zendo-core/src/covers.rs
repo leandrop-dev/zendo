@@ -309,6 +309,10 @@ impl Fetcher {
     }
 }
 
+/// The largest answer [`download`] keeps: an image, not a mistake or a
+/// hostile body.
+const MAX_IMAGE: u64 = 16 * 1024 * 1024;
+
 /// Downloads an image: its bytes, and the extension their signature gives.
 pub(crate) fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<(Vec<u8>, &'static str)> {
     // Epic hands out some image addresses with bare spaces in them.
@@ -318,9 +322,18 @@ pub(crate) fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<(Vec<u8
         .call()
         .with_context(|| format!("could not download {url}"))?;
     let status = response.status();
-    anyhow::ensure!(status.is_success(), "could not download {url}: {status}");
+    if !status.is_success() {
+        // A refused image is a kind of answer the caller inspects (a store
+        // with no cover), so the status keeps its type through `anyhow`.
+        return Err(anyhow::Error::new(ureq::Error::StatusCode(status.as_u16()))
+            .context(format!("could not download {url}")));
+    }
+    // The server is a store's CDN or SteamGridDB: read no more than an
+    // image can be, whatever it sends.
     let bytes = response
         .into_body()
+        .with_config()
+        .limit(MAX_IMAGE)
         .read_to_vec()
         .with_context(|| format!("could not download {url}"))?;
     let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
