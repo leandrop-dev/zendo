@@ -53,7 +53,7 @@ impl Zendo {
                 self.key.save_after_check = false;
                 self.check_key()
             }
-            Message::KeyChecked(result) => self.key_checked(result),
+            Message::KeyChecked(checked, result) => self.key_checked(checked, result),
             Message::SetDownloadCovers(on) => {
                 self.config.download_covers = on;
                 if !self.save_config() {
@@ -141,10 +141,13 @@ impl Zendo {
         ])
     }
 
-    fn key_checked(&mut self, result: Result<KeyCheck, String>) -> Task<Message> {
-        let Some(key) = self.key.checking.take() else {
+    fn key_checked(&mut self, key: String, result: Result<KeyCheck, String>) -> Task<Message> {
+        // An answer is about the key it checked: one that arrived after the
+        // field moved on says nothing about what is in it now.
+        if self.key.checking.as_deref() != Some(key.as_str()) {
             return Task::none();
-        };
+        }
+        self.key.checking = None;
         let save = std::mem::take(&mut self.key.save_after_check);
         match result {
             Ok(KeyCheck::Accepted) if save => {
@@ -211,9 +214,10 @@ impl Zendo {
         if !self.persist {
             return Task::none();
         }
+        let asking = key.clone();
         Task::perform(
             blocking(move || covers::check_key(&key).map_err(|err| format!("{err:#}"))),
-            Message::KeyChecked,
+            move |result| Message::KeyChecked(asking.clone(), result),
         )
     }
 

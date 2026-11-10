@@ -82,7 +82,7 @@ pub enum NexusMessage {
     ToggleShown,
     SaveKey,
     CheckKey,
-    KeyChecked(Result<KeyCheck, String>),
+    KeyChecked(String, Result<KeyCheck, String>),
     /// What opens links, as `xdg-mime` says.
     Handler(Handler),
     BecomeHandler,
@@ -114,13 +114,14 @@ impl Zendo {
             Message::Nexus(NexusMessage::Handler(handler))
         })];
         if let Some(key) = self.config.nexus_key.clone() {
+            let asking = key.clone();
             tasks.push(Task::perform(
                 blocking(move || {
                     // Nexus's games, for the games it has by title; weekly.
                     let _ = nexus::refresh_games(&key);
                     nexus::check_key(&key).map_err(|err| format!("{err:#}"))
                 }),
-                |result| Message::Nexus(NexusMessage::KeyChecked(result)),
+                move |result| Message::Nexus(NexusMessage::KeyChecked(asking.clone(), result)),
             ));
         }
         for link in std::mem::take(&mut self.nexus.pending) {
@@ -237,7 +238,7 @@ impl Zendo {
                 let key = self.nexus.key.value.trim().to_owned();
                 self.check_nexus_key(key)
             }
-            NexusMessage::KeyChecked(result) => self.nexus_key_checked(result),
+            NexusMessage::KeyChecked(checked, result) => self.nexus_key_checked(checked, result),
             NexusMessage::Handler(handler) => {
                 self.nexus.handler = Some(handler);
                 Task::none()
@@ -281,20 +282,31 @@ impl Zendo {
         if !self.persist {
             return Task::none();
         }
+        let asking = key.clone();
         Task::perform(
             blocking(move || nexus::check_key(&key).map_err(|err| format!("{err:#}"))),
-            |result| Message::Nexus(NexusMessage::KeyChecked(result)),
+            move |result| Message::Nexus(NexusMessage::KeyChecked(asking.clone(), result)),
         )
     }
 
-    fn nexus_key_checked(&mut self, result: Result<KeyCheck, String>) -> Task<Message> {
-        // The check at start, with nothing typed.
-        let Some(key) = self.nexus.key.checking.take() else {
-            if let Ok(KeyCheck::Accepted(user)) = result {
-                self.nexus.user = Some(user);
+    fn nexus_key_checked(
+        &mut self,
+        key: String,
+        result: Result<KeyCheck, String>,
+    ) -> Task<Message> {
+        match self.nexus.key.checking.as_deref() {
+            // The check at start, with nothing typed: it is the stored key.
+            None => {
+                if let Ok(KeyCheck::Accepted(user)) = result {
+                    self.nexus.user = Some(user);
+                }
+                return Task::none();
             }
-            return Task::none();
-        };
+            Some(checking) if checking == key => {}
+            // An answer about a key the field has moved on from.
+            Some(_) => return Task::none(),
+        }
+        self.nexus.key.checking = None;
         let save = std::mem::take(&mut self.nexus.key.save_after_check);
         // The check proves the key in the field. That is Zendo's key only
         // when it is the one stored, and only then does its account tell
@@ -914,7 +926,10 @@ mod tests {
         let nexus = |message| Message::Nexus(message);
         let _ = zendo.update(nexus(NexusMessage::KeyInput("good".into())));
         let _ = zendo.update(nexus(NexusMessage::SaveKey));
-        let _ = zendo.update(nexus(NexusMessage::KeyChecked(Ok(KeyCheck::Rejected))));
+        let _ = zendo.update(nexus(NexusMessage::KeyChecked(
+            "good".into(),
+            Ok(KeyCheck::Rejected),
+        )));
         assert_eq!(zendo.config.nexus_key, None);
 
         let _ = zendo.update(nexus(NexusMessage::SaveKey));
@@ -922,9 +937,10 @@ mod tests {
             name: "someone".into(),
             is_premium: false,
         };
-        let _ = zendo.update(nexus(NexusMessage::KeyChecked(Ok(KeyCheck::Accepted(
-            user.clone(),
-        )))));
+        let _ = zendo.update(nexus(NexusMessage::KeyChecked(
+            "good".into(),
+            Ok(KeyCheck::Accepted(user.clone())),
+        )));
         assert_eq!(zendo.config.nexus_key.as_deref(), Some("good"));
         assert_eq!(zendo.nexus.user, Some(user));
 

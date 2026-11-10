@@ -223,7 +223,7 @@ enum Message {
     ToggleKeyShown,
     SaveKey,
     CheckKey,
-    KeyChecked(Result<KeyCheck, String>),
+    KeyChecked(String, Result<KeyCheck, String>),
     SetDownloadCovers(bool),
     /// Settings' "Update games by themselves".
     SetAutoUpdate(bool),
@@ -654,7 +654,7 @@ impl Zendo {
             | Message::ToggleKeyShown
             | Message::SaveKey
             | Message::CheckKey
-            | Message::KeyChecked(_)
+            | Message::KeyChecked(..)
             | Message::SetDownloadCovers(_)
             | Message::SetAutoUpdate(_)
             | Message::SetWorkers(_)
@@ -2001,26 +2001,40 @@ mod tests {
         let _ = zendo.update(Message::Navigate(Page::Settings));
         let _ = zendo.update(Message::Type("bad".into()));
         let _ = zendo.update(Message::SaveKey);
-        let _ = zendo.update(Message::KeyChecked(Ok(KeyCheck::Rejected)));
+        let _ = zendo.update(Message::KeyChecked("bad".into(), Ok(KeyCheck::Rejected)));
         assert_eq!(zendo.config.steamgriddb_key, None);
 
         let _ = zendo.update(Message::KeyInput(" good ".into()));
         let _ = zendo.update(Message::SaveKey);
-        let _ = zendo.update(Message::KeyChecked(Ok(KeyCheck::Accepted)));
+        let _ = zendo.update(Message::KeyChecked("good".into(), Ok(KeyCheck::Accepted)));
         assert_eq!(zendo.config.steamgriddb_key.as_deref(), Some("good"));
 
         // Offline, Save still keeps it; Check alone never does.
         let _ = zendo.update(Message::KeyInput("other".into()));
         let _ = zendo.update(Message::CheckKey);
-        let _ = zendo.update(Message::KeyChecked(Err("offline".into())));
+        let _ = zendo.update(Message::KeyChecked("other".into(), Err("offline".into())));
         assert_eq!(zendo.config.steamgriddb_key.as_deref(), Some("good"));
         let _ = zendo.update(Message::SaveKey);
-        let _ = zendo.update(Message::KeyChecked(Err("offline".into())));
+        let _ = zendo.update(Message::KeyChecked("other".into(), Err("offline".into())));
         assert_eq!(zendo.config.steamgriddb_key.as_deref(), Some("other"));
 
         let _ = zendo.update(Message::KeyInput(String::new()));
         let _ = zendo.update(Message::SaveKey);
         assert_eq!(zendo.config.steamgriddb_key, None);
+    }
+
+    #[test]
+    fn a_stale_key_check_decides_nothing() {
+        let mut zendo = zendo_with(1, 3);
+        let _ = zendo.update(Message::KeyInput("old".into()));
+        let _ = zendo.update(Message::SaveKey);
+        let _ = zendo.update(Message::KeyInput("new".into()));
+        let _ = zendo.update(Message::SaveKey);
+        // The answer about "old" arrives after "new" was asked about.
+        let _ = zendo.update(Message::KeyChecked("old".into(), Ok(KeyCheck::Accepted)));
+        assert_eq!(zendo.config.steamgriddb_key, None, "nothing was stored");
+        let _ = zendo.update(Message::KeyChecked("new".into(), Ok(KeyCheck::Accepted)));
+        assert_eq!(zendo.config.steamgriddb_key.as_deref(), Some("new"));
     }
 
     #[test]
