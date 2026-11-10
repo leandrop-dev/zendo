@@ -56,7 +56,7 @@ impl Zendo {
             Message::KeyChecked(checked, result) => self.key_checked(checked, result),
             Message::SetDownloadCovers(on) => {
                 self.config.download_covers = on;
-                if !self.save_config() {
+                if !self.save_config(|config| config.download_covers = on) {
                     self.config.download_covers = !on;
                     return Task::none();
                 }
@@ -69,7 +69,7 @@ impl Zendo {
             Message::SetAutoUpdate(on) => self.set_auto_update(on),
             Message::SetWorkers(workers) => {
                 let previous = std::mem::replace(&mut self.config.download_workers, workers);
-                if !self.save_config() {
+                if !self.save_config(|config| config.download_workers = workers) {
                     self.config.download_workers = previous;
                 }
                 Task::none()
@@ -110,7 +110,9 @@ impl Zendo {
                     &mut self.config.language,
                     language.map(|language| language.tag().to_owned()),
                 );
-                if !self.save_config() {
+                if !self.save_config(|config| {
+                    config.language = language.map(|language| language.tag().to_owned());
+                }) {
                     self.config.language = previous;
                 }
                 i18n::set(Language::chosen(self.config.language.as_deref()));
@@ -180,8 +182,9 @@ impl Zendo {
 
     /// Sets the key and writes the settings; on failure the old key stays.
     fn store_key(&mut self, key: Option<String>) -> bool {
+        let setting = key.clone();
         let previous = std::mem::replace(&mut self.config.steamgriddb_key, key);
-        if self.save_config() {
+        if self.save_config(|config| config.steamgriddb_key = setting) {
             true
         } else {
             self.config.steamgriddb_key = previous;
@@ -189,13 +192,19 @@ impl Zendo {
         }
     }
 
-    /// Writes the settings, saying so on the page when it fails.
-    pub(super) fn save_config(&mut self) -> bool {
+    /// Writes a change to the settings, saying so on the page when it
+    /// fails. The change is applied to the file as it is now, under its
+    /// lock, so a hand edit or another writer is not overwritten.
+    pub(super) fn save_config(&mut self, change: impl FnOnce(&mut Config)) -> bool {
         if !self.persist {
+            change(&mut self.config);
             return true;
         }
-        match self.config.save() {
-            Ok(()) => true,
+        match Config::update(change) {
+            Ok(config) => {
+                self.config = config;
+                true
+            }
             Err(err) => {
                 self.key.note = Some((format!("{err:#}"), false));
                 false

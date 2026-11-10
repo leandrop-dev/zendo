@@ -210,8 +210,9 @@ impl Themes {
 
 impl Zendo {
     pub(super) fn set_theme(&mut self, choice: &Choice) -> Task<Message> {
-        let previous = self.config.theme.replace(choice.tag().to_owned());
-        if !self.save_config() {
+        let theme = choice.tag().to_owned();
+        let previous = self.config.theme.replace(theme.clone());
+        if !self.save_config(|config| config.theme = Some(theme)) {
             self.config.theme = previous;
         }
         self.themes.choice = Choice::chosen(self.config.theme.as_deref());

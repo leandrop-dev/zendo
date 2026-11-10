@@ -286,7 +286,24 @@ impl Config {
     /// When there is no config folder or the file cannot be written.
     pub fn save(&mut self) -> anyhow::Result<()> {
         let path = Self::path().context("no home folder to keep Zendo's settings in")?;
-        self.save_to(&path, &secrets::System)
+        paths::locked(&path, || self.save_to(&path, &secrets::System))
+    }
+
+    /// Reads the file, changes it and writes it back under the lock, as
+    /// `State::update` does: a setting changed here is not lost to a save
+    /// from another thread, and a line added by hand meanwhile survives.
+    ///
+    /// # Errors
+    ///
+    /// When the file cannot be locked, read, parsed or written.
+    pub fn update(change: impl FnOnce(&mut Self)) -> anyhow::Result<Self> {
+        let path = Self::path().context("no home folder to keep Zendo's settings in")?;
+        paths::locked(&path, || {
+            let mut config = Self::load_with(Some(&path), &secrets::System, true)?;
+            change(&mut config);
+            config.save_to(&path, &secrets::System)?;
+            Ok(config)
+        })
     }
 
     #[cfg(test)]

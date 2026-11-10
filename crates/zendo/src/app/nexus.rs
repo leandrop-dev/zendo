@@ -15,6 +15,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
+use zendo_core::config::Config;
 use zendo_core::mods::{self, Added, Overview};
 use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
 use zendo_core::secrets::Key;
@@ -348,12 +349,13 @@ impl Zendo {
 
     /// Sets the key and writes the settings; on failure the old key stays.
     fn store_nexus_key(&mut self, key: Option<String>) -> bool {
+        let setting = key.clone();
         let previous = std::mem::replace(&mut self.config.nexus_key, key);
         if !self.persist {
             return true;
         }
-        match self.config.save() {
-            Ok(()) => true,
+        match Config::update(|config| config.nexus_key = setting) {
+            Ok(_) => true,
             Err(err) => {
                 self.config.nexus_key = previous;
                 self.nexus.key.note = Some((format!("{err:#}"), false));

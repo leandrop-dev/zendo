@@ -185,7 +185,7 @@ impl Zendo {
     /// cannot be written.
     fn set_switch(&mut self, on: bool, switch: fn(&mut Config) -> &mut bool) -> Task<Message> {
         *switch(&mut self.config) = on;
-        if !self.save_config() {
+        if !self.save_config(|config| *switch(config) = on) {
             *switch(&mut self.config) = !on;
         }
         Task::none()

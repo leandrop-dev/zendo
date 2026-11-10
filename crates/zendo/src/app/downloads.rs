@@ -503,7 +503,7 @@ impl Zendo {
     /// updates found already are queued too.
     pub(super) fn set_auto_update(&mut self, on: bool) -> Task<Message> {
         self.config.auto_update = on;
-        if !self.save_config() {
+        if !self.save_config(|config| config.auto_update = on) {
             self.config.auto_update = !on;
             return Task::none();
         }

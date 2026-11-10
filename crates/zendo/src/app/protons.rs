@@ -13,6 +13,7 @@ use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, pick_list, progress_bar, row, text};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Size;
+use zendo_core::config::Config;
 use zendo_core::ge_proton::{self, Release};
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::proton::{self, Proton};
@@ -238,8 +239,9 @@ impl Zendo {
     /// goes back to Automatic with `None`, in `config.toml`.
     fn set_default_proton(&mut self, name: Option<String>) -> Task<Message> {
         self.config.default_proton = name;
+        let setting = self.config.default_proton.clone();
         let saved = if self.persist {
-            self.config.save()
+            Config::update(|config| config.default_proton = setting).map(|_| ())
         } else {
             Ok(())
         };
