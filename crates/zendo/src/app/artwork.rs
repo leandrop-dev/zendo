@@ -246,8 +246,10 @@ impl Zendo {
         let Some(key) = key else {
             return Task::none();
         };
-        picker.generation += 1;
+        // Only a fresh list invalidates the answers and thumbnails already
+        // on their way; a later page joins them.
         if page == 0 {
+            picker.generation += 1;
             picker.downloading.clear();
             picker.images.clear();
             picker.thumbs.clear();
@@ -335,9 +337,11 @@ impl Zendo {
         match result {
             Ok(path) => {
                 self.set_image(id, kind, &path);
+                // The picker may have been closed and opened for another
+                // game while the file was written.
                 let title = self
                     .picker
-                    .take()
+                    .take_if(|picker| picker.id == id)
                     .map_or_else(|| id.to_owned(), |picker| picker.title);
                 self.status = Some(t!(
                     "art-new",
@@ -346,7 +350,7 @@ impl Zendo {
                 ));
             }
             Err(err) => {
-                if let Some(picker) = self.picker.as_mut() {
+                if let Some(picker) = self.picker.as_mut().filter(|picker| picker.id == id) {
                     picker.busy = None;
                     picker.note = Some(err);
                 }
