@@ -427,7 +427,16 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
         )?,
     };
     if ended == Ended::Done {
-        let installed = installs(store).iter().any(|game| game.app == job.app);
+        let (installed, problems) = installs(store);
+        // A record Zendo could not read is not a record saying "not
+        // installed": say so instead of blaming the engine.
+        if let Some(problem) = problems.first() {
+            bail!(
+                "could not tell whether {} is installed: {problem}",
+                job.title
+            );
+        }
+        let installed = installed.iter().any(|game| game.app == job.app);
         let uninstalling = job.action == Action::Uninstall;
         if uninstalling && installed {
             bail!("{} is still installed", job.title);
@@ -455,7 +464,7 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
 
 /// The store ids of the DLC installed with a game Zendo installed.
 fn installed_dlc(store: Store, app: &str) -> Vec<String> {
-    installs(store)
+    known(store)
         .into_iter()
         .find(|game| game.app == app)
         .map(|game| game.install.dlc.into_iter().map(|dlc| dlc.id).collect())
@@ -1102,11 +1111,9 @@ fn move_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::R
 
 /// Deletes the folder a game was copied out of, once nothing records it.
 fn delete_old(job: &Job, old: &Path, report: &mut dyn FnMut(Event)) -> anyhow::Result<()> {
-    let holds_a_game = Store::ALL
-        .into_iter()
-        .flat_map(installs)
-        .filter_map(|game| game.install.path)
-        .any(|path| path.starts_with(old) || old.starts_with(&path));
+    let holds_a_game = recorded_folders()?
+        .iter()
+        .any(|path| path.starts_with(old) || old.starts_with(path));
     if holds_a_game || !safe_to_delete(old) {
         bail!(
             "{} moved, but its old folder {} was left: it does not look like only this game's",
@@ -1159,7 +1166,7 @@ fn copy_progress(done: u64, total: u64, elapsed: Duration) -> Progress {
 
 /// The folder the engine records the game in.
 fn recorded_path(store: Store, app: &str) -> Option<PathBuf> {
-    installs(store)
+    known(store)
         .into_iter()
         .find(|game| game.app == app)
         .and_then(|game| game.install.path)
@@ -1235,12 +1242,12 @@ fn import_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
     if !folder.is_dir() {
         bail!("{} is not a folder", folder.display());
     }
-    if installs(store).iter().any(|game| game.app == job.app) {
+    if known(store).iter().any(|game| game.app == job.app) {
         bail!("Zendo has {} installed already", job.title);
     }
     let taken = Store::ALL
         .into_iter()
-        .flat_map(installs)
+        .flat_map(known)
         .filter_map(|game| game.install.path)
         .find(|path| path.starts_with(folder) || folder.starts_with(path));
     if let Some(taken) = taken {
@@ -1266,7 +1273,14 @@ fn import_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow:
     };
     let args: Vec<String> = words.into_iter().map(str::to_owned).collect();
     let (ended, error) = engine_told(store, &args, stop, report)?;
-    if ended == Ended::Done && !installs(store).iter().any(|game| game.app == job.app) {
+    let (imported, problems) = installs(store);
+    if let Some(problem) = problems.first() {
+        bail!(
+            "could not tell whether {} was imported: {problem}",
+            job.title
+        );
+    }
+    if ended == Ended::Done && !imported.iter().any(|game| game.app == job.app) {
         bail!(
             "{} did not import {}: {}",
             store.engine_name(),
@@ -1349,7 +1363,16 @@ pub fn discard(job: &Job) -> anyhow::Result<()> {
         return Ok(());
     }
     let store = job.store();
-    if installs(store).iter().any(|game| game.app == job.app) {
+    let (installed, problems) = installs(store);
+    // Deleting is not undone: a record Zendo could not read is a reason to
+    // stop, not a reason to decide the game is not installed.
+    if let Some(problem) = problems.first() {
+        bail!(
+            "could not tell whether {} is installed: {problem}",
+            job.title
+        );
+    }
+    if installed.iter().any(|game| game.app == job.app) {
         return Ok(());
     }
     if let Some(dir) = store.dir() {
@@ -1372,11 +1395,7 @@ pub fn discard(job: &Job) -> anyhow::Result<()> {
     if !folder.exists() {
         return Ok(());
     }
-    let recorded: Vec<PathBuf> = Store::ALL
-        .into_iter()
-        .flat_map(installs)
-        .filter_map(|game| game.install.path)
-        .collect();
+    let recorded = recorded_folders()?;
     let inside = folder.parent() == Some(job.path.as_path());
     let holds_a_game = recorded
         .iter()
@@ -1390,10 +1409,32 @@ pub fn discard(job: &Job) -> anyhow::Result<()> {
     fs::remove_dir_all(folder).with_context(|| format!("could not delete {}", folder.display()))
 }
 
-/// What Zendo installed from this store, from the engine's own record.
-fn installs(store: Store) -> Vec<Installed> {
+/// What Zendo installed from this store, from the engine's own record, and
+/// anything that record could not be read from.
+fn installs(store: Store) -> (Vec<Installed>, Vec<String>) {
     let mut scan = Scan::default();
-    installs_into(store, &mut scan)
+    let installed = installs_into(store, &mut scan);
+    (installed, scan.problems)
+}
+
+/// The same list, where an unreadable record only means "not known", as for
+/// a lookup that changes nothing.
+fn known(store: Store) -> Vec<Installed> {
+    installs(store).0
+}
+
+/// Every folder a store records a game in. Refuses when a record cannot be
+/// read, because callers use this to decide whether a folder may go.
+fn recorded_folders() -> anyhow::Result<Vec<PathBuf>> {
+    let mut folders = Vec::new();
+    for store in Store::ALL {
+        let (installed, problems) = installs(store);
+        if let Some(problem) = problems.first() {
+            bail!("could not tell where games are installed: {problem}");
+        }
+        folders.extend(installed.into_iter().filter_map(|game| game.install.path));
+    }
+    Ok(folders)
 }
 
 fn installs_into(store: Store, scan: &mut Scan) -> Vec<Installed> {

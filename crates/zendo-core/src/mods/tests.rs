@@ -875,6 +875,21 @@ fn a_real_archive_goes_in_and_out() {
 }
 
 #[test]
+fn only_deletes_a_mod_its_own_folder_names() {
+    let scratch = Scratch::new("remove");
+    let place = scratch.place(None, false);
+    fs::create_dir_all(place.files().join("SkyUI")).unwrap();
+    fs::create_dir_all(place.files().join("b")).unwrap();
+    assert_eq!(
+        removable(&place, "SkyUI"),
+        vec![place.files().join("SkyUI")]
+    );
+    for id in ["", ".", "..", "/etc", "a/b", "../b", "a\\\\b"] {
+        assert!(removable(&place, id).is_empty(), "{id:?} was removable");
+    }
+}
+
+#[test]
 fn knows_games_by_steam_id_or_title() {
     let game = |id: &str, title: &str, source| {
         Game::new(

@@ -576,10 +576,17 @@ pub fn prefix(game: &Game) -> Option<PathBuf> {
 #[must_use]
 pub fn prefix_in(dir: &Path, game: &Game) -> PathBuf {
     let name = match game.id.strip_prefix("local:") {
-        Some(name) if game.source == Source::Local => name.to_owned(),
+        Some(name) if game.source == Source::Local && one_component(name) => name.to_owned(),
         _ => downloads::folder_name(&game.title),
     };
     dir.join("Prefixes").join(name)
+}
+
+/// Whether a name read from a file is one folder and no more: not empty, not
+/// `.` or `..`, no separator. A name that fails is not joined into a path.
+fn one_component(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none()
 }
 
 /// Makes the prefix the command's `WINEPREFIX` names, when it has one.
@@ -1042,6 +1049,34 @@ fn open_log(log: &Path, command: &Command) -> anyhow::Result<Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_prefix_is_named_after_one_folder_only() {
+        let game = |id: &str| {
+            Game::new(
+                id.into(),
+                "Some Game".into(),
+                Source::Local,
+                Launch::Local {
+                    program: PathBuf::from("/x"),
+                    args: Vec::new(),
+                    dir: None,
+                },
+            )
+        };
+        let dir = Path::new("/games");
+        assert_eq!(
+            prefix_in(dir, &game("local:watch")),
+            Path::new("/games/Prefixes/watch")
+        );
+        for id in ["local:..", "local:.", "local:a/b", "local:"] {
+            assert_eq!(
+                prefix_in(dir, &game(id)),
+                Path::new("/games/Prefixes/Some Game"),
+                "{id} was joined as a path"
+            );
+        }
+    }
 
     #[test]
     fn quotes_what_a_shell_would_split() {

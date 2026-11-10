@@ -644,7 +644,9 @@ fn parse_manifest(text: &str) -> anyhow::Result<Option<App>> {
         id: id.to_owned(),
         name: name.to_owned(),
         last_played: get_u64(state, "LastPlayed").filter(|&when| when > 0),
-        install_dir: get_str(state, "installdir").map(str::to_owned),
+        install_dir: get_str(state, "installdir")
+            .filter(|dir| !dir.is_empty() && *dir != "." && *dir != ".." && !dir.contains('/'))
+            .map(str::to_owned),
         size: get_u64(state, "SizeOnDisk"),
         build: get_str(state, "buildid").map(str::to_owned),
     }))

@@ -21,7 +21,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -326,7 +326,21 @@ fn gog_path(location: &str, prefix: &Path, install: &Path) -> anyhow::Result<Pat
         let unknown: String = path[start..].chars().take_while(|&c| c != '/').collect();
         bail!("GOG names a save folder Zendo does not know: {unknown}");
     }
-    Ok(PathBuf::from(path))
+    let path = PathBuf::from(path);
+    // The locations come from GOG's config for the game. One that climbs
+    // out with `..`, or sits under neither the prefix nor the install, is
+    // not a folder Zendo makes or hands to gogdl.
+    if path
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+        || (!path.starts_with(prefix) && !path.starts_with(install))
+    {
+        bail!(
+            "GOG names a save folder outside the game's folder and prefix: {}",
+            path.display()
+        );
+    }
+    Ok(path)
 }
 
 /// The time of each GOG location's last sync, by game and location
@@ -361,6 +375,28 @@ fn keep_in<T: Serialize + DeserializeOwned>(name: &str, key: &str, value: T) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_gogs_save_folders_inside_the_prefix_or_the_install() {
+        let prefix = Path::new("/prefix");
+        let install = Path::new("/games/Cyberpunk 2077");
+        assert_eq!(
+            gog_path("<?SAVED_GAMES?>/Saves", prefix, install).unwrap(),
+            Path::new("/prefix/drive_c/users/steamuser/Saved Games/Saves")
+        );
+        assert!(gog_path("<?INSTALL?>/saves", prefix, install).is_ok());
+        for outside in [
+            "/tmp/x",
+            "<?SAVED_GAMES?>/../../../../home/me",
+            "<?INSTALL?>/../other",
+            "",
+        ] {
+            assert!(
+                gog_path(outside, prefix, install).is_err(),
+                "{outside:?} was allowed"
+            );
+        }
+    }
 
     #[test]
     fn reads_gogs_windows_save_locations() {

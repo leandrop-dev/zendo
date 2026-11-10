@@ -808,13 +808,27 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
         }
         Ok(())
     })?;
-    for kept in [place.files().join(id), place.installers().join(id)] {
-        if !id.is_empty() && kept.is_dir() {
-            fs::remove_dir_all(&kept)
-                .with_context(|| format!("could not delete {}", kept.display()))?;
-        }
+    for kept in removable(&place, id) {
+        fs::remove_dir_all(&kept)
+            .with_context(|| format!("could not delete {}", kept.display()))?;
     }
     place.overview()
+}
+
+/// The folders removing a mod may delete: only ones Zendo's own folders
+/// name by a single normal component, so an id hand-edited into `mods.toml`
+/// as `..`, `.` or `a/b` cannot reach the game's files or a sibling's tree.
+fn removable(place: &Place, id: &str) -> Vec<PathBuf> {
+    let mut parts = Path::new(id).components();
+    let one =
+        matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none();
+    if !one {
+        return Vec::new();
+    }
+    [place.files().join(id), place.installers().join(id)]
+        .into_iter()
+        .filter(|kept| kept.is_dir())
+        .collect()
 }
 
 /// Turns a plugin on or off; Apply makes it so. The game's main masters
