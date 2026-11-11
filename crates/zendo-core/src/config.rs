@@ -30,6 +30,12 @@
 //! # The window's colours: "zendo", Zendo's own; or, on a computer with
 //! # hyprmonk, "hyprmonk" to follow its tone. Left out, "zendo".
 //! theme = "hyprmonk"
+//! # The window hides to the system tray instead of quitting: closing it
+//! # (X), and when a game starts, leaves it there with a tray icon to bring
+//! # it back. Off, closing quits as usual and there is no tray icon.
+//! minimize_to_tray = false
+//! # Discord shows what Zendo is playing (rich presence). Off by default.
+//! discord_presence = false
 //! ```
 //!
 //! The API keys are kept in the system keyring ([`secrets`]) when one
@@ -103,6 +109,11 @@ pub struct Config {
     /// when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    /// Whether closing or starting a game hides the window to the system
+    /// tray instead of quitting, with a tray icon to bring it back.
+    pub minimize_to_tray: bool,
+    /// Whether Discord shows what Zendo is playing (rich presence).
+    pub discord_presence: bool,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
     held: [Held; Key::ALL.len()],
@@ -160,6 +171,8 @@ impl PartialEq for Config {
             && self.default_proton == other.default_proton
             && self.language == other.language
             && self.theme == other.theme
+            && self.minimize_to_tray == other.minimize_to_tray
+            && self.discord_presence == other.discord_presence
     }
 }
 
@@ -182,6 +195,8 @@ impl std::fmt::Debug for Config {
             .field("default_proton", &self.default_proton)
             .field("language", &self.language)
             .field("theme", &self.theme)
+            .field("minimize_to_tray", &self.minimize_to_tray)
+            .field("discord_presence", &self.discord_presence)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
             .field("steam_session_kept", self.kept(Key::SteamSession))
@@ -205,6 +220,8 @@ impl Default for Config {
             default_proton: None,
             language: None,
             theme: None,
+            minimize_to_tray: false,
+            discord_presence: false,
             held: Default::default(),
             retired_steam_key: None,
         }

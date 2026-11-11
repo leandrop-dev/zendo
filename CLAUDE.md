@@ -25,3 +25,6 @@ fetch covers and queue auto-updates. `grim` saves a still
 goes through `ydotool` with `ydotool.service` running (`systemctl --user
 start ydotool`) and Zendo focused. The virtual mouse reaches the whole
 session, so use it with the user present.
+
+After a layout change, click every new control once in the app. A control
+can be drawn outside the area that receives clicks.

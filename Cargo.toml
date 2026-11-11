@@ -12,6 +12,9 @@ repository = "https://github.com/leandrop-dev/zendo"
 anyhow = "1"
 # The Steam sign-in token's dates (a JWT); already in the build.
 base64 = "0.23.1"
+# Discord's rich presence: the user's status shows what Zendo is playing,
+# over Discord's local IPC socket. Off by default.
+discord-rich-presence = "1.1"
 # The window's words in each language (Mozilla's Fluent); unic-langid
 # names the languages, sys-locale finds the system's (cosmic-text already
 # brings it).
@@ -22,6 +25,8 @@ flate2 = "1.1.10"
 gilrs = "0.11.2"
 # GTK 3, the version wry builds its Linux web view on.
 gtk = "0.18"
+# Decoding the tray icon's PNG, already in the build through Iced's image.
+image = "0.25"
 iced = { version = "0.14.0", features = ["image"] }
 keyvalues-parser = "0.2.4"
 roxmltree = "0.20.0"
@@ -36,6 +41,9 @@ sys-locale = "0.3.2"
 unic-langid = "0.9"
 x11rb = "0.13.2"
 ureq = "3.5.1"
+# The system tray icon (StatusNotifierItem) for hiding to the tray; the
+# ksni backend runs on its own thread and needs no GTK loop in the window.
+tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }
 # The WebKit view under wry's, for the sign-in window's pop-ups; the
 # version wry pins.
 webkit2gtk = "=2.0.2"

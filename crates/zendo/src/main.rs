@@ -6,7 +6,9 @@ mod file_dialog;
 mod gamepad;
 mod i18n;
 mod links;
+mod presence;
 mod sign_in_window;
+mod tray;
 
 use std::process::ExitCode;
 

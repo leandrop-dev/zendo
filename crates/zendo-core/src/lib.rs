@@ -58,6 +58,7 @@ pub mod theme;
 mod time;
 pub mod tone;
 mod umu;
+pub mod watch;
 mod windows;
 
 use std::collections::{BTreeMap, HashSet};

@@ -390,7 +390,7 @@ fn installed_dir(text: &str) -> Option<String> {
 
 /// The folders listed in the root's `libraryfolders.vdf`, or the root alone
 /// when the file is missing.
-fn library_folders(root: &Path, problems: &mut Vec<String>) -> Vec<PathBuf> {
+pub(crate) fn library_folders(root: &Path, problems: &mut Vec<String>) -> Vec<PathBuf> {
     let file = root.join("steamapps/libraryfolders.vdf");
     let Ok(text) = fs::read_to_string(&file) else {
         return vec![root.to_path_buf()];

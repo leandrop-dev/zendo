@@ -234,6 +234,17 @@ files-queue = Fila de transferências
 files-sign-ins = Sessões das lojas
 files-games = Jogos
 
+## A janela e o Discord
+
+window-title = Janela
+window-about = Fechar a janela (X), ou iniciar um jogo, deixa o Zendo no tabuleiro do sistema com um ícone para o trazer de volta. Num ambiente sem tabuleiro, como o GNOME original, deixe isto desligado e fechar sai como de costume.
+minimize-to-tray = Ocultar para o tabuleiro ao fechar e ao iniciar um jogo
+tray-open = Abrir
+tray-quit = Sair
+discord-title = Discord
+discord-about = Presença rica: o seu estado no Discord mostra o jogo que o Zendo está a jogar, desde que começa até terminar.
+discord-presence = Mostrar no Discord o que o Zendo está a jogar
+
 ## Nexus Mods
 
 cancel = Cancelar

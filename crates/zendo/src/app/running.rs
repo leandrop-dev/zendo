@@ -18,6 +18,7 @@ use zendo_core::{cloud_saves, galaxy, gog_playtime, gog_setup, known_fixes};
 use super::style::{self, BOLD};
 use super::{Message, Zendo};
 use crate::i18n::t;
+use crate::presence::Presence;
 
 /// How often Zendo looks whether a game still runs.
 const POLL: Duration = Duration::from_secs(2);
@@ -44,6 +45,8 @@ struct Session {
     /// later for one its launcher starts.
     seen: bool,
     started: Instant,
+    /// When its processes were seen, Unix seconds: Discord's start time.
+    since: u64,
     /// Stop was pressed: the next press kills it.
     stopping: bool,
     /// An anti-cheat runtime it needs could not be downloaded.
@@ -56,6 +59,7 @@ impl Session {
             watch: None,
             seen: false,
             started: Instant::now(),
+            since: 0,
             stopping: false,
             warning: None,
         }
@@ -166,9 +170,11 @@ impl Zendo {
                 if let Some(session) = self.running.games.get_mut(&id) {
                     session.seen = true;
                     session.started = Instant::now();
+                    session.since = super::now();
                     self.status = Some(t!("run-running", title = self.title_of(&id)));
                 }
-                Task::none()
+                self.update_presence();
+                self.hide_on_launch()
             }
             RunMessage::Missed(id) => {
                 if self.running.games.remove(&id).is_some() {
@@ -193,6 +199,7 @@ impl Zendo {
                 }
                 let title = self.title_of(&id);
                 self.status = Some(t!("run-closed", title = title, minutes = minutes));
+                self.update_presence();
                 // A job held while the game ran can go now.
                 self.next_job()
             }
@@ -284,6 +291,7 @@ impl Zendo {
         let title = self.title_of(id);
         let launcher = launcher(self.game(id));
         let start_warning = started.warning;
+        let mut running_now = false;
         match started.watch {
             Watch::Nothing => {
                 self.running.games.remove(id);
@@ -291,8 +299,10 @@ impl Zendo {
             }
             watch => {
                 if let Some(session) = self.running.games.get_mut(id) {
-                    session.seen = matches!(watch, Watch::Group(_));
+                    running_now = matches!(watch, Watch::Group(_));
+                    session.seen = running_now;
                     session.started = Instant::now();
+                    session.since = super::now();
                     let warning = session.warning.take().or(start_warning);
                     self.status = Some(if let Some(warning) = warning {
                         warning
@@ -311,12 +321,41 @@ impl Zendo {
             played.launches += 1;
             played.last = Some(super::now());
         }
-        self.select(Some(id))
+        if running_now {
+            self.update_presence();
+        }
+        let hide = if running_now {
+            self.hide_on_launch()
+        } else {
+            Task::none()
+        };
+        Task::batch([self.select(Some(id)), hide])
     }
 
     fn title_of(&self, id: &str) -> String {
         self.game(id)
             .map_or_else(|| id.to_owned(), |game| game.title.clone())
+    }
+
+    /// Shows the most recently started running game on Discord, or nothing
+    /// when none runs; does nothing while the Discord setting is off.
+    pub(super) fn update_presence(&mut self) {
+        let Some(presence) = &self.presence else {
+            return;
+        };
+        let current = self
+            .running
+            .games
+            .iter()
+            .filter(|(_, session)| session.seen)
+            .max_by_key(|(_, session)| session.started);
+        match current {
+            Some((id, session)) => presence.show(Presence::Playing {
+                title: self.title_of(id),
+                since: session.since,
+            }),
+            None => presence.show(Presence::Idle),
+        }
     }
 
     /// Play, or Running with Stop while the game runs.

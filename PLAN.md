@@ -6,8 +6,9 @@ later. A sister project of [hyprmonk](../hyprmonk), MIT like it.
 
 Status: planned on 2026-11-04 from a hyprmonk session; the whole of phases 1
 to 7 built by 2026-11-07, then items 1 to 19 of the list after them, the last
-of those (the library's categories) on 2026-11-10, and the 25 must-fix
-faults of that day's review closed the same day.
+of those (the library's categories) on 2026-11-10, the 25 must-fix faults of
+that day's review closed the same day, and item 20 (the window) built and
+tried by the user on 2026-11-11.
 
 ## Documents
 
@@ -16,14 +17,14 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 19 to 26, the work left, in order | starting one of them |
+| `docs/backlog.md` | items 21 to 26, the work left, in order | starting one of them |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
 ## Where it stands
 
 Phases 1 to 7 are built and checked, mods (phase 7) last on 2026-11-07 and
-tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 19 are built,
+tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 20 are built,
 most of them tried by the user. Item 19, the library's categories, was built
 on 2026-11-10 and tried by the user the same day: it works [firm]. A
 whole-workspace review the same day (Rust and Iced) found 25 must-fix
@@ -33,13 +34,19 @@ colour and Cat Quest II's cloud saves; its reports are in
 `.mallet/reviews/2026-11-10/`. The review's non-blocking findings were then
 cleared in passes on 2026-11-11, the last one built and looked at on screen
 (docs/history.md). The review is closed but for one note (`rust-facts` 11).
-Next is item 20.
 
-Next is item 20, the window: minimise when a game starts, Discord presence,
-rescanning by itself when a launcher's files change. The phase 5a gap is
-closed: an Epic game was installed and played through legendary on
-2026-11-10 (docs/history.md, phase 5a). The other "not checked" notes sit
-with the work they belong to in docs/history.md.
+Item 20, the window (minimise to the tray, Discord presence, rescanning when
+a launcher's files change), was built and tried by the user on 2026-11-11
+(docs/history.md, item 20): the tray icon, the hide and restore, and the
+pointer staying put all work [firm]. On Wayland an app can minimise but not
+unminimise its own window, so restoring goes through Hyprland's `hyprctl`
+(hyprmonk's `hyprmonk_focus`, without moving the pointer); on X11 it restores
+normally. The Discord presence is off by default and needs Discord's Activity
+Status on. Next is item 21.
+
+The phase 5a gap is closed: an Epic game was installed and played through
+legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
+notes sit with the work they belong to in docs/history.md.
 
 ## Direction [firm]
 
@@ -125,8 +132,8 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Item 20, the window, then 21 to 26: docs/backlog.md, in the user's firm
-order. Each item is planned in detail when it starts.
+Item 21, then 22 to 26: docs/backlog.md, in the user's firm order. Each
+item is planned in detail when it starts.
 
 ## On hyprmonk's side
 

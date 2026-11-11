@@ -19,6 +19,8 @@ use super::style::{self, BOLD, colors};
 use super::themes::Choice;
 use super::{Message, Zendo, blocking, key_id};
 use crate::i18n::{self, Language, t};
+use crate::presence::PresenceHandle;
+use crate::tray::Tray;
 
 const KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
 
@@ -47,6 +49,8 @@ pub(super) enum Setting {
     GogGalaxy(bool),
     NexusAdult(bool),
     DefaultProton(Option<String>),
+    MinimizeToTray(bool),
+    DiscordPresence(bool),
 }
 
 /// What the Settings page says once the `SteamGridDB` key is written.
@@ -84,6 +88,8 @@ impl Setting {
             Self::GogGalaxy(on) => config.gog_galaxy = *on,
             Self::NexusAdult(on) => config.nexus_adult = *on,
             Self::DefaultProton(name) => config.default_proton.clone_from(name),
+            Self::MinimizeToTray(on) => config.minimize_to_tray = *on,
+            Self::DiscordPresence(on) => config.discord_presence = *on,
         }
     }
 }
@@ -155,6 +161,8 @@ impl Zendo {
             Message::SetDownloadCovers(on) => self.save_setting(Setting::DownloadCovers(on)),
             Message::SetAutoUpdate(on) => self.save_setting(Setting::AutoUpdate(on)),
             Message::SetWorkers(workers) => self.save_setting(Setting::Workers(workers)),
+            Message::SetMinimizeToTray(on) => self.save_setting(Setting::MinimizeToTray(on)),
+            Message::SetDiscordPresence(on) => self.save_setting(Setting::DiscordPresence(on)),
             Message::CopyReport => {
                 if self.diagnostics.gathering {
                     return Task::none();
@@ -345,6 +353,28 @@ impl Zendo {
                 self.protons.default_set();
                 Task::none()
             }
+            Setting::MinimizeToTray(on) => {
+                self.tray = if on && self.persist {
+                    Tray::spawn()
+                } else {
+                    None
+                };
+                // The window can only be hidden while the tray exists, but
+                // turning it off mid-hide must not strand the window.
+                if !on && self.hidden {
+                    return self.show_from_tray();
+                }
+                Task::none()
+            }
+            Setting::DiscordPresence(on) => {
+                self.presence = if on && self.persist {
+                    Some(PresenceHandle::spawn())
+                } else {
+                    None
+                };
+                self.update_presence();
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
@@ -379,6 +409,8 @@ impl Zendo {
                     header,
                     self.language_section(),
                     self.theme_section(),
+                    self.window_section(),
+                    self.discord_section(),
                     self.key_section(),
                     self.nexus_section(),
                     self.covers_section(),
@@ -524,6 +556,25 @@ impl Zendo {
             choices = choices.push(choice(language.name().to_owned(), Some(language)));
         }
         section(t!("language-title"), t!("language-about"), choices)
+    }
+
+    /// The window's tray behaviour: closing or starting a game hides it to
+    /// the system tray, with an icon to bring it back.
+    fn window_section(&self) -> Element<'_, Message> {
+        let body = toggler(self.config.minimize_to_tray)
+            .label(t!("minimize-to-tray"))
+            .text_size(14)
+            .on_toggle(Message::SetMinimizeToTray);
+        section(t!("window-title"), t!("window-about"), body)
+    }
+
+    /// Discord rich presence: off, Zendo says nothing to Discord.
+    fn discord_section(&self) -> Element<'_, Message> {
+        let body = toggler(self.config.discord_presence)
+            .label(t!("discord-presence"))
+            .text_size(14)
+            .on_toggle(Message::SetDiscordPresence);
+        section(t!("discord-title"), t!("discord-about"), body)
     }
 
     fn covers_section(&self) -> Element<'_, Message> {

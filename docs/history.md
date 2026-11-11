@@ -2558,3 +2558,73 @@ error for the environment were checked too.
   item 20, the window (minimise when a game starts, Discord presence,
   rescanning when a launcher's files change, processes tracked by their
   start time).
+
+## Item 20, the window, 2026-11-11
+
+Planned with the user the same day, then built and tried by the user.
+
+- **The tray.** `crates/zendo/src/tray.rs`, through the `tray-icon` crate's
+  `ksni` backend (a freedesktop `StatusNotifierItem`; it keeps a thread of
+  its own, so the Iced window needs no GTK loop). The icon is
+  `data/zendo.svg` rasterised into `crates/zendo/tray-icon.png` (64 px, the
+  charcoal ensō with its orange dot), decoded with `image` and set as the
+  64×64 pixmap. Both the tooltip and the `Title` are "Zendo": a panel lists
+  the item by its title, and without one it showed a numeric id. A menu
+  with Open and Quit.
+- **Hiding to the tray.** The close button (X) and a game's start hide the
+  window when `minimize_to_tray` is on (default off, Settings' Window
+  section). The hide is `window::minimize(id, true)`, not Iced's
+  `Mode::Hidden`: winit 0.30's Wayland backend makes `set_visible(false)` a
+  no-op (`// Not possible on Wayland`), so a "hidden" window never hid.
+  Minimising works because Hyprland's `minimise.lua` turns `window.minimize`
+  into a move to `special:minimized`.
+- **Restoring.** On X11 `minimize(false)` and focus bring it back. On
+  Wayland an app cannot unminimise itself, so Hyprland is asked through
+  `hyprctl`. The first try used `hl.dsp.focus`, which restored the window
+  but warped the pointer to its centre; the user asked to avoid that.
+  `hyprmonk_focus` (hyprmonk's `minimise.lua`) sets `cursor.no_warps`
+  around the focus and puts it back after, which is the dock's "without
+  moving the pointer". Zendo calls `hyprmonk_focus` when it is defined and
+  falls back to `hl.dsp.focus` otherwise. The tray's Quit goes through the
+  same close path, so a running download still asks first.
+- **Minimising on start.** A game is hidden as it is seen running: at once
+  for a game Zendo starts itself (its process group), and when its
+  processes turn up for a Steam or Heroic game. Only with the setting on
+  and a tray.
+- **Discord presence.** `crates/zendo/src/presence.rs` on the
+  `discord-rich-presence` crate (1.1.0, MIT), a thread of its own: it
+  connects to Discord's local IPC with Zendo's application id
+  (`1570036457047986256`), shows "Playing", the game's title and the time it
+  started, clears when it ends, and reconnects as Discord comes and goes.
+  Off by default; Settings' Discord section turns it on. The game shown is
+  the most recently started still-running one.
+- **Rescanning on a change.** `crates/zendo-core/src/watch.rs` gives the
+  modification times of the launchers' files (Steam's `libraryfolders.vdf`
+  and each `appmanifest_*.acf`, Heroic's `installed.json` records, the
+  `.desktop` applications folders) as one sorted list; the window keeps the
+  last list and polls every 10 s, calling `refresh()` when it differs. Only
+  the launchers' files, never Zendo's own, so Zendo never rescans itself.
+  Always on.
+- **Settings.** Two sections, Window (`minimize_to_tray`) and Discord
+  (`discord_presence`), each a `Setting` written by `Config::update` as the
+  others are.
+
+Decisions [firm]: close hides to the tray and only the tray's Quit exits;
+the minimising button stays a taskbar minimise; the Discord application id
+is Zendo's own, baked in, and presence is off by default; the orange dot is
+part of the icon.
+
+Checked: `cargo fmt --check` clean, pedantic clippy with no warning,
+`cargo test --workspace` green (231 core, 129 window; two watch tests are
+new). On screen, through `grim`, `ydotool` and `hyprctl`: the tray
+registered as `org.kde.StatusNotifierItem-<pid>-1` with tooltip and title
+"Zendo" and the 64×64 icon; the left click minimises and restores the
+window, the restore does not move the pointer, and the tray's Quit exits.
+Not seen live: the Discord presence (Vesktop was running, but the status
+was not watched); the id is real, so it should show once Discord's Activity
+Status is on.
+
+Left open: on Wayland the minimised window stays in hyprmonk's dock rather
+than vanishing from it, as that dock is built to restore minimised windows;
+and restoring off Hyprland (another Wayland compositor) still needs the
+compositor rather than Zendo.

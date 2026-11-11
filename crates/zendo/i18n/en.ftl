@@ -226,6 +226,17 @@ files-queue = Download queue
 files-sign-ins = Store sign-ins
 files-games = Games
 
+## The window and Discord
+
+window-title = Window
+window-about = Closing the window (X), or starting a game, leaves Zendo in the system tray with an icon to bring it back. On a desktop with no tray, such as stock GNOME, leave this off and closing quits as usual.
+minimize-to-tray = Hide to the tray on close and when a game starts
+tray-open = Open
+tray-quit = Quit
+discord-title = Discord
+discord-about = Rich presence: your Discord status shows the game Zendo is playing, from when it starts until it ends.
+discord-presence = Show what Zendo is playing on Discord
+
 ## Nexus Mods
 
 cancel = Cancel

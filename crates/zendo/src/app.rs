@@ -59,6 +59,8 @@ use zendo_core::{Category, Game, Library, Sort, Source, State};
 
 use crate::gamepad::{self, Pad};
 use crate::i18n::{self, Language, t};
+use crate::presence::PresenceHandle;
+use crate::tray::{self, Tray, TrayMessage};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use categories::CategoriesMessage;
@@ -84,6 +86,9 @@ use themes::{Choice, Themes};
 use zendo_core::theme::Theme;
 
 const START_SIZE: Size = Size::new(1360.0, 860.0);
+
+/// How often the file watch looks whether a launcher's files changed.
+const WATCH: std::time::Duration = std::time::Duration::from_secs(10);
 
 fn grid_id() -> Id {
     Id::new("grid")
@@ -241,6 +246,18 @@ enum Message {
     /// How many files the engines download at once; `None` leaves it to
     /// them.
     SetWorkers(Option<u32>),
+    /// Settings' Window section: hide to the tray on close and on start.
+    SetMinimizeToTray(bool),
+    /// Settings' Discord section: rich presence on or off.
+    SetDiscordPresence(bool),
+    /// The tray icon was clicked, or one of its menu items was chosen.
+    Tray(TrayMessage),
+    /// The window's close button was pressed: hide to the tray, or quit.
+    CloseRequested,
+    /// Time to look whether a launcher's files changed.
+    WatchTick,
+    /// The signature of the launchers' files, read just now.
+    WatchChecked(Vec<(PathBuf, u64)>),
     /// A settings change written on a thread: the settings as they were
     /// before it, what the change was, and the file's settings now.
     ConfigSaved(Box<Config>, settings::Setting, Result<Box<Config>, String>),
@@ -352,6 +369,8 @@ struct Zendo {
     window: Option<window::Id>,
     focused: bool,
     fullscreen: bool,
+    /// Hidden to the tray (not minimised), waiting for a tray click.
+    hidden: bool,
     scroll_top: f32,
     viewport_height: f32,
     status: Option<String>,
@@ -411,6 +430,12 @@ struct Zendo {
     store: StoreState,
     /// What is open on the game page.
     game_view: GameView,
+    /// The tray icon, when the Window setting is on and it was made.
+    tray: Option<Tray>,
+    /// Discord rich presence, when the Discord setting is on.
+    presence: Option<PresenceHandle>,
+    /// The launchers' files' signature as last seen, for the rescan watch.
+    watch_signature: Option<Vec<(PathBuf, u64)>>,
     /// Off in tests, so they never touch the user's files or the network.
     persist: bool,
 }
@@ -431,6 +456,7 @@ impl Zendo {
             window: None,
             focused: false,
             fullscreen: false,
+            hidden: false,
             scroll_top: 0.0,
             viewport_height: START_SIZE.height,
             status: None,
@@ -469,6 +495,9 @@ impl Zendo {
             accounts: Accounts::default(),
             store: StoreState::default(),
             game_view: GameView::default(),
+            tray: None,
+            presence: None,
+            watch_signature: None,
             persist: true,
         };
         // The window's id, so F11 works before the first resize or focus
@@ -669,6 +698,10 @@ impl Zendo {
             Message::TogglePinned => self.toggle_pinned(),
             Message::ShowHidden => self.filter(|zendo| zendo.show_hidden = !zendo.show_hidden),
             Message::ToggleFullscreen => self.toggle_fullscreen(),
+            Message::Tray(message) => self.tray_message(message),
+            Message::CloseRequested => self.close_requested(),
+            Message::WatchTick => self.watch_tick(),
+            Message::WatchChecked(signature) => self.watch_checked(signature),
             // From another page the search is not on screen to focus yet;
             // typing reaches it there all the same.
             // The Store has a search field of its own: Ctrl+F there focuses
@@ -685,6 +718,8 @@ impl Zendo {
             | Message::SetDownloadCovers(_)
             | Message::SetAutoUpdate(_)
             | Message::SetWorkers(_)
+            | Message::SetMinimizeToTray(_)
+            | Message::SetDiscordPresence(_)
             | Message::DownloadNow
             | Message::CopyReport
             | Message::ReportReady(_)
@@ -772,6 +807,9 @@ impl Zendo {
                     }
                     self.key.value = config.steamgriddb_key.clone().unwrap_or_default();
                     self.config = config;
+                    if self.persist && self.config.minimize_to_tray {
+                        self.tray = Tray::spawn();
+                    }
                 }
                 Err(err) => self.status = Some(err),
             }
@@ -1030,6 +1068,106 @@ impl Zendo {
         window::set_mode(id, mode)
     }
 
+    /// The window's close button: with the tray on, hide to it; otherwise
+    /// the usual close, which asks before a running download is lost.
+    fn close_requested(&mut self) -> Task<Message> {
+        if self.config.minimize_to_tray && self.tray.is_some() {
+            self.hide_to_tray()
+        } else {
+            self.update_download(DownloadMessage::CloseRequested)
+        }
+    }
+
+    /// A click or a menu item from the tray.
+    fn tray_message(&mut self, message: TrayMessage) -> Task<Message> {
+        match message {
+            TrayMessage::Toggle => self.toggle_window(),
+            TrayMessage::Open => self.show_from_tray(),
+            TrayMessage::Quit => self.update_download(DownloadMessage::CloseRequested),
+        }
+    }
+
+    /// Shows the window, or hides it to the tray, as a tray click says.
+    fn toggle_window(&mut self) -> Task<Message> {
+        if self.hidden {
+            self.show_from_tray()
+        } else {
+            self.hide_to_tray()
+        }
+    }
+
+    /// Hides the window to the tray, leaving the icon to bring it back.
+    /// Minimising, not `Mode::Hidden`, since hiding is not possible on
+    /// Wayland but minimising is.
+    fn hide_to_tray(&mut self) -> Task<Message> {
+        let Some(id) = self.window else {
+            return Task::none();
+        };
+        self.hidden = true;
+        window::minimize(id, true)
+    }
+
+    /// Hides the window to the tray as a game starts, when the Window
+    /// setting asks for it and the tray is there.
+    fn hide_on_launch(&mut self) -> Task<Message> {
+        if self.config.minimize_to_tray && self.tray.is_some() && !self.hidden {
+            self.hide_to_tray()
+        } else {
+            Task::none()
+        }
+    }
+
+    /// Reads the launchers' files' signature on a thread, to compare it
+    /// with the last seen.
+    fn watch_tick(&mut self) -> Task<Message> {
+        if !self.persist || self.scanning {
+            return Task::none();
+        }
+        Task::perform(
+            blocking(zendo_core::watch::signature),
+            Message::WatchChecked,
+        )
+    }
+
+    /// The signature read: rescan when it differs from the last seen.
+    fn watch_checked(&mut self, signature: Vec<(PathBuf, u64)>) -> Task<Message> {
+        match &self.watch_signature {
+            None => {
+                self.watch_signature = Some(signature);
+                Task::none()
+            }
+            Some(previous) if *previous == signature => Task::none(),
+            Some(_) => {
+                self.watch_signature = Some(signature);
+                self.refresh()
+            }
+        }
+    }
+
+    /// Brings the window back from the tray and gives it focus. On X11 the
+    /// window restores itself; on Wayland it cannot (the compositor owns
+    /// it), so Hyprland is asked to focus it. hyprmonk's own helper does
+    /// that without moving the pointer; plain focus runs otherwise.
+    fn show_from_tray(&mut self) -> Task<Message> {
+        let Some(id) = self.window else {
+            self.hidden = false;
+            return Task::none();
+        };
+        self.hidden = false;
+        if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
+            let script = format!(
+                r#"if hyprmonk_focus then hyprmonk_focus("class:{APP_ID}") else hl.dispatch(hl.dsp.focus({{window="class:{APP_ID}"}})) end"#
+            );
+            let _ = Command::new("hyprctl")
+                .args(["eval", script.as_str()])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+        Task::batch([window::minimize(id, false), window::gain_focus(id)])
+    }
+
     /// A controller button, by page: on a game's page Y pins and X hides.
     fn pad(&mut self, pad: Pad) -> Task<Message> {
         let on_game = matches!(self.page, Page::Game(_));
@@ -1265,12 +1403,26 @@ impl Zendo {
             Subscription::run(steam_installs::idle_ticks)
                 .map(|()| Message::SteamInstall(SteamInstallMessage::Tick))
         };
+        // The tray's clicks and menu, listened to only while it is there.
+        let tray = if self.tray.is_some() {
+            Subscription::run(tray::events).map(Message::Tray)
+        } else {
+            Subscription::none()
+        };
+        // The launchers' files, looked at every so often for a change.
+        let watch = if self.persist {
+            Subscription::run(watch_ticks).map(|()| Message::WatchTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             tone,
             steam,
+            tray,
+            watch,
             event::listen_with(on_event),
             Subscription::run(gamepad::events).map(Message::Pad),
-            window::close_requests().map(|_| Message::Download(DownloadMessage::CloseRequested)),
+            window::close_requests().map(|_| Message::CloseRequested),
             Subscription::run(crate::links::listen)
                 .map(|link| Message::Nexus(NexusMessage::Link(link))),
         ])
@@ -1356,6 +1508,23 @@ fn scan() -> Task<Message> {
         }),
         |loaded| Message::Loaded(Box::new(loaded)),
     )
+}
+
+/// A tick every [`WATCH`], for the launchers' file watch.
+fn watch_ticks() -> impl Stream<Item = ()> {
+    iced::stream::channel(1, async move |mut output| {
+        let (sender, mut receiver) = mpsc::unbounded();
+        thread::spawn(move || {
+            while sender.unbounded_send(()).is_ok() {
+                thread::sleep(WATCH);
+            }
+        });
+        while let Some(()) = receiver.next().await {
+            if output.send(()).await.is_err() {
+                return;
+            }
+        }
+    })
 }
 
 /// Runs blocking work (file reads, HTTP) on a thread of its own. When the

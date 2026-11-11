@@ -1,7 +1,7 @@
 # Zendo: the backlog
 
 The remaining work, in the user's firm order. Read only the item you are
-starting. Items 1 to 19 are built; their detail is in history.md.
+starting. Items 1 to 20 are built; their detail is in history.md.
 
 ## After phase 7: the list [firm order]
 
@@ -10,12 +10,6 @@ user confirmed the order, and the findings noted in the items (DLC
 skipped today, what the keyring gains, Nexus downloads for free
 accounts, Steam's install link, Quiver's licence), the same day [firm].
 Each item is planned in detail when it starts.
-
-20. (was 23) The window: minimise when a game starts, Discord presence, and
-    rescanning by itself when a launcher's files change (Hikari watches
-    their modification times). Hikari also tracks a prefix's processes
-    by their start time in `/proc` (finding 11, a process group id
-    reused, was fixed 2026-11-09 the same way).
 
 Moved after those by the user 2026-11-09 [firm]:
 
