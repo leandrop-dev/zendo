@@ -305,11 +305,15 @@ impl Place {
         let mut placed = 0;
         let mut missing = Vec::new();
         for install in installs {
-            let Some(target) = install.target().filter(|_| fomod::safe(&install.source)) else {
-                bail!(
-                    "the installer puts {} outside the mod, which Zendo does not allow",
-                    install.source
-                );
+            let Some(target) = install.target() else {
+                // Name the value that left the mod: the source when it is
+                // itself unsafe, else the destination the installer gave.
+                let bad = if fomod::safe(&install.source) {
+                    install.destination.as_deref().unwrap_or(&install.source)
+                } else {
+                    install.source.as_str()
+                };
+                bail!("the installer puts {bad} outside the mod, which Zendo does not allow");
             };
             let source = install.source.to_lowercase();
             let copies: Vec<(PathBuf, PathBuf)> = if install.folder {

@@ -107,7 +107,11 @@ pub fn refresh() -> anyhow::Result<()> {
         .read_to_string()
         .context("AreWeAntiCheatYet's list")?;
     // Kept only when it reads, so a broken answer leaves the old one.
-    parse(&text).context("AreWeAntiCheatYet's list is not valid")?;
+    let games = parse(&text).context("AreWeAntiCheatYet's list is not valid")?;
+    anyhow::ensure!(
+        !games.is_empty(),
+        "AreWeAntiCheatYet's list has no entry Zendo can read"
+    );
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -231,8 +235,14 @@ struct Update {
     reference: String,
 }
 
+/// The list, skipping an entry that does not read rather than losing every
+/// other game's status to it.
 fn parse(text: &str) -> serde_json::Result<Vec<Game>> {
-    serde_json::from_str(text)
+    let entries: Vec<serde_json::Value> = serde_json::from_str(text)?;
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry| serde_json::from_value(entry).ok())
+        .collect())
 }
 
 fn cache_file() -> Option<PathBuf> {
@@ -264,6 +274,18 @@ mod tests {
 
     fn games() -> Vec<Game> {
         parse(LIST).unwrap()
+    }
+
+    #[test]
+    fn skips_an_entry_that_does_not_read() {
+        let text = r#"[
+          {"name": "Good", "status": "Supported", "slug": "good", "storeIds": {}},
+          {"status": "Supported", "slug": "no-name"},
+          {"name": "Bad status", "status": 12, "slug": "bad", "storeIds": {}}
+        ]"#;
+        let games = parse(text).unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "Good");
     }
 
     #[test]

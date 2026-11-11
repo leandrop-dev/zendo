@@ -57,10 +57,18 @@ pub(crate) fn read_folder(folder: &Path) -> anyhow::Result<Folder> {
         .find_map(|line| serde_json::from_str::<Folder>(line).ok());
     match found {
         Some(found) if output.status.success() => Ok(found),
-        _ => bail!(
-            "GOG's files are not in {}: choose the folder that has the game's goggame-….info",
-            folder.display()
-        ),
+        _ => {
+            let said = crate::stores::last_line(&output);
+            let why = if said.is_empty() {
+                String::new()
+            } else {
+                format!(" ({said})")
+            };
+            bail!(
+                "GOG's files are not in {}{why}: choose the folder that has the game's goggame-….info",
+                folder.display()
+            );
+        }
     }
 }
 

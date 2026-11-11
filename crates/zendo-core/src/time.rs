@@ -23,11 +23,22 @@ pub fn parse_utc(text: &str) -> Option<u64> {
     // would overflow the day count.
     if !(1970..=9999).contains(&year)
         || !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
         || !(0..24).contains(&hour)
         || !(0..60).contains(&minute)
         || !(0..=60).contains(&second)
     {
+        return None;
+    }
+    // A day the month does not have is not quietly rolled into the next
+    // month.
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if !(1..=days).contains(&day) {
         return None;
     }
     let seconds = days_from_civil(year, month, day) * 86_400 + hour * 3600 + minute * 60 + second;
@@ -96,6 +107,11 @@ mod tests {
         // A year no date can hold is refused, not overflowed.
         assert_eq!(parse_utc("10000000000-01-01T00:00:00Z"), None);
         assert_eq!(parse_utc("-2026-01-01T00:00:00Z"), None);
+        // A day the month does not have is refused, not rolled over.
+        assert_eq!(parse_utc("2026-02-31T00:00:00Z"), None);
+        assert_eq!(parse_utc("2026-04-31T00:00:00Z"), None);
+        assert_eq!(parse_utc("2023-02-29T00:00:00Z"), None);
+        assert!(parse_utc("2024-02-29T00:00:00Z").is_some());
     }
 
     #[test]

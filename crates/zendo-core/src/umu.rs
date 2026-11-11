@@ -127,6 +127,8 @@ fn by_title(agent: &ureq::Agent, title: &str) -> anyhow::Result<Option<String>> 
         .into_iter()
         .filter_map(|entry| entry.umu_id)
         .collect();
+    // `dedup` only sees neighbours, and the database's order is its own.
+    ids.sort_unstable();
     ids.dedup();
     if ids.len() > CANDIDATES {
         return Ok(None);

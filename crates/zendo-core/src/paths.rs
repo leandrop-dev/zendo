@@ -129,9 +129,15 @@ fn write_with(path: &Path, bytes: &[u8], access: Access) -> io::Result<()> {
         let _ = fs::remove_file(&temporary);
         return Err(err);
     }
-    fs::rename(&temporary, path)?;
+    fs::rename(&temporary, path).inspect_err(|_| {
+        // The rename failed, so the temporary is still ours to remove:
+        // `write_private` writes secrets into it.
+        let _ = fs::remove_file(&temporary);
+    })?;
     if let Some(dir) = dir {
-        fs::File::open(dir)?.sync_all()?;
+        // The file is in place; a failed fsync costs durability, not the
+        // write, and reporting it would leave the caller out of step.
+        let _ = fs::File::open(dir)?.sync_all();
     }
     Ok(())
 }

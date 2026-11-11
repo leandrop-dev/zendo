@@ -146,10 +146,23 @@ fn call_text(
     request: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
 ) -> anyhow::Result<Option<String>> {
     let mut answer = request.call()?;
-    if !answer.status().is_success() {
-        return Ok(None);
+    let status = answer.status();
+    if status.is_success() {
+        return Ok(Some(
+            answer
+                .body_mut()
+                .read_to_string()
+                .context("the store's achievements answer")?,
+        ));
     }
-    Ok(Some(answer.body_mut().read_to_string()?))
+    // Steam answers 403 for an app with no achievements, and a store that
+    // does not know the game answers 404: both mean "none". The rest are
+    // news, and hiding them would say "no achievements" for an outage.
+    anyhow::ensure!(
+        matches!(status.as_u16(), 403 | 404),
+        "{status} from the store"
+    );
+    Ok(None)
 }
 
 fn ask_gog(agent: &ureq::Agent, product: &str) -> anyhow::Result<Option<(Vec<Found>, bool)>> {
@@ -313,7 +326,13 @@ fn steam_unlocks(xml: &str) -> Option<HashMap<String, u64>> {
     }
     let mut unlocks = HashMap::new();
     for block in xml.split("<achievement ").skip(1) {
-        if !block.starts_with("closed=\"1\"") {
+        // The attributes' order carries no meaning: `closed` can come
+        // anywhere in the open tag.
+        let tag = block.split_once('>').map_or(block, |(tag, _)| tag);
+        if !tag
+            .split_whitespace()
+            .any(|attribute| attribute == "closed=\"1\"")
+        {
             continue;
         }
         let field = |name: &str| {
@@ -413,7 +432,10 @@ fn epic_query(
     if !answer.status().is_success() {
         return Ok(None);
     }
-    let text = answer.body_mut().read_to_string()?;
+    let text = answer
+        .body_mut()
+        .read_to_string()
+        .context("Epic's achievements answer")?;
     Ok(serde_json::from_str(&text).ok())
 }
 
@@ -638,6 +660,13 @@ mod tests {
         let unlocks = steam_unlocks(xml).unwrap();
         assert_eq!(unlocks.get("place_campfire"), Some(&1_659_102_640));
         assert_eq!(unlocks.len(), 1);
+        // An attribute before `closed` does not hide the unlock.
+        let reordered = xml.replace(
+            r#"<achievement closed="1">"#,
+            r#"<achievement name="Place Camp Fire" closed="1">"#,
+        );
+        let unlocks = steam_unlocks(&reordered).unwrap();
+        assert_eq!(unlocks.get("place_campfire"), Some(&1_659_102_640));
         let private = "<?xml version=\"1.0\"?><response><error><![CDATA[This profile is private.]]></error></response>";
         assert!(steam_unlocks(private).is_none());
     }

@@ -57,7 +57,7 @@ const HEADER: &str = "\
 
 /// Zendo's settings. Its `Debug` leaves the keys out, so a log or a
 /// report never shows them.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -105,7 +105,7 @@ pub struct Config {
     pub theme: Option<String>,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
-    held: [Held; 3],
+    held: [Held; Key::ALL.len()],
     /// The Steam Web API key Zendo once took, replaced by the Steam
     /// sign-in: an old file with it still loads, and loses it.
     #[serde(rename = "steam_key", skip_serializing)]
@@ -142,6 +142,28 @@ struct Held {
     kept: Kept,
     saved: Option<String>,
 }
+
+/// The settings, not the bookkeeping of where each key happened to be
+/// kept: two configs with the same settings are equal.
+impl PartialEq for Config {
+    fn eq(&self, other: &Self) -> bool {
+        self.steamgriddb_key == other.steamgriddb_key
+            && self.nexus_key == other.nexus_key
+            && self.steam_session == other.steam_session
+            && self.download_covers == other.download_covers
+            && self.gog_playtime == other.gog_playtime
+            && self.gog_galaxy == other.gog_galaxy
+            && self.nexus_adult == other.nexus_adult
+            && self.install_dir == other.install_dir
+            && self.auto_update == other.auto_update
+            && self.download_workers == other.download_workers
+            && self.default_proton == other.default_proton
+            && self.language == other.language
+            && self.theme == other.theme
+    }
+}
+
+impl Eq for Config {}
 
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -240,7 +262,7 @@ impl Config {
     /// Where the key is kept, as last read or written.
     #[must_use]
     pub fn kept(&self, key: Key) -> &Kept {
-        &self.held[key as usize].kept
+        &self.held[key.index()].kept
     }
 
     /// The user's settings with the keys, or the defaults when there is no
@@ -331,7 +353,7 @@ impl Config {
         }
         for key in Key::ALL {
             let value = config.key(key).map(str::to_owned);
-            let held = &mut config.held[key as usize];
+            let held = &mut config.held[key.index()];
             if let Kept::File(_) = held.kept {
                 if !move_keys {
                     held.saved = value;
@@ -370,7 +392,7 @@ impl Config {
         for key in Key::ALL {
             let value = normalise_key(self.key_mut(key).take());
             self.key_mut(key).clone_from(&value);
-            let held = &mut self.held[key as usize];
+            let held = &mut self.held[key.index()];
             // A key already in the keyring is not written again; one in
             // the file is offered to the keyring again.
             let kept = value == held.saved && !matches!(held.kept, Kept::File(_));
@@ -412,7 +434,7 @@ impl Config {
         for key in Key::ALL {
             let written = config.key_mut(key).take();
             if written.is_some() {
-                config.held[key as usize].kept = Kept::File(None);
+                config.held[key.index()].kept = Kept::File(None);
             }
             *config.key_mut(key) = normalise_key(written);
         }

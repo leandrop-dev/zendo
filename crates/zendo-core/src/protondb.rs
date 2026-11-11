@@ -73,7 +73,7 @@ struct Kept {
 /// kept then, so the next look asks again.
 pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
     let file = paths::cache_home().map(|dir| dir.join("zendo/protondb.json"));
-    let mut kept: HashMap<String, Kept> = file
+    let kept: HashMap<String, Kept> = file
         .as_ref()
         .and_then(|file| fs::read(file).ok())
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -94,18 +94,24 @@ pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
         }),
         None => None,
     };
-    kept.insert(
-        id.to_owned(),
-        Kept {
-            version: VERSION,
-            asked: now,
-            rating: rating.clone(),
-        },
-    );
-    if let Some(file) = file
-        && let Ok(json) = serde_json::to_vec(&kept)
-    {
-        let _ = paths::write_atomic(&file, &json);
+    if let Some(file) = file {
+        // Read again under the lock: another writer may have added an
+        // entry while the network answered.
+        let _ = paths::locked(&file, || {
+            let mut kept: HashMap<String, Kept> = fs::read(&file)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or_default();
+            kept.insert(
+                id.to_owned(),
+                Kept {
+                    version: VERSION,
+                    asked: now,
+                    rating: rating.clone(),
+                },
+            );
+            Ok(paths::write_atomic(&file, &serde_json::to_vec(&kept)?)?)
+        });
     }
     Ok(rating)
 }

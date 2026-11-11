@@ -25,6 +25,16 @@ pub enum Key {
 impl Key {
     pub const ALL: [Self; 3] = [Self::SteamGridDb, Self::Nexus, Self::SteamSession];
 
+    /// Its place in [`Key::ALL`], from the enum itself rather than its
+    /// layout, so the array and the names cannot drift apart.
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            Self::SteamGridDb => 0,
+            Self::Nexus => 1,
+            Self::SteamSession => 2,
+        }
+    }
+
     /// Its name in the keyring and in `config.toml`.
     fn name(self) -> &'static str {
         match self {

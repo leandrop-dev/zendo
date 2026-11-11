@@ -1033,7 +1033,9 @@ impl Place {
     fn list(&self) -> anyhow::Result<List> {
         let path = self.list_path();
         match fs::read_to_string(&path) {
-            Ok(text) => toml::from_str(&text).with_context(|| format!("{}", path.display())),
+            Ok(text) => {
+                toml::from_str(&text).with_context(|| format!("could not parse {}", path.display()))
+            }
             Err(err) if err.kind() == ErrorKind::NotFound => Ok(List::default()),
             Err(err) => Err(err).with_context(|| format!("could not read {}", path.display())),
         }
@@ -1054,9 +1056,11 @@ impl Place {
     fn manifest(&self) -> anyhow::Result<Option<Manifest>> {
         let path = self.manifest_path();
         match fs::read(&path) {
-            Ok(bytes) => Ok(Some(
-                serde_json::from_slice(&bytes).with_context(|| format!("{}", path.display()))?,
-            )),
+            Ok(bytes) => {
+                Ok(Some(serde_json::from_slice(&bytes).with_context(|| {
+                    format!("could not parse {}", path.display())
+                })?))
+            }
             Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err).with_context(|| format!("could not read {}", path.display())),
         }
@@ -1130,7 +1134,13 @@ impl Place {
             }
         };
         Ok(Overview {
-            target: self.game_dir.join(&folder),
+            // Joining nothing ends the path with a slash, which
+            // `rebase_manifest` already works around.
+            target: if folder.is_empty() {
+                self.game_dir.clone()
+            } else {
+                self.game_dir.join(&folder)
+            },
             game_dir: self.game_dir.clone(),
             folder,
             custom_folder,

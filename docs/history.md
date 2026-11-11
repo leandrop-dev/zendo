@@ -277,10 +277,16 @@ the same day.
      Zendo, and it worked: 10 Second Ninja X from Amazon (nile, umu's
      database knew it as `umu-435790`) and Gunslugs 3 Rogue Tactics from
      GOG (gogdl, `umu-default`), both on proton-cachyos-slr, the only
-     Proton here. That was also the first real Amazon install. Not
-     checked: an Epic game through legendary, and how long umu's first
-     run takes to fetch the Steam Linux Runtime on a fresh PC, with
-     nothing shown meanwhile.
+     Proton here. That was also the first real Amazon install. An Epic
+     game through legendary was checked later: on 2026-11-10 the user
+     installed and played Cat Quest II, and it worked. Its log
+     (`epic_6a2cc8b03e684bbd9096a338f96a7ba2.log`) is headed `Started by
+     Zendo`, runs `legendary launch … --no-wine --wrapper umu-run` with
+     `GAMEID=umu-default` and proton-cachyos, and umu's database has no
+     entry for the game. Let's Build a Zoo the same evening had the same
+     shape (2026-11-11). Still not checked: how long umu's first run takes
+     to fetch the Steam Linux Runtime on a fresh PC, with nothing shown
+     meanwhile.
      Quirks the user found, left for 5c [firm]: Gunslugs 3 opened in a
      window, not full screen (a Java game keeping its own window mode,
      `storedWindowedModeID` in its preferences in the prefix; gamescope's
@@ -2234,6 +2240,70 @@ fix and Consider findings are in the reports above and not built.
   with both skip flags, so no save moved.
 
 
+## The core quick pass over the review's findings, 2026-11-11
+
+The user asked for the review's non-blocking findings that are quick and
+cannot break the system, and agreed to two passes: the core first, then the
+window. This is the core pass: 32 of the reports' Rust findings in
+`crates/zendo-core`, all the mechanical ones. The window's findings and the
+core ones that change behaviour, stored data or threading are still open.
+
+- `rust-facts`: three caches read and write under `paths::locked` again, with
+  the network call outside it (`protondb.rs`, `steam_deck.rs`,
+  `requirements.rs`); a non-2xx answer is no longer "the store has none"
+  (403 and 404 stay "none", the rest are errors); `nexus::identify` skips
+  only a 404 and reports a rate limit or an outage; a bad `expires` in a
+  Nexus link is an error, not a key silently dropped; the report scrubs the
+  Steam session's token on its own; Steam's unlocks match `closed` in any
+  attribute position; sizes from Nexus, Steam's depots and GOG saturate; one
+  malformed AreWeAntiCheatYet entry no longer loses the whole list; body-read
+  errors name the endpoint.
+- `rust-launch`: `dedup` sorts first; a quote left open in a store task's
+  arguments is an error instead of silently launching with none; unpack and
+  cache paths say which path failed; `split_first` replaces `words[0]` at
+  the three sites; a non-engine game in `cloud_saves` is an error, not
+  `unreachable!`.
+- `rust-mods`: the "outside the mod" error names the source or the
+  destination that left it; the 7-Zip test also checks `bsdtar`; a record
+  header outside 12 to 24 bytes is refused, not sliced; the FOMOD read
+  sites use the total accessors; the module doc matches the inactive-plugin
+  behaviour; parse errors say "could not parse"; `Overview::target` does
+  not end in a slash.
+- `rust-spine`: a category's identity uses the same Unicode lowering as its
+  order; `Key::index()` replaces `key as usize` and the held array is
+  `Key::ALL.len()`; a failed rename removes the temporary file, and a failed
+  directory fsync no longer fails the write; `parse_utc` refuses a day the
+  month does not have; `Config`'s equality is over the settings only;
+  `command_line` quotes a quote, a backslash and the empty word.
+- `rust-stores`: the prefix's setup record is written under its lock; a
+  failed `gogdl import` keeps what gogdl said; `words_for` returns an error
+  instead of `unreachable!`; the Store list is de-duplicated by id with a
+  set, not neighbours; GOG's pagination stops after 200 pages.
+
+Deliberate differences from the reports' suggested code:
+
+- 404 counts as "none" beside 403 in `call_text`/`get_text`: Epic's content
+  URL answers 404 for a page a game does not have, and turning that into an
+  error would report "no requirements" as a failure.
+- `owned::keep` de-duplicates with a `HashSet` rather than `dedup_by` after
+  the sort: sorting by title does not put two different titles for one id
+  side by side, which is the case the finding names.
+- The core findings left open are `rust-facts` 11 (a note: the envelope has
+  no message field to surface yet) and `rust-launch` 7 (the umu id lookup,
+  which changes `prefix_command`'s shape).
+
+Checked: `cargo fmt --check` clean, `cargo clippy --all-targets
+--all-features -- -W clippy::pedantic` with no warning, `cargo test
+--workspace` green (228 core, 120 window). Six tests are new: the parse
+skips a bad anti-cheat entry, the category case rule is Unicode, the report
+hides a session token, `parse_utc` refuses February 31 and April 31 and
+accepts 2024's leap day, `command_line` round-trips a quote, a backslash and
+an empty argument, and Steam's unlock survives an attribute before `closed`.
+
+The Epic gap from phase 5a is also closed: the user installed and played Cat
+Quest II through legendary on 2026-11-10, and Let's Build a Zoo the same
+evening (see phase 5a).
+
 ## Next session, as logged to 2026-11-09
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built
@@ -2291,6 +2361,9 @@ fix and Consider findings are in the reports above and not built.
   whole-workspace review and its must-fix findings followed the same day
   (above); all 25 are built, the settings save last, after the user's
   first tries found the green tick boxes and Cat Quest II's saves
-  (above). Next: item 20, the window
-  (minimise when a game starts, Discord presence, rescanning when a
-  launcher's files change, processes tracked by their start time).
+  (above). On 2026-11-11 the first of two quick passes over the review's
+  non-blocking findings was built (the core's, above); the window's pass
+  and the findings that need a try-out or a decision are next, before
+  item 20, the window (minimise when a game starts, Discord presence,
+  rescanning when a launcher's files change, processes tracked by their
+  start time).

@@ -389,7 +389,7 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
         (Store::Epic, Action::Update) => {
             let ended = engine(
                 store,
-                &engine_args(job, &job.path, &workers()),
+                &engine_args(job, &job.path, &workers())?,
                 stop,
                 report,
             )?;
@@ -417,11 +417,11 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
                 report(Event::Folder(folder.clone()));
                 folder
             };
-            engine(store, &engine_args(job, &folder, &workers()), stop, report)?
+            engine(store, &engine_args(job, &folder, &workers())?, stop, report)?
         }
         (Store::Epic | Store::Amazon, _) => engine(
             store,
-            &engine_args(job, &job.path, &workers()),
+            &engine_args(job, &job.path, &workers())?,
             stop,
             report,
         )?,
@@ -517,18 +517,18 @@ fn workers() -> Vec<String> {
 
 /// legendary's and nile's arguments for a job, with `workers` for those
 /// that download; `folder` is the game's own folder for an install.
-fn engine_args(job: &Job, folder: &Path, workers: &[String]) -> Vec<String> {
-    let mut args = words_for(job, folder);
+fn engine_args(job: &Job, folder: &Path, workers: &[String]) -> anyhow::Result<Vec<String>> {
+    let mut args = words_for(job, folder)?;
     if matches!(
         job.action,
         Action::Install | Action::Update | Action::Repair
     ) {
         args.extend_from_slice(workers);
     }
-    args
+    Ok(args)
 }
 
-fn words_for(job: &Job, folder: &Path) -> Vec<String> {
+fn words_for(job: &Job, folder: &Path) -> anyhow::Result<Vec<String>> {
     let app = job.app.clone();
     let base = folder
         .parent()
@@ -567,10 +567,14 @@ fn words_for(job: &Job, folder: &Path) -> Vec<String> {
         (Store::Amazon, Action::Uninstall) => vec!["uninstall", &app],
         (Store::Gog, _)
         | (_, Action::AddDlc | Action::RemoveDlc | Action::Move | Action::Import) => {
-            unreachable!("gogdl's jobs, DLC jobs, moves and imports have their own steps")
+            bail!(
+                "{} has its own steps for {}",
+                job.store().engine_name(),
+                job.action.label()
+            )
         }
     };
-    words.into_iter().map(str::to_owned).collect()
+    Ok(words.into_iter().map(str::to_owned).collect())
 }
 
 /// Runs an engine, reading its log for progress, until it ends or is
@@ -1659,7 +1663,7 @@ mod tests {
         };
         let folder = Path::new("/home/me/Games/Sugar Rush");
         assert_eq!(
-            engine_args(&job, folder, &[]).join(" "),
+            engine_args(&job, folder, &[]).unwrap().join(" "),
             "install Sugar --base-path /home/me/Games --game-folder Sugar Rush --platform Windows --skip-sdl --skip-dlcs -y"
         );
         let job = Job {
@@ -1667,19 +1671,22 @@ mod tests {
             ..job
         };
         assert_eq!(
-            engine_args(&job, folder, &[]),
+            engine_args(&job, folder, &[]).unwrap(),
             ["install", "--path", "/home/me/Games/Sugar Rush", "Sugar"]
         );
         let job = Job {
             action: Action::Repair,
             ..job
         };
-        assert_eq!(engine_args(&job, &job.path, &[]), ["verify", "Sugar"]);
+        assert_eq!(
+            engine_args(&job, &job.path, &[]).unwrap(),
+            ["verify", "Sugar"]
+        );
         assert_eq!(job.id(), "amazon:Sugar");
         // The workers go with what downloads, not with an uninstall.
         let workers = ["--max-workers".to_owned(), "4".to_owned()];
         assert_eq!(
-            engine_args(&job, &job.path, &workers),
+            engine_args(&job, &job.path, &workers).unwrap(),
             ["verify", "Sugar", "--max-workers", "4"]
         );
         let job = Job {
@@ -1687,7 +1694,7 @@ mod tests {
             ..job
         };
         assert_eq!(
-            engine_args(&job, &job.path, &workers),
+            engine_args(&job, &job.path, &workers).unwrap(),
             ["uninstall", "Sugar"]
         );
     }
@@ -1708,6 +1715,7 @@ mod tests {
         };
         assert!(
             engine_args(&job, Path::new("/home/me/Games/Sugar"), &[])
+                .unwrap()
                 .contains(&"--with-dlcs".to_owned())
         );
         let job = Job {

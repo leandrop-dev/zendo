@@ -100,7 +100,7 @@ pub fn for_game(
 ) -> anyhow::Result<Option<Requirements>> {
     let file = paths::cache_home().map(|dir| dir.join("zendo/requirements.json"));
     let key = format!("{id}/{system:?}");
-    let mut kept: HashMap<String, Kept> = file
+    let kept: HashMap<String, Kept> = file
         .as_ref()
         .and_then(|file| fs::read(file).ok())
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -118,17 +118,23 @@ pub fn for_game(
             break;
         }
     }
-    kept.insert(
-        key,
-        Kept {
-            asked: now,
-            requirements: found.clone(),
-        },
-    );
-    if let Some(file) = file
-        && let Ok(json) = serde_json::to_vec(&kept)
-    {
-        let _ = paths::write_atomic(&file, &json);
+    if let Some(file) = file {
+        // Read again under the lock: another writer may have added an
+        // entry while the network answered.
+        let _ = paths::locked(&file, || {
+            let mut kept: HashMap<String, Kept> = fs::read(&file)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or_default();
+            kept.insert(
+                key.clone(),
+                Kept {
+                    asked: now,
+                    requirements: found.clone(),
+                },
+            );
+            Ok(paths::write_atomic(&file, &serde_json::to_vec(&kept)?)?)
+        });
     }
     Ok(found)
 }
@@ -166,10 +172,23 @@ fn get_text(
     request: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
 ) -> anyhow::Result<Option<String>> {
     let mut answer = request.call()?;
-    if !answer.status().is_success() {
-        return Ok(None);
+    let status = answer.status();
+    if status.is_success() {
+        return Ok(Some(
+            answer
+                .body_mut()
+                .read_to_string()
+                .context("the store's requirements answer")?,
+        ));
     }
-    Ok(Some(answer.body_mut().read_to_string()?))
+    // A store that does not know the game answers 403 or 404, which means
+    // "none"; the rest are news, and hiding them says "no requirements"
+    // for an outage.
+    anyhow::ensure!(
+        matches!(status.as_u16(), 403 | 404),
+        "{status} from the store"
+    );
+    Ok(None)
 }
 
 fn ask_gog(agent: &ureq::Agent, product: &str, system: System) -> anyhow::Result<Option<Vec<Row>>> {

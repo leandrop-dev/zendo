@@ -354,8 +354,11 @@ pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
 
 /// Sorts a store's list, keeps it in the cache and finds its images.
 pub(crate) fn keep(shop: Shop, mut games: Vec<Owned>) -> anyhow::Result<Vec<Owned>> {
-    games.sort_by_cached_key(|game| game.title.to_lowercase());
-    games.dedup_by(|a, b| a.id == b.id);
+    games.sort_by_cached_key(|game| (game.title.to_lowercase(), game.id.clone()));
+    // By id, not neighbours: two entries for one id can have different
+    // titles (GOG's database has both "Prey" and "Prey (2006)").
+    let mut seen = HashSet::new();
+    games.retain(|game| seen.insert(game.id.clone()));
     if let Some(file) = cache_file(shop) {
         let json = serde_json::to_vec(&games)?;
         paths::write_atomic(&file, &json)
@@ -807,7 +810,9 @@ fn gog() -> anyhow::Result<Vec<Owned>> {
     let agent = agent();
     let mut releases = Vec::new();
     let mut token: Option<String> = None;
-    loop {
+    let mut done = false;
+    // A repeated page token must not keep the fetch thread going forever.
+    for _ in 0..200 {
         let mut request = agent
             .get(format!(
                 "https://galaxy-library.gog.com/users/{}/releases",
@@ -827,10 +832,15 @@ fn gog() -> anyhow::Result<Vec<Owned>> {
         let page: Page = serde_json::from_str(&response.into_body().read_to_string()?)
             .context("GOG's library: unexpected reply")?;
         releases.extend(page.items);
-        match page.next_page_token.filter(|token| !token.is_empty()) {
-            Some(next) => token = Some(next),
-            None => break,
+        if let Some(next) = page.next_page_token.filter(|token| !token.is_empty()) {
+            token = Some(next);
+        } else {
+            done = true;
+            break;
         }
+    }
+    if !done {
+        bail!("GOG's library kept listing pages");
     }
 
     let dir = paths::cache_home()

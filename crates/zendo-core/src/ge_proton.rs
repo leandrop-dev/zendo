@@ -228,7 +228,7 @@ fn unpack(tarball: &Path, tools: &Path, name: &str) -> anyhow::Result<PathBuf> {
         fs::remove_dir_all(&partial)
             .with_context(|| format!("could not clear {}", partial.display()))?;
     }
-    fs::create_dir(&partial)?;
+    fs::create_dir(&partial).with_context(|| format!("could not make {}", partial.display()))?;
     let result = (|| {
         let status = Command::new("tar")
             .arg("-xzf")

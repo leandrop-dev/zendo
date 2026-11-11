@@ -300,13 +300,20 @@ impl Game {
     }
 }
 
-/// A program and its arguments as one line, words with spaces quoted.
+/// A program and its arguments as one line a shell would read back: words
+/// with spaces (or quotes, or backslashes) quoted, and the empty word as
+/// `""`.
 fn words(program: &str, args: &[String]) -> String {
     std::iter::once(program)
         .chain(args.iter().map(String::as_str))
         .map(|word| {
-            if word.contains(char::is_whitespace) {
-                format!("\"{word}\"")
+            if word.is_empty()
+                || word
+                    .chars()
+                    .any(|c| c.is_whitespace() || c == '"' || c == '\\')
+            {
+                let escaped = word.replace('\\', "\\\\").replace('"', "\\\"");
+                format!("\"{escaped}\"")
             } else {
                 word.to_owned()
             }
@@ -480,6 +487,18 @@ mod tests {
             },
         );
         assert_eq!(desktop.command_line(), "xonotic -basedir \"/opt/x data\"");
+        // A quote, a backslash and an empty argument survive the line.
+        let awkward = Game::new(
+            "desktop:y".into(),
+            "Y".into(),
+            Source::Desktop,
+            Launch::Command {
+                program: "y".into(),
+                args: vec![r#"a"b"#.into(), r"c\d".into(), String::new()],
+                dir: None,
+            },
+        );
+        assert_eq!(awkward.command_line(), r#"y "a\"b" "c\\d" """#);
     }
 
     #[test]

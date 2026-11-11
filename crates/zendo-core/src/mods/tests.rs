@@ -405,7 +405,8 @@ fn finds_the_mod_inside_its_wrappers() {
 
 #[test]
 fn unpacks_an_archive_and_refuses_links() {
-    if launch::which("7z").is_none() {
+    // Both tools are used below: 7-Zip to make the zip, bsdtar the tar.
+    if launch::which("7z").is_none() || launch::which("bsdtar").is_none() {
         return;
     }
     let scratch = Scratch::new("unpack");

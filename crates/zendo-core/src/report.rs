@@ -19,7 +19,7 @@ use crate::config::{Config, Kept};
 use crate::runtimes::{self, Found, Runtime};
 use crate::secrets::Key;
 use crate::stores::Store;
-use crate::{Launch, Library, Size, Source, heroic, launch, paths, proton, steam, time};
+use crate::{Launch, Library, Size, Source, heroic, launch, paths, proton, steam, steam_web, time};
 
 /// How many of the latest launches' logs the report ends with.
 const LOGS: usize = 3;
@@ -509,6 +509,16 @@ fn scrub(text: &str, home: Option<&Path>, config: &Config) -> String {
             text = text.replace(value, "…");
         }
     }
+    // The Steam session is kept as JSON, so the whole value above never
+    // matches the token on its own, which is what a launch log can echo.
+    if let Some(token) = config
+        .key(Key::SteamSession)
+        .and_then(steam_web::Session::parse)
+        .map(|session| session.token)
+        .filter(|token| token.len() >= 4)
+    {
+        text = text.replace(&token, "…");
+    }
     if let Some(home) = home.and_then(Path::to_str).filter(|home| home.len() > 1) {
         text = text.replace(home, "~");
     }
@@ -528,6 +538,17 @@ mod tests {
             scrub(text, Some(Path::new("/home/me")), &config),
             "~/Games and ~/x?key=…"
         );
+    }
+
+    #[test]
+    fn hides_the_steam_sessions_token_on_its_own() {
+        let mut config = Config::default();
+        let session = crate::steam_web::Session {
+            steamid: "76561198000000000".into(),
+            token: "steam-token-abcdef".into(),
+        };
+        config.steam_session = Some(session.to_text());
+        assert_eq!(scrub("token steam-token-abcdef", None, &config), "token …");
     }
 
     #[test]

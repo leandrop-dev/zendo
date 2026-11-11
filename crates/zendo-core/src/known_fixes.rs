@@ -142,7 +142,7 @@ pub fn refresh() -> anyhow::Result<()> {
     serde_json::from_str::<serde_json::Value>(&text)
         .context("Heroic's known fixes are not valid")?;
     if let Some(dir) = file.parent() {
-        fs::create_dir_all(dir)?;
+        fs::create_dir_all(dir).with_context(|| format!("could not make {}", dir.display()))?;
     }
     paths::write_atomic(&file, text.as_bytes())
         .with_context(|| format!("could not write {}", file.display()))

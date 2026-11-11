@@ -90,7 +90,7 @@ struct Kept {
 /// then, so the next look asks again.
 pub fn report(app: u32) -> anyhow::Result<Option<Report>> {
     let file = paths::cache_home().map(|dir| dir.join("zendo/steamdeck.json"));
-    let mut kept: HashMap<u32, Kept> = file
+    let kept: HashMap<u32, Kept> = file
         .as_ref()
         .and_then(|file| fs::read(file).ok())
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -110,17 +110,23 @@ pub fn report(app: u32) -> anyhow::Result<Option<Report>> {
         .read_to_string()
         .context("Steam's Steam Deck report")?;
     let report = parse(app, &text)?;
-    kept.insert(
-        app,
-        Kept {
-            asked: now,
-            report: report.clone(),
-        },
-    );
-    if let Some(file) = file
-        && let Ok(json) = serde_json::to_vec(&kept)
-    {
-        let _ = paths::write_atomic(&file, &json);
+    if let Some(file) = file {
+        // Read again under the lock: another writer may have added an
+        // entry while the network answered.
+        let _ = paths::locked(&file, || {
+            let mut kept: HashMap<u32, Kept> = fs::read(&file)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or_default();
+            kept.insert(
+                app,
+                Kept {
+                    asked: now,
+                    report: report.clone(),
+                },
+            );
+            Ok(paths::write_atomic(&file, &serde_json::to_vec(&kept)?)?)
+        });
     }
     Ok(report)
 }

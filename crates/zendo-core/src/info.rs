@@ -293,7 +293,7 @@ fn language_sizes(size: &HashMap<String, GogSize>, pick: impl Fn(&GogSize) -> u6
         .iter()
         .filter_map(|key| size.get(*key))
         .map(pick)
-        .sum()
+        .fold(0, u64::saturating_add)
 }
 
 impl GogInfo {

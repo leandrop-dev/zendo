@@ -328,6 +328,14 @@ pub struct Header {
 /// When the file cannot be read or is not a plugin.
 pub fn read_header(path: &Path, rules: &Rules) -> io::Result<Header> {
     let mut start = [0_u8; 24];
+    // `Rules` is public and has no constructor: a header outside the
+    // records a plugin has is refused rather than panicking on a slice.
+    if !(12..=start.len()).contains(&rules.header) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "a record header is 12 to 24 bytes",
+        ));
+    }
     let mut file = File::open(path)?;
     file.read_exact(&mut start[..rules.header])?;
     let bad = || io::Error::new(io::ErrorKind::InvalidData, "not a plugin");

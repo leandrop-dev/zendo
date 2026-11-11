@@ -505,12 +505,16 @@ fn done_in(prefix: &Path) -> BTreeSet<String> {
 fn mark_done(prefix: &Path, app: &str) -> anyhow::Result<()> {
     #[derive(Serialize)]
     struct Done<'a>(&'a BTreeSet<String>);
-    let mut done = done_in(prefix);
-    done.insert(app.to_owned());
     fs::create_dir_all(prefix).with_context(|| format!("could not make {}", prefix.display()))?;
     let file = prefix.join(DONE_FILE);
-    paths::write_atomic(&file, &serde_json::to_vec_pretty(&Done(&done))?)
-        .with_context(|| format!("could not write {}", file.display()))
+    // Read again under the lock: a second start may be recording another
+    // game's setup in the same prefix.
+    paths::locked(&file, || {
+        let mut done = done_in(prefix);
+        done.insert(app.to_owned());
+        paths::write_atomic(&file, &serde_json::to_vec_pretty(&Done(&done))?)
+            .with_context(|| format!("could not write {}", file.display()))
+    })
 }
 
 fn start_log(log: &Path) -> anyhow::Result<()> {

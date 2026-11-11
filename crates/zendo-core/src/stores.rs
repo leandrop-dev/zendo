@@ -491,7 +491,7 @@ fn is_executable(file: &Path) -> bool {
 }
 
 /// The last thing an engine said, for an error message.
-fn last_line(output: &Output) -> String {
+pub(crate) fn last_line(output: &Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     stderr

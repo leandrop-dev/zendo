@@ -283,10 +283,13 @@ impl State {
     /// A category's name as it is stored, found whatever the case or the
     /// spaces around it.
     fn category_key(&self, name: &str) -> Option<String> {
-        let name = name.trim();
+        // The same lowering as `categories()` and `categories_of()`, so
+        // the name two categories are told apart by is the one they are
+        // ordered by.
+        let name = name.trim().to_lowercase();
         self.categories
             .keys()
-            .find(|key| key.eq_ignore_ascii_case(name))
+            .find(|key| key.to_lowercase() == name)
             .cloned()
     }
 }
@@ -406,6 +409,10 @@ mod tests {
         assert!(!state.add_category("co-op"));
         assert_eq!(state.categories().len(), 1);
         assert_eq!(state.categories()[0].name, "Co-op");
+        // The case rule is the order's, Unicode lowering, not ASCII.
+        assert!(state.add_category("Été"));
+        assert!(!state.add_category("ÉTÉ"));
+        assert_eq!(state.categories().len(), 2);
     }
 
     #[test]

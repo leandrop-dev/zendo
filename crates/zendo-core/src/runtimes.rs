@@ -283,7 +283,7 @@ fn unpack(tarball: &Path, dir: &Path, runtime: Runtime, version: &str) -> anyhow
                 .with_context(|| format!("could not clear {}", leftover.display()))?;
         }
     }
-    fs::create_dir(&partial)?;
+    fs::create_dir(&partial).with_context(|| format!("could not make {}", partial.display()))?;
     let result = (|| {
         let status = Command::new("tar")
             .arg("-xJf")
@@ -298,12 +298,15 @@ fn unpack(tarball: &Path, dir: &Path, runtime: Runtime, version: &str) -> anyhow
             bail!("tar could not unpack the {} runtime", runtime.label());
         }
         // The tarball holds one folder, whatever it is named.
-        let folder = fs::read_dir(&partial)?
+        let folder = fs::read_dir(&partial)
+            .with_context(|| format!("could not read {}", partial.display()))?
             .filter_map(Result::ok)
             .map(|entry| entry.path())
             .find(|path| runtime.complete(path))
             .with_context(|| format!("the download holds no {} runtime", runtime.label()))?;
-        fs::write(folder.join("current_version"), version)?;
+        let version_file = folder.join("current_version");
+        fs::write(&version_file, version)
+            .with_context(|| format!("could not write {}", version_file.display()))?;
         let target = dir.join(key);
         if target.exists() {
             fs::rename(&target, &old)

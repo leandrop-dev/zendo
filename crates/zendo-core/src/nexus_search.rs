@@ -210,7 +210,10 @@ fn parse(text: &str) -> anyhow::Result<Found> {
                 version: tidy(node.version),
                 endorsements: node.endorsements,
                 downloads: node.downloads,
-                size: node.file_size.filter(|kb| *kb > 0).map(|kb| kb * 1024),
+                size: node
+                    .file_size
+                    .filter(|kb| *kb > 0)
+                    .map(|kb| kb.saturating_mul(1024)),
                 updated: node.updated_at.chars().take(10).collect(),
                 category: node.mod_category.map(|category| category.name),
                 adult: node.adult_content.unwrap_or(false),

@@ -100,7 +100,13 @@ impl Link {
             let value = crate::http::percent_decode(value);
             match name {
                 "key" if !value.is_empty() => link.key = Some(value),
-                "expires" => link.expires = value.parse().ok(),
+                "expires" => {
+                    link.expires = Some(
+                        value
+                            .parse()
+                            .with_context(|| format!("not an expiry time in the link: {value}"))?,
+                    );
+                }
                 _ => {}
             }
         }
@@ -234,6 +240,12 @@ fn api_agent() -> ureq::Agent {
     crate::http::answering_agent(Duration::from_secs(30))
 }
 
+/// Whether the error carries this HTTP status, rather than a message that
+/// merely names it.
+fn is_status(err: &anyhow::Error, code: u16) -> bool {
+    matches!(err.downcast_ref::<ureq::Error>(), Some(ureq::Error::StatusCode(c)) if *c == code)
+}
+
 /// One call to the API, its reply read as `T`.
 fn get<T: DeserializeOwned>(key: &str, path: &str, query: &[(&str, &str)]) -> anyhow::Result<T> {
     let mut request = api_agent()
@@ -253,7 +265,12 @@ fn get<T: DeserializeOwned>(key: &str, path: &str, query: &[(&str, &str)]) -> an
             "Nexus gives this file only to Premium accounts, or from the site: press \
              Mod manager download on the mod's page"
         ),
-        404 => bail!("Nexus does not have this (anymore): {path}"),
+        404 => {
+            // The status keeps its type so a caller can tell "not there"
+            // from a failure, as `identify` does.
+            return Err(anyhow::Error::new(ureq::Error::StatusCode(404))
+                .context(format!("Nexus does not have this (anymore): {path}")));
+        }
         410 => bail!("the download link from Nexus ran out: press the button on the site again"),
         429 => bail!("Nexus's limit of calls for now was reached; try again in an hour"),
         code => bail!("Nexus answered {code} to {path}"),
@@ -280,7 +297,10 @@ pub fn check_key(key: &str) -> anyhow::Result<KeyCheck> {
         .context("could not reach Nexus Mods")?;
     match response.status().as_u16() {
         200..=299 => {
-            let text = response.into_body().read_to_string()?;
+            let text = response
+                .into_body()
+                .read_to_string()
+                .context("Nexus users/validate")?;
             let user: User =
                 serde_json::from_str(&text).context("Nexus users/validate: unexpected reply")?;
             Ok(KeyCheck::Accepted(user))
@@ -436,8 +456,9 @@ pub fn identify(
     for id in candidates {
         let files = match files(key, domain, id) {
             Ok(files) => files,
-            // Not a mod of this game: the next id, maybe.
-            Err(_) if mod_id.is_none() => continue,
+            // Not a mod of this game: the next id, maybe. Any other
+            // failure (offline, a rate limit, a bad key) is not a "no".
+            Err(err) if mod_id.is_none() && is_status(&err, 404) => continue,
             Err(err) => return Err(err),
         };
         let Some(file) = files

@@ -150,7 +150,7 @@ pub fn sync(game: &Game, how: How) -> anyhow::Result<Done> {
 
 fn sync_now(game: &Game, how: How) -> anyhow::Result<Done> {
     let Launch::Engine { app, .. } = &game.launch else {
-        unreachable!("checked by applies");
+        bail!("{} is not a store game", game.title);
     };
     let prefix = launch::prefix(game).context("no folder for the game's Wine prefix")?;
     if !prefix.join("user.reg").is_file() {

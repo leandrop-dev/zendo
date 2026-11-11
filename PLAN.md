@@ -30,14 +30,16 @@ whole-workspace review the same day (Rust and Iced) found 25 must-fix
 faults, all of them since fixed, the last one (the settings save) after the
 user's first tries the same day, which also fixed the category tick boxes'
 colour and Cat Quest II's cloud saves; its reports are in
-`.mallet/reviews/2026-11-10/`.
+`.mallet/reviews/2026-11-10/`. On 2026-11-11 the first of two quick passes
+over the review's 119 non-blocking findings cleared the core's mechanical 32
+(docs/history.md); the window's pass and the findings that need a try-out or
+a decision remain.
 
 Next is item 20, the window: minimise when a game starts, Discord presence,
-rescanning by itself when a launcher's files change. One gap is known from the
-phases:
-an Epic game has not yet been started through legendary (docs/history.md,
-phase 5a). The other "not checked" notes sit with the work they belong to in
-docs/history.md.
+rescanning by itself when a launcher's files change. The phase 5a gap is
+closed: an Epic game was installed and played through legendary on
+2026-11-10 (docs/history.md, phase 5a). The other "not checked" notes sit
+with the work they belong to in docs/history.md.
 
 ## Direction [firm]
 

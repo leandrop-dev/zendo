@@ -276,8 +276,14 @@ fn app_sizes(tree: &Value) -> Option<Sizes> {
         .filter(|depot| !(has_64 && depot.arch == Some(32)))
         .collect();
     (!chosen.is_empty()).then(|| Sizes {
-        install: chosen.iter().map(|depot| depot.sizes.install).sum(),
-        download: chosen.iter().map(|depot| depot.sizes.download).sum(),
+        install: chosen
+            .iter()
+            .map(|depot| depot.sizes.install)
+            .fold(0, u64::saturating_add),
+        download: chosen
+            .iter()
+            .map(|depot| depot.sizes.download)
+            .fold(0, u64::saturating_add),
     })
 }
 

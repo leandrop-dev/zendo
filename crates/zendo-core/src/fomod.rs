@@ -10,9 +10,9 @@
 //! files is `mods.rs`'.
 //!
 //! A file condition (`fileDependency`) sees a file as active when the game's
-//! mod folder or a mod that is on has it, and missing otherwise; Zendo
-//! keeps no list of active plugins yet, so "inactive" never matches. Game
-//! and FOMM version conditions always hold.
+//! mod folder or a mod that is on has it, inactive when a plugin that is
+//! off is there instead, and missing otherwise. Game and FOMM version
+//! conditions always hold.
 
 use std::collections::{HashMap, HashSet};
 
@@ -422,7 +422,7 @@ impl Installer {
     fn set_flags(&self, selection: &Selection, at: usize, flags: &mut HashMap<String, String>) {
         for (g, group) in self.steps[at].groups.iter().enumerate() {
             for (o, option) in group.options.iter().enumerate() {
-                if selection.0[at][g][o] {
+                if selection.is_on(at, g, o) {
                     for (name, value) in &option.flags {
                         flags.insert(name.clone(), value.clone());
                     }
@@ -441,7 +441,7 @@ impl Installer {
             let types = self.types(selection, at, present);
             for (g, group) in self.steps[at].groups.iter().enumerate() {
                 for (o, option) in group.options.iter().enumerate() {
-                    if selection.0[at][g][o] && types[g][o] != OptionType::NotUsable {
+                    if selection.is_on(at, g, o) && types[g][o] != OptionType::NotUsable {
                         files.extend(option.files.iter().cloned());
                     }
                 }
@@ -466,7 +466,7 @@ impl Installer {
             let step = &self.steps[at];
             for (g, group) in step.groups.iter().enumerate() {
                 for (o, option) in group.options.iter().enumerate() {
-                    if selection.0[at][g][o] {
+                    if selection.is_on(at, g, o) {
                         chosen.push(format!("{}/{}/{}", step.name, group.name, option.name));
                     }
                 }
@@ -495,7 +495,7 @@ impl Installer {
                 }
                 for (o, name) in names.iter().enumerate() {
                     let on = chosen.contains(name);
-                    if selection.0[at][g][o] != on {
+                    if selection.is_on(at, g, o) != on {
                         self.toggle(&mut selection, at, g, o, on, present);
                     }
                 }

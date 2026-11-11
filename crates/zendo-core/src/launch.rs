@@ -165,10 +165,9 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
             words.push(program.clone());
             words.extend(args.iter().cloned());
             words.extend(options.arguments()?);
-            let mut command = Command::new(&words[0]);
-            command
-                .args(&words[1..])
-                .envs(options.environment_for(false)?);
+            let (program, args) = words.split_first().context("nothing to start")?;
+            let mut command = Command::new(program);
+            command.args(args).envs(options.environment_for(false)?);
             if let Some(dir) = dir.as_ref().filter(|dir| dir.is_dir()) {
                 command.current_dir(dir);
             }
@@ -727,9 +726,10 @@ pub(crate) fn prefix_command(game: &Game, game_id: Option<&str>) -> anyhow::Resu
     {
         pair.1 = id.into();
     }
-    let mut command = Command::new(&umu.words[0]);
+    let (program, args) = umu.words.split_first().context("nothing to start")?;
+    let mut command = Command::new(program);
     command
-        .args(&umu.words[1..])
+        .args(args)
         .envs(umu.env)
         .envs(options.environment_for(true)?);
     make_prefix(&command)?;
@@ -794,9 +794,10 @@ fn local_command(
     words.push(program.to_string_lossy().into_owned());
     words.extend(args.iter().cloned());
     words.extend(options.arguments()?);
-    let mut command = Command::new(&words[0]);
+    let (exe, rest) = words.split_first().context("nothing to start")?;
+    let mut command = Command::new(exe);
     command
-        .args(&words[1..])
+        .args(rest)
         .envs(env)
         .envs(options.environment_for(windows)?);
     if let Some(dir) = dir.filter(|dir| dir.is_dir()) {
@@ -958,7 +959,10 @@ fn engine_command_with(
     // The engines pass on what they do not know to the game: Epic's
     // option's arguments, then the game's own.
     if let Some(Chosen::Arguments(arguments)) = &task {
-        command.args(shlex::split(arguments).unwrap_or_default());
+        command.args(
+            shlex::split(arguments)
+                .with_context(|| format!("{}'s arguments have a quote left open", game.title))?,
+        );
     }
     command.args(options.arguments()?);
     Ok(command)
