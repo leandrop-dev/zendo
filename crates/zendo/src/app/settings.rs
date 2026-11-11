@@ -554,6 +554,7 @@ impl Zendo {
     }
 
     fn sources_section(&self) -> Element<'_, Message> {
+        let scanning = self.library.is_none();
         let games = self.library.iter().flat_map(|library| &library.games);
         let mut rows: Vec<Element<'_, Message>> = [
             (Source::Steam, "Steam".to_owned()),
@@ -569,7 +570,10 @@ impl Zendo {
             let count = games.clone().filter(|game| game.source == source).count();
             row![
                 text(label).size(14).width(320),
-                if count == 0 {
+                if scanning {
+                    // A first scan still running is not "none found".
+                    text(t!("library-scanning")).size(14).color(colors().dim)
+                } else if count == 0 {
                     text(t!("sources-none-found")).size(14).color(colors().dim)
                 } else {
                     text(t!("count-games", count = count)).size(14)

@@ -158,7 +158,7 @@ impl Zendo {
                 )
                 .padding([10, 18])
                 .style(style::secondary)
-                .on_press_maybe(job.is_none().then(|| queue(game, Action::Update)).flatten()),
+                .on_press_maybe(queue(game, Action::Update).filter(|_| job.is_none())),
             );
         }
         bar = bar
@@ -254,7 +254,7 @@ impl Zendo {
                 button(text(t!("action-label", action = "repair")).size(14))
                     .padding([8, 14])
                     .style(style::secondary)
-                    .on_press_maybe(free.then(|| queue(game, Action::Repair)).flatten()),
+                    .on_press_maybe(queue(game, Action::Repair).filter(|_| free)),
             );
             let movable = free && !self.running.is_open(&game.id);
             more = more.push(
@@ -274,7 +274,7 @@ impl Zendo {
                     button(text(t!("downloads-press-again")).size(14).font(BOLD))
                         .padding([8, 14])
                         .style(style::danger)
-                        .on_press_maybe(free.then(|| queue(game, Action::Uninstall)).flatten())
+                        .on_press_maybe(queue(game, Action::Uninstall).filter(|_| free))
                 } else {
                     button(text(t!("action-label", action = "uninstall")).size(14))
                         .padding([8, 14])

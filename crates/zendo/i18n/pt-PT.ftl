@@ -302,6 +302,8 @@ nexus-progress = { $done } de { $total } MiB
 nexus-progress-unknown = { $done } MiB
 nexus-stopping = A parar…
 nexus-stop = Parar
+nexus-needs-key = Um mod veio do Nexus: defina a sua chave do Nexus nas Definições e volte a premir o botão no Nexus
+nexus-press-mod-manager = No Nexus, prima Mod manager download para o novo ficheiro; o Zendo coloca-o no lugar do antigo
 nexus-choose-title = Para que jogo é este mod?
 nexus-choose-none = O Nexus diz que este mod é para { $name }, e nenhum jogo instalado tem esse nome. Escolha o jogo a que se destina; o Zendo lembra-se disso para os próximos mods deste jogo.
 nexus-choose-several = O Nexus diz que este mod é para { $name }, e há mais de um jogo instalado que corresponde.
@@ -827,6 +829,7 @@ accounts-preparing = A preparar…
 
 install = Instalar
 installing = A instalar…
+steam-paused = Em pausa no Steam
 resume = Retomar
 queued = Na fila
 see-downloads = Ver transferências

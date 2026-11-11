@@ -62,7 +62,11 @@ fn bind(path: &Path) -> Option<UnixListener> {
         .mode(0o700)
         .create(dir)
         .ok()?;
-    // Ours alone, even when the folder was there before.
+    // Ours alone, even when the folder was there before, and only if it is
+    // a folder: a symlink planted here is not ours to chmod.
+    if !fs::symlink_metadata(dir).ok()?.is_dir() {
+        return None;
+    }
     fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).ok()?;
     if let Ok(meta) = fs::symlink_metadata(path) {
         if UnixStream::connect(path).is_ok() {

@@ -27,16 +27,6 @@ pub const GRID_PADDING: f32 = 24.0;
 /// Room kept for the scrollbar beside the grid.
 const SCROLLBAR: f32 = 12.0;
 
-const SOURCES: [Source; 7] = [
-    Source::Steam,
-    Source::Epic,
-    Source::Gog,
-    Source::Amazon,
-    Source::Heroic,
-    Source::Desktop,
-    Source::Local,
-];
-
 /// How many cards fit across a window this wide, beside the sidebar.
 pub fn columns_for(window_width: f32) -> usize {
     let room = window_width - sidebar::WIDTH - 2.0 * GRID_PADDING - SCROLLBAR + SPACING;
@@ -91,7 +81,7 @@ impl Zendo {
             .collect();
         let shown = games.iter().filter(|game| !game.hidden).count();
         let hidden = games.len() - shown;
-        let stores = SOURCES
+        let stores = Source::ALL
             .iter()
             .filter(|source| games.iter().any(|game| game.source == **source))
             .count();
@@ -173,7 +163,7 @@ impl Zendo {
             self.source.is_none() && self.category.is_none(),
             Message::ClearFilters,
         )];
-        for source in SOURCES {
+        for source in Source::ALL {
             let count = games.iter().filter(|game| game.source == source).count();
             if count > 0 {
                 chips.push(chip(
@@ -257,7 +247,7 @@ impl Zendo {
         chips.push(chip(
             t!("categories-assign"),
             None,
-            true,
+            false,
             Message::Categories(CategoriesMessage::Open(self.selected_games.clone())),
         ));
         chips.push(chip(
@@ -301,7 +291,7 @@ impl Zendo {
             scroll_top: self.scroll_top,
             height: self.viewport_height,
         };
-        cards_grid(cards, visible.len(), self.columns, window)
+        cards_grid(cards, self.columns, window)
     }
 }
 
@@ -349,11 +339,13 @@ fn rows_on_screen(count: usize, columns: usize, window: Window) -> (usize, usize
 /// redraw slow. The rows left out are space of the same height, so the
 /// scroll bar and the cursor's place stay right.
 pub fn cards_grid<'a>(
-    cards: impl Iterator<Item = Element<'a, Message>>,
-    count: usize,
+    cards: impl ExactSizeIterator<Item = Element<'a, Message>>,
     columns: usize,
     window: Window,
 ) -> Element<'a, Message> {
+    // The count is the cards': two numbers could disagree, and then the
+    // spacers and the scroll bar would lie.
+    let count = cards.len();
     let columns = columns.max(1);
     let total = count.div_ceil(columns);
     let (first, shown) = rows_on_screen(count, columns, window);

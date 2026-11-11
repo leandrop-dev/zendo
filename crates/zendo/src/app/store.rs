@@ -104,14 +104,13 @@ impl StoreState {
             .filter(move |game| game.id == id)
     }
 
-    pub fn has_list(&self, shop: impl Into<Shop>) -> bool {
-        self.lists.contains_key(&shop.into())
+    pub fn has_list(&self, shop: Shop) -> bool {
+        self.lists.contains_key(&shop)
     }
 
     /// A signed-out store's games leave the page; the caller removes the
     /// cache.
-    pub fn forget(&mut self, shop: impl Into<Shop>) {
-        let shop = shop.into();
+    pub fn forget(&mut self, shop: Shop) {
         self.lists.remove(&shop);
         self.errors.remove(&shop);
     }
@@ -190,8 +189,9 @@ impl Zendo {
                             // Kept, so the page has them on the next start.
                             if self.persist
                                 && let Some(games) = self.store.lists.get(&Shop::Steam)
+                                && let Err(err) = owned::save(Shop::Steam, games)
                             {
-                                let _ = owned::save(Shop::Steam, games);
+                                self.status = Some(format!("{err:#}"));
                             }
                         }
                         InfoState::Got(GameInfo::default())
@@ -304,11 +304,11 @@ impl Zendo {
     }
 
     pub(super) fn open_owned(&mut self) -> Task<Message> {
-        match self
-            .store_visible()
-            .get(self.store.selected)
-            .map(|game| game.id.clone())
-        {
+        // The drawing clamps the cursor to the list it has; the action has
+        // to agree after a Refresh shrinks it.
+        let visible = self.store_visible();
+        let index = self.store.selected.min(visible.len().saturating_sub(1));
+        match visible.get(index).map(|game| game.id.clone()) {
             Some(id) => self.navigate(Page::Owned(id)),
             None => Task::none(),
         }
@@ -365,7 +365,13 @@ impl Zendo {
             .filter(|game| self.is_installed(&game.id))
             .count();
 
-        let asking: Vec<&str> = self.store.asking.iter().map(|shop| shop.label()).collect();
+        // The stores' own order, not the set's: the same state must read
+        // the same way twice.
+        let asking: Vec<&str> = Shop::ALL
+            .into_iter()
+            .filter(|shop| self.store.asking.contains(shop))
+            .map(Shop::label)
+            .collect();
         let subtitle = if asking.is_empty() {
             format!(
                 "{} · {}",
@@ -417,12 +423,14 @@ impl Zendo {
         let toolbar = self.store_toolbar(&shown, installed);
 
         let mut problems = column![].spacing(4).padding([0.0, GRID_PADDING]);
-        for (shop, err) in &self.store.errors {
-            problems = problems.push(
-                text(format!("{}: {err}", shop.label()))
-                    .size(13)
-                    .color(colors().bad),
-            );
+        for shop in Shop::ALL {
+            if let Some(err) = self.store.errors.get(&shop) {
+                problems = problems.push(
+                    text(format!("{}: {err}", shop.label()))
+                        .size(13)
+                        .color(colors().bad),
+                );
+            }
         }
 
         let body: Element<'_, Message> = if signed_in.is_empty() && shown.is_empty() {
@@ -439,6 +447,13 @@ impl Zendo {
             )
         } else if visible.is_empty() && !self.store.asking.is_empty() {
             centered(text(t!("store-asking-all")).color(colors().dim))
+        } else if visible.is_empty() && !self.store.search.trim().is_empty() {
+            centered(
+                text(t!("library-no-match", search = self.store.search.as_str()))
+                    .color(colors().dim),
+            )
+        } else if visible.is_empty() && (self.store.source.is_some() || self.store.hide_installed) {
+            centered(text(t!("library-none-here")).color(colors().dim))
         } else if visible.is_empty() {
             centered(text(t!("store-nothing")).color(colors().dim))
         } else {
@@ -449,7 +464,6 @@ impl Zendo {
 
     fn store_grid<'a>(&'a self, visible: Vec<&'a Owned>) -> Element<'a, Message> {
         let selected = self.store.selected.min(visible.len().saturating_sub(1));
-        let count = visible.len();
         let window = Window {
             scroll_top: self.store.scroll_top,
             height: self.viewport_height,
@@ -471,7 +485,6 @@ impl Zendo {
                     on_press: Message::Store(StoreMessage::Clicked(index)),
                 })
             }),
-            count,
             self.columns,
             window,
         )
@@ -697,7 +710,11 @@ impl Zendo {
                 None,
             ),
             Some(Following::Busy(state)) => (
-                t!("installing"),
+                if matches!(&state.progress, zendo_core::steam::Progress::Paused { .. }) {
+                    t!("steam-paused")
+                } else {
+                    t!("installing")
+                },
                 None,
                 progress_line(state.progress),
                 Some(percent(state.progress)),

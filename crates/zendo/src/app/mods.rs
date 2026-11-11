@@ -1032,6 +1032,8 @@ fn add_as_from_nexus(
         return None;
     }
     let domain = mods::nexus_domain(game)?;
+    // Best effort, unlike a file the user asked Nexus for: a lookup that
+    // fails adds the archive as any other mod, which is what `None` says.
     let (mod_id, mut fetched) = nexus::identify(key, &domain, archive, None).ok()??;
     let folder = mods::downloads_dir(game).ok()?;
     std::fs::create_dir_all(&folder).ok()?;

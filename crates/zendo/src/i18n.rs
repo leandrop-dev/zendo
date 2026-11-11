@@ -113,10 +113,10 @@ pub fn set_from_settings() {
 
 /// The window's language.
 pub fn current() -> Language {
-    match CURRENT.load(Ordering::Relaxed) {
-        1 => Language::Portuguese,
-        _ => Language::English,
-    }
+    Language::ALL
+        .get(usize::from(CURRENT.load(Ordering::Relaxed)))
+        .copied()
+        .unwrap_or(Language::English)
 }
 
 /// Changes the window's language; the next frame shows it.
@@ -211,6 +211,13 @@ mod tests {
             if let Err(errors) = bundle.add_resource(resource) {
                 panic!("{}: a message twice: {errors:?}", language.tag());
             }
+        }
+    }
+
+    #[test]
+    fn every_language_indexes_its_own_bundle() {
+        for language in Language::ALL {
+            assert_eq!(Language::ALL[language.index()], language);
         }
     }
 

@@ -257,18 +257,28 @@ pub fn primary(_: &Theme, status: button::Status) -> button::Style {
 }
 
 pub fn secondary(_: &Theme, status: button::Status) -> button::Style {
+    let colors = colors();
+    let disabled = status == button::Status::Disabled;
     button::Style {
         background: Some(Background::Color(match status {
-            button::Status::Hovered | button::Status::Pressed => colors().raised,
-            _ => colors().surface,
+            button::Status::Hovered | button::Status::Pressed => colors.raised,
+            // A disabled one is not a surface the user can press.
+            button::Status::Disabled => Color {
+                a: 0.4,
+                ..colors.surface
+            },
+            button::Status::Active => colors.surface,
         })),
-        text_color: if status == button::Status::Disabled {
-            colors().dim
-        } else {
-            colors().text
-        },
+        text_color: if disabled { colors.dim } else { colors.text },
         border: Border {
-            color: colors().line,
+            color: if disabled {
+                Color {
+                    a: 0.4,
+                    ..colors.line
+                }
+            } else {
+                colors.line
+            },
             width: 1.0,
             radius: 8.0.into(),
         },

@@ -2304,6 +2304,61 @@ The Epic gap from phase 5a is also closed: the user installed and played Cat
 Quest II through legendary on 2026-11-10, and Let's Build a Zoo the same
 evening (see phase 5a).
 
+## The window quick pass over the review's findings, 2026-11-11
+
+The second pass, the window's mechanical findings: 26 built. Like the core
+pass, the ones that change interaction, layout or threading are left for a
+session where each can be tried.
+
+- Shell: `Language::current` decodes through `Language::ALL` and a test pins
+  each index; `links::bind` refuses a symlink before chmod; `uncategorize`
+  checks membership before `State::update` writes; doc comments moved to the
+  items they describe; the footer formats `Downloads::summary()` once; the
+  footer's 10 px padding became 8; `reveal`'s arithmetic is `reveal_y`, with
+  the three cases tested.
+- Library: `Source::ALL` in the core replaces the window's copy of the list,
+  with a duplicate check; `queue`/`dlc_job` results are filtered after the
+  fact instead of `bool::then(...).flatten()`; `cards_grid` takes the count
+  from its `ExactSizeIterator`; the "assign a category" chip no longer looks
+  chosen.
+- Store: `open_owned` clamps the cursor like the drawing does; a failed
+  Steam-list write is in the status line; the asking and error lists follow
+  `Shop::ALL`; `has_list`/`forget` take a `Shop`; the empty page says which
+  filter found nothing; a paused Steam download says so; the progress bar is
+  drawn only once a percentage exists; a finished job's Open goes to the
+  game's page only when the scan already knows it.
+- Accounts: the page's capped column is centred, and Checking keeps the
+  Sign in button's slot, disabled.
+- Settings: the sources list says "Scanning…" until the first scan is in,
+  and a disabled secondary button is drawn faded.
+- Mods and Nexus: the two untranslated status lines are in the catalogue;
+  a Nexus file the user asked for reports an identification failure instead
+  of being added without its identity; one mod's file list failing no longer
+  hides the other mods' updates.
+
+Deliberate differences from the reports' suggested code:
+
+- The window has no `mod spacing` module of 8-point tokens, so the footer's
+  padding is the numbers 8 and 24, matching the rest of the window.
+- The footer's summary is computed once per frame rather than only in the
+  branch that shows it, since the branch is not known first.
+- `add_as_from_nexus` (`mods.rs`) keeps its best-effort lookup: an archive
+  added by hand whose Nexus identity cannot be found is still added as any
+  other mod, now with a comment saying so.
+
+Checked: `cargo fmt --check` clean, pedantic clippy with no warning,
+`cargo test --workspace` green (229 core, 122 window). Two window tests are
+new: the language index round trip, and `reveal_y`'s above, below and
+already-visible cases. The rest are covered by existing tests, which pass.
+
+The window findings still open are the ones that need a look at the screen
+or a decision: the overlay input order's neighbours (per-page scroll, the
+palette global, Ctrl+F on the Store), the grid's virtualisation and
+re-sorting in `update`, the game page's width and type scale, the toolbar's
+grouping and wrapping, the FOMOD installer's pad input and footer, the
+launch-options form's sticky footer and field errors, the card-fetch error
+states, and the filesystem reads in `view`.
+
 ## Next session, as logged to 2026-11-09
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built

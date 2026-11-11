@@ -755,7 +755,7 @@ impl Zendo {
                 .align_y(Alignment::Center),
             );
             for (job, outcome) in state.finished.iter().rev() {
-                body = body.push(finished_row(job, outcome));
+                body = body.push(finished_row(job, outcome, self.game(&job.id()).is_some()));
             }
         }
         scrollable(body).height(Length::Fill).into()
@@ -813,65 +813,70 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
         .step
         .clone()
         .unwrap_or_else(|| progress_line(job, progress));
-    container(
-        column![
-            row![
-                column![
-                    text(&job.title).size(18).font(BOLD),
-                    text(format!(
-                        "{} · {}",
-                        action_doing(job.action),
-                        job.store().label()
-                    ))
-                    .size(13)
-                    .color(colors().accent),
-                ]
-                .spacing(2),
-                space::horizontal(),
-                button(
-                    text(if running.then == Some(Then::Pause) {
-                        t!("pausing")
-                    } else {
-                        t!("pause")
-                    })
-                    .size(14)
-                )
-                .padding([8, 14])
-                .style(style::secondary)
-                .on_press_maybe(
-                    running
-                        .then
-                        .is_none()
-                        .then(|| Message::Download(DownloadMessage::Pause(job.id())))
-                ),
-                button(
-                    text(if running.then == Some(Then::Cancel) {
-                        t!("cancelling")
-                    } else {
-                        t!("cancel")
-                    })
-                    .size(14)
-                )
-                .padding([8, 14])
-                .style(style::secondary)
-                .on_press_maybe(
-                    (running.then != Some(Then::Cancel))
-                        .then(|| Message::Download(DownloadMessage::Cancel(job.id())))
-                ),
+    let mut content = column![
+        row![
+            column![
+                text(&job.title).size(18).font(BOLD),
+                text(format!(
+                    "{} · {}",
+                    action_doing(job.action),
+                    job.store().label()
+                ))
+                .size(13)
+                .color(colors().accent),
             ]
-            .spacing(10)
-            .align_y(Alignment::Center),
-            progress_bar(0.0..=100.0, progress.percent.unwrap_or(0.0))
+            .spacing(2),
+            space::horizontal(),
+            button(
+                text(if running.then == Some(Then::Pause) {
+                    t!("pausing")
+                } else {
+                    t!("pause")
+                })
+                .size(14)
+            )
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press_maybe(
+                running
+                    .then
+                    .is_none()
+                    .then(|| Message::Download(DownloadMessage::Pause(job.id())))
+            ),
+            button(
+                text(if running.then == Some(Then::Cancel) {
+                    t!("cancelling")
+                } else {
+                    t!("cancel")
+                })
+                .size(14)
+            )
+            .padding([8, 14])
+            .style(style::secondary)
+            .on_press_maybe(
+                (running.then != Some(Then::Cancel))
+                    .then(|| Message::Download(DownloadMessage::Cancel(job.id())))
+            ),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center),
+    ]
+    .spacing(10);
+    // A bar at zero says "stalled"; without a percentage the line below
+    // already says the engine is starting.
+    if let Some(percent) = progress.percent {
+        content = content.push(
+            progress_bar(0.0..=100.0, percent)
                 .girth(8)
                 .style(style::progress),
-            text(line).size(13).color(colors().dim),
-        ]
-        .spacing(10),
-    )
-    .padding(16)
-    .width(Length::Fill)
-    .style(style::card)
-    .into()
+        );
+    }
+    content = content.push(text(line).size(13).color(colors().dim));
+    container(content)
+        .padding(16)
+        .width(Length::Fill)
+        .style(style::card)
+        .into()
 }
 
 /// Percentage, size, speed and time left, as far as the engine said.
@@ -968,16 +973,27 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>, waits: bool) -> Eleme
     .into()
 }
 
-fn finished_row<'a>(job: &'a Job, outcome: &'a Result<(), String>) -> Element<'a, Message> {
+/// `in_library` is whether the scan already knows the game: right after an
+/// install it does not, and the game's page would say it has gone.
+fn finished_row<'a>(
+    job: &'a Job,
+    outcome: &'a Result<(), String>,
+    in_library: bool,
+) -> Element<'a, Message> {
     let (verdict, color) = match outcome {
         Ok(()) => (t!("downloads-done"), colors().good),
         Err(err) => (err.clone(), colors().bad),
     };
     let open = (outcome.is_ok() && job.action != Action::Uninstall).then(|| {
+        let page = if in_library {
+            Page::Game(job.id())
+        } else {
+            Page::Owned(job.id())
+        };
         button(text(t!("open")).size(13))
             .padding([6, 12])
             .style(style::secondary)
-            .on_press(Message::Navigate(Page::Game(job.id())))
+            .on_press(Message::Navigate(page))
     });
     container(
         row![

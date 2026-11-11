@@ -1147,17 +1147,8 @@ impl Zendo {
             return Task::none();
         }
         let columns = self.columns.max(1);
-        let viewport_height = self.viewport_height;
         let (selected, scroll_top) = self.cursor();
-        #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
-        let row = (*selected / columns) as f32;
-        let top = row * (library::CARD_HEIGHT + library::SPACING);
-        let bottom = top + library::CARD_HEIGHT + 2.0 * library::GRID_PADDING;
-        let y = if top < *scroll_top {
-            top
-        } else if bottom > *scroll_top + viewport_height {
-            bottom - viewport_height
-        } else {
+        let Some(y) = reveal_y(*selected, columns, *scroll_top, self.viewport_height) else {
             return Task::none();
         };
         operation::scroll_to(grid_id(), AbsoluteOffset { x: 0.0, y })
@@ -1279,14 +1270,13 @@ impl Zendo {
         } else {
             &self.status
         };
-        let left = match (status, problems) {
+        let summary = self.downloads.summary();
+        let left = match (status, problems, summary.as_deref()) {
             _ if self.images.left > 0 => text(t!("images-downloading", count = self.images.left)),
-            (Some(status), _) => text(status.clone()),
-            (None, _) if self.downloads.summary().is_some() => {
-                text(self.downloads.summary().unwrap_or_default())
-            }
-            (None, 0) => text(""),
-            (None, n) => text(t!("footer-unreadable", count = n)),
+            (Some(status), ..) => text(status.clone()),
+            (None, _, Some(summary)) => text(summary.to_owned()),
+            (None, 0, None) => text(""),
+            (None, n, None) => text(t!("footer-unreadable", count = n)),
         };
         let hints = match self.page {
             Page::Library if !self.selected_games.is_empty() => t!("hints-selection"),
@@ -1304,7 +1294,8 @@ impl Zendo {
             text(hints).size(13).color(colors().dim),
         ]
         .spacing(16)
-        .padding([10, 24])
+        // 8 and 24: the window's other paddings, all on the 8-point scale.
+        .padding([8, 24])
         .into()
     }
 }
@@ -1338,6 +1329,22 @@ trait Fallback {
     fn panicked() -> Self;
 }
 
+/// Where the grid scrolls to show `selected`: just enough, or `None` when
+/// it is already in view.
+fn reveal_y(selected: usize, columns: usize, scroll_top: f32, viewport: f32) -> Option<f32> {
+    #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
+    let row = (selected / columns) as f32;
+    let top = row * (library::CARD_HEIGHT + library::SPACING);
+    let bottom = top + library::CARD_HEIGHT + 2.0 * library::GRID_PADDING;
+    if top < scroll_top {
+        Some(top)
+    } else if bottom > scroll_top + viewport {
+        Some(bottom - viewport)
+    } else {
+        None
+    }
+}
+
 /// What the window says when work hit a bug.
 fn panicked_note() -> String {
     t!("panicked")
@@ -1355,7 +1362,6 @@ impl<T> Fallback for anyhow::Result<T> {
     }
 }
 
-/// A list nothing came of.
 /// Work that found nothing when it hit a bug.
 impl<T> Fallback for Option<T> {
     fn panicked() -> Self {
@@ -1363,6 +1369,7 @@ impl<T> Fallback for Option<T> {
     }
 }
 
+/// A list nothing came of.
 impl<T> Fallback for Vec<T> {
     fn panicked() -> Self {
         Vec::new()
@@ -1394,11 +1401,11 @@ impl Fallback for zendo_core::nexus::Handler {
     }
 }
 
-/// Fetches each image on a thread (the requests block) and reports each one
-/// as it lands, then `ImagesDone`.
 /// A game from the library or a store, whose images are wanted.
 type Job = Box<dyn Artwork + Send>;
 
+/// Fetches each image on a thread (the requests block) and reports each one
+/// as it lands, then `ImagesDone`.
 fn fetch_images(mut fetcher: Fetcher, wanted: Vec<(Job, Kind)>) -> impl Stream<Item = Message> {
     iced::stream::channel(8, async move |mut output| {
         let (sender, mut receiver) = mpsc::unbounded();
@@ -1997,6 +2004,18 @@ mod tests {
         assert_eq!(after(&mut zendo, 6, Move::Right), 6);
         assert_eq!(after(&mut zendo, 0, Move::Left), 0);
         assert_eq!(after(&mut zendo, 2, Move::Last), 6);
+    }
+
+    #[test]
+    fn reveals_the_selected_row_just_enough() {
+        let pitch = library::CARD_HEIGHT + library::SPACING;
+        let card = library::CARD_HEIGHT + 2.0 * library::GRID_PADDING;
+        // Row 0 is above a scroll of one row: back to the top.
+        assert_eq!(reveal_y(0, 3, pitch + 1.0, 800.0), Some(0.0));
+        // Already in view: nothing moves.
+        assert_eq!(reveal_y(0, 3, 0.0, card + 1.0), None);
+        // Row 1 is below a viewport that shows only row 0.
+        assert_eq!(reveal_y(3, 3, 0.0, pitch), Some(card));
     }
 
     #[test]

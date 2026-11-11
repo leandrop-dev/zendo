@@ -191,6 +191,22 @@ fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
     let game = find(id)?;
     // The name as it is stored, and whether the game was in it.
     let mut category = name.to_owned();
+    if !member {
+        // Refused before the file is touched, not after a write that
+        // changed nothing.
+        let state = State::load()?;
+        let Some(found) = state
+            .categories()
+            .into_iter()
+            .find(|found| found.name.eq_ignore_ascii_case(name))
+        else {
+            anyhow::bail!("{id} is not in {name:?}");
+        };
+        category = found.name;
+        if !found.games.contains(&game.id) {
+            anyhow::bail!("{id} is not in {category:?}");
+        }
+    }
     let mut made = false;
     let mut had = false;
     State::update(|state| {
@@ -209,9 +225,6 @@ fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
             state.set_category(name, &game.id, false);
         }
     })?;
-    if !member && !had {
-        anyhow::bail!("{id} is not in {category:?}");
-    }
     if member {
         if had {
             println!("already in {category:?}");

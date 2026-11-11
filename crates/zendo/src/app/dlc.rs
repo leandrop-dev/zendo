@@ -98,10 +98,7 @@ impl Zendo {
                 button(text(t!("dlc-install-all")).size(13))
                     .padding([6, 12])
                     .style(style::secondary)
-                    .on_press_maybe(
-                        free.then(|| dlc_job(game, Action::AddDlc, to_install))
-                            .flatten(),
-                    ),
+                    .on_press_maybe(dlc_job(game, Action::AddDlc, to_install).filter(|_| free)),
             );
         }
         let mut body = column![top].spacing(12);
@@ -149,10 +146,8 @@ impl Zendo {
                         .padding([6, 12])
                         .style(style::danger)
                         .on_press_maybe(
-                            free.then(|| {
-                                dlc_job(game, Action::RemoveDlc, vec![line.id.to_owned()])
-                            })
-                            .flatten(),
+                            dlc_job(game, Action::RemoveDlc, vec![line.id.to_owned()])
+                                .filter(|_| free),
                         )
                         .into()
                 } else {
@@ -169,8 +164,7 @@ impl Zendo {
                 .padding([6, 12])
                 .style(style::secondary)
                 .on_press_maybe(
-                    free.then(|| dlc_job(game, Action::AddDlc, vec![line.id.to_owned()]))
-                        .flatten(),
+                    dlc_job(game, Action::AddDlc, vec![line.id.to_owned()]).filter(|_| free),
                 )
                 .into(),
             (true, true, false) => text(t!("installed")).size(13).color(colors().good).into(),

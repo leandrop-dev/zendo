@@ -120,7 +120,7 @@ impl Zendo {
                     },
                 );
                 // A list kept from last time waits for Refresh.
-                if signed_in && !self.store.has_list(store) {
+                if signed_in && !self.store.has_list(store.into()) {
                     self.fetch_owned(store)
                 } else {
                     Task::none()
@@ -226,7 +226,7 @@ impl Zendo {
         match result {
             Ok(()) => {
                 self.accounts.set(store, Account::SignedOut);
-                self.store.forget(store);
+                self.store.forget(store.into());
                 if self.persist {
                     zendo_core::owned::forget(store.into());
                 }
@@ -421,12 +421,15 @@ impl Zendo {
         ]
         .spacing(2);
         scrollable(
-            column![header]
-                .push(self.steam_card())
-                .extend(Store::ALL.map(|store| self.account_card(store)))
-                .spacing(20)
-                .padding(24)
-                .max_width(960),
+            container(
+                column![header]
+                    .push(self.steam_card())
+                    .extend(Store::ALL.map(|store| self.account_card(store)))
+                    .spacing(20)
+                    .padding(24)
+                    .max_width(960),
+            )
+            .center_x(Length::Fill),
         )
         .height(Length::Fill)
         .into()
@@ -454,7 +457,13 @@ impl Zendo {
                 .style(style::secondary)
                 .on_press(Message::Account(AccountMessage::SignOut(store)))
                 .into(),
-            Account::Checking => space::horizontal().width(0).into(),
+            // The slot stays where the button will be, disabled until the
+            // engines have answered.
+            Account::Checking => button(text(t!("accounts-sign-in")).size(14).font(BOLD))
+                .padding([8, 18])
+                .style(style::primary)
+                .on_press_maybe(None)
+                .into(),
             Account::SignedOut | Account::Failed(_) => {
                 button(text(t!("accounts-sign-in")).size(14).font(BOLD))
                     .padding([8, 18])

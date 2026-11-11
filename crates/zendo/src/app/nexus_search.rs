@@ -437,8 +437,10 @@ fn add_from_site(
     mod_id: u64,
     archive: &std::path::Path,
 ) -> anyhow::Result<(mods::Added, String)> {
+    // A failed lookup is not "the name carries no ids": the caller says
+    // what went wrong instead of adding the mod without its identity.
     let identified = match key {
-        Some(key) => nexus::identify(key, domain, archive, Some(mod_id)).unwrap_or(None),
+        Some(key) => nexus::identify(key, domain, archive, Some(mod_id))?,
         None => None,
     };
     if let Some((mod_id, fetched)) = identified {

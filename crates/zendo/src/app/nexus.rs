@@ -25,6 +25,10 @@ use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
+/// The newer files of a game's mods, and the mods whose file list could
+/// not be asked.
+type UpdateList = (Vec<(String, FileInfo)>, Vec<String>);
+
 #[derive(Debug, Default)]
 pub struct NexusState {
     key: KeyField,
@@ -98,7 +102,7 @@ pub enum NexusMessage {
     Progress(u64, u64, Option<u64>),
     Finished(u64, String, Result<(Added, String), String>),
     Stop(u64),
-    Updates(String, Result<Vec<(String, FileInfo)>, String>),
+    Updates(String, Result<UpdateList, String>),
     Update(String, String),
 }
 
@@ -216,8 +220,14 @@ impl Zendo {
             }
             NexusMessage::Updates(game, result) => {
                 match result {
-                    Ok(found) => {
+                    Ok((found, problems)) => {
                         self.nexus.updates.insert(game, found.into_iter().collect());
+                        // One mod's file list failing does not hide the
+                        // others' updates, but it is still said.
+                        if !problems.is_empty() {
+                            self.status =
+                                Some(t!("nexus-updates-failed", error = problems.join("; ")));
+                        }
                     }
                     Err(err) => {
                         self.status = Some(t!("nexus-updates-failed", error = err));
@@ -382,11 +392,7 @@ impl Zendo {
             return Task::none();
         };
         let Some(key) = self.config.nexus_key.clone() else {
-            self.status = Some(
-                "A mod came from Nexus: set your Nexus key in Settings, then press the \
-                 button on Nexus again"
-                    .to_owned(),
-            );
+            self.status = Some(t!("nexus-needs-key"));
             return Task::none();
         };
         if !self.persist {
@@ -533,19 +539,29 @@ impl Zendo {
         Task::perform(
             blocking(move || {
                 let mut found = Vec::new();
+                let mut problems = Vec::new();
                 let mut asked: HashMap<(String, u64), nexus::Files> = HashMap::new();
                 for (mod_id, source) in sources {
                     let wanted = (source.domain.clone(), source.mod_id);
-                    if !asked.contains_key(&wanted) {
-                        let files = nexus::files(&key, &source.domain, source.mod_id)
-                            .map_err(|err| format!("{err:#}"))?;
-                        asked.insert(wanted.clone(), files);
-                    }
-                    if let Some(newer) = asked[&wanted].newest(source.file_id) {
+                    let files = match asked.entry(wanted) {
+                        std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            match nexus::files(&key, &source.domain, source.mod_id) {
+                                Ok(files) => entry.insert(files),
+                                Err(err) => {
+                                    // One mod's file list failing is not
+                                    // the whole game's.
+                                    problems.push(format!("{}: {err:#}", source.domain));
+                                    continue;
+                                }
+                            }
+                        }
+                    };
+                    if let Some(newer) = files.newest(source.file_id) {
                         found.push((mod_id, newer.clone()));
                     }
                 }
-                Ok(found)
+                Ok((found, problems))
             }),
             move |result| Message::Nexus(NexusMessage::Updates(game.clone(), result)),
         )
@@ -580,11 +596,7 @@ impl Zendo {
         if self.nexus.user.as_ref().is_some_and(|user| user.is_premium) {
             return self.download_mod(game, link, false);
         }
-        self.status = Some(
-            "On Nexus, press Mod manager download for the new file; Zendo puts it in place \
-             of the old one"
-                .to_owned(),
-        );
+        self.status = Some(t!("nexus-press-mod-manager"));
         Task::done(Message::Open(link.page()))
     }
 

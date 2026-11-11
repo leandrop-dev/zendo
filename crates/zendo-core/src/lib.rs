@@ -85,6 +85,17 @@ pub enum Source {
 }
 
 impl Source {
+    /// Every source, in the order the window lists them.
+    pub const ALL: [Self; 7] = [
+        Self::Steam,
+        Self::Epic,
+        Self::Gog,
+        Self::Amazon,
+        Self::Heroic,
+        Self::Desktop,
+        Self::Local,
+    ];
+
     /// The name shown to people.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -463,6 +474,13 @@ mod tests {
         assert_eq!(Size::Bytes(512).to_string(), "512 B");
         assert_eq!(Size::Bytes(374_178_085).to_string(), "356.84 MiB");
         assert_eq!(Size::Label("75.85 GiB".into()).to_string(), "75.85 GiB");
+    }
+
+    #[test]
+    fn lists_each_source_once() {
+        let unique: HashSet<Source> = Source::ALL.into_iter().collect();
+        assert_eq!(unique.len(), Source::ALL.len());
+        assert_eq!(Source::ALL.len(), 7, "a source left out gets no chip");
     }
 
     #[test]
