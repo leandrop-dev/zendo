@@ -49,6 +49,13 @@ impl Sort {
     /// title.
     #[must_use]
     pub fn compare(self, a: &Game, b: &Game) -> Ordering {
+        self.compare_with_titles(a, b, &a.title.to_lowercase(), &b.title.to_lowercase())
+    }
+
+    /// [`Sort::compare`], with the titles already lowered: a sort takes
+    /// them once per game instead of twice per comparison.
+    #[must_use]
+    pub fn compare_with_titles(self, a: &Game, b: &Game, a_title: &str, b_title: &str) -> Ordering {
         // `None` sorts before `Some`, so reversed it puts the never played
         // last.
         let recent = || b.played.last.cmp(&a.played.last);
@@ -62,7 +69,7 @@ impl Sort {
                 .then_with(recent),
             Self::Title => Ordering::Equal,
         });
-        order.then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+        order.then_with(|| a_title.cmp(b_title))
     }
 }
 

@@ -615,14 +615,7 @@ fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, M
         None => container(space::horizontal())
             .width(width)
             .height(height)
-            .style(|_| container::Style {
-                background: Some(colors().surface.into()),
-                border: iced::Border {
-                    radius: 8.0.into(),
-                    ..iced::Border::default()
-                },
-                ..container::Style::default()
-            })
+            .style(style::placeholder)
             .into(),
     };
     let mut about = format!("{}x{}", found.width, found.height);

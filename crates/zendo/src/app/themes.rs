@@ -95,6 +95,8 @@ pub struct Themes {
     found: Found,
     /// When `tone.json` last changed, as last read.
     modified: Option<SystemTime>,
+    /// The colours last painted, so `view`'s theme comes from this state.
+    colors: Colors,
 }
 
 /// The built-in themes, with the user's from `dir` over them, by name; and
@@ -149,10 +151,10 @@ impl Themes {
             Choice::Hyprmonk => return self.apply_tone(),
         };
         if let Some(theme) = self.files.iter().find(|theme| theme.id == id) {
-            style::set_colors(Colors::from_theme(theme));
+            self.paint(Colors::from_theme(theme));
             self.found = Found::File;
         } else {
-            style::set_colors(self.default_colors());
+            self.paint(self.default_colors());
             self.found = Found::Gone(id);
         }
     }
@@ -161,11 +163,11 @@ impl Themes {
         self.modified = Tone::modified();
         match Tone::read() {
             Ok(Some(tone)) => {
-                style::set_colors(Colors::from_theme(&Theme::from_tone(&tone)));
+                self.paint(Colors::from_theme(&Theme::from_tone(&tone)));
                 self.found = Found::Following(tone.label);
             }
             Ok(None) => {
-                style::set_colors(self.default_colors());
+                self.paint(self.default_colors());
                 self.found = Found::Missing;
             }
             // Perhaps caught half written: looked at again next time.
@@ -174,6 +176,17 @@ impl Themes {
                 self.found = Found::Failed(format!("{err:#}"));
             }
         }
+    }
+
+    /// The window's colours, as last painted.
+    pub fn palette(&self) -> Colors {
+        self.colors
+    }
+
+    /// Sets the colours here and on the window.
+    fn paint(&mut self, colors: Colors) {
+        self.colors = colors;
+        style::set_colors(colors);
     }
 
     /// Zendo's own, from its file (the user's, when it replaces it).

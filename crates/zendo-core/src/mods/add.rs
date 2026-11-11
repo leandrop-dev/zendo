@@ -100,9 +100,9 @@ impl Place {
                 what,
             }));
         }
-        self.put_in(&id, &unpacked)?;
-        let _ = fs::remove_dir_all(self.installers().join(&id));
-        self.change(|list| {
+        let old = self.put_in(&id, &unpacked)?;
+        let installer_old = aside(&self.installers().join(&id))?;
+        let written = self.change(|list| {
             match list.mods.iter_mut().find(|entry| entry.id == id) {
                 Some(entry) => {
                     entry.root = root;
@@ -123,7 +123,15 @@ impl Place {
                 }),
             }
             Ok(())
-        })?;
+        });
+        if let Err(err) = written {
+            restore(&self.files().join(&id), old);
+            restore(&self.installers().join(&id), installer_old);
+            return Err(err);
+        }
+        for old in [old, installer_old].into_iter().flatten() {
+            let _ = fs::remove_dir_all(old);
+        }
         Ok(None)
     }
 
@@ -149,27 +157,21 @@ impl Place {
         }
     }
 
-    /// Puts a folder in as `files/<id>`, the mod's files kept before
-    /// deleted once it is in.
-    pub(super) fn put_in(&self, id: &str, folder: &Path) -> anyhow::Result<()> {
+    /// Puts a folder in as `files/<id>`, the mod's previous files moved
+    /// aside rather than deleted: the list that records the new ones has
+    /// not been written yet.
+    pub(super) fn put_in(&self, id: &str, folder: &Path) -> anyhow::Result<Option<PathBuf>> {
         let kept = self.files().join(id);
-        let old = self.files().join(format!(".old-{id}"));
-        if old.exists() {
-            fs::remove_dir_all(&old)
-                .with_context(|| format!("could not clear {}", old.display()))?;
-        }
-        if kept.exists() {
-            fs::rename(&kept, &old)
-                .with_context(|| format!("could not move {} aside", kept.display()))?;
-        }
+        let old = aside(&kept)?;
         if let Err(err) = fs::rename(folder, &kept) {
-            let _ = fs::rename(&old, &kept);
+            if let Some(old) = &old {
+                let _ = fs::rename(old, &kept);
+            }
             let _ = fs::remove_dir_all(folder);
             return Err(err)
                 .with_context(|| format!("could not keep the mod in {}", kept.display()));
         }
-        let _ = fs::remove_dir_all(&old);
-        Ok(())
+        Ok(old)
     }
 
     /// [`add_from_nexus`]'s work: the installer to run, if any, and whether
@@ -205,6 +207,8 @@ impl Place {
         let mut files = HashSet::new();
         listed(&self.game_dir.join(&folder), Path::new(""), 4, &mut files);
         for entry in list.mods.iter().filter(|entry| entry.enabled) {
+            // Best effort here: a broken mod's files are missing from the
+            // conditions, and `overview` is where its error is said.
             for file in walk(&self.mod_root(entry)).unwrap_or_default() {
                 files.insert(fomod::normalise(&file.to_string_lossy()).to_lowercase());
             }
@@ -234,8 +238,8 @@ impl Place {
             let _ = fs::remove_dir_all(&built);
             return Err(err);
         }
-        self.put_in(&id, &built)?;
-        let (source, nexus) = match &pending.what {
+        let files_old = self.put_in(&id, &built)?;
+        let (source, nexus, installer_old) = match &pending.what {
             PendingKind::New {
                 raw, source, nexus, ..
             }
@@ -243,19 +247,16 @@ impl Place {
                 raw, source, nexus, ..
             } => {
                 let kept = self.installers().join(&id);
-                if kept.exists() {
-                    fs::remove_dir_all(&kept)
-                        .with_context(|| format!("could not clear {}", kept.display()))?;
-                }
+                let old = aside(&kept)?;
                 fs::create_dir_all(self.installers())?;
                 fs::rename(raw, &kept).with_context(|| {
                     format!("could not keep the installer in {}", kept.display())
                 })?;
-                (Some(source.clone()), Some(nexus.clone()))
+                (Some(source.clone()), Some(nexus.clone()), old)
             }
-            PendingKind::Options { .. } => (None, None),
+            PendingKind::Options { .. } => (None, None, None),
         };
-        self.change(|list| {
+        let written = self.change(|list| {
             match list.mods.iter_mut().find(|entry| entry.id == id) {
                 Some(entry) => {
                     entry.root = String::new();
@@ -280,7 +281,16 @@ impl Place {
                 }),
             }
             Ok(())
-        })
+        });
+        if let Err(err) = written {
+            restore(&self.files().join(&id), files_old);
+            restore(&self.installers().join(&id), installer_old);
+            return Err(err);
+        }
+        for old in [files_old, installer_old].into_iter().flatten() {
+            let _ = fs::remove_dir_all(old);
+        }
+        Ok(())
     }
 
     /// Copies what an installer's options install from `root` into `into`,
@@ -552,4 +562,28 @@ pub(super) fn unpack(archive: &Path, into: &Path) -> anyhow::Result<()> {
         bail!("could not unpack {}: {reason}", archive.display());
     }
     Ok(())
+}
+
+/// Moves a folder to `<name>.old` beside it, so a change whose list write
+/// fails can put it back.
+fn aside(path: &Path) -> anyhow::Result<Option<PathBuf>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let mut name = path.as_os_str().to_owned();
+    name.push(".old");
+    let old = PathBuf::from(name);
+    if old.exists() {
+        fs::remove_dir_all(&old).with_context(|| format!("could not clear {}", old.display()))?;
+    }
+    fs::rename(path, &old).with_context(|| format!("could not move {} aside", path.display()))?;
+    Ok(Some(old))
+}
+
+/// Puts back what [`aside`] moved, if anything.
+fn restore(path: &Path, old: Option<PathBuf>) {
+    let _ = fs::remove_dir_all(path);
+    if let Some(old) = old {
+        let _ = fs::rename(old, path);
+    }
 }

@@ -73,38 +73,49 @@ pub fn send(game: &Game, started: u64, ended: u64) -> anyhow::Result<()> {
     }
     let new = played(app, started, ended);
     let file = file(QUEUE_FILE).context("no home folder to keep GOG's played time in")?;
-    paths::locked(&file, || {
+    // Take the queue out under the lock, so the token and the network
+    // calls do not hold it. A session added meanwhile waits for the next
+    // call.
+    let queue = paths::locked(&file, || {
         let mut queue = load(&file);
         queue.extend(new);
         if queue.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
-        let result = match Store::Gog.gog_token() {
-            // The sessions are the account's: without one, none is sent.
-            Ok(None) => return Ok(()),
-            Ok(Some(credentials)) => {
-                let agent = crate::http::answering_agent(Duration::from_secs(15));
-                send_all(queue, |session| {
-                    post(
-                        &agent,
-                        &credentials.user_id,
-                        &credentials.access_token,
-                        session,
-                    )
-                })
-            }
-            Err(err) => (queue, Some(err)),
-        };
-        let (left, error) = result;
-        save(&file, &left)?;
-        match error {
-            Some(err) => Err(err.context(format!(
-                "GOG's played time ({} kept for next time)",
-                minutes_kept(&left)
-            ))),
-            None => Ok(()),
+        save(&file, &[])?;
+        Ok(queue)
+    })?;
+    if queue.is_empty() {
+        return Ok(());
+    }
+    let result = match Store::Gog.gog_token() {
+        // The sessions are the account's: without one, none is sent.
+        Ok(None) => (queue, None),
+        Ok(Some(credentials)) => {
+            let agent = crate::http::answering_agent(Duration::from_secs(15));
+            send_all(queue, |session| {
+                post(
+                    &agent,
+                    &credentials.user_id,
+                    &credentials.access_token,
+                    session,
+                )
+            })
         }
-    })
+        Err(err) => (queue, Some(err)),
+    };
+    let (left, error) = result;
+    let kept = minutes_kept(&left);
+    paths::locked(&file, || {
+        let mut queue = load(&file);
+        // What could not be sent goes before what arrived while sending.
+        queue.splice(0..0, left);
+        save(&file, &queue)
+    })?;
+    match error {
+        Some(err) => Err(err.context(format!("GOG's played time ({kept} kept for next time)"))),
+        None => Ok(()),
+    }
 }
 
 /// GOG's total for the game with Zendo's id `id` (`gog:<id>`), in

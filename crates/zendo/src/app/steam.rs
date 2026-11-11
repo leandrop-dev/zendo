@@ -167,7 +167,7 @@ impl Zendo {
             }
             Err(err) => Err(err),
         };
-        self.update_store(StoreMessage::Fetched(Shop::Steam, result))
+        self.update_store(StoreMessage::Fetched(Shop::Steam, result, Vec::new()))
     }
 
     /// Sets the session and writes the settings; on failure the old one

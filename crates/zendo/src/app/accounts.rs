@@ -46,10 +46,30 @@ pub struct Accounts {
     epic: Account,
     gog: Account,
     amazon: Account,
+    /// Each store's engine, found when the accounts are checked: not in
+    /// `view`, where it would walk `PATH` on every redraw.
+    engines: [Option<std::path::PathBuf>; 3],
     signing_in: Option<SignIn>,
 }
 
 impl Accounts {
+    fn index(store: Store) -> usize {
+        match store {
+            Store::Epic => 0,
+            Store::Gog => 1,
+            Store::Amazon => 2,
+        }
+    }
+
+    /// The store's engine, as last found.
+    pub fn engine(&self, store: Store) -> Option<&std::path::Path> {
+        self.engines[Self::index(store)].as_deref()
+    }
+
+    fn set_engine(&mut self, store: Store, engine: Option<std::path::PathBuf>) {
+        self.engines[Self::index(store)] = engine;
+    }
+
     pub fn get(&self, store: Store) -> &Account {
         match store {
             Store::Epic => &self.epic,
@@ -77,7 +97,11 @@ impl Accounts {
 
 #[derive(Debug, Clone)]
 pub enum AccountMessage {
-    Checked(Store, Result<Option<String>, String>),
+    Checked(
+        Store,
+        Result<Option<String>, String>,
+        Option<std::path::PathBuf>,
+    ),
     Start(Store),
     AmazonReady(Result<AmazonLogin, String>),
     /// The sign-in window ended: the code, or `None` when it was closed.
@@ -100,8 +124,13 @@ pub enum AccountMessage {
 pub fn check_all() -> Task<Message> {
     Task::batch(Store::ALL.map(|store| {
         Task::perform(
-            blocking(move || store.account().map_err(|err| format!("{err:#}"))),
-            move |result| Message::Account(AccountMessage::Checked(store, result)),
+            blocking(move || {
+                (
+                    store.account().map_err(|err| format!("{err:#}")),
+                    store.engine(),
+                )
+            }),
+            move |result| Message::Account(AccountMessage::Checked(store, result.0, result.1)),
         )
     }))
 }
@@ -109,7 +138,8 @@ pub fn check_all() -> Task<Message> {
 impl Zendo {
     pub(super) fn update_account(&mut self, message: AccountMessage) -> Task<Message> {
         match message {
-            AccountMessage::Checked(store, result) => {
+            AccountMessage::Checked(store, result, engine) => {
+                self.accounts.set_engine(store, engine);
                 let signed_in = matches!(result, Ok(Some(_)));
                 self.accounts.set(
                     store,
@@ -436,7 +466,7 @@ impl Zendo {
     }
 
     fn account_card(&self, store: Store) -> Element<'_, Message> {
-        let engine = store.engine();
+        let engine = self.accounts.engine(store);
         let signing_in = self
             .accounts
             .signing_in

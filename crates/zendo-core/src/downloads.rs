@@ -370,7 +370,7 @@ impl Stop {
 /// engine said it would be afterwards.
 pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
     let store = job.store();
-    let ended = match (store, job.action) {
+    let mut ended = match (store, job.action) {
         (_, Action::Move) => move_game(job, stop, report)?,
         (_, Action::Import) => import_game(job, stop, report)?,
         (Store::Gog, Action::Install) => gog_install(job, stop, report)?,
@@ -426,6 +426,14 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
             report,
         )?,
     };
+    // A Stop pressed in the last moments of a successful install is not a
+    // paused job: resuming it would fail, as the engine finds it done.
+    if ended == Ended::Stopped
+        && job.action != Action::Uninstall
+        && installs(store).0.iter().any(|game| game.app == job.app)
+    {
+        ended = Ended::Done;
+    }
     if ended == Ended::Done {
         let (installed, problems) = installs(store);
         // A record Zendo could not read is not a record saying "not
@@ -690,7 +698,7 @@ fn engine_told(
 
 /// Sends a signal to the engine's process group: `-INT` as Ctrl+C in a
 /// terminal would, `-KILL` when that went unheard.
-fn signal_group(pid: u32, signal: &str) {
+pub(crate) fn signal_group(pid: u32, signal: &str) {
     let _ = Command::new("kill")
         .args([signal, "--", &format!("-{pid}")])
         .stdin(Stdio::null())

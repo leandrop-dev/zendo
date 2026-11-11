@@ -126,7 +126,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     };
     iced::application(boot, Zendo::update, Zendo::view)
         .title("Zendo")
-        .theme(|_: &Zendo| style::theme())
+        .theme(Zendo::theme)
         .subscription(Zendo::subscription)
         .window(window::Settings {
             size: START_SIZE,
@@ -159,6 +159,13 @@ enum Page {
     About,
 }
 
+/// The two pages with a virtualised grid, so a scroll event names its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Grid {
+    Library,
+    Store,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Move {
     Left,
@@ -184,8 +191,10 @@ enum Message {
     Image(String, Kind, Result<Option<PathBuf>, String>),
     ImagesDone,
     Resized(window::Id, Size),
+    /// The window iced made for Zendo, before any focus or resize event.
+    WindowReady(window::Id),
     Focused(window::Id, bool),
-    Scrolled(Viewport),
+    Scrolled(Grid, Viewport),
     Navigate(Page),
     Move(Move),
     /// The search field's new text.
@@ -197,7 +206,7 @@ enum Message {
     Back,
     /// Enter, A: opens the selected game, or plays the one on its page.
     Activate,
-    Clicked(usize),
+    Clicked(String),
     Play,
     SetSort(Sort),
     CycleSort,
@@ -209,7 +218,7 @@ enum Message {
     /// Marks the card under the cursor, or leaves it.
     ToggleSelected,
     /// Marks the card at this place in the grid, or leaves it.
-    ToggleSelectedAt(usize),
+    ToggleSelectedAt(String),
     ClearSelection,
     /// Hides the current game, or brings it back when it is hidden.
     ToggleHidden,
@@ -418,7 +427,7 @@ impl Zendo {
             columns: library::columns_for(START_SIZE.width),
             window_width: START_SIZE.width,
             window: None,
-            focused: true,
+            focused: false,
             fullscreen: false,
             scroll_top: 0.0,
             viewport_height: START_SIZE.height,
@@ -460,8 +469,9 @@ impl Zendo {
             game_view: GameView::default(),
             persist: true,
         };
-        // The window's id, so F11 works before the first resize event.
-        let window = window::latest().and_then(|id| Task::done(Message::Focused(id, true)));
+        // The window's id, so F11 works before the first resize or focus
+        // event; focus itself arrives as its own message.
+        let window = window::latest().and_then(|id| Task::done(Message::WindowReady(id)));
         let tasks = [
             scan(),
             window,
@@ -500,7 +510,8 @@ impl Zendo {
             .split_whitespace()
             .map(str::to_lowercase)
             .collect();
-        let mut games: Vec<&Game> = library
+        // The lowered title once per game, not twice per comparison.
+        let mut games: Vec<(&Game, String)> = library
             .games
             .iter()
             .filter(|game| self.show_hidden || !game.hidden)
@@ -510,13 +521,11 @@ impl Zendo {
                     .as_ref()
                     .is_none_or(|name| game.categories.contains(name))
             })
-            .filter(|game| {
-                let title = game.title.to_lowercase();
-                words.iter().all(|word| title.contains(word.as_str()))
-            })
+            .map(|game| (game, game.title.to_lowercase()))
+            .filter(|(_, title)| words.iter().all(|word| title.contains(word.as_str())))
             .collect();
-        games.sort_by(|a, b| self.sort.compare(a, b));
-        games
+        games.sort_by(|(a, at), (b, bt)| self.sort.compare_with_titles(a, b, at, bt));
+        games.into_iter().map(|(game, _)| game).collect()
     }
 
     fn selected_id(&self) -> Option<String> {
@@ -589,14 +598,17 @@ impl Zendo {
         self.reveal()
     }
 
-    /// Remembers the window, and whether it has focus: the controller
-    /// moves Zendo only while it does.
-    fn focus_changed(&mut self, id: window::Id, focused: bool) -> Task<Message> {
-        self.window = Some(id);
+    /// Remembers whether the window has focus: the controller moves Zendo
+    /// only while it does.
+    fn focus_changed(&mut self, _id: window::Id, focused: bool) -> Task<Message> {
         self.focused = focused;
         Task::none()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per message, which the router keeps together"
+    )]
     fn update(&mut self, message: Message) -> Task<Message> {
         if let Some(task) = self.overlay_takes(&message) {
             return task;
@@ -607,8 +619,12 @@ impl Zendo {
             Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),
             Message::Resized(id, size) => self.resized(id, size),
+            Message::WindowReady(id) => {
+                self.window = Some(id);
+                Task::none()
+            }
             Message::Focused(id, focused) => self.focus_changed(id, focused),
-            Message::Scrolled(viewport) => self.scrolled(viewport),
+            Message::Scrolled(grid, viewport) => self.scrolled(grid, viewport),
             Message::Navigate(page) => self.navigate(page),
             Message::Move(step) if matches!(self.page, Page::Library | Page::Store) => {
                 self.step(step)
@@ -627,7 +643,7 @@ impl Zendo {
             Message::Activate => self.activate(),
             Message::Store(message) => self.update_store(message),
             Message::GameView(message) => self.update_game_view(message),
-            Message::Clicked(index) => self.clicked(index),
+            Message::Clicked(id) => self.clicked(id),
             Message::Play => self.play(),
             Message::SetSort(sort) => self.set_sort(sort),
             Message::CycleSort if self.page == Page::Library => self.set_sort(self.sort.next()),
@@ -652,6 +668,9 @@ impl Zendo {
             Message::ToggleFullscreen => self.toggle_fullscreen(),
             // From another page the search is not on screen to focus yet;
             // typing reaches it there all the same.
+            // The Store has a search field of its own: Ctrl+F there focuses
+            // it rather than leaving the page.
+            Message::FocusSearch if self.page == Page::Store => operation::focus(store_search_id()),
             Message::FocusSearch if self.page != Page::Library => self.navigate(Page::Library),
             Message::FocusSearch => operation::focus(search_id()),
             Message::Open(target) => self.open_target(&target),
@@ -936,10 +955,13 @@ impl Zendo {
         self.select(id.as_deref())
     }
 
-    /// Opens the game of the card clicked.
-    fn clicked(&mut self, index: usize) -> Task<Message> {
-        self.selected = index;
-        self.open_selected()
+    /// Opens the game of the card clicked, by its id: the list can change
+    /// between the click and this message.
+    fn clicked(&mut self, id: String) -> Task<Message> {
+        if let Some(index) = self.visible().iter().position(|game| game.id == id) {
+            self.selected = index;
+        }
+        self.navigate(Page::Game(id))
     }
 
     /// What the marks in the grid do: the cursor's card and a clicked one
@@ -950,9 +972,8 @@ impl Zendo {
                 let id = self.selected_id();
                 self.toggle_selected(id.as_deref());
             }
-            Message::ToggleSelectedAt(index) => {
-                let id = self.visible().get(*index).map(|game| game.id.clone());
-                self.toggle_selected(id.as_deref());
+            Message::ToggleSelectedAt(id) => {
+                self.toggle_selected(Some(id));
             }
             _ => self.selected_games.clear(),
         }
@@ -971,10 +992,24 @@ impl Zendo {
     }
 
     /// How far the page's grid is scrolled, and how tall its window is.
-    fn scrolled(&mut self, viewport: Viewport) -> Task<Message> {
+    fn scrolled(&mut self, grid: Grid, viewport: Viewport) -> Task<Message> {
+        // A viewport event from the page being left says nothing about the
+        // one being entered.
+        if grid != self.grid_page() {
+            return Task::none();
+        }
         *self.cursor().1 = viewport.absolute_offset().y;
         self.viewport_height = viewport.bounds().height;
         Task::none()
+    }
+
+    /// Which grid the page shows, for its scroll events.
+    fn grid_page(&self) -> Grid {
+        if self.page == Page::Store {
+            Grid::Store
+        } else {
+            Grid::Library
+        }
     }
 
     fn toggle_fullscreen(&mut self) -> Task<Message> {
@@ -1236,6 +1271,11 @@ impl Zendo {
         ])
     }
 
+    /// Iced's theme from the colours the state holds, not a global.
+    fn theme(&self) -> iced::Theme {
+        style::theme_of(self.themes.palette())
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let page = match &self.page {
             Page::Library => self.library_page(),
@@ -1315,18 +1355,19 @@ fn scan() -> Task<Message> {
 
 /// Runs blocking work (file reads, HTTP) on a thread of its own. When the
 /// work panics (a bug), the window carries on with [`Fallback::panicked`]
-/// in its place; the panic itself is printed on the terminal.
+/// in its place, and says what the panic said when it can.
 async fn blocking<T: Fallback + Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     let (sender, receiver) = oneshot::channel();
     thread::spawn(move || {
-        let _ = sender.send(work());
+        let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
+        let _ = sender.send(answer.unwrap_or_else(|payload| T::panicked(Some(payload))));
     });
-    receiver.await.unwrap_or_else(|_| T::panicked())
+    receiver.await.unwrap_or_else(|_| T::panicked(None))
 }
 
 /// What work on a thread gives when it panicked instead of finishing.
 trait Fallback {
-    fn panicked() -> Self;
+    fn panicked(payload: Option<Box<dyn std::any::Any + Send>>) -> Self;
 }
 
 /// Where the grid scrolls to show `selected`: just enough, or `None` when
@@ -1345,58 +1386,70 @@ fn reveal_y(selected: usize, columns: usize, scroll_top: f32, viewport: f32) -> 
     }
 }
 
-/// What the window says when work hit a bug.
-fn panicked_note() -> String {
-    t!("panicked")
+/// What the window says when work hit a bug: the panic's own words when it
+/// carried any.
+fn panicked_note(payload: Option<Box<dyn std::any::Any + Send>>) -> String {
+    let said = payload.and_then(|payload| {
+        payload.downcast_ref::<String>().cloned().or_else(|| {
+            payload
+                .downcast_ref::<&str>()
+                .map(|text| (*text).to_owned())
+        })
+    });
+    match said {
+        Some(said) if !said.is_empty() => t!("panicked-with", error = said),
+        _ => t!("panicked"),
+    }
 }
 
 impl<T> Fallback for Result<T, String> {
-    fn panicked() -> Self {
-        Err(panicked_note())
+    fn panicked(payload: Option<Box<dyn std::any::Any + Send>>) -> Self {
+        Err(panicked_note(payload))
     }
 }
 
 impl<T> Fallback for anyhow::Result<T> {
-    fn panicked() -> Self {
-        Err(anyhow::anyhow!(panicked_note()))
+    fn panicked(payload: Option<Box<dyn std::any::Any + Send>>) -> Self {
+        Err(anyhow::anyhow!(panicked_note(payload)))
     }
 }
 
 /// Work that found nothing when it hit a bug.
 impl<T> Fallback for Option<T> {
-    fn panicked() -> Self {
+    fn panicked(_: Option<Box<dyn std::any::Any + Send>>) -> Self {
         None
     }
 }
 
 /// A list nothing came of.
 impl<T> Fallback for Vec<T> {
-    fn panicked() -> Self {
+    fn panicked(_: Option<Box<dyn std::any::Any + Send>>) -> Self {
         Vec::new()
     }
 }
 
 /// Two pieces of work, each with its own fallback.
 impl<A: Fallback, B: Fallback> Fallback for (A, B) {
-    fn panicked() -> Self {
-        (A::panicked(), B::panicked())
+    fn panicked(_: Option<Box<dyn std::any::Any + Send>>) -> Self {
+        (A::panicked(None), B::panicked(None))
     }
 }
 
 /// The library read at start: none, saying why, and the settings unread.
 impl Fallback for Scanned {
-    fn panicked() -> Self {
+    fn panicked(payload: Option<Box<dyn std::any::Any + Send>>) -> Self {
+        let note = panicked_note(payload);
         let library = Library {
-            problems: vec![panicked_note()],
+            problems: vec![note.clone()],
             ..Library::default()
         };
-        (library, Sort::default(), Vec::new(), Err(panicked_note()))
+        (library, Sort::default(), Vec::new(), Err(note))
     }
 }
 
 /// Not known to open `nxm://` links.
 impl Fallback for zendo_core::nexus::Handler {
-    fn panicked() -> Self {
+    fn panicked(_: Option<Box<dyn std::any::Any + Send>>) -> Self {
         Self::Nothing
     }
 }
@@ -1550,7 +1603,10 @@ mod tests {
         assert_eq!(done, Ok(7));
         let failed: Result<u32, String> =
             iced::futures::executor::block_on(blocking(|| panic!("a bug in the work")));
-        assert_eq!(failed, Err(panicked_note()));
+        assert_eq!(
+            failed,
+            Err(t!("panicked-with", error = "a bug in the work"))
+        );
         let none: Vec<u8> = iced::futures::executor::block_on(blocking(|| panic!("again")));
         assert_eq!(none, Vec::<u8>::new());
     }
@@ -1572,6 +1628,8 @@ mod tests {
             .collect();
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
+        // No focus event arrives in a test: the window is the one in use.
+        zendo.focused = true;
         zendo.scanning = false;
         zendo.sort = Sort::Title;
         zendo.library = Some(Library {
@@ -1662,7 +1720,7 @@ mod tests {
         );
         let _ = zendo.update(Message::ToggleSelected);
         assert!(zendo.selected_games.is_empty(), "pressed again, it is left");
-        let _ = zendo.update(Message::ToggleSelectedAt(2));
+        let _ = zendo.update(Message::ToggleSelectedAt("desktop:2".into()));
         assert_eq!(
             zendo.selected_games.iter().collect::<Vec<_>>(),
             ["desktop:2"]
@@ -1691,8 +1749,8 @@ mod tests {
     #[test]
     fn a_rescan_drops_marks_of_games_that_left() {
         let mut zendo = zendo_with(3, 3);
-        let _ = zendo.update(Message::ToggleSelectedAt(0));
-        let _ = zendo.update(Message::ToggleSelectedAt(1));
+        let _ = zendo.update(Message::ToggleSelectedAt("desktop:0".into()));
+        let _ = zendo.update(Message::ToggleSelectedAt("desktop:1".into()));
         let left = Game::new(
             "desktop:1".into(),
             "Game 01".into(),
@@ -1718,8 +1776,8 @@ mod tests {
     #[test]
     fn assigning_reaches_every_marked_game() {
         let mut zendo = zendo_with(2, 3);
-        let _ = zendo.update(Message::ToggleSelectedAt(0));
-        let _ = zendo.update(Message::ToggleSelectedAt(1));
+        let _ = zendo.update(Message::ToggleSelectedAt("desktop:0".into()));
+        let _ = zendo.update(Message::ToggleSelectedAt("desktop:1".into()));
         let marked = zendo.selected_games.clone();
         press(&mut zendo, CategoriesMessage::Open(marked));
         press(&mut zendo, CategoriesMessage::Typed("Book".into()));

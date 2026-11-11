@@ -331,11 +331,11 @@ fn with_sizes(games: &mut [Owned]) {
 ///
 /// When no one is signed in, the engine fails or the store cannot be
 /// reached.
-pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
-    let games = match store {
+pub fn fetch(store: Store) -> anyhow::Result<(Vec<Owned>, Vec<String>)> {
+    let (games, problems) = match store {
         Store::Epic => {
             let output = store.run_checked(&["list", "--json"])?;
-            parse_legendary(&output.stdout)?
+            (parse_legendary(&output.stdout)?, Vec::new())
         }
         Store::Amazon => {
             store.run_checked(&["library", "sync"])?;
@@ -345,11 +345,11 @@ pub fn fetch(store: Store) -> anyhow::Result<Vec<Owned>> {
                 .join("nile/library.json");
             let bytes =
                 fs::read(&file).with_context(|| format!("could not read {}", file.display()))?;
-            parse_nile(&bytes)?
+            (parse_nile(&bytes)?, Vec::new())
         }
         Store::Gog => gog()?,
     };
-    keep(store.into(), games)
+    Ok((keep(store.into(), games)?, problems))
 }
 
 /// Sorts a store's list, keeps it in the cache and finds its images.
@@ -792,7 +792,7 @@ fn agent() -> ureq::Agent {
 /// GOG: the Galaxy library's GOG releases, each looked up in GOG's games
 /// database. Each game's record is kept with its `ETag`, so asking again
 /// costs a "not changed" per game.
-fn gog() -> anyhow::Result<Vec<Owned>> {
+fn gog() -> anyhow::Result<(Vec<Owned>, Vec<String>)> {
     #[derive(Deserialize)]
     struct Page {
         #[serde(default)]
@@ -847,6 +847,7 @@ fn gog() -> anyhow::Result<Vec<Owned>> {
         .context("no home folder")?
         .join("zendo/store/gogdb");
     let mut games = Vec::new();
+    let mut problems = Vec::new();
     for release in releases
         .into_iter()
         .filter(|release| release.platform_id == "gog")
@@ -855,18 +856,25 @@ fn gog() -> anyhow::Result<Vec<Owned>> {
             Value::String(id) => id.clone(),
             other => other.to_string(),
         };
-        let record = gamesdb(
+        let record = match gamesdb(
             &agent,
             &dir,
             &id,
             release.certificate.as_deref(),
             &credentials.access_token,
-        )?;
+        ) {
+            Ok(record) => record,
+            // One game's record failing does not lose the others.
+            Err(err) => {
+                problems.push(format!("{id}: {err:#}"));
+                continue;
+            }
+        };
         if let Some(owned) = record.as_ref().and_then(from_gamesdb) {
             games.push(owned);
         }
     }
-    Ok(games)
+    Ok((games, problems))
 }
 
 /// One game's record in GOG's games database, from the cache when GOG says

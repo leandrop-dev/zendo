@@ -2359,6 +2359,64 @@ grouping and wrapping, the FOMOD installer's pad input and footer, the
 launch-options form's sticky footer and field errors, the card-fetch error
 states, and the filesystem reads in `view`.
 
+## The engineering pass, 2026-11-11
+
+The third pass over the review, after the two quick ones: the findings that
+change state or scheduling but need no visual decision. 26 built; the few
+that add a new card state or a test suite are left for the batch that tries
+the window.
+
+- Core: `gog_playtime` takes the queue under its lock and sends outside it,
+  putting back what could not be sent before anything added meanwhile; the
+  umu id is passed into `prefix_command` instead of overwritten, so no
+  lookup is made for it; a hand-broken `gamescope_more` is a warning on
+  `Started` rather than silently fewer options; a mod's files and installer
+  are moved aside and put back when the list write fails (`mods/add.rs`);
+  `.nam` is found in any case; a symlink or unreadable mod folder is an
+  error in `overview`, not "0 files"; `Sort::compare_with_titles` takes the
+  lowered titles once; a Stop after a successful install is `Done`, not a
+  job that can never resume; one GOG games-database record failing keeps the
+  rest of the library and is reported; `Comet::drop` signals its whole
+  group; a hand-edited `local.toml` whose arguments have an open quote is a
+  problem line; nile's sign-in asks the account first and uses the prose
+  only when it is not there yet.
+- Window: a panic's payload reaches the status line
+  (`panicked-with`); `visible()` lowers each title once; `WindowReady` is
+  its own message, so the controller is not armed before a focus event; the
+  palette comes from `Themes`, not a global, in the application's theme;
+  scroll events name their grid and one from the page being left is
+  ignored; Ctrl+F on the Store focuses its search field; a card click and a
+  mark carry the game's id, in the library and the Store; the cover
+  placeholder and the card button's style live in `style.rs`; a saved queue
+  arriving under a running job is merged instead of reordered; the finished
+  job is read through checked accessors; the Accounts page caches each
+  engine found by the check instead of walking `PATH` in `view`; the two
+  early returns of the Downloads page scroll; cancelling a FOMOD clears its
+  scratch folder through `blocking`.
+
+Deliberate differences from the reports' suggested code:
+
+- The window keeps one `viewport_height` for both grids: the window's
+  height is the same for both, and naming the grid already stops the
+  misapplied event. Per-page heights would only matter for a few pixels of
+  scrollbar.
+- `queue[0]` is still used to remove the finished job after the front has
+  been checked; the reads that described it now go through `first()` and
+  `first_mut()`.
+- `add_as_from_nexus` remains a best-effort lookup for an archive added by
+  hand; only the file the user asked Nexus for reports an identification
+  failure.
+
+Deferred to the next batch: the four card fetches keeping their error and
+offering Retry, "Copied the report" waiting for the clipboard, the
+filesystem reads in `view` on the Proton and Settings pages, and the test
+suites the reports name for the library, the pages and the mods.
+
+Checked: `cargo fmt --check` clean, pedantic clippy with no warning,
+`cargo test --workspace` green (229 core, 122 window). The panic test now
+expects the payload's message, and the test window sets `focused`, since a
+focus event cannot arrive in a test.
+
 ## Next session, as logged to 2026-11-09
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built

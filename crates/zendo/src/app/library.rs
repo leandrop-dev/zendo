@@ -7,7 +7,7 @@ use iced::widget::{
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use iced::{Alignment, Background, Border, Color, ContentFit, Element, Length};
+use iced::{Alignment, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
 use super::categories::CategoriesMessage;
@@ -279,19 +279,19 @@ impl Zendo {
                 },
                 check: Some((
                     self.selected_games.contains(&game.id),
-                    Message::ToggleSelectedAt(index),
+                    Message::ToggleSelectedAt(game.id.clone()),
                 )),
                 line,
                 line_color,
                 selected: index == selected,
-                on_press: Message::Clicked(index),
+                on_press: Message::Clicked(game.id.clone()),
             })
         });
         let window = Window {
             scroll_top: self.scroll_top,
             height: self.viewport_height,
         };
-        cards_grid(cards, self.columns, window)
+        cards_grid(cards, self.columns, window, super::Grid::Library)
     }
 }
 
@@ -342,6 +342,7 @@ pub fn cards_grid<'a>(
     cards: impl ExactSizeIterator<Item = Element<'a, Message>>,
     columns: usize,
     window: Window,
+    page: super::Grid,
 ) -> Element<'a, Message> {
     // The count is the cards': two numbers could disagree, and then the
     // spacers and the scroll bar would lie.
@@ -376,7 +377,7 @@ pub fn cards_grid<'a>(
     let grid = column(rows).spacing(SPACING).width(width);
     scrollable(container(grid).center_x(Length::Fill).padding(GRID_PADDING))
         .id(grid_id())
-        .on_scroll(Message::Scrolled)
+        .on_scroll(move |viewport| Message::Scrolled(page, viewport))
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
@@ -468,14 +469,7 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
             .center(Length::Fill)
             .width(COVER_WIDTH)
             .height(COVER_HEIGHT)
-            .style(|_| container::Style {
-                background: Some(Background::Color(colors().surface)),
-                border: Border {
-                    radius: 8.0.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            })
+            .style(style::placeholder)
             .into(),
     };
     let mut badges = row![style::badge(
@@ -514,25 +508,7 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         .width(CARD_WIDTH)
         .height(CARD_HEIGHT)
         .on_press(on_press)
-        .style(move |_, status| button::Style {
-            background: Some(Background::Color(match status {
-                button::Status::Hovered | button::Status::Pressed => colors().surface,
-                _ => Color::TRANSPARENT,
-            })),
-            text_color: colors().text,
-            border: Border {
-                color: if ticked {
-                    colors().good
-                } else if selected {
-                    colors().accent
-                } else {
-                    Color::TRANSPARENT
-                },
-                width: 2.0,
-                radius: 12.0.into(),
-            },
-            ..button::Style::default()
-        })
+        .style(style::card_button(ticked, selected))
         .into()
 }
 

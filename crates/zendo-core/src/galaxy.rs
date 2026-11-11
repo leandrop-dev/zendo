@@ -140,9 +140,8 @@ impl Drop for Comet {
         if matches!(self.child.try_wait(), Ok(Some(_))) {
             return;
         }
-        let _ = Command::new("kill")
-            .args(["-INT", &self.child.id().to_string()])
-            .status();
+        // Its own group, so everything it started ends with it.
+        crate::downloads::signal_group(self.child.id(), "-INT");
         let asked = Instant::now();
         while asked.elapsed() < STOP_WAIT {
             if matches!(self.child.try_wait(), Ok(Some(_))) {

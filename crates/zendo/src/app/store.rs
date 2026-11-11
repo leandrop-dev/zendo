@@ -61,14 +61,14 @@ pub enum InfoState {
 pub enum StoreMessage {
     Cached(Vec<(Shop, Vec<Owned>)>),
     Refresh,
-    Fetched(Shop, Result<Vec<Owned>, String>),
+    Fetched(Shop, Result<Vec<Owned>, String>, Vec<String>),
     Search(String),
     Source(Option<Shop>),
     ToggleInstalled,
     Sort(Sort),
     /// "Also install its DLC" ticked or unticked for a game.
     ToggleDlc(String),
-    Clicked(usize),
+    Clicked(String),
     Info(String, Result<GameInfo, String>),
     /// What Steam's store says about a Steam game.
     SteamDetails(String, Result<Option<StoreDetails>, String>),
@@ -131,11 +131,17 @@ impl Zendo {
                 let connected = self.connected();
                 Task::batch(connected.into_iter().map(|shop| self.fetch_owned(shop)))
             }
-            StoreMessage::Fetched(shop, result) => {
+            StoreMessage::Fetched(shop, result, problems) => {
                 self.store.asking.remove(&shop);
                 match result {
                     Ok(games) => {
-                        self.store.errors.remove(&shop);
+                        // Games that could not be asked about are said, but
+                        // the rest of the list is kept.
+                        if problems.is_empty() {
+                            self.store.errors.remove(&shop);
+                        } else {
+                            self.store.errors.insert(shop, problems.join("; "));
+                        }
                         self.store.lists.insert(shop, games);
                         self.download_images()
                     }
@@ -167,9 +173,13 @@ impl Zendo {
                 self.store.sort = StoreSort(sort);
                 self.store_filter_changed()
             }
-            StoreMessage::Clicked(index) => {
-                self.store.selected = index;
-                self.open_owned()
+            StoreMessage::Clicked(id) => {
+                // By id: a list landing between the click and this message
+                // can reorder or shrink what the index pointed at.
+                if let Some(index) = self.store_visible().iter().position(|game| game.id == id) {
+                    self.store.selected = index;
+                }
+                self.navigate(Page::Owned(id))
             }
             StoreMessage::Info(id, result) => {
                 let state = match result {
@@ -291,7 +301,12 @@ impl Zendo {
         };
         Task::perform(
             blocking(move || owned::fetch(store).map_err(|err| format!("{err:#}"))),
-            move |result| Message::Store(StoreMessage::Fetched(shop, result)),
+            move |result| match result {
+                Ok((games, problems)) => {
+                    Message::Store(StoreMessage::Fetched(shop, Ok(games), problems))
+                }
+                Err(err) => Message::Store(StoreMessage::Fetched(shop, Err(err), Vec::new())),
+            },
         )
     }
 
@@ -482,11 +497,12 @@ impl Zendo {
                     line: card_line(game),
                     line_color: colors().dim,
                     selected: index == selected,
-                    on_press: Message::Store(StoreMessage::Clicked(index)),
+                    on_press: Message::Store(StoreMessage::Clicked(game.id.clone())),
                 })
             }),
             self.columns,
             window,
+            super::Grid::Store,
         )
     }
 

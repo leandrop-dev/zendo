@@ -1086,7 +1086,10 @@ impl Place {
         // Which mod gives each file, as Apply will place them.
         let mut owner: HashMap<String, usize> = HashMap::new();
         for (index, entry) in list.mods.iter().enumerate() {
-            let files = walk(&self.mod_root(entry)).unwrap_or_default();
+            // A symlink or a folder the user cannot read is a broken mod,
+            // not one with no files.
+            let files = walk(&self.mod_root(entry))
+                .with_context(|| format!("could not read the mod {}", entry.id))?;
             mods.push(ModInfo {
                 id: entry.id.clone(),
                 name: entry.name.clone(),

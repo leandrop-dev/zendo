@@ -262,11 +262,14 @@ impl Rules {
                 .flatten()
                 .flatten()
                 .filter_map(|entry| {
+                    // Any case, as `is_plugin` reads the other extensions.
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let stem = name
-                        .strip_suffix(".nam")
-                        .or_else(|| name.strip_suffix(".NAM"))?;
-                    Some(stem.to_owned())
+                    let path = Path::new(&name);
+                    let stem = path.file_stem()?.to_str()?;
+                    path.extension()?
+                        .to_str()?
+                        .eq_ignore_ascii_case("nam")
+                        .then(|| stem.to_owned())
                 })
                 .collect();
             stems.sort();

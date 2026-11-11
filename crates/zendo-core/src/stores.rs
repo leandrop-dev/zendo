@@ -305,7 +305,14 @@ impl Store {
                     "--client-id",
                     &login.client_id,
                 ])?;
-                if !String::from_utf8_lossy(&output.stderr).contains("registered a device") {
+                if !output.status.success() {
+                    bail!("{}", failure(self.engine_name(), &output));
+                }
+                // The account is the truth, not nile's wording: the prose
+                // only answers when the account is not there yet.
+                if self.account()?.is_none()
+                    && !String::from_utf8_lossy(&output.stderr).contains("registered a device")
+                {
                     bail!(
                         "Amazon turned the code down ({}); sign in again",
                         last_line(&output)

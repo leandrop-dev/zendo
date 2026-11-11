@@ -163,6 +163,7 @@ hints-owned = Enter instalar ou abrir · Esc voltar · F11 ecrã inteiro
 hints-closing = Enter fechar mesmo assim · Esc continuar a transferir
 hints-other = Esc voltar · F11 ecrã inteiro
 panicked = O Zendo encontrou um erro ao fazer isso; o terminal tem os detalhes
+panicked-with = O Zendo encontrou um erro ao fazer isso: { $error }
 
 ## Definições
 

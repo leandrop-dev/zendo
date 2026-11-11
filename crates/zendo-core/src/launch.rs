@@ -161,7 +161,10 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         }
         Launch::Command { program, args, dir } => {
             let options = options_for(game)?;
-            let mut words = wrappers_for(&options, false)?;
+            let (mut words, more) = wrappers_for(&options, false)?;
+            if warning.is_none() {
+                warning = more;
+            }
             words.push(program.clone());
             words.extend(args.iter().cloned());
             words.extend(options.arguments()?);
@@ -175,14 +178,15 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         }
         Launch::Local { program, args, dir } => {
             let options = options_for(game)?;
-            let command = local_command(game, program, args, dir.as_deref(), &options)?;
+            let command =
+                local_command(game, program, args, dir.as_deref(), &options, &mut warning)?;
             make_prefix(&command)?;
             (command, log_path(&game.id), None)
         }
         Launch::Engine { app, .. } => {
-            let command = engine_command(game, app)?;
+            let command = engine_command(game, app, &mut warning)?;
             make_prefix(&command)?;
-            warning = before_engine(game);
+            warning = warning.or_else(|| before_engine(game));
             let log = log_path(&game.id);
             (command, log, None)
         }
@@ -613,12 +617,18 @@ fn umu_setup(
     game: &Game,
     options: &LaunchOptions,
     store: Option<(&str, &str)>,
+    game_id: Option<&str>,
 ) -> anyhow::Result<Umu> {
     let prefix = prefix(game).context("no folder for the game's Wine prefix")?;
-    let game_id = match store {
-        Some((store, app)) => umu::game_id(store, app, &game.title),
-        None => umu::game_id("local", &game.id, &game.title),
-    };
+    // A tool run in the prefix names its own id; asking umu for the game's
+    // would be waste.
+    let game_id = game_id.map_or_else(
+        || match store {
+            Some((store, app)) => umu::game_id(store, app, &game.title),
+            None => umu::game_id("local", &game.id, &game.title),
+        },
+        str::to_owned,
+    );
     let mut env = vec![
         ("WINEPREFIX", prefix.clone().into_os_string()),
         ("GAMEID", game_id.clone().into()),
@@ -720,12 +730,7 @@ pub(crate) fn prefix_command(game: &Game, game_id: Option<&str>) -> anyhow::Resu
     let mut options = LaunchOptions::load(&game.id)?;
     options.no_umu = false;
     let store = store.map(|(key, app)| (umu::store_name(key), app.as_str()));
-    let mut umu = umu_setup(game, &options, store)?;
-    if let Some(id) = game_id
-        && let Some(pair) = umu.env.iter_mut().find(|(key, _)| *key == "GAMEID")
-    {
-        pair.1 = id.into();
-    }
+    let umu = umu_setup(game, &options, store, game_id)?;
     let (program, args) = umu.words.split_first().context("nothing to start")?;
     let mut command = Command::new(program);
     command
@@ -763,15 +768,18 @@ fn link_pfx(prefix: &Path) -> anyhow::Result<()> {
 
 /// The game's wrappers, and for a native game the Steam Linux Runtime its
 /// launch options choose.
-fn wrappers_for(options: &LaunchOptions, windows: bool) -> anyhow::Result<Vec<String>> {
-    let mut words = options.wrappers();
+fn wrappers_for(
+    options: &LaunchOptions,
+    windows: bool,
+) -> anyhow::Result<(Vec<String>, Option<String>)> {
+    let (mut words, warning) = options.wrappers();
     if !windows && let Some(runtime) = options.steam_runtime {
         let folder = runtime.find().with_context(|| {
             format!("{} is not installed: install it in Steam", runtime.label())
         })?;
         words.extend(runtime.words(&folder));
     }
-    Ok(words)
+    Ok((words, warning))
 }
 
 /// A game added by hand: its wrappers, umu-run for a Windows program, the
@@ -782,12 +790,16 @@ fn local_command(
     args: &[String],
     dir: Option<&Path>,
     options: &LaunchOptions,
+    warning: &mut Option<String>,
 ) -> anyhow::Result<Command> {
     let windows = needs_proton(game);
-    let mut words = wrappers_for(options, windows)?;
+    let (mut words, more) = wrappers_for(options, windows)?;
+    if warning.is_none() {
+        *warning = more;
+    }
     let mut env = Vec::new();
     if windows {
-        let umu = umu_setup(game, options, None)?;
+        let umu = umu_setup(game, options, None, None)?;
         words.extend(umu.words);
         env = umu.env;
     }
@@ -874,7 +886,7 @@ fn options_for(game: &Game) -> anyhow::Result<LaunchOptions> {
 
 /// The engine's own launch, with umu-run as the wrapper for a Windows
 /// game, inside the wrappers the game's launch options turn on.
-fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
+fn engine_command(game: &Game, app: &str, warning: &mut Option<String>) -> anyhow::Result<Command> {
     let store = match game.source {
         Source::Epic => Store::Epic,
         Source::Gog => Store::Gog,
@@ -882,7 +894,7 @@ fn engine_command(game: &Game, app: &str) -> anyhow::Result<Command> {
         _ => bail!("{} has no store engine to start it", game.title),
     };
     let options = options_for(game)?;
-    engine_command_with(game, app, store, &options, store.command()?)
+    engine_command_with(game, app, store, &options, store.command()?, warning)
 }
 
 /// [`engine_command`] from the engine's bare command.
@@ -892,12 +904,16 @@ fn engine_command_with(
     store: Store,
     options: &LaunchOptions,
     mut command: Command,
+    warning: &mut Option<String>,
 ) -> anyhow::Result<Command> {
     let windows = needs_proton(game);
-    let mut wrapper = wrappers_for(options, windows)?;
+    let (mut wrapper, more) = wrappers_for(options, windows)?;
+    if warning.is_none() {
+        *warning = more;
+    }
     if windows {
         let store_key = umu::store_name(store_key(store));
-        let umu = umu_setup(game, options, Some((store_key, app)))?;
+        let umu = umu_setup(game, options, Some((store_key, app)), None)?;
         command.envs(umu.env);
         wrapper.extend(umu.words);
     }
@@ -1110,8 +1126,15 @@ mod tests {
             environment: "DXVK_HUD=fps".into(),
             ..LaunchOptions::default()
         };
-        let command =
-            engine_command_with(&game, "1", Store::Gog, &options, Command::new("gogdl")).unwrap();
+        let command = engine_command_with(
+            &game,
+            "1",
+            Store::Gog,
+            &options,
+            Command::new("gogdl"),
+            &mut None,
+        )
+        .unwrap();
         assert_eq!(
             describe(&command),
             "DXVK_HUD=fps gogdl launch /games/Sugar 1 --platform linux \
@@ -1136,8 +1159,15 @@ mod tests {
             executable: Some("bin/sugar".into()),
             ..LaunchOptions::default()
         };
-        let command =
-            engine_command_with(&game, "1", Store::Gog, &options, Command::new("gogdl")).unwrap();
+        let command = engine_command_with(
+            &game,
+            "1",
+            Store::Gog,
+            &options,
+            Command::new("gogdl"),
+            &mut None,
+        )
+        .unwrap();
         assert_eq!(
             describe(&command),
             "gogdl launch /games/Sugar 1 --platform linux --override-exe /games/Sugar/bin/sugar"
@@ -1149,9 +1179,15 @@ mod tests {
             executable: Some("/games/Sugar/bin/sugar".into()),
             ..LaunchOptions::default()
         };
-        let command =
-            engine_command_with(&game, "1", Store::Epic, &whole, Command::new("legendary"))
-                .unwrap();
+        let command = engine_command_with(
+            &game,
+            "1",
+            Store::Epic,
+            &whole,
+            Command::new("legendary"),
+            &mut None,
+        )
+        .unwrap();
         assert_eq!(
             describe(&command),
             "legendary launch 1 --override-exe bin/sugar"
@@ -1161,8 +1197,15 @@ mod tests {
             ..LaunchOptions::default()
         };
         assert!(
-            engine_command_with(&game, "1", Store::Epic, &outside, Command::new("legendary"))
-                .is_err()
+            engine_command_with(
+                &game,
+                "1",
+                Store::Epic,
+                &outside,
+                Command::new("legendary"),
+                &mut None,
+            )
+            .is_err()
         );
     }
 
@@ -1190,6 +1233,7 @@ mod tests {
             Store::Epic,
             &options,
             Command::new("legendary"),
+            &mut None,
         )
         .unwrap();
         assert_eq!(
@@ -1321,6 +1365,7 @@ mod tests {
             &["--level".into(), "two words".into()],
             Some(&dir),
             &options,
+            &mut None,
         )
         .unwrap();
         assert_eq!(

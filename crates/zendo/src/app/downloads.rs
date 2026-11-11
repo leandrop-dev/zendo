@@ -11,7 +11,7 @@
 //! The page also keeps whether each game Zendo installed has an update,
 //! asked of its store once a session and after each job.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::thread;
 
@@ -220,9 +220,23 @@ impl DownloadsState {
 }
 
 impl Zendo {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per download message, each short"
+    )]
     pub(super) fn update_download(&mut self, message: DownloadMessage) -> Task<Message> {
         match message {
             DownloadMessage::Loaded(Ok(jobs)) => {
+                if self.downloads.running.is_some() {
+                    // The running job stays at the front; the saved queue
+                    // only adds what is not queued already.
+                    let known: HashSet<String> = self.downloads.queue.iter().map(Job::id).collect();
+                    self.downloads
+                        .queue
+                        .extend(jobs.into_iter().filter(|job| !known.contains(&job.id())));
+                    self.save_queue();
+                    return Task::none();
+                }
                 // Anything queued meanwhile goes after what was left.
                 let added = std::mem::replace(&mut self.downloads.queue, jobs);
                 for job in added {
@@ -551,7 +565,9 @@ impl Zendo {
                 Task::batch([cancelled, self.next_job()])
             }
             (Ok(Ended::Stopped), _) => {
-                let job = &mut self.downloads.queue[0];
+                let Some(job) = self.downloads.queue.first_mut() else {
+                    return Task::none();
+                };
                 job.paused = true;
                 self.status = Some(t!(
                     "downloads-paused-job",
@@ -562,33 +578,40 @@ impl Zendo {
                 self.next_job()
             }
             (Ok(Ended::Done), _) => {
+                let Some(job) = self.downloads.queue.first() else {
+                    return Task::none();
+                };
+                let (action, title, id) = (job.action, job.title.clone(), job.id());
                 let job = self.downloads.queue.remove(0);
                 self.save_queue();
                 self.status = Some(t!(
                     "downloads-done-job",
-                    action = action_label(job.action),
-                    title = job.title.as_str()
+                    action = action_label(action),
+                    title = title.as_str()
                 ));
                 // Asked again once the library has it back.
-                self.downloads.updates.remove(&job.id());
+                self.downloads.updates.remove(&id);
                 self.downloads.finished.push((job, Ok(())));
                 let rescan = self.update(Message::Refresh);
                 Task::batch([rescan, self.next_job()])
             }
             (Err(err), _) => {
+                let Some(first) = self.downloads.queue.first() else {
+                    return Task::none();
+                };
+                let (action, title) = (first.action, first.title.clone());
                 self.status = Some(t!(
                     "downloads-failed-job",
-                    action = action_label(self.downloads.queue[0].action),
-                    title = self.downloads.queue[0].title.as_str(),
+                    action = action_label(action),
+                    title = title.as_str(),
                     error = err.as_str()
                 ));
                 // An uninstall has nothing to carry on; the rest wait to be
                 // tried again.
-                if self.downloads.queue[0].action == Action::Uninstall {
+                if action == Action::Uninstall {
                     let job = self.downloads.queue.remove(0);
                     self.downloads.finished.push((job, Err(err)));
-                } else {
-                    let job = &mut self.downloads.queue[0];
+                } else if let Some(job) = self.downloads.queue.first_mut() {
                     job.paused = true;
                     self.downloads.errors.insert(job.id(), err);
                 }
@@ -692,9 +715,10 @@ impl Zendo {
         }
         if state.queue.is_empty() && state.finished.is_empty() {
             if !self.nexus.downloads.is_empty() || self.steam_installs.active() {
-                return body.into();
+                // A long Steam or mod card list still scrolls.
+                return scrollable(body).height(Length::Fill).into();
             }
-            return column![
+            return scrollable(column![
                 body,
                 centered(
                     column![
@@ -707,7 +731,8 @@ impl Zendo {
                     .spacing(12)
                     .align_x(Alignment::Center),
                 ),
-            ]
+            ])
+            .height(Length::Fill)
             .into();
         }
 

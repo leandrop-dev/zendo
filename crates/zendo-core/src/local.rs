@@ -218,7 +218,18 @@ pub(crate) fn scan() -> Scan {
     match load() {
         Ok(games) => Scan {
             games: games.iter().map(LocalGame::game).collect(),
-            problems: Vec::new(),
+            // `game` cannot fail, so it starts with no arguments when the
+            // file's quote is open; say so instead of hiding it.
+            problems: games
+                .iter()
+                .filter(|local| shlex::split(&local.arguments).is_none())
+                .map(|local| {
+                    format!(
+                        "{}: the arguments have a quote left open, so none are used",
+                        local.title
+                    )
+                })
+                .collect(),
         },
         Err(err) => Scan {
             games: Vec::new(),

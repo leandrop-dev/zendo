@@ -132,10 +132,54 @@ pub const BOLD: Font = Font {
     ..Font::DEFAULT
 };
 
+impl Default for Colors {
+    fn default() -> Self {
+        Self::ZENDO
+    }
+}
+
+/// A cover's surface before its image is there, and a picker's pending
+/// tile: one look, written once.
+pub fn placeholder(_: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(colors().surface)),
+        border: Border {
+            radius: 8.0.into(),
+            ..Border::default()
+        },
+        ..container::Style::default()
+    }
+}
+
+/// A game card's button: the marked and chosen borders, and the hover.
+pub fn card_button(
+    ticked: bool,
+    selected: bool,
+) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| button::Style {
+        background: Some(Background::Color(match status {
+            button::Status::Hovered | button::Status::Pressed => colors().surface,
+            _ => Color::TRANSPARENT,
+        })),
+        text_color: colors().text,
+        border: Border {
+            color: if ticked {
+                colors().good
+            } else if selected {
+                colors().accent
+            } else {
+                Color::TRANSPARENT
+            },
+            width: 2.0,
+            radius: 12.0.into(),
+        },
+        ..button::Style::default()
+    }
+}
+
 /// Iced's theme from the window's colours: what the widgets Zendo does
 /// not style itself (scroll bars, pick lists, togglers) are drawn in.
-pub fn theme() -> Theme {
-    let colors = colors();
+pub fn theme_of(colors: Colors) -> Theme {
     Theme::custom(
         "Zendo",
         iced::theme::Palette {

@@ -485,10 +485,12 @@ impl LaunchOptions {
     /// The wrappers the game runs inside, outermost first, before umu-run
     /// for a Windows game: `gamemoderun`, then gamescope (with
     /// `--mangoapp` for the overlay, as `MangoHud` does not draw inside
-    /// it), then `mangohud`.
+    /// it), then `mangohud`. With, second, what is wrong with options
+    /// changed by hand, which the game starts without.
     #[must_use]
-    pub fn wrappers(&self) -> Vec<String> {
+    pub fn wrappers(&self) -> (Vec<String>, Option<String>) {
         let mut words: Vec<String> = Vec::new();
+        let mut warning = None;
         if self.gamemode {
             words.push("gamemoderun".into());
         }
@@ -528,8 +530,12 @@ impl LaunchOptions {
             if let Some(fps) = self.gamescope_fps {
                 words.extend(["-r".into(), fps.to_string()]);
             }
-            // Checked when saved; a file changed by hand since gives none.
-            words.extend(self.gamescope_more().unwrap_or_default());
+            // Checked when saved; a file changed by hand since gives none,
+            // and the game is told so after it starts.
+            match self.gamescope_more() {
+                Ok(more) => words.extend(more),
+                Err(err) => warning = Some(format!("{err:#}")),
+            }
             if self.mangohud {
                 words.push("--mangoapp".into());
             }
@@ -537,7 +543,7 @@ impl LaunchOptions {
         } else if self.mangohud {
             words.push("mangohud".into());
         }
-        words
+        (words, warning)
     }
 
     /// The programs [`wrappers`](Self::wrappers) needs, with the names
@@ -690,7 +696,7 @@ mod tests {
             ..LaunchOptions::default()
         };
         assert_eq!(
-            options.wrappers(),
+            options.wrappers().0,
             [
                 "gamemoderun",
                 "gamescope",
@@ -727,7 +733,7 @@ mod tests {
             ..LaunchOptions::default()
         };
         assert_eq!(
-            window.wrappers(),
+            window.wrappers().0,
             ["gamescope", "-b", "-F", "nearest", "--"]
         );
         for (language, valid) in [
@@ -746,7 +752,7 @@ mod tests {
             mangohud: true,
             ..LaunchOptions::default()
         };
-        assert_eq!(alone.wrappers(), ["mangohud"]);
+        assert_eq!(alone.wrappers().0, ["mangohud"]);
         assert_eq!(alone.tools(), [("mangohud", "MangoHud")]);
     }
 }

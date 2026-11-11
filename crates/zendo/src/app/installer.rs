@@ -13,7 +13,7 @@ use zendo_core::mods::{self, Pending};
 
 use super::launch_options::overlay;
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo};
+use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
 #[derive(Debug, Default)]
@@ -34,13 +34,15 @@ struct Sheet {
     focus: Option<(usize, usize)>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum InstallerMessage {
     /// An option clicked: its group and place, and on or off.
     Pick(usize, usize, bool),
     Next,
     Back,
     Cancel,
+    /// What came of clearing the cancelled mod's scratch folder.
+    Cancelled(Result<(), String>),
 }
 
 impl Zendo {
@@ -129,16 +131,32 @@ impl Zendo {
                 Task::batch([task, self.next_installer()])
             }
             InstallerMessage::Cancel => {
+                let mut task = Task::none();
                 if let Some(sheet) = self.installer.open.take() {
                     self.status = Some(t!(
                         "installer-cancelled",
                         name = sheet.pending.name.as_str()
                     ));
                     if self.persist {
-                        std::thread::spawn(move || mods::cancel_install(&sheet.pending));
+                        let pending = sheet.pending;
+                        // Through `blocking`, as every other piece of work:
+                        // a panic becomes a status line.
+                        task = Task::perform(
+                            blocking(move || {
+                                mods::cancel_install(&pending);
+                                Ok::<(), String>(())
+                            }),
+                            |result| Message::Installer(InstallerMessage::Cancelled(result)),
+                        );
                     }
                 }
-                self.next_installer()
+                Task::batch([task, self.next_installer()])
+            }
+            InstallerMessage::Cancelled(result) => {
+                if let Err(err) = result {
+                    self.status = Some(err);
+                }
+                Task::none()
             }
         }
     }

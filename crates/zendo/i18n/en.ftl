@@ -158,6 +158,7 @@ hints-owned = Enter install or open · Esc back · F11 full-screen
 hints-closing = Enter close anyway · Esc keep downloading
 hints-other = Esc back · F11 full-screen
 panicked = Zendo hit a bug doing that; the terminal has the details
+panicked-with = Zendo hit a bug doing that: { $error }
 
 ## Settings
 
