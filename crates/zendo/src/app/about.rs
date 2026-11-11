@@ -35,40 +35,43 @@ pub fn page<'a>() -> Element<'a, Message> {
     };
 
     scrollable(
-        column![
+        container(
             column![
-                text("Zendo").size(40).font(BOLD),
-                text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
-                    .size(14)
-                    .color(colors().dim),
+                column![
+                    text("Zendo").size(40).font(BOLD),
+                    text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
+                        .size(14)
+                        .color(colors().dim),
+                ]
+                .spacing(2),
+                text(t!("about-intro")).size(15),
+                links,
+                card(t!("about-licence"), vec![t!("about-licence-text")]),
+                card(
+                    t!("about-built-on"),
+                    vec![
+                        t!("about-built-iced"),
+                        t!("about-built-gilrs"),
+                        t!("about-built-keyvalues"),
+                        t!("about-built-ureq"),
+                        t!("about-built-steamgriddb"),
+                        t!("about-built-fluent"),
+                    ]
+                ),
+                card(
+                    t!("about-ideas-from"),
+                    vec![
+                        t!("about-ideas-hikari"),
+                        t!("about-ideas-omarchy"),
+                        t!("about-ideas-heroic"),
+                    ]
+                ),
             ]
-            .spacing(2),
-            text(t!("about-intro")).size(15),
-            links,
-            card(t!("about-licence"), vec![t!("about-licence-text")]),
-            card(
-                t!("about-built-on"),
-                vec![
-                    t!("about-built-iced"),
-                    t!("about-built-gilrs"),
-                    t!("about-built-keyvalues"),
-                    t!("about-built-ureq"),
-                    t!("about-built-steamgriddb"),
-                    t!("about-built-fluent"),
-                ]
-            ),
-            card(
-                t!("about-ideas-from"),
-                vec![
-                    t!("about-ideas-hikari"),
-                    t!("about-ideas-omarchy"),
-                    t!("about-ideas-heroic"),
-                ]
-            ),
-        ]
-        .spacing(20)
-        .padding(24)
-        .max_width(860),
+            .spacing(20)
+            .padding(24)
+            .max_width(860),
+        )
+        .center_x(Length::Fill),
     )
     .height(Length::Fill)
     .into()

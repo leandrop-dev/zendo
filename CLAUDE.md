@@ -16,3 +16,12 @@ The rest is read on demand, never all at once:
 
 Keep `PLAN.md` current as decisions are made. What is built and checked goes
 into `docs/history.md`, dated, rather than growing `PLAN.md`.
+
+## Checking the window
+
+Say so before launching Zendo for a check: a start can scan the library,
+fetch covers and queue auto-updates. `grim` saves a still
+(`grim /tmp/opencode/zendo.png`), `wtype` types into it, and mouse input
+goes through `ydotool` with `ydotool.service` running (`systemctl --user
+start ydotool`) and Zendo focused. The virtual mouse reaches the whole
+session, so use it with the user present.

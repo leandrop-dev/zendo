@@ -41,8 +41,9 @@ pub struct Protons {
     error: Option<String>,
     asking: bool,
     download: Option<Download>,
-    /// The Proton whose Remove was pressed once.
-    confirm_remove: Option<String>,
+    /// The Proton whose Remove was pressed once, and the games using it,
+    /// counted then rather than in `view`.
+    confirm_remove: Option<(String, usize)>,
     /// The last thing that happened, and whether it went well.
     note: Option<(String, bool)>,
 }
@@ -215,8 +216,15 @@ impl Zendo {
     /// Remove, pressed once to ask and again to delete.
     fn remove_proton(&mut self, name: String) -> Task<Message> {
         let protons = &mut self.protons;
-        if protons.confirm_remove.as_deref() != Some(name.as_str()) {
-            protons.confirm_remove = Some(name);
+        if protons
+            .confirm_remove
+            .as_ref()
+            .map(|(chosen, _)| chosen.as_str())
+            != Some(name.as_str())
+        {
+            // Counted once, here: the view must not read launch options.
+            let users = games_using(&name);
+            protons.confirm_remove = Some((name, users));
             return Task::none();
         }
         protons.confirm_remove = None;
@@ -242,12 +250,14 @@ impl Zendo {
             self.protons.note = Some((err, false));
             return Task::none();
         }
-        // A default that is gone goes back to Automatic.
+        // Games that named it go back to Automatic, and the default too,
+        // or they would launch with a Proton that is gone.
+        let reset = reset_games_using(name);
         if self.config.default_proton.as_deref() == Some(name) {
             let _ = self.set_default_proton(None);
-            if self.protons.note.as_ref().is_some_and(|(_, good)| *good) {
-                self.protons.note = Some((t!("protons-removed-default", name = name), true));
-            }
+            self.protons.note = Some((t!("protons-removed-default", name = name), true));
+        } else if reset > 0 {
+            self.protons.note = Some((t!("protons-reset", name = name, count = reset), true));
         } else {
             self.protons.note = Some((t!("protons-removed", name = name), true));
         }
@@ -358,7 +368,10 @@ impl Zendo {
 
     fn installed_row<'a>(&'a self, found: &'a Proton) -> Element<'a, Message> {
         let removable = ge_proton::removable(found);
-        let confirming = self.protons.confirm_remove.as_deref() == Some(found.name.as_str());
+        let (confirming, users) = match &self.protons.confirm_remove {
+            Some((chosen, users)) if chosen == &found.name => (true, *users),
+            _ => (false, 0),
+        };
         let mut label = column![text(&found.name).size(14)].spacing(2);
         label = label.push(
             text(found.path.display().to_string())
@@ -366,11 +379,6 @@ impl Zendo {
                 .font(Font::MONOSPACE)
                 .color(colors().dim),
         );
-        let users = if confirming {
-            games_using(&found.name)
-        } else {
-            0
-        };
         if users > 0 {
             label = label.push(
                 text(t!("protons-chosen-by", count = users))
@@ -423,25 +431,42 @@ impl Zendo {
                 )
                 .into()
         };
+        // Natural widths: a `Fill` cell and `wrap` put the button on a
+        // line of its own even when there is room.
         row![
-            text(&release.name).size(14).width(200),
-            text(&release.published)
-                .size(13)
-                .color(colors().dim)
-                .width(110),
+            text(&release.name).size(14),
+            text(&release.published).size(13).color(colors().dim),
             text(Size::Bytes(release.size).to_string())
                 .size(13)
-                .color(colors().dim)
-                .width(Length::Fill),
+                .color(colors().dim),
             action,
         ]
         .spacing(12)
         .align_y(Alignment::Center)
+        .wrap()
         .into()
     }
 }
 
 /// How many games' launch options chose this Proton.
+/// Puts every game that chose this Proton back to Automatic, and says how
+/// many.
+fn reset_games_using(name: &str) -> usize {
+    let Ok(all) = LaunchOptions::load_all() else {
+        return 0;
+    };
+    let mut reset = 0;
+    for (id, mut options) in all {
+        if options.proton.as_deref() == Some(name) {
+            options.proton = None;
+            if options.save(&id).is_ok() {
+                reset += 1;
+            }
+        }
+    }
+    reset
+}
+
 fn games_using(name: &str) -> usize {
     LaunchOptions::load_all().map_or(0, |all| {
         all.values()
@@ -580,7 +605,11 @@ mod tests {
             "GE-Proton11-12".into(),
         )));
         assert_eq!(
-            zendo.protons.confirm_remove.as_deref(),
+            zendo
+                .protons
+                .confirm_remove
+                .as_ref()
+                .map(|(name, _)| name.as_str()),
             Some("GE-Proton11-12")
         );
         assert!(zendo.protons.note.is_none());

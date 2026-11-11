@@ -72,10 +72,15 @@ pub fn chosen(game: &Game, key: &str) -> Option<Chosen> {
                 .position(|task| task.path.as_deref() == Some(key))
                 .map(Chosen::Index)
         }
-        Source::Epic => epic_options(&epic_metadata(app)?)
-            .into_iter()
-            .find(|task| task.key == key)
-            .map(|task| Chosen::Arguments(task.detail)),
+        Source::Epic => {
+            let options = epic_options(&epic_metadata(app)?);
+            // A key saved before these were numbered is the display name.
+            options
+                .iter()
+                .find(|task| task.key == key)
+                .or_else(|| options.iter().find(|task| task.name == key))
+                .map(|task| Chosen::Arguments(task.detail.clone()))
+        }
         _ => None,
     }
 }
@@ -179,7 +184,8 @@ fn epic_options(metadata: &Value) -> Vec<StoreTask> {
             let name = value(&format!("extraLaunchOption_{number}_Name"))?;
             let arguments = value(&format!("extraLaunchOption_{number}_Args")).unwrap_or("");
             Some(StoreTask {
-                key: name.to_owned(),
+                // The number is stable when Epic rewords the name.
+                key: number.to_owned(),
                 name: name.to_owned(),
                 detail: arguments.to_owned(),
             })
@@ -250,6 +256,9 @@ mod tests {
                 ("Safe mode", "-safe")
             ]
         );
+        // The key is the number, not the name Epic may reword.
+        let keys: Vec<&str> = options.iter().map(|task| task.key.as_str()).collect();
+        assert_eq!(keys, ["001", "002"]);
         assert_eq!(epic_options(&json!({"metadata": {}})).len(), 0);
     }
 }

@@ -176,6 +176,10 @@ pub struct LaunchOptions {
     /// would.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub environment: String,
+    /// The winetricks components typed for this game's prefix, kept as
+    /// typed (`vcrun2022 d3dx9`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub winetricks_components: Option<String>,
 }
 
 /// How gamescope fits the game's frames to its own (`-S`).

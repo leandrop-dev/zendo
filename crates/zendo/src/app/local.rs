@@ -335,7 +335,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
         ),
         text(t!("local-cover-note")).size(13).color(colors().dim),
     ]
-    .spacing(18);
+    .spacing(16);
     if let Some(error) = &form.error {
         body = body.push(text(error).size(13).color(colors().bad));
     }

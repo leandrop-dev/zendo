@@ -219,6 +219,8 @@ enum Message {
     ToggleSelected,
     /// Marks the card at this place in the grid, or leaves it.
     ToggleSelectedAt(String),
+    /// Asks again for a game page's cards that could not be asked.
+    Retry(String),
     ClearSelection,
     /// Hides the current game, or brings it back when it is hidden.
     ToggleHidden,
@@ -644,6 +646,7 @@ impl Zendo {
             Message::Store(message) => self.update_store(message),
             Message::GameView(message) => self.update_game_view(message),
             Message::Clicked(id) => self.clicked(id),
+            Message::Retry(id) => self.retry_cards(&id),
             Message::Play => self.play(),
             Message::SetSort(sort) => self.set_sort(sort),
             Message::CycleSort if self.page == Page::Library => self.set_sort(self.sort.next()),
@@ -885,6 +888,7 @@ impl Zendo {
         match &self.page {
             Page::Game(id) | Page::Owned(id) => {
                 let id = id.clone();
+                self.load_prefix_components(&id);
                 Task::batch([
                     operation::scroll_to(game_scroll_id(), AbsoluteOffset { x: 0.0, y: 0.0 }),
                     self.want_info(&id),
@@ -906,6 +910,7 @@ impl Zendo {
                     self.themes.reload(Theme::dir().as_deref());
                 }
                 self.want_overlay();
+                self.settings_paths();
                 Task::batch([self.want_protons(), self.want_runtimes()])
             }
             Page::Accounts | Page::Downloads | Page::About => Task::none(),
@@ -1586,12 +1591,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_report_says_it_was_copied_or_why_not() {
+    fn a_report_says_it_was_gathered_or_why_not() {
         let mut zendo = zendo_with(1, 1);
         let _ = zendo.update(Message::ReportReady(Ok("# Zendo report\n\nline".into())));
         assert_eq!(
             zendo.diagnostics.note(),
-            Some(&("Copied the report: 3 lines.".to_owned(), true))
+            Some(&(t!("report-gathered", count = 3), true))
         );
         let _ = zendo.update(Message::ReportReady(Err("broke".into())));
         assert_eq!(zendo.diagnostics.note(), Some(&("broke".to_owned(), false)));

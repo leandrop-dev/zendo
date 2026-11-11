@@ -17,7 +17,8 @@ use crate::i18n::t;
 
 pub const COVER_WIDTH: f32 = 180.0;
 pub const COVER_HEIGHT: f32 = 270.0;
-const CAPTION_HEIGHT: f32 = 42.0;
+/// Two lines of the title and one of the line under it.
+const CAPTION_HEIGHT: f32 = 60.0;
 const CARD_PADDING: f32 = 6.0;
 pub const CARD_WIDTH: f32 = COVER_WIDTH + 2.0 * CARD_PADDING;
 pub const CARD_HEIGHT: f32 = COVER_HEIGHT + CAPTION_HEIGHT + 4.0 + 2.0 * CARD_PADDING;
@@ -133,7 +134,7 @@ impl Zendo {
         .spacing(12)
         .align_y(Alignment::Center)
         .padding(iced::Padding {
-            top: 20.0,
+            top: 24.0,
             right: GRID_PADDING,
             bottom: 8.0,
             left: GRID_PADDING,
@@ -157,7 +158,7 @@ impl Zendo {
             .filter(|game| game.hidden)
             .count();
 
-        let mut chips: Vec<Element<'_, Message>> = vec![chip(
+        let mut filters: Vec<Element<'_, Message>> = vec![chip(
             t!("library-all"),
             Some(games.len()),
             self.source.is_none() && self.category.is_none(),
@@ -166,7 +167,7 @@ impl Zendo {
         for source in Source::ALL {
             let count = games.iter().filter(|game| game.source == source).count();
             if count > 0 {
-                chips.push(chip(
+                filters.push(chip(
                     format::source(source),
                     Some(count),
                     self.source == Some(source),
@@ -174,23 +175,22 @@ impl Zendo {
                 ));
             }
         }
-        chips.push(space::horizontal().width(16).into());
-        chips.push(
+        let mut sorts: Vec<Element<'_, Message>> = vec![
             container(text(t!("library-sort")).size(13).color(colors().dim))
                 .padding([6, 0])
                 .into(),
-        );
+        ];
         for sort in [Sort::Recent, Sort::MostPlayed, Sort::Title] {
-            chips.push(chip(
+            sorts.push(chip(
                 format::sort(sort),
                 None,
                 self.sort == sort,
                 Message::SetSort(sort),
             ));
         }
+        let mut narrow: Vec<Element<'_, Message>> = Vec::new();
         if hidden > 0 || self.show_hidden {
-            chips.push(space::horizontal().width(16).into());
-            chips.push(chip(
+            narrow.push(chip(
                 t!("library-show-hidden"),
                 Some(hidden),
                 self.show_hidden,
@@ -198,13 +198,12 @@ impl Zendo {
             ));
         }
         if !self.categories.is_empty() {
-            chips.push(space::horizontal().width(16).into());
             for category in &self.categories {
                 let count = games
                     .iter()
                     .filter(|game| game.categories.contains(&category.name))
                     .count();
-                chips.push(chip(
+                narrow.push(chip(
                     category.name.clone(),
                     Some(count),
                     self.category.as_deref() == Some(category.name.as_str()),
@@ -212,16 +211,23 @@ impl Zendo {
                 ));
             }
         }
-        chips.push(space::horizontal().width(16).into());
-        chips.push(chip(
+        let mut actions: Vec<Element<'_, Message>> = vec![chip(
             t!("categories-open"),
             (!self.categories.is_empty()).then_some(self.categories.len()),
             false,
             Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
-        ));
-        self.selection_chips(&mut chips);
-        row(chips)
-            .spacing(8)
+        )];
+        self.selection_chips(&mut actions);
+        let mut groups: Vec<Element<'_, Message>> = vec![
+            row(filters).spacing(8).into(),
+            row(sorts).spacing(8).align_y(Alignment::Center).into(),
+        ];
+        if !narrow.is_empty() {
+            groups.push(row(narrow).spacing(8).into());
+        }
+        groups.push(row(actions).spacing(8).into());
+        row(groups)
+            .spacing(16)
             .padding([4.0, GRID_PADDING])
             .wrap()
             .vertical_spacing(8)
@@ -234,7 +240,6 @@ impl Zendo {
         if self.selected_games.is_empty() {
             return;
         }
-        chips.push(space::horizontal().width(16).into());
         chips.push(
             container(
                 text(t!("library-selected", count = self.selected_games.len()))
@@ -399,7 +404,7 @@ pub(super) fn chip<'a>(
         }));
     }
     button(content.align_y(Alignment::Center))
-        .padding([5, 12])
+        .padding([4, 12])
         .style(style::chip(chosen))
         .on_press(message)
         .into()
@@ -496,7 +501,7 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
     ];
 
     let caption = column![
-        text(title).size(14).wrapping(text::Wrapping::None),
+        text(title).size(14).wrapping(text::Wrapping::WordOrGlyph),
         text(line).size(12).color(line_color),
     ]
     .spacing(2)
@@ -515,6 +520,27 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_card_says_how_much_was_played() {
+        let mut game = Game::new(
+            "desktop:x".into(),
+            "X".into(),
+            Source::Desktop,
+            zendo_core::Launch::Uri { uri: String::new() },
+        );
+        assert_eq!(played_line(&game, 0), t!("played-never"));
+        game.played.last = Some(0);
+        assert_eq!(
+            played_line(&game, 0),
+            t!("played-when", when = format::ago(0, 0))
+        );
+        game.played.minutes = 90;
+        assert_eq!(
+            played_line(&game, 0),
+            t!("played-time", time = format::play_time(90))
+        );
+    }
 
     #[test]
     fn fits_whole_cards_beside_the_sidebar() {

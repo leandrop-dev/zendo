@@ -89,6 +89,33 @@ impl Setting {
 }
 
 impl Zendo {
+    /// Finds the paths Settings offers, once as it opens: `view` must not
+    /// stat the disk.
+    pub(super) fn settings_paths(&mut self) {
+        let folder = |path: Option<PathBuf>| -> Option<PathBuf> {
+            let path = path?;
+            let folder = if path.extension().is_some() {
+                path.parent().unwrap_or(&path).to_path_buf()
+            } else {
+                path
+            };
+            folder.is_dir().then_some(folder)
+        };
+        self.diagnostics.logs = launch::logs_dir().filter(|dir| dir.is_dir());
+        self.diagnostics.folders = vec![
+            folder(Config::path()),
+            folder(State::path()),
+            folder(covers::dir()),
+            folder(State::path().map(|state| state.with_file_name("downloads.json"))),
+            folder(
+                zendo_core::stores::Store::Epic
+                    .dir()
+                    .and_then(|dir| dir.parent().map(Path::to_path_buf)),
+            ),
+            folder(self.config.install_dir()),
+        ];
+    }
+
     pub(super) fn update_settings(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::KeyInput(value) => {
@@ -104,6 +131,9 @@ impl Zendo {
                 let key = self.key.value.trim().to_owned();
                 self.key.value.clone_from(&key);
                 if key.is_empty() {
+                    // A check still in flight is about a key that is gone.
+                    self.key.checking = None;
+                    self.key.save_after_check = false;
                     return self.save_setting(Setting::SteamGridDbKey {
                         key: None,
                         then: KeyThen::Removed,
@@ -143,7 +173,9 @@ impl Zendo {
                 match result {
                     Ok(text) => {
                         let lines = text.lines().count();
-                        self.diagnostics.note = Some((t!("report-copied", count = lines), true));
+                        // iced's clipboard write has no result to wait for,
+                        // so the note says what is true: the report was made.
+                        self.diagnostics.note = Some((t!("report-gathered", count = lines), true));
                         if self.persist {
                             iced::clipboard::write(text)
                         } else {
@@ -342,24 +374,27 @@ impl Zendo {
         ]
         .spacing(2);
         scrollable(
-            column![
-                header,
-                self.language_section(),
-                self.theme_section(),
-                self.key_section(),
-                self.nexus_section(),
-                self.covers_section(),
-                self.downloads_section(),
-                self.protons_section(),
-                self.runtimes_section(),
-                self.overlay_section(),
-                self.sources_section(),
-                files_section(self.config.install_dir()),
-                self.diagnostics_section(),
-            ]
-            .spacing(20)
-            .padding(24)
-            .max_width(960),
+            container(
+                column![
+                    header,
+                    self.language_section(),
+                    self.theme_section(),
+                    self.key_section(),
+                    self.nexus_section(),
+                    self.covers_section(),
+                    self.downloads_section(),
+                    self.protons_section(),
+                    self.runtimes_section(),
+                    self.overlay_section(),
+                    self.sources_section(),
+                    files_section(self.config.install_dir(), &self.diagnostics.folders),
+                    self.diagnostics_section(),
+                ]
+                .spacing(20)
+                .padding(24)
+                .max_width(960),
+            )
+            .center_x(Length::Fill),
         )
         .height(Length::Fill)
         .into()
@@ -435,7 +470,8 @@ impl Zendo {
     }
 
     fn diagnostics_section(&self) -> Element<'_, Message> {
-        let logs = launch::logs_dir().filter(|dir| dir.is_dir());
+        // Found when Settings opened: `view` reads state only.
+        let logs = self.diagnostics.logs.as_ref();
         let mut body = column![
             row![
                 button(
@@ -579,6 +615,9 @@ impl Zendo {
                     text(t!("count-games", count = count)).size(14)
                 },
             ]
+            .spacing(12)
+            .align_y(Alignment::Center)
+            .wrap()
             .into()
         })
         .collect();
@@ -598,60 +637,56 @@ impl Zendo {
     }
 }
 
-fn files_section<'a>(games: Option<PathBuf>) -> Element<'a, Message> {
-    let entry = |label: String, path: Option<PathBuf>| -> Element<'a, Message> {
-        let shown = path
-            .as_ref()
-            .map_or_else(|| t!("files-no-home"), |path| path.display().to_string());
-        // The folder, as the file may not exist yet.
-        let folder = path
-            .as_deref()
-            .map(|path| {
-                if path.extension().is_some() {
-                    path.parent().unwrap_or(path)
-                } else {
-                    path
-                }
-            })
-            .filter(|folder| folder.is_dir())
-            .map(Path::to_path_buf);
-        row![
-            text(label).size(14).color(colors().dim).width(160),
-            text(shown)
-                .size(13)
-                .font(Font::MONOSPACE)
-                .width(Length::Fill),
-            button(text(t!("files-open-folder")).size(13))
-                .padding([4, 10])
-                .style(style::secondary)
-                .on_press_maybe(
-                    folder.map(|folder| Message::Open(folder.to_string_lossy().into_owned()))
-                ),
-        ]
-        .spacing(12)
-        .align_y(Alignment::Center)
-        .into()
-    };
+fn files_section<'a>(
+    games: Option<PathBuf>,
+    folders: &'a [Option<PathBuf>],
+) -> Element<'a, Message> {
+    let entry =
+        |label: String, path: Option<PathBuf>, folder: Option<PathBuf>| -> Element<'a, Message> {
+            let shown = path
+                .as_ref()
+                .map_or_else(|| t!("files-no-home"), |path| path.display().to_string());
+            row![
+                text(label).size(14).color(colors().dim).width(160),
+                text(shown)
+                    .size(13)
+                    .font(Font::MONOSPACE)
+                    .width(Length::Fill),
+                button(text(t!("files-open-folder")).size(13))
+                    .padding([4, 10])
+                    .style(style::secondary)
+                    .on_press_maybe(
+                        folder.map(|folder| Message::Open(folder.to_string_lossy().into_owned()))
+                    ),
+            ]
+            .spacing(12)
+            .align_y(Alignment::Center)
+            .into()
+        };
+    let rows: Vec<Element<'a, Message>> = [
+        (t!("files-settings"), Config::path()),
+        (t!("files-state"), State::path()),
+        (t!("files-images"), covers::dir()),
+        (
+            t!("files-queue"),
+            State::path().map(|state| state.with_file_name("downloads.json")),
+        ),
+        (
+            t!("files-sign-ins"),
+            zendo_core::stores::Store::Epic
+                .dir()
+                .and_then(|dir| dir.parent().map(Path::to_path_buf)),
+        ),
+        (t!("files-games"), games),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (label, path))| entry(label, path, folders.get(index).cloned().flatten()))
+    .collect();
     section(
         t!("files-title"),
         t!("files-about"),
-        column![
-            entry(t!("files-settings"), Config::path()),
-            entry(t!("files-state"), State::path()),
-            entry(t!("files-images"), covers::dir()),
-            entry(
-                t!("files-queue"),
-                State::path().map(|state| state.with_file_name("downloads.json"))
-            ),
-            entry(
-                t!("files-sign-ins"),
-                zendo_core::stores::Store::Epic
-                    .dir()
-                    .and_then(|dir| dir.parent().map(Path::to_path_buf))
-            ),
-            entry(t!("files-games"), games),
-        ]
-        .spacing(10),
+        column(rows).spacing(10),
     )
 }
 
@@ -661,6 +696,10 @@ pub(super) struct Diagnostics {
     gathering: bool,
     /// What happened to the last report, and whether it went well.
     note: Option<(String, bool)>,
+    /// Where the logs are, and the folders the Files section can open:
+    /// found when Settings opens, not in `view`.
+    logs: Option<PathBuf>,
+    folders: Vec<Option<PathBuf>>,
 }
 
 #[cfg(test)]
@@ -700,4 +739,27 @@ pub(super) fn section<'a>(
     .width(Length::Fill)
     .style(style::card)
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_for_a_key_no_longer_checked_saves_nothing() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.key.value = "sgdb-old".into();
+        let _ = zendo.update(Message::SaveKey); // checks "sgdb-old"
+        zendo.key.value.clear();
+        let _ = zendo.update(Message::SaveKey); // removes the key
+        let _ = zendo.update(Message::KeyChecked(
+            "sgdb-old".into(),
+            Ok(KeyCheck::Accepted),
+        ));
+        assert_eq!(
+            zendo.config.steamgriddb_key, None,
+            "the removed key stays gone"
+        );
+    }
 }

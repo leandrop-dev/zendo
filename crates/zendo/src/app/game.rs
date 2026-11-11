@@ -94,7 +94,7 @@ impl Zendo {
             game_hero(game, update, self.hero_pills(&game.id)),
             self.action_bar(game, update),
         ]
-        .spacing(20)
+        .spacing(24)
         .padding(24);
         if self.game_view.more {
             page = page.push(self.more_row(game));
@@ -120,7 +120,7 @@ impl Zendo {
         }
         main.extend(self.achievements_card(&game.id));
         main.extend(self.requirements_card(&game.id));
-        let side = column![self.details_card(game), self.technical_card(game)].spacing(20);
+        let side = column![self.details_card(game), self.technical_card(game)].spacing(24);
 
         let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;
         page = if main.is_empty() {
@@ -128,10 +128,10 @@ impl Zendo {
         } else if two {
             page.push(
                 row![
-                    column(main).spacing(20).width(Length::FillPortion(3)),
+                    column(main).spacing(24).width(Length::FillPortion(3)),
                     side.width(Length::FillPortion(2)),
                 ]
-                .spacing(20),
+                .spacing(24),
             )
         } else {
             page.extend(main).push(side)
@@ -161,8 +161,10 @@ impl Zendo {
                 .on_press_maybe(queue(game, Action::Update).filter(|_| job.is_none())),
             );
         }
+        if super::launch_options::applies(game) {
+            bar = bar.push(launch_options_button(game));
+        }
         bar = bar
-            .push(launch_options_button(game))
             .push(
                 button(
                     text(if game.pinned {
@@ -287,7 +289,9 @@ impl Zendo {
         if let Some(app) = steam_app(game) {
             more = more.push(self.steam_buttons(game, app));
         }
-        more = more.push(self.local_buttons(game));
+        if game.source == Source::Local {
+            more = more.push(self.local_buttons(game));
+        }
         container(more)
             .padding([12, 16])
             .width(Length::Fill)
@@ -478,6 +482,24 @@ pub(super) fn card(heading: String, body: Element<'_, Message>) -> Element<'_, M
         .into()
 }
 
+/// A card that could not be asked, with the way to ask again.
+pub(super) fn failed_card<'a>(heading: String, id: &str, error: &str) -> Element<'a, Message> {
+    card(
+        heading,
+        column![
+            text(t!("card-failed", error = error))
+                .size(13)
+                .color(colors().dim),
+            button(text(t!("try-again")).size(13))
+                .padding([6, 12])
+                .style(style::secondary)
+                .on_press(Message::Retry(id.to_owned())),
+        ]
+        .spacing(10)
+        .into(),
+    )
+}
+
 pub(super) fn label_row(label: String, value: Element<'_, Message>) -> Element<'_, Message> {
     row![
         text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
@@ -625,7 +647,7 @@ pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
     badges = badges.extend(hero.pills);
     let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
     if let Some(developer) = hero.developer {
-        info = info.push(text(developer).size(15).color(colors().dim));
+        info = info.push(text(developer).size(14).color(colors().dim));
     }
     let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
     if !facts.is_empty() {
@@ -823,4 +845,31 @@ fn launch_options_button(game: &Game) -> Element<'_, Message> {
         .style(style::secondary)
         .on_press(Message::Sheet(super::launch_options::SheetMessage::Open))
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_page_sections_open_and_close() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let _ = zendo.update(Message::GameView(GameViewMessage::ToggleMore));
+        assert!(zendo.game_view.more);
+        let _ = zendo.update(Message::GameView(GameViewMessage::ToggleMore));
+        assert!(!zendo.game_view.more);
+        let _ = zendo.update(Message::GameView(GameViewMessage::ToggleTechnical));
+        assert!(zendo.game_view.technical);
+        let _ = zendo.update(Message::GameView(GameViewMessage::MoreAchievements));
+        assert_eq!(
+            zendo.game_view.achievements_more,
+            crate::app::achievements::SHOWN
+        );
+        let _ = zendo.update(Message::GameView(GameViewMessage::MoreChangelog));
+        assert_eq!(
+            zendo.game_view.changelog_more,
+            crate::app::gog_changelog::MORE
+        );
+    }
 }

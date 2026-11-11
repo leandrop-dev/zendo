@@ -973,6 +973,43 @@ mod tests {
     }
 
     #[test]
+    fn one_mods_failed_file_list_keeps_the_others_updates() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let file = FileInfo {
+            file_id: 2,
+            name: "New".into(),
+            version: Some("2".into()),
+            file_name: "a.zip".into(),
+            size_kb: None,
+            category_name: None,
+            uploaded_timestamp: 0,
+        };
+        let _ = zendo.update(Message::Nexus(NexusMessage::Updates(
+            "game:1".into(),
+            Ok((
+                vec![("mod-a".to_owned(), file)],
+                vec!["mod-b: offline".to_owned()],
+            )),
+        )));
+        assert!(
+            zendo
+                .nexus
+                .updates
+                .get("game:1")
+                .is_some_and(|updates| updates.contains_key("mod-a")),
+            "the rest stays"
+        );
+        assert!(
+            zendo
+                .status
+                .as_deref()
+                .is_some_and(|status| status.contains("mod-b")),
+            "the failure is said"
+        );
+    }
+
+    #[test]
     fn a_link_for_no_known_game_asks_which() {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;

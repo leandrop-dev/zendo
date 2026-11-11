@@ -126,8 +126,27 @@ impl State {
             return Ok(Self::default());
         };
         match fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text)
-                .with_context(|| format!("{}: not valid state", path.display())),
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(state) => Ok(state),
+                Err(err) => {
+                    // A corrupt file must not lock the window out of every
+                    // change: it is kept as `.bad` and the next start is
+                    // empty.
+                    let bad = path.with_extension("json.bad");
+                    let why = match fs::rename(&path, &bad) {
+                        Ok(()) => format!(
+                            "{} was not valid state and is now {}; starting empty",
+                            path.display(),
+                            bad.display()
+                        ),
+                        Err(move_err) => format!(
+                            "{}: not valid state (and could not be moved aside: {move_err})",
+                            path.display()
+                        ),
+                    };
+                    Err(err).with_context(|| why)
+                }
+            },
             Err(err) if err.kind() == ErrorKind::NotFound => Ok(Self::default()),
             Err(err) => Err(err).with_context(|| format!("could not read {}", path.display())),
         }

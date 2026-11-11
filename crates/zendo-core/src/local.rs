@@ -143,11 +143,11 @@ pub fn load() -> anyhow::Result<Vec<LocalGame>> {
 
 /// Reads the games, changes them and writes them back, holding the file's
 /// lock.
-fn change(edit: impl FnOnce(&mut Vec<LocalGame>)) -> anyhow::Result<()> {
+fn change(edit: impl FnOnce(&mut Vec<LocalGame>) -> anyhow::Result<()>) -> anyhow::Result<()> {
     let path = path().context("no home folder to keep the games added by hand in")?;
     paths::locked(&path, || {
         let mut games = load()?;
-        edit(&mut games);
+        edit(&mut games)?;
         let text = format!("{HEADER}{}", toml::to_string(&File { games })?);
         paths::write_atomic(&path, text.as_bytes())
             .with_context(|| format!("could not write {}", path.display()))
@@ -188,10 +188,15 @@ pub fn put(mut game: LocalGame) -> anyhow::Result<String> {
     change(|games| {
         if let Some(kept) = games.iter_mut().find(|kept| kept.id == game.id) {
             *kept = game.clone();
-        } else {
+        } else if game.id.is_empty() {
             game.id = new_id(&game.title, games);
             games.push(game.clone());
+        } else {
+            // The id names a game that is gone: a new one would lose its
+            // play time, pins and prefix.
+            anyhow::bail!("{} was removed; add it again", game.title);
         }
+        Ok(())
     })?;
     Ok(game.id)
 }
@@ -202,7 +207,10 @@ pub fn put(mut game: LocalGame) -> anyhow::Result<String> {
 ///
 /// When the file cannot be read or written.
 pub fn remove(id: &str) -> anyhow::Result<()> {
-    change(|games| games.retain(|game| game.id != id))
+    change(|games| {
+        games.retain(|game| game.id != id);
+        Ok(())
+    })
 }
 
 /// One game's record, for editing it.

@@ -13,8 +13,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use iced::widget::{
-    button, center, column, container, opaque, pick_list, row, scrollable, space, text, text_input,
-    toggler,
+    button, center, column, container, mouse_area, opaque, pick_list, row, scrollable, space, text,
+    text_input, toggler,
 };
 use iced::{Alignment, Background, Color, Element, Length, Task};
 use zendo_core::cloud_saves::{self, Done, How};
@@ -59,7 +59,52 @@ pub struct Sheet {
     gamescope: gamescope::Fields,
     /// For a native game: none, then the runtimes installed.
     runtimes: Vec<Pick<Runtime>>,
-    error: Option<String>,
+    error: Option<(Field, String)>,
+    /// The options as they were when the sheet opened, to tell whether
+    /// closing would discard anything.
+    original: LaunchOptions,
+    /// Close was pressed with changes: ask before discarding them.
+    confirm_close: bool,
+}
+
+/// The part of the form an error belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Field {
+    Arguments,
+    Environment,
+    Gamescope,
+    Other,
+}
+
+impl Sheet {
+    /// The options the form would save, and the field at fault when it
+    /// cannot.
+    fn build(&self) -> Result<LaunchOptions, (Field, String)> {
+        let mut options = self.options.clone();
+        options.gamescope_width = number(&self.width);
+        options.gamescope_height = number(&self.height);
+        options.frame_cap = number(&self.frame_cap);
+        options.executable = Some(self.executable.trim().to_owned())
+            .filter(|program| self.store.is_some() && !program.is_empty());
+        options.language = Some(self.language.trim().to_owned())
+            .filter(|language| self.store == Some(StoreKind::Epic) && !language.is_empty());
+        options
+            .arguments()
+            .map_err(|err| (Field::Arguments, format!("{err:#}")))?;
+        options
+            .environment()
+            .map_err(|err| (Field::Environment, format!("{err:#}")))?;
+        self.gamescope
+            .keep(&mut options)
+            .map_err(|err| (Field::Gamescope, err))?;
+        if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
+            return Err((Field::Gamescope, t!("options-size-both")));
+        }
+        options
+            .check()
+            .map_err(|err| (Field::Other, format!("{err:#}")))?;
+        Ok(options)
+    }
 }
 
 /// The cloud saves part: the sync running, the Upload or Download pressed
@@ -328,6 +373,9 @@ pub enum SheetMessage {
     After(String),
     Save,
     Close,
+    /// Close, with changes to discard.
+    Discard,
+    KeepEditing,
 }
 
 /// Whether the game has launch options Zendo applies.
@@ -429,7 +477,25 @@ impl Zendo {
             | SheetMessage::Before(_)
             | SheetMessage::After(_) => return self.update_starting(message),
             SheetMessage::Save => return self.save_sheet(),
-            SheetMessage::Close => self.sheet = None,
+            SheetMessage::Close => {
+                let Some(sheet) = self.sheet.as_mut() else {
+                    return Task::none();
+                };
+                if sheet
+                    .build()
+                    .map_or(true, |options| options != sheet.original)
+                {
+                    sheet.confirm_close = true;
+                } else {
+                    self.sheet = None;
+                }
+            }
+            SheetMessage::Discard => self.sheet = None,
+            SheetMessage::KeepEditing => {
+                if let Some(sheet) = self.sheet.as_mut() {
+                    sheet.confirm_close = false;
+                }
+            }
         }
         Task::none()
     }
@@ -526,7 +592,7 @@ impl Zendo {
                         sheet.executable = kept_program(sheet.folder.as_deref(), &path);
                     }
                     Ok(None) => {}
-                    Err(err) => sheet.error = Some(err),
+                    Err(err) => sheet.error = Some((Field::Other, err)),
                 }
             }
             SheetMessage::Before(line) => sheet.options.before = line,
@@ -569,7 +635,7 @@ impl Zendo {
         else {
             return Task::none();
         };
-        let options = if self.persist {
+        let mut options = if self.persist {
             match LaunchOptions::load(&game.id) {
                 Ok(options) => options,
                 Err(err) => {
@@ -586,6 +652,20 @@ impl Zendo {
             (Launch::Engine { .. }, Source::Epic) => Some(StoreKind::Epic),
             (Launch::Engine { .. }, Source::Gog) => Some(StoreKind::Gog),
             _ => None,
+        };
+        let listed = if store.is_some() {
+            let listed = store_tasks::listed(&game);
+            // Epic's options are keyed by their number now: a task saved
+            // as a display name moves to its number and is written back.
+            if let Some(saved) = options.task.as_deref()
+                && !listed.iter().any(|task| task.key == saved)
+                && let Some(task) = listed.iter().find(|task| task.name == saved)
+            {
+                options.task = Some(task.key.clone());
+            }
+            listed
+        } else {
+            Vec::new()
         };
         self.sheet = Some(Sheet {
             id: game.id.clone(),
@@ -614,7 +694,7 @@ impl Zendo {
             folder: game.details.install_path.clone(),
             executable: options.executable.clone().unwrap_or_default(),
             tasks: if store.is_some() {
-                task_choices(store_tasks::listed(&game), options.task.as_deref())
+                task_choices(listed, options.task.as_deref())
             } else {
                 Vec::new()
             },
@@ -628,9 +708,11 @@ impl Zendo {
             } else {
                 runtime_choices(&steam_runtime::installed(), options.steam_runtime)
             },
+            original: options.clone(),
             options,
             tools: Tools::find(),
             error: None,
+            confirm_close: false,
         });
         Task::none()
     }
@@ -639,22 +721,13 @@ impl Zendo {
         let Some(sheet) = self.sheet.as_mut() else {
             return Task::none();
         };
-        let mut options = sheet.options.clone();
-        options.gamescope_width = number(&sheet.width);
-        options.gamescope_height = number(&sheet.height);
-        options.frame_cap = number(&sheet.frame_cap);
-        options.executable = Some(sheet.executable.trim().to_owned())
-            .filter(|program| sheet.store.is_some() && !program.is_empty());
-        options.language = Some(sheet.language.trim().to_owned())
-            .filter(|language| sheet.store == Some(StoreKind::Epic) && !language.is_empty());
-        if let Err(err) = sheet.gamescope.keep(&mut options) {
-            sheet.error = Some(err);
-            return Task::none();
-        }
-        if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
-            sheet.error = Some(t!("options-size-both"));
-            return Task::none();
-        }
+        let options = match sheet.build() {
+            Ok(options) => options,
+            Err((field, err)) => {
+                sheet.error = Some((field, err));
+                return Task::none();
+            }
+        };
         let saved = if self.persist {
             options.save(&sheet.id)
         } else {
@@ -666,7 +739,7 @@ impl Zendo {
                 self.sheet = None;
                 self.cloud.reload();
             }
-            Err(err) => sheet.error = Some(format!("{err:#}")),
+            Err(err) => sheet.error = Some((Field::Other, format!("{err:#}"))),
         }
         Task::none()
     }
@@ -674,7 +747,9 @@ impl Zendo {
     /// The sheet over the page, when it is open.
     pub(super) fn with_sheet<'a>(&'a self, page: Element<'a, Message>) -> Element<'a, Message> {
         match &self.sheet {
-            Some(sheet) => overlay(page, sheet_card(sheet)),
+            Some(sheet) => {
+                overlay_dismiss(page, sheet_card(sheet), Message::Sheet(SheetMessage::Close))
+            }
             None => page,
         }
     }
@@ -692,6 +767,31 @@ pub(super) fn overlay<'a>(
     iced::widget::stack![page, opaque(backdrop)].into()
 }
 
+/// [`overlay`], with a click on the dimmed backdrop sending `close`.
+fn overlay_dismiss<'a>(
+    page: Element<'a, Message>,
+    card: Element<'a, Message>,
+    close: Message,
+) -> Element<'a, Message> {
+    let shade = mouse_area(
+        container(space::horizontal())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(Color::from_rgba8(0, 0, 0, 0.6))),
+                ..container::Style::default()
+            }),
+    )
+    .on_press(close);
+    // Only the card is opaque: the rest of the window is the backdrop,
+    // and a click there closes.
+    iced::widget::stack![page, opaque(shade), center(opaque(card)).padding(32)].into()
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "one section per part of the form, in reading order"
+)]
 fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
     let tools = sheet.tools;
@@ -752,30 +852,57 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     if sheet.windows {
         body = body.push(proton_switches(sheet));
     }
-    body = body.push(text_fields(options));
+    body = body.push(text_fields(options, sheet.error.as_ref()));
     body = body.push(scripts(options));
-    if let Some(error) = &sheet.error {
-        body = body.push(text(error).size(13).color(colors().bad));
+    // The error stays beside Save, where the user is looking when it
+    // appears, rather than at the bottom of the scroll.
+    let mut footer = row![].spacing(10).align_y(Alignment::Center);
+    if sheet.confirm_close {
+        footer = footer
+            .push(text(t!("options-discard-ask")).size(13).color(colors().bad))
+            .push(space::horizontal())
+            .push(
+                button(text(t!("options-keep-editing")).size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::Sheet(SheetMessage::KeepEditing)),
+            )
+            .push(
+                button(text(t!("options-discard")).size(14).font(BOLD))
+                    .padding([10, 24])
+                    .style(style::danger)
+                    .on_press(Message::Sheet(SheetMessage::Discard)),
+            );
+    } else {
+        footer = footer.push(space::horizontal());
+        if let Some((Field::Other, error)) = &sheet.error {
+            footer = footer.push(text(error).size(13).color(colors().bad));
+        }
+        footer = footer
+            .push(
+                button(text(t!("cancel")).size(14))
+                    .padding([10, 18])
+                    .style(style::secondary)
+                    .on_press(Message::Sheet(SheetMessage::Close)),
+            )
+            .push(
+                button(text(t!("save")).size(14).font(BOLD))
+                    .padding([10, 24])
+                    .style(style::primary)
+                    .on_press(Message::Sheet(SheetMessage::Save)),
+            );
     }
-    body = body.push(
-        row![
-            space::horizontal(),
-            button(text(t!("cancel")).size(14))
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::Sheet(SheetMessage::Close)),
-            button(text(t!("save")).size(14).font(BOLD))
-                .padding([10, 24])
-                .style(style::primary)
-                .on_press(Message::Sheet(SheetMessage::Save)),
-        ]
-        .spacing(10),
-    );
 
-    container(scrollable(body.padding(24)))
-        .max_width(620)
-        .style(style::card)
-        .into()
+    container(column![
+        scrollable(body.padding(24)).height(Length::Fill),
+        container(footer).padding([16, 24]),
+    ])
+    .max_width(620)
+    // A definite height, so the footer is inside the card's hit region,
+    // not drawn past it.
+    .height(Length::Fill)
+    .style(style::card)
+    .into()
 }
 
 /// The switches Proton, Wine and DXVK read, for a Windows game.
@@ -1121,31 +1248,47 @@ fn fsr_sharpening(options: &LaunchOptions) -> Element<'_, Message> {
 }
 
 /// The game's arguments and environment.
-fn text_fields(options: &LaunchOptions) -> Element<'_, Message> {
-    column![
-        field(
-            t!("local-arguments"),
-            t!("options-arguments-about"),
-            text_input("-windowed", &options.arguments)
-                .on_input(|value| Message::Sheet(SheetMessage::Arguments(value)))
-                .on_submit(Message::Sheet(SheetMessage::Save))
-                .size(14)
-                .padding([8, 12])
-                .style(style::input),
-        ),
-        field(
-            t!("options-environment"),
-            t!("options-environment-about"),
-            text_input("DXVK_HUD=fps", &options.environment)
-                .on_input(|value| Message::Sheet(SheetMessage::Environment(value)))
-                .on_submit(Message::Sheet(SheetMessage::Save))
-                .size(14)
-                .padding([8, 12])
-                .style(style::input),
-        ),
-    ]
-    .spacing(18)
-    .into()
+fn text_fields<'a>(
+    options: &'a LaunchOptions,
+    error: Option<&'a (Field, String)>,
+) -> Element<'a, Message> {
+    let at = |which: Field| {
+        error
+            .filter(|(field, _)| *field == which)
+            .map(|(_, text)| text.as_str())
+    };
+    let mut fields = column![].spacing(18);
+    let mut arguments = column![field(
+        t!("local-arguments"),
+        t!("options-arguments-about"),
+        text_input("-windowed", &options.arguments)
+            .on_input(|value| Message::Sheet(SheetMessage::Arguments(value)))
+            .on_submit(Message::Sheet(SheetMessage::Save))
+            .size(14)
+            .padding([8, 12])
+            .style(style::input),
+    )]
+    .spacing(4);
+    if let Some(error) = at(Field::Arguments) {
+        arguments = arguments.push(text(error).size(13).color(colors().bad));
+    }
+    fields = fields.push(arguments);
+    let mut environment = column![field(
+        t!("options-environment"),
+        t!("options-environment-about"),
+        text_input("DXVK_HUD=fps", &options.environment)
+            .on_input(|value| Message::Sheet(SheetMessage::Environment(value)))
+            .on_submit(Message::Sheet(SheetMessage::Save))
+            .size(14)
+            .padding([8, 12])
+            .style(style::input),
+    )]
+    .spacing(4);
+    if let Some(error) = at(Field::Environment) {
+        environment = environment.push(text(error).size(13).color(colors().bad));
+    }
+    fields = fields.push(environment);
+    fields.into()
 }
 
 fn field<'a>(
@@ -1237,6 +1380,25 @@ mod tests {
     }
 
     #[test]
+    fn closing_with_changes_asks_first() {
+        let mut zendo = zendo_with(gog_game());
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        // Unchanged: Close closes at once.
+        let _ = zendo.update(Message::Sheet(SheetMessage::Close));
+        assert!(zendo.sheet.is_none());
+        let _ = zendo.update(Message::Sheet(SheetMessage::Open));
+        let _ = zendo.update(Message::Sheet(SheetMessage::MangoHud(true)));
+        let _ = zendo.update(Message::Sheet(SheetMessage::Close));
+        let sheet = zendo.sheet.as_ref().expect("the sheet stays");
+        assert!(sheet.confirm_close, "changed: it asks");
+        let _ = zendo.update(Message::Sheet(SheetMessage::KeepEditing));
+        assert!(!zendo.sheet.as_ref().unwrap().confirm_close);
+        let _ = zendo.update(Message::Sheet(SheetMessage::Close));
+        let _ = zendo.update(Message::Sheet(SheetMessage::Discard));
+        assert!(zendo.sheet.is_none());
+    }
+
+    #[test]
     fn opens_saves_and_closes_over_the_page() {
         let mut zendo = zendo_with(gog_game());
         let _ = zendo.update(Message::Sheet(SheetMessage::Open));
@@ -1250,8 +1412,11 @@ mod tests {
         let _ = zendo.update(Message::Activate);
         let error = zendo.sheet.as_ref().and_then(|sheet| sheet.error.clone());
         assert_eq!(
-            error.as_deref(),
-            Some("\"DXVK_HUD\" in the environment is not NAME=value")
+            error,
+            Some((
+                Field::Environment,
+                "\"DXVK_HUD\" in the environment is not NAME=value".to_owned()
+            ))
         );
         let _ = zendo.update(Message::Sheet(SheetMessage::Environment(
             "DXVK_HUD=fps".into(),

@@ -9,7 +9,7 @@ use iced::widget::{button, column, row, text};
 use iced::{Color, Element, Length, Task};
 use zendo_core::areweanticheatyet::{self, Entry, Note, Status};
 
-use super::game::card;
+use super::game::{card, failed_card};
 use super::style::{self, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -20,6 +20,8 @@ pub enum AntiCheatState {
     Asking,
     /// `None`: the list does not have it.
     Got(Option<Entry>),
+    /// What went wrong; the card offers to ask again.
+    Failed(String),
 }
 
 fn status_color(status: Status) -> Color {
@@ -56,7 +58,12 @@ fn status_about(status: Status) -> String {
 impl Zendo {
     /// Looks the game up in the list, on a thread, once a session.
     pub(super) fn want_anti_cheat(&mut self, id: &str, steam_app: Option<u32>) -> Task<Message> {
-        if !self.persist || self.anti_cheat.contains_key(id) {
+        if !self.persist
+            || matches!(
+                self.anti_cheat.get(id),
+                Some(AntiCheatState::Asking | AntiCheatState::Got(_))
+            )
+        {
             return Task::none();
         }
         self.anti_cheat
@@ -73,21 +80,18 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer; a failure (offline with no list kept, say) is
-    /// forgotten, so the page asks again next time it opens.
+    /// Keeps the answer; a failure (offline with no list kept, say) keeps
+    /// its reason, and the card offers to ask again.
     pub(super) fn anti_cheat_arrived(
         &mut self,
         id: String,
         result: Result<Option<Entry>, String>,
     ) -> Task<Message> {
-        match result {
-            Ok(entry) => {
-                self.anti_cheat.insert(id, AntiCheatState::Got(entry));
-            }
-            Err(_) => {
-                self.anti_cheat.remove(&id);
-            }
-        }
+        let state = match result {
+            Ok(entry) => AntiCheatState::Got(entry),
+            Err(err) => AntiCheatState::Failed(err),
+        };
+        self.anti_cheat.insert(id, state);
         Task::none()
     }
 
@@ -95,7 +99,7 @@ impl Zendo {
     fn anti_cheat_entry(&self, id: &str) -> Option<&Entry> {
         match self.anti_cheat.get(id)? {
             AntiCheatState::Got(Some(entry)) => Some(entry),
-            AntiCheatState::Got(None) | AntiCheatState::Asking => None,
+            AntiCheatState::Got(None) | AntiCheatState::Asking | AntiCheatState::Failed(_) => None,
         }
     }
 
@@ -106,6 +110,10 @@ impl Zendo {
         id: &str,
         main: &mut Vec<Element<'a, Message>>,
     ) {
+        if let Some(AntiCheatState::Failed(error)) = self.anti_cheat.get(id) {
+            main.push(failed_card(t!("anti-cheat-title"), id, error));
+            return;
+        }
         let Some(entry) = self.anti_cheat_entry(id) else {
             return;
         };
@@ -130,6 +138,7 @@ fn anti_cheat_card(entry: &Entry) -> Element<'_, Message> {
                 .color(colors().dim),
         );
     }
+    let head = head.wrap();
     let mut body = column![
         head,
         text(status_about(entry.status)).size(14).line_height(1.5),
@@ -240,9 +249,13 @@ mod tests {
             Err("offline".into()),
         ));
         assert!(
-            !zendo.anti_cheat.contains_key("steam:252490"),
-            "asked again next time"
+            matches!(
+                zendo.anti_cheat.get("steam:252490"),
+                Some(AntiCheatState::Failed(error)) if error == "offline"
+            ),
+            "the reason stays, with a way to ask again"
         );
+        assert_eq!(cards(&zendo, "steam:252490"), 2, "the failure card");
     }
 
     #[test]

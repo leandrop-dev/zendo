@@ -159,6 +159,7 @@ hints-closing = Enter close anyway · Esc keep downloading
 hints-other = Esc back · F11 full-screen
 panicked = Zendo hit a bug doing that; the terminal has the details
 panicked-with = Zendo hit a bug doing that: { $error }
+card-failed = Could not ask: { $error }
 
 ## Settings
 
@@ -191,7 +192,7 @@ report-about = A report of what Zendo found, to paste into a bug report: the sys
 report-gathering = Gathering…
 report-copy = Copy report
 report-open-logs = Open launch logs
-report-copied = Copied the report: { $count } lines.
+report-gathered = Report gathered: { $count } lines. The clipboard write is best effort; `zendo report` prints it.
 images-none = No images to download
 images-left = { $count } left
 covers-title = Covers
@@ -585,6 +586,9 @@ options-proton-default-umu = Default (UMU-Proton, downloaded by umu)
 options-proton-missing = { $name } (not installed; the default runs)
 options-size-both = Give gamescope both a width and a height, or neither
 options-saved = Saved { $title }'s launch options
+options-discard-ask = Discard the changes to this game's launch options?
+options-keep-editing = Keep editing
+options-discard = Discard
 options-title = { $title } · Launch options
 options-proton-about = Runs the Windows game. GE-Proton carries the most fixes; Settings sets the default.
 options-mangohud-about = An overlay with the frame rate, frame times and temperatures.
@@ -718,6 +722,7 @@ protons-installed-note = { $name } is installed; launch options can choose it
 protons-stopped = Stopped downloading { $name }
 protons-removed-default = Removed { $name }; it was the default, so Automatic is used now
 protons-removed = Removed { $name }
+protons-reset = Removed { $name }; { $count } games go back to Automatic
 protons-umu = UMU-Proton, which umu downloads
 protons-default-set = Games without a Proton of their own now run with { $name }
 protons-automatic = Automatic: newest GE-Proton first ({ $name })

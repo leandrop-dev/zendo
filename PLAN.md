@@ -30,10 +30,10 @@ whole-workspace review the same day (Rust and Iced) found 25 must-fix
 faults, all of them since fixed, the last one (the settings save) after the
 user's first tries the same day, which also fixed the category tick boxes'
 colour and Cat Quest II's cloud saves; its reports are in
-`.mallet/reviews/2026-11-10/`. On 2026-11-11 two quick passes over the
-review's non-blocking findings cleared 58 of them, and a third cleared 26
-more of the engineering ones (docs/history.md); the 29 left need a try-out
-or a decision, bar a few follow-ups on the cards, the clipboard and `view`.
+`.mallet/reviews/2026-11-10/`. The review's non-blocking findings were then
+cleared in passes on 2026-11-11, the last one built and looked at on screen
+(docs/history.md). The review is closed but for one note (`rust-facts` 11).
+Next is item 20.
 
 Next is item 20, the window: minimise when a game starts, Discord presence,
 rescanning by itself when a launcher's files change. The phase 5a gap is

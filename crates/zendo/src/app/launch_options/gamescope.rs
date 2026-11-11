@@ -8,7 +8,7 @@ use iced::widget::{column, pick_list, row, text, text_input};
 use iced::{Alignment, Element};
 use zendo_core::launch_options::{Filter, GAMESCOPE_SOFTEST, LaunchOptions, Scaler};
 
-use super::{Pick, Sheet, SheetMessage, field, number, size_input};
+use super::{Field, Pick, Sheet, SheetMessage, field, number, size_input};
 use crate::app::Message;
 use crate::app::style::{self, colors};
 use crate::i18n::t;
@@ -136,7 +136,7 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
     let fields = &sheet.gamescope;
     let set = |setting| Message::Sheet(SheetMessage::GamescopeSet(setting));
-    let sizes = column![
+    let mut sizes = column![
         size_row(
             t!("options-output-size"),
             (&sheet.width, SheetMessage::Width),
@@ -154,6 +154,9 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
         text(t!("options-sizes-about")).size(13).color(colors().dim),
     ]
     .spacing(8);
+    if let Some((Field::Gamescope, error)) = &sheet.error {
+        sizes = sizes.push(text(error).size(13).color(colors().bad));
+    }
     let scaling = scaling(options);
     column![
         labelled(

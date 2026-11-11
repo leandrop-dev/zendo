@@ -75,6 +75,24 @@ impl Zendo {
         Task::batch(tasks)
     }
 
+    /// Asks again for the cards that failed, with the Steam app id the
+    /// rating found.
+    pub(super) fn retry_cards(&mut self, id: &str) -> Task<Message> {
+        let app = match self.ratings.get(id) {
+            Some(RatingState::Got(Some(rating))) => Some(rating.app),
+            _ => None,
+        };
+        let mut tasks = vec![
+            self.want_anti_cheat(id, app),
+            self.want_requirements(id, app),
+            self.want_achievements(id),
+        ];
+        if let Some(app) = app {
+            tasks.push(self.want_deck(id, app));
+        }
+        Task::batch(tasks)
+    }
+
     /// The pills beside the badges on a game's page: `ProtonDB`'s, then
     /// the Steam Deck's.
     pub(super) fn hero_pills(&self, id: &str) -> Vec<Element<'_, Message>> {

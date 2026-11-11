@@ -164,6 +164,7 @@ hints-closing = Enter fechar mesmo assim · Esc continuar a transferir
 hints-other = Esc voltar · F11 ecrã inteiro
 panicked = O Zendo encontrou um erro ao fazer isso; o terminal tem os detalhes
 panicked-with = O Zendo encontrou um erro ao fazer isso: { $error }
+card-failed = Não foi possível perguntar: { $error }
 
 ## Definições
 
@@ -196,10 +197,7 @@ report-about = Um relatório do que o Zendo encontrou, para colar num relatório
 report-gathering = A reunir…
 report-copy = Copiar relatório
 report-open-logs = Abrir registos de lançamento
-report-copied = { $count ->
-    [one] Relatório copiado: 1 linha.
-   *[other] Relatório copiado: { $count } linhas.
-}
+report-gathered = Relatório reunido: { $count } linhas. A cópia para a área de transferência é uma tentativa; `zendo report` imprime-o.
 images-none = Não há imagens para transferir
 images-left = { $count ->
     [one] falta 1
@@ -599,6 +597,9 @@ options-proton-default-umu = Predefinido (UMU-Proton, transferido pelo umu)
 options-proton-missing = { $name } (não instalado; corre o predefinido)
 options-size-both = Indique ao gamescope a largura e a altura, ou nenhuma
 options-saved = Opções de lançamento de { $title } guardadas
+options-discard-ask = Descartar as alterações às opções de lançamento deste jogo?
+options-keep-editing = Continuar a editar
+options-discard = Descartar
 options-title = { $title } · Opções de lançamento
 options-proton-about = Corre o jogo de Windows. O GE-Proton traz mais correções; as Definições escolhem o predefinido.
 options-mangohud-about = Uma sobreposição com a taxa de fotogramas, os tempos de fotograma e as temperaturas.
@@ -732,6 +733,7 @@ protons-installed-note = { $name } está instalado; as opções de lançamento p
 protons-stopped = Transferência de { $name } parada
 protons-removed-default = { $name } removido; era o predefinido, por isso passa a ser usado o Automático
 protons-removed = { $name } removido
+protons-reset = { $name } removido; { $count } jogos voltam ao Automático
 protons-umu = UMU-Proton, que o umu transfere
 protons-default-set = Os jogos sem Proton próprio passam a correr com { $name }
 protons-automatic = Automático: o GE-Proton mais recente primeiro ({ $name })

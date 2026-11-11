@@ -11,7 +11,7 @@ use iced::{Alignment, Element, Length, Task};
 use zendo_core::achievements::{self, Achievement, Achievements};
 use zendo_core::steam;
 
-use super::game::{GameViewMessage, card};
+use super::game::{GameViewMessage, card, failed_card};
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking, format, now};
 use crate::i18n::t;
@@ -28,6 +28,8 @@ pub enum AchievementsState {
     Asking,
     /// `None`: the store gives none for it.
     Got(Option<Achievements>),
+    /// What went wrong; the card offers to ask again.
+    Failed(String),
 }
 
 impl Zendo {
@@ -37,7 +39,13 @@ impl Zendo {
         let from_store = ["gog:", "steam:", "epic:"]
             .iter()
             .any(|prefix| id.starts_with(prefix));
-        if !from_store || !self.persist || self.achievements.contains_key(id) {
+        if !from_store
+            || !self.persist
+            || matches!(
+                self.achievements.get(id),
+                Some(AchievementsState::Asking | AchievementsState::Got(_))
+            )
+        {
             return Task::none();
         }
         self.achievements
@@ -60,26 +68,26 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer; a failure (offline, say) is forgotten, so the
-    /// page asks again next time it opens.
+    /// Keeps the answer; a failure (offline, say) keeps its reason, and
+    /// the card offers to ask again.
     pub(super) fn achievements_arrived(
         &mut self,
         id: String,
         result: Result<Option<Achievements>, String>,
     ) -> Task<Message> {
-        match result {
-            Ok(found) => {
-                self.achievements.insert(id, AchievementsState::Got(found));
-            }
-            Err(_) => {
-                self.achievements.remove(&id);
-            }
-        }
+        let state = match result {
+            Ok(found) => AchievementsState::Got(found),
+            Err(err) => AchievementsState::Failed(err),
+        };
+        self.achievements.insert(id, state);
         Task::none()
     }
 
     /// The card, once the achievements have come.
     pub(super) fn achievements_card(&self, id: &str) -> Option<Element<'_, Message>> {
+        if let AchievementsState::Failed(error) = self.achievements.get(id)? {
+            return Some(failed_card(t!("achievements-title"), id, error));
+        }
         let AchievementsState::Got(Some(found)) = self.achievements.get(id)? else {
             return None;
         };
@@ -234,9 +242,13 @@ mod tests {
         assert!(zendo.achievements_card("gog:2").is_none());
         let _ = zendo.update(Message::Achievements("gog:1".into(), Err("offline".into())));
         assert!(
-            !zendo.achievements.contains_key("gog:1"),
-            "asked again next time"
+            matches!(
+                zendo.achievements.get("gog:1"),
+                Some(AchievementsState::Failed(error)) if error == "offline"
+            ),
+            "the reason stays, with a way to ask again"
         );
+        assert!(zendo.achievements_card("gog:1").is_some());
     }
 
     #[test]

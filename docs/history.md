@@ -2417,6 +2417,84 @@ Checked: `cargo fmt --check` clean, pedantic clippy with no warning,
 expects the payload's message, and the test window sets `focused`, since a
 focus event cannot arrive in a test.
 
+## The leftovers, 2026-11-11
+
+After the three passes, the rest of the review's findings, plus the visual
+batch, were built and then looked at on screen.
+
+- The four cached cards keep a failure: `Failed(String)` in requirements,
+  achievements, anti-cheat and the Steam Deck pill, with Retry through
+  `Message::Retry` (the pill's reason in a tooltip). The reason no longer
+  disappears into "the store lists none".
+- The report note says "Report gathered", not "Copied": `iced` 0.14's
+  `clipboard::write` gives no result to wait for, so the note states only
+  what is known.
+- No filesystem reads in `view`: the Proton row's `games_using` is counted
+  when Remove is pressed (`confirm_remove` holds the count); the Settings
+  file and log paths are found when the page opens (`settings_paths`).
+- Stored-data policies, as agreed: a corrupt `state.json` is renamed to
+  `state.json.bad` and the next start is empty; Epic's launch options are
+  keyed by `extraLaunchOption_<n>` with a display-name migration in the
+  sheet and in `store_tasks::chosen`; `local::put` refuses a vanished id; a
+  failed Apply writes the previous profile list back; removing a Proton
+  sets the games that chose it back to Automatic; winetricks components are
+  per game (`LaunchOptions::winetricks_components`, loaded with the page);
+  the Nexus domain is filled in every mods entry point through `look`.
+- The Settings key flow has a test now; it found that removing a key left
+  an in-flight check able to write the old key back, so the empty-key path
+  clears `checking` and `save_after_check`. The category delete confirm and
+  `played_line` have tests too.
+- Visual batch: the game page is capped at 1280 and centred; the type
+  scale is 38/18/14/13/12; the library toolbar is rows of groups that wrap
+  between groups; a card's caption is two lines of title plus the played
+  line (60 px, `WordOrGlyph`); 20/18/5 px spacings became 24/16/4; the
+  zero-sized Launch options and Local buttons are left out instead of
+  spacing the bar; the FOMOD installer takes arrows to focus and Enter to
+  pick, with the focused row marked; the launch-options sheet has a pinned
+  footer and the error beside Save; Proton and Sources rows wrap.
+- Looked at on screen with `cargo build --release`, `grim`, and `ydotool`:
+  the library (grouped toolbar, two-line captions, five columns), the game
+  page (hero, pills, action bar, two columns), the launch-options sheet
+  (pinned footer, scrolling body), the Settings page, and its lower
+  sections after a scrollbar drag. The Proton release row was fixed then:
+  a `Fill` cell inside a wrapping row pushed the Download button onto a
+  line of its own even when there was room, so the row uses natural widths.
+
+Left open from this batch: clicking the dimmed backdrop still does
+nothing, a long launch-options form still closes without asking, validation
+errors are pinned beside Save rather than at their field, and the test
+suites named for the pages and mods are only partly added. Item 20 is next.
+
+Checked: `cargo fmt --check` clean, pedantic clippy with no warning,
+`cargo test --workspace` green (229 core, 126 window).
+
+## The second look at the leftovers, 2026-11-11
+
+The user looked at the screens and asked for two changes, and the rest of
+the open items followed.
+
+- The game page is full width again, as the store's game page is: the 1280
+  cap is gone. Settings and About are centred like Accounts, keeping their
+  960 and 860 widths.
+- The launch-options sheet's dimmed backdrop closes on a click now; only
+  the card is opaque, so a click outside it reaches the backdrop.
+- Closing the sheet with changes asks first: `Sheet::build` makes the
+  options the form would save, and `Close` compares them with the ones the
+  sheet opened with. Keep editing or Discard.
+- Validation errors sit at their field: arguments and environment under
+  their inputs, the gamescope sizes under the size rows; the rest stay
+  beside Save.
+- Tests: the page's sections open and close, a Nexus update with one failed
+  file list keeps the others and says so, and the close guard asks only
+  when there is a change. 129 window tests, 229 core.
+
+On screen, the footer of the launch-options sheet was drawn but did not
+take clicks: the `max_height` container left the footer outside its hit
+region. The sheets now take the height they are given (the 760 and 640 caps
+are gone), so the footer is inside the card and its buttons work; checked
+with Cancel, Keep editing and Discard. The backdrop click and the field
+error for the environment were checked too.
+
 ## Next session, as logged to 2026-11-09
 
 - The list after phase 7 (above), confirmed 2026-11-07. Item 1 built

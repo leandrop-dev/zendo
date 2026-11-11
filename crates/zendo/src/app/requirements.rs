@@ -8,7 +8,7 @@ use iced::widget::{column, row, text};
 use iced::{Element, Length, Task};
 use zendo_core::requirements::{self, From, Requirements, System};
 
-use super::game::{LABEL_WIDTH, card};
+use super::game::{LABEL_WIDTH, card, failed_card};
 use super::style::{BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -19,13 +19,20 @@ pub enum RequirementsState {
     Asking,
     /// `None`: no store lists them.
     Got(Option<Requirements>),
+    /// What went wrong; the card offers to ask again.
+    Failed(String),
 }
 
 impl Zendo {
     /// Asks the stores for the game's requirements, on a thread, once a
     /// session.
     pub(super) fn want_requirements(&mut self, id: &str, steam_app: Option<u32>) -> Task<Message> {
-        if !self.persist || self.requirements.contains_key(id) {
+        if !self.persist
+            || matches!(
+                self.requirements.get(id),
+                Some(RequirementsState::Asking | RequirementsState::Got(_))
+            )
+        {
             return Task::none();
         }
         let linux = self
@@ -51,21 +58,18 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer; a failure (offline, say) is forgotten, so the
-    /// page asks again next time it opens.
+    /// Keeps the answer; a failure (offline, say) keeps its reason, and
+    /// the card offers to ask again.
     pub(super) fn requirements_arrived(
         &mut self,
         id: String,
         result: Result<Option<Requirements>, String>,
     ) -> Task<Message> {
-        match result {
-            Ok(found) => {
-                self.requirements.insert(id, RequirementsState::Got(found));
-            }
-            Err(_) => {
-                self.requirements.remove(&id);
-            }
-        }
+        let state = match result {
+            Ok(found) => RequirementsState::Got(found),
+            Err(err) => RequirementsState::Failed(err),
+        };
+        self.requirements.insert(id, state);
         Task::none()
     }
 
@@ -73,6 +77,9 @@ impl Zendo {
     pub(super) fn requirements_card(&self, id: &str) -> Option<Element<'_, Message>> {
         match self.requirements.get(id)? {
             RequirementsState::Got(Some(found)) => Some(requirements_card(found)),
+            RequirementsState::Failed(error) => {
+                Some(failed_card(t!("requirements-title"), id, error))
+            }
             RequirementsState::Got(None) | RequirementsState::Asking => None,
         }
     }
@@ -164,8 +171,12 @@ mod tests {
         assert!(zendo.requirements_card("gog:2").is_none());
         let _ = zendo.update(Message::Requirements("gog:1".into(), Err("offline".into())));
         assert!(
-            !zendo.requirements.contains_key("gog:1"),
-            "asked again next time"
+            matches!(
+                zendo.requirements.get("gog:1"),
+                Some(RequirementsState::Failed(error)) if error == "offline"
+            ),
+            "the reason stays, with a way to ask again"
         );
+        assert!(zendo.requirements_card("gog:1").is_some());
     }
 }

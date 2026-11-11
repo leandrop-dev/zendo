@@ -484,6 +484,18 @@ mod tests {
     }
 
     #[test]
+    fn deletes_a_category_only_on_the_second_press() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        zendo.categories = vec![category("Co-op", &["a"])];
+        let _ = zendo.update_categories(CategoriesMessage::Open(BTreeSet::new()));
+        let _ = zendo.update_categories(CategoriesMessage::Delete("Co-op".into()));
+        assert_eq!(zendo.categories.len(), 1, "the first press only asks");
+        let _ = zendo.update_categories(CategoriesMessage::Delete("Co-op".into()));
+        assert_eq!(zendo.categories.len(), 0);
+    }
+
+    #[test]
     fn ticks_only_when_every_target_is_in_the_category() {
         let co_op = category("Co-op", &["a"]);
         assert!(!member(&sheet(&[]), &co_op), "no targets, nothing to tick");

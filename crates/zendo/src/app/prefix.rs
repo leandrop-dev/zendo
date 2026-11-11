@@ -13,6 +13,7 @@ use zendo_core::Game;
 use zendo_core::gog_setup;
 use zendo_core::known_fixes::{self, Fixes};
 use zendo_core::launch;
+use zendo_core::launch_options::LaunchOptions;
 use zendo_core::prefix_tools::{self, Ran, Tool};
 
 use super::game::card;
@@ -24,8 +25,8 @@ use crate::i18n::t;
 pub struct PrefixState {
     /// What runs in each game's prefix now, by id.
     busy: HashMap<String, Tool>,
-    /// The components typed to install.
-    components: String,
+    /// The components typed to install, by game id.
+    components: HashMap<String, String>,
     /// How each game's last tool went: the words, and whether it went well.
     notes: HashMap<String, (String, bool)>,
     /// Each game's known fixes, read as its page opens; `None` when the
@@ -39,7 +40,8 @@ pub enum PrefixMessage {
     /// Run a program: choose it first.
     Pick(String),
     Picked(String, Result<Option<PathBuf>, String>),
-    Components(String),
+    /// What was typed, and for which game's prefix.
+    Components(String, String),
     Install(String),
     Done(String, Result<Ran, String>),
     /// The game's known fixes, read from the list kept.
@@ -98,17 +100,23 @@ impl Zendo {
                 self.prefix.notes.insert(id, (err, false));
                 Task::none()
             }
-            PrefixMessage::Components(typed) => {
-                self.prefix.components = typed;
+            PrefixMessage::Components(id, typed) => {
+                self.prefix.components.insert(id, typed);
                 Task::none()
             }
-            PrefixMessage::Install(id) => match prefix_tools::components(&self.prefix.components) {
-                Ok(verbs) => self.run_tool(id, Tool::Components(verbs)),
-                Err(err) => {
-                    self.prefix.notes.insert(id, (format!("{err:#}"), false));
-                    Task::none()
+            PrefixMessage::Install(id) => {
+                let typed = self.prefix.components.get(&id).cloned().unwrap_or_default();
+                match prefix_tools::components(&typed) {
+                    Ok(verbs) => {
+                        self.save_prefix_components(&id, &typed);
+                        self.run_tool(id, Tool::Components(verbs))
+                    }
+                    Err(err) => {
+                        self.prefix.notes.insert(id, (format!("{err:#}"), false));
+                        Task::none()
+                    }
                 }
-            },
+            }
             PrefixMessage::Fixes(id, fixes) => {
                 self.prefix.fixes.insert(id, fixes);
                 Task::none()
@@ -119,7 +127,9 @@ impl Zendo {
                 };
                 let note = match (&tool, result) {
                     (Tool::Components(_), Ok(ran)) => {
-                        self.prefix.components.clear();
+                        if let Some(text) = self.prefix.components.get_mut(&id) {
+                            text.clear();
+                        }
                         (installed(&ran), true)
                     }
                     (tool, Ok(_)) => (t!("prefix-done", what = label(tool)), true),
@@ -139,6 +149,30 @@ impl Zendo {
 
     /// Reads the game's known fixes, on a thread, as its page opens (Heroic's
     /// list asked again once a day).
+    /// The components last typed for the game, read as its page opens.
+    pub(super) fn load_prefix_components(&mut self, id: &str) {
+        if self.prefix.components.contains_key(id) {
+            return;
+        }
+        let typed = LaunchOptions::load(id)
+            .ok()
+            .and_then(|options| options.winetricks_components)
+            .unwrap_or_default();
+        self.prefix.components.insert(id.to_owned(), typed);
+    }
+
+    fn save_prefix_components(&self, id: &str, typed: &str) {
+        if !self.persist {
+            return;
+        }
+        if let Ok(mut options) = LaunchOptions::load(id) {
+            options.winetricks_components = Some(typed.trim())
+                .filter(|typed| !typed.is_empty())
+                .map(str::to_owned);
+            let _ = options.save(id);
+        }
+    }
+
     pub(super) fn want_known_fixes(&mut self, id: &str) -> Task<Message> {
         let Some(game) = self
             .game(id)
@@ -221,17 +255,15 @@ impl Zendo {
                 Some(Message::Open(folder.to_string_lossy().into_owned())),
             ));
         }
+        let components = self.prefix.components.get(id).map_or("", String::as_str);
         let install = row![
-            text_input(
-                &t!("prefix-components-placeholder"),
-                &self.prefix.components
-            )
-            .on_input(|typed| Message::Prefix(PrefixMessage::Components(typed)))
-            .on_submit_maybe(message(PrefixMessage::Install(id.clone())))
-            .padding([8, 12])
-            .size(14)
-            .style(style::input)
-            .width(Length::Fill),
+            text_input(&t!("prefix-components-placeholder"), components)
+                .on_input(|typed| { Message::Prefix(PrefixMessage::Components(id.clone(), typed)) })
+                .on_submit_maybe(message(PrefixMessage::Install(id.clone())))
+                .padding([8, 12])
+                .size(14)
+                .style(style::input)
+                .width(Length::Fill),
             tool(
                 t!("prefix-install"),
                 message(PrefixMessage::Install(id.clone()))
@@ -351,13 +383,16 @@ mod tests {
     #[test]
     fn installs_the_components_typed() {
         let mut zendo = with_game();
-        send(&mut zendo, PrefixMessage::Components("vcrun2022 -q".into()));
+        send(
+            &mut zendo,
+            PrefixMessage::Components("gog:1".into(), "vcrun2022 -q".into()),
+        );
         send(&mut zendo, PrefixMessage::Install("gog:1".into()));
         assert!(zendo.tools_free("gog:1"), "an option is refused");
         assert!(matches!(zendo.prefix.notes.get("gog:1"), Some((_, false))));
         send(
             &mut zendo,
-            PrefixMessage::Components("vcrun2022 d3dx9".into()),
+            PrefixMessage::Components("gog:1".into(), "vcrun2022 d3dx9".into()),
         );
         send(&mut zendo, PrefixMessage::Install("gog:1".into()));
         assert_eq!(
@@ -376,7 +411,10 @@ mod tests {
                 true
             ))
         );
-        assert_eq!(zendo.prefix.components, "");
+        assert_eq!(
+            zendo.prefix.components.get("gog:1").map(String::as_str),
+            Some("")
+        );
     }
 
     #[test]

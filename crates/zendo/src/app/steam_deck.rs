@@ -19,12 +19,19 @@ pub enum DeckState {
     Asking,
     /// `None`: Valve has not reviewed it.
     Got(Option<Report>),
+    /// What went wrong; the pill offers to ask again.
+    Failed(String),
 }
 
 impl Zendo {
     /// Asks Steam about the game, on a thread, once a session.
     pub(super) fn want_deck(&mut self, id: &str, app: u32) -> Task<Message> {
-        if !self.persist || self.decks.contains_key(id) {
+        if !self.persist
+            || matches!(
+                self.decks.get(id),
+                Some(DeckState::Asking | DeckState::Got(_))
+            )
+        {
             return Task::none();
         }
         self.decks.insert(id.to_owned(), DeckState::Asking);
@@ -35,21 +42,18 @@ impl Zendo {
         )
     }
 
-    /// Keeps the answer; a failure (offline, say) is forgotten, so the
-    /// page asks again next time it opens.
+    /// Keeps the answer; a failure (offline, say) keeps its reason, and
+    /// the pill offers to ask again.
     pub(super) fn deck_arrived(
         &mut self,
         id: String,
         result: Result<Option<Report>, String>,
     ) -> Task<Message> {
-        match result {
-            Ok(report) => {
-                self.decks.insert(id, DeckState::Got(report));
-            }
-            Err(_) => {
-                self.decks.remove(&id);
-            }
-        }
+        let state = match result {
+            Ok(report) => DeckState::Got(report),
+            Err(err) => DeckState::Failed(err),
+        };
+        self.decks.insert(id, state);
         Task::none()
     }
 
@@ -57,6 +61,7 @@ impl Zendo {
     pub(super) fn deck_pill(&self, id: &str) -> Option<Element<'_, Message>> {
         match self.decks.get(id)? {
             DeckState::Got(Some(report)) => Some(pill(report)),
+            DeckState::Failed(error) => Some(failed_pill(id, error)),
             DeckState::Got(None) | DeckState::Asking => None,
         }
     }
@@ -69,6 +74,23 @@ fn category_color(category: Category) -> Color {
         Category::Playable => Color::from_rgb8(0xcf, 0xb5, 0x3b),
         Category::Unsupported => colors().dim,
     }
+}
+
+/// The pill when Valve could not be asked: a way to ask again, with the
+/// reason in its tooltip.
+fn failed_pill<'a>(id: &str, error: &'a str) -> Element<'a, Message> {
+    tooltip(
+        button(text(t!("try-again")).size(11).font(BOLD))
+            .padding([2, 7])
+            .style(style::pill(colors().dim))
+            .on_press(Message::Retry(id.to_owned())),
+        container(text(error).size(12))
+            .padding([4, 8])
+            .max_width(420)
+            .style(style::card),
+        tooltip::Position::Bottom,
+    )
+    .into()
 }
 
 fn pill(report: &Report) -> Element<'_, Message> {
@@ -228,8 +250,12 @@ mod tests {
         assert!(zendo.deck_pill("steam:2").is_none());
         let _ = zendo.update(Message::Deck("steam:1".into(), Err("offline".into())));
         assert!(
-            !zendo.decks.contains_key("steam:1"),
-            "asked again next time"
+            matches!(
+                zendo.decks.get("steam:1"),
+                Some(DeckState::Failed(error)) if error == "offline"
+            ),
+            "the reason stays, with a way to ask again"
         );
+        assert!(zendo.deck_pill("steam:1").is_some());
     }
 }

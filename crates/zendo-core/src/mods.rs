@@ -603,6 +603,16 @@ fn place(game: &Game) -> anyhow::Result<Place> {
     })
 }
 
+/// The game's mods, with the Nexus game its title matches when the list
+/// does not name one: every entry point goes through here.
+fn look(game: &Game, place: &Place) -> anyhow::Result<Overview> {
+    let mut overview = place.overview()?;
+    if overview.nexus.is_none() {
+        overview.nexus = nexus::domain_for(&game.title, &nexus::cached_games());
+    }
+    Ok(overview)
+}
+
 /// The game's mods, or `None` when there is no folder to put them in.
 ///
 /// # Errors
@@ -613,11 +623,7 @@ pub fn overview(game: &Game) -> anyhow::Result<Option<Overview>> {
     let Ok(place) = place(game) else {
         return Ok(None);
     };
-    let mut overview = place.overview()?;
-    if overview.nexus.is_none() {
-        overview.nexus = nexus::domain_for(&game.title, &nexus::cached_games());
-    }
-    Ok(Some(overview))
+    Ok(Some(look(game, &place)?))
 }
 
 /// Adds a mod from an archive (zip, 7z, rar, tar…), on and last.
@@ -630,7 +636,7 @@ pub fn add(game: &Game, archive: &Path) -> anyhow::Result<Added> {
     let place = place(game)?;
     match place.take_in(archive, None, None, None)? {
         Some(pending) => Ok(Added::Choose(Box::new(pending))),
-        None => Ok(Added::Done(Box::new(place.overview()?))),
+        None => Ok(Added::Done(Box::new(look(game, &place)?))),
     }
 }
 
@@ -644,7 +650,7 @@ pub fn install(game: &Game, pending: &Pending, selection: &Selection) -> anyhow:
     let _lock = lock();
     let place = place(game)?;
     place.install(pending, selection)?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Drops a mod waiting for its installer's options.
@@ -701,7 +707,7 @@ pub fn add_from_nexus(
     let (pending, updated) = place.add_fetched(fetched, domain, mod_id)?;
     let added = match pending {
         Some(pending) => Added::Choose(Box::new(pending)),
-        None => Added::Done(Box::new(place.overview()?)),
+        None => Added::Done(Box::new(look(game, &place)?)),
     };
     Ok((added, updated))
 }
@@ -768,7 +774,7 @@ pub fn set_enabled(game: &Game, id: &str, enabled: bool) -> anyhow::Result<Overv
         }
         Ok(())
     })?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Moves a mod one place earlier (`up`) or later in the order.
@@ -788,7 +794,7 @@ pub fn move_mod(game: &Game, id: &str, up: bool) -> anyhow::Result<Overview> {
         }
         Ok(())
     })?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Deletes a mod Zendo keeps. Applied, its files stay in the game until
@@ -812,7 +818,7 @@ pub fn remove(game: &Game, id: &str) -> anyhow::Result<Overview> {
         fs::remove_dir_all(&kept)
             .with_context(|| format!("could not delete {}", kept.display()))?;
     }
-    place.overview()
+    look(game, &place)
 }
 
 /// The folders removing a mod may delete: only ones Zendo's own folders
@@ -848,7 +854,7 @@ pub fn set_plugin(game: &Game, name: &str, enabled: bool) -> anyhow::Result<Over
         order[at].1 = enabled;
         Some(order)
     })?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Moves a plugin one place earlier (`up`) or later, among its kind.
@@ -860,7 +866,7 @@ pub fn move_plugin(game: &Game, name: &str, up: bool) -> anyhow::Result<Overview
     let _lock = lock();
     let place = place(game)?;
     place.change_plugins(|plugins| plugins::moved(plugins, name, up))?;
-    place.overview()
+    look(game, &place)
 }
 
 /// What to do with a game's profiles.
@@ -892,7 +898,7 @@ pub fn change_profiles(
     let _lock = lock();
     let place = place(game)?;
     place.change_profiles(change, apply)?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Sets where the game's mods go, from its folder; `None` for the one
@@ -915,7 +921,7 @@ pub fn set_folder(game: &Game, folder: Option<&str>) -> anyhow::Result<Overview>
         list.folder = folder.map(|folder| folder.trim_matches('/').to_owned());
         Ok(())
     })?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Deletes what the game wrote while modded.
@@ -931,7 +937,7 @@ pub fn clear_overwrite(game: &Game) -> anyhow::Result<Overview> {
         fs::remove_dir_all(&overwrite)
             .with_context(|| format!("could not delete {}", overwrite.display()))?;
     }
-    place.overview()
+    look(game, &place)
 }
 
 /// Puts the mods that are on into the game, after taking out any applied
@@ -945,7 +951,7 @@ pub fn apply(game: &Game) -> anyhow::Result<Overview> {
     let _lock = lock();
     let place = place(game)?;
     place.apply()?;
-    place.overview()
+    look(game, &place)
 }
 
 /// Takes the mods out: the game as it was.
@@ -957,7 +963,7 @@ pub fn restore(game: &Game) -> anyhow::Result<Overview> {
     let _lock = lock();
     let place = place(game)?;
     place.restore()?;
-    place.overview()
+    look(game, &place)
 }
 
 /// After a game's folder moved from `from` to `to`: the record of what
@@ -1044,9 +1050,13 @@ impl Place {
     fn change(&self, edit: impl FnOnce(&mut List) -> anyhow::Result<()>) -> anyhow::Result<()> {
         let mut list = self.list()?;
         edit(&mut list)?;
+        self.write(&list)
+    }
+
+    fn write(&self, list: &List) -> anyhow::Result<()> {
         let text = format!(
             "# This game's mods in Zendo, which rewrites this file. Later ones win.\n\n{}",
-            toml::to_string(&list)?
+            toml::to_string(list)?
         );
         let path = self.list_path();
         paths::write_atomic(&path, text.as_bytes())
@@ -1180,7 +1190,7 @@ impl Place {
     }
 
     fn change_profiles(&self, change: &ProfileChange, apply: bool) -> anyhow::Result<()> {
-        let before = self.list()?.active().to_owned();
+        let before = self.list()?;
         self.change(|list| match change {
             ProfileChange::New(name) => list.new_profile(name),
             ProfileChange::Switch(name) => list.switch_profile(name),
@@ -1188,11 +1198,20 @@ impl Place {
             ProfileChange::Delete(name) => list.delete_profile(name),
         })?;
         let switched = match change {
-            ProfileChange::Switch(_) | ProfileChange::Delete(_) => self.list()?.active() != before,
+            ProfileChange::Switch(_) | ProfileChange::Delete(_) => {
+                self.list()?.active() != before.active()
+            }
             ProfileChange::New(_) | ProfileChange::Rename { .. } => false,
         };
-        if switched && apply && self.manifest()?.is_some() {
-            self.apply()?;
+        if switched
+            && apply
+            && self.manifest()?.is_some()
+            && let Err(err) = self.apply()
+        {
+            // The game still has the old profile's files: say so, and put
+            // the list back to match.
+            let _ = self.write(&before);
+            return Err(err.context("the profile was not switched"));
         }
         Ok(())
     }

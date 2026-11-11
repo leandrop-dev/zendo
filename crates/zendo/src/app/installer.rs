@@ -13,7 +13,7 @@ use zendo_core::mods::{self, Pending};
 
 use super::launch_options::overlay;
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo, blocking};
+use super::{Message, Move, Zendo, blocking};
 use crate::i18n::t;
 
 #[derive(Debug, Default)]
@@ -41,6 +41,10 @@ pub enum InstallerMessage {
     Next,
     Back,
     Cancel,
+    /// Moves the cursor by this many options in the step.
+    Focus(isize),
+    /// Turns the focused option on or off, as a click would.
+    PickFocused,
     /// What came of clearing the cancelled mod's scratch folder.
     Cancelled(Result<(), String>),
 }
@@ -80,6 +84,10 @@ impl Zendo {
         Task::none()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per installer message, each short"
+    )]
     pub(super) fn update_installer(&mut self, message: InstallerMessage) -> Task<Message> {
         let Some(sheet) = &mut self.installer.open else {
             return Task::none();
@@ -130,6 +138,52 @@ impl Zendo {
                     });
                 Task::batch([task, self.next_installer()])
             }
+            InstallerMessage::Focus(delta) => {
+                let Some(sheet) = self.installer.open.as_mut() else {
+                    return Task::none();
+                };
+                let step = &sheet.pending.installer.steps[sheet.step];
+                let positions: Vec<(usize, usize)> = step
+                    .groups
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(g, group)| (0..group.options.len()).map(move |o| (g, o)))
+                    .collect();
+                if positions.is_empty() {
+                    return Task::none();
+                }
+                let at = sheet
+                    .focus
+                    .and_then(|focus| positions.iter().position(|place| *place == focus))
+                    .unwrap_or(0);
+                let len = isize::try_from(positions.len()).unwrap_or(1);
+                let at = isize::try_from(at).unwrap_or(0);
+                let next = usize::try_from((at + delta).rem_euclid(len)).unwrap_or(0);
+                sheet.focus = Some(positions[next]);
+                Task::none()
+            }
+            InstallerMessage::PickFocused => {
+                let Some(sheet) = self.installer.open.as_mut() else {
+                    return Task::none();
+                };
+                let (g, o) = sheet.focus.unwrap_or((0, 0));
+                let installer = &sheet.pending.installer;
+                let present = &sheet.pending.present;
+                let Some(group) = installer.steps[sheet.step].groups.get(g) else {
+                    return Task::none();
+                };
+                if o >= group.options.len() {
+                    return Task::none();
+                }
+                let was = sheet.selection.is_on(sheet.step, g, o);
+                let on = if group.kind == GroupKind::AtMostOne && was {
+                    false
+                } else {
+                    !was
+                };
+                installer.toggle(&mut sheet.selection, sheet.step, g, o, on, present);
+                Task::none()
+            }
             InstallerMessage::Cancel => {
                 let mut task = Task::none();
                 if let Some(sheet) = self.installer.open.take() {
@@ -169,12 +223,29 @@ impl Zendo {
         self.open_installer(game, pending)
     }
 
-    /// Escape cancels and Enter goes on, while the sheet is open.
+    /// Escape cancels, arrows move the cursor, Enter picks and Right goes
+    /// on, while the sheet is open.
     pub(super) fn installer_takes(&mut self, message: &Message) -> Option<Task<Message>> {
+        let focused = self
+            .installer
+            .open
+            .as_ref()
+            .is_some_and(|sheet| sheet.focus.is_some());
         self.installer.open.as_ref()?;
         match message {
             Message::Back => Some(self.update_installer(InstallerMessage::Cancel)),
-            Message::Activate => Some(self.update_installer(InstallerMessage::Next)),
+            Message::Activate => {
+                let next = if focused {
+                    InstallerMessage::PickFocused
+                } else {
+                    InstallerMessage::Next
+                };
+                Some(self.update_installer(next))
+            }
+            Message::Move(Move::Up) => Some(self.update_installer(InstallerMessage::Focus(-1))),
+            Message::Move(Move::Down) => Some(self.update_installer(InstallerMessage::Focus(1))),
+            Message::Move(Move::Right) => Some(self.update_installer(InstallerMessage::Next)),
+            Message::Move(Move::Left) => Some(self.update_installer(InstallerMessage::Back)),
             Message::Move(_)
             | Message::Type(_)
             | Message::Backspace
@@ -320,7 +391,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     )
     .padding(24)
     .max_width(920)
-    .max_height(640)
+    .height(Length::Fill)
     .style(style::card)
     .into()
 }
@@ -368,7 +439,14 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
                         }))
                         .into()
                 };
-            options = options.push(option_row);
+            let focused = sheet.focus == Some((g, o));
+            options = options.push(container(option_row).padding([2, 4]).style(move |theme| {
+                if focused {
+                    style::card(theme)
+                } else {
+                    iced::widget::container::Style::default()
+                }
+            }));
         }
         list = list.push(options);
     }
@@ -457,7 +535,7 @@ mod tests {
         let _ = zendo.update(pick(true));
         assert!(!picks(&zendo), "clicked again, it clears");
 
-        let _ = zendo.update(Message::Activate);
+        let _ = zendo.update(Message::Move(Move::Right));
         assert_eq!(zendo.installer.open.as_ref().unwrap().step, 1);
         let _ = zendo.update(Message::Installer(InstallerMessage::Back));
         assert_eq!(zendo.installer.open.as_ref().unwrap().step, 0);
@@ -467,5 +545,35 @@ mod tests {
         let open = zendo.installer.open.as_ref().unwrap();
         assert_eq!(open.game, "epic:dog");
         assert!(zendo.installer.waiting.is_empty());
+    }
+
+    #[test]
+    fn the_arrows_focus_and_enter_picks() {
+        let installer = Installer::parse(
+            br#"<config><moduleName>Test</moduleName><installSteps order="Explicit">
+              <installStep name="One"><optionalFileGroups>
+                <group name="Any" type="SelectAny"><plugins>
+                  <plugin name="A"><files><file source="a"/></files>
+                    <typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+                  <plugin name="B"><files><file source="b"/></files>
+                    <typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+                </plugins></group></optionalFileGroups></installStep>
+            </installSteps></config>"#,
+        )
+        .unwrap();
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let pending = mods::test_pending("Test", installer);
+        let _ = zendo.open_installer("epic:cat".into(), Box::new(pending));
+        let focus = |zendo: &Zendo| zendo.installer.open.as_ref().unwrap().focus;
+        assert_eq!(focus(&zendo), None);
+        let _ = zendo.update(Message::Move(Move::Down));
+        assert_eq!(focus(&zendo), Some((0, 1)));
+        let _ = zendo.update(Message::Activate);
+        let sheet = zendo.installer.open.as_ref().unwrap();
+        assert!(
+            sheet.selection.is_on(0, 0, 1),
+            "Enter picked the focused option"
+        );
     }
 }
