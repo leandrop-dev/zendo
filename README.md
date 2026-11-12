@@ -301,7 +301,7 @@ launcher is needed only for its own games:
 
 ## Install
 
-On Fedora (x86_64, 44 and later), the latest commit on main is built in
+On Fedora (x86_64, 45 and Rawhide), the latest commit on main is built in
 [COPR](https://copr.fedorainfracloud.org/coprs/leandrop/zendo/):
 
 ```bash

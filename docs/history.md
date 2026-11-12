@@ -2839,6 +2839,15 @@ Checked on 2026-11-12: the SRPM from HEAD, then `mock -r fedora-45-x86_64`
 the Makefile now bakes the values in. rpmlint: no error that matters
 (`explicit-lib-dependency` is wanted, the libraries are dlopened; spelling
 errors on tool names). Every `Requires` name exists in Fedora's repos
-(`dnf repoquery`). Not checked: the COPR build itself (needs the user's COPR
-project and a pushed commit), installing the RPM and starting it on a clean
-machine, Fedora 44.
+(`dnf repoquery`). COPR: the project `leandrop/zendo` (fedora-45 and fedora-rawhide, x86_64) was
+made with `copr-cli create`; the first build (11316245) failed because
+the Makefile ran `git` while parsing, before the `dnf install git` step, in a
+source chroot that starts without git. Fixed (the install runs first, then a
+second make does the work, 9d89054); the second build (11316285, submitted by
+the user with `copr-cli buildscm ... --method make_srpm`) succeeded for both
+chroots, 2026-11-12. Installed from COPR by the user (`dnf copr enable`, `dnf install`) and
+started in a throwaway home with no session bus: `rpm -V` clean, no missing
+library, `desktop-file-validate` passes, the window opened and listed the three
+KDE entries, and closed cleanly. Not checked: Fedora 44, the tray from the
+package. COPR's homepage and contact
+fields are set in the web page; `copr-cli` has no option for them.
