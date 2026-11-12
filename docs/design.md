@@ -4,13 +4,13 @@ Zendo's new look is modelled on [omakade](https://github.com/btsouth/omakade)
 (a Qt/QML and C++ game library for Omarchy, GPL-3.0-or-later). Ideas and look
 only, no code and no assets, as with Quiver. Written 2026-11-12 from omakade's
 README, `docs/GUIDE.md`, `docs/GAME-MODE.md`, its library and game page
-screenshots and both demo videos. Built in Iced (backlog items 30 to 33).
+screenshots and both demo videos. Built in Iced (backlog items 31 to 34).
 
 ## Look
 
 - A translucent window over the wallpaper with a thin accent border; the
   fallback, if Iced's transparency does not blur on KWin, is an opaque
-  themed window (decided by the spike in item 30).
+  themed window (decided by the spike in item 31).
 - Monospace type throughout (JetBrains Mono, OFL-1.1, bundled), small
   uppercase letter-spaced labels, flat rectangular chips with 1px borders,
   the selection shown as an accent outline.
@@ -58,6 +58,6 @@ none of that is planned for Zendo yet.
 
 ## Not taken
 
-Console libraries and native ports (item 36 covers emulation its own way),
-Sunshine/Moonlight export, Year in Review imagery (item 35 may do a plain
+Console libraries and native ports (item 37 covers emulation its own way),
+Sunshine/Moonlight export, Year in Review imagery (item 36 may do a plain
 summary), and omakade's Omarchy-specific parts.
