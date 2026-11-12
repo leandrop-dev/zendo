@@ -18,28 +18,26 @@ direction the same day:
 Numbering continues from 27 so it never collides with the built items 1 to
 20 cited in history.md and the commits.
 
-27. Generic platform. Remove the `hyprctl`/hyprmonk code: the tray restore
-    (`crates/zendo/src/app.rs`, `show_from_tray`), `tone.rs`, the hyprmonk
-    choice in `app/themes.rs`, `config.rs`, `theme.rs` and the i18n
-    strings. Tray restore on Wayland: first check whether ksni passes an
-    xdg-activation token; otherwise close the window on hide and reopen it
-    on restore (`iced::daemon` instead of `iced::application`).
-    No Heroic needed: `galaxy.rs` `install_service` also looks for
-    `GalaxyCommunication.exe` outside Heroic, in a Zendo data folder filled
-    from comet's `dummy-service.zip`; the messages that say "it comes with
-    Heroic" name where to get each tool instead; the README and
-    reference.md list the standalone releases (legendary, gogdl, nile,
-    comet, umu-launcher). Heroic's folders stay as a fallback and its
-    installed games are still imported. Later [tentative]: Settings →
-    Engines downloads and updates the engines itself, as `ge_proton.rs`
-    does for GE-Proton.
+27. Generic platform. Built on 2026-11-12 (docs/history.md, item 27): the
+    tray restore without `hyprctl`, and no Heroic needed for GOG Galaxy.
+    Still to do, moved to 28: the hyprmonk tone. The engines' own
+    downloader is item 40.
 28. The KDE colour scheme as a theme. A `kdeglobals` reader in zendo-core
-    replaces `tone.rs`, reusing `theme.rs`'s mixing and the file watch.
+    replaces `tone.rs`, reusing `theme.rs`'s mixing and the file watch
+    (`themes.rs`' `LookAtTone`, `ticks`, `watching`, kept from item 27).
+    This also removes the hyprmonk tone: `tone.rs` (`Rgb` moves to
+    `theme.rs`, which `app/style.rs` uses), the hyprmonk choice in
+    `app/themes.rs` and its test, `config.rs`'s theme doc, the `theme-*`
+    strings in both `.ftl` files and the README's hyprmonk lines. A saved
+    `theme = "hyprmonk"` falls back to Zendo's own.
     "System" becomes a theme choice next to Zendo's own. plasmonk keeps its
     surfaces fixed dark greys and tints only the accent, links and
     selection, so the result is an accent-tinted Zendo.
 29. Fedora package: an RPM spec and COPR (was 22), with the README's Fedora
-    install path. The Arch package stays.
+    install path. The Arch package stays. The RPM bundles no engines
+    (decided 2026-11-12 [tentative], see item 40): Zendo downloads them, so
+    the package needs only Zendo and what it links. Item 40 comes before the
+    package reaches other users, or they get a Zendo with no engines.
 30. Redesign, the shell. First a throwaway spike: a transparent Iced 0.14
     window on KWin, checking whether the blur shows through; if it does not,
     the fallback is an opaque themed window, written down before going on.
@@ -64,6 +62,24 @@ Numbering continues from 27 so it never collides with the built items 1 to
 38. Library views beyond the grid: a list and a details view (was 25),
     unless 31 and 33 already cover them.
 39. OptiScaler, last: niche (was 23).
+40. Engines and Protons downloaded by Zendo, decided 2026-11-12 [tentative
+    until the user confirms]. Fedora 45 packages none of gogdl, nile, comet
+    or umu-launcher and has legendary 0.20.34 (checked with `dnf repoquery`),
+    so neither `Requires` nor a bundled copy in the RPM works well. Settings →
+    Engines downloads and updates, from each project's GitHub release, as
+    `ge_proton.rs` already does for GE-Proton: legendary, gogdl, nile, comet
+    and umu-launcher, into a folder of Zendo's own, found before `PATH` or
+    after it as the user chooses (`stores.rs` `bundled` looks on `PATH`
+    first today). Settings → Protons gets, next to GE-Proton, CachyOS's
+    (`CachyOS/proton-cachyos`; checked 2026-11-12: a release per build,
+    `proton-cachyos-<version>-slr-x86_64.tar.xz` of about 340 MB, an
+    `x86_64_v3` variant, an arm64 one, and a `.sha512sum` for each, so the
+    download is checked as GE-Proton's is). The `x86_64_v3` build only when
+    the CPU has it. The same downloader fetches comet's
+    `dummy-service.zip` (already done in `galaxy.rs`, item 27). To settle
+    when it starts: where the engines go, how updates are noticed, and how a
+    Proton CachyOS names the unpacked folder (`proton.rs` already knows the
+    `proton-cachyos-slr` name).
 
 ## On hold
 

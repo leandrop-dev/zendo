@@ -2677,3 +2677,56 @@ colour scheme, and a complete redesign in the style of omakade, built in Iced
 with ideas and look only (it is GPL-3.0-or-later; `docs/design.md`).
 Recompiled games are on hold; emulation moves up. The backlog is renumbered
 from 27 so it does not collide with the built items cited above.
+
+## Item 27, the generic platform, 2026-11-12
+
+Planned with the user the same day. Decided: Zendo downloads comet's
+`dummy-service.zip` itself, and the hyprmonk tone's removal moves to item 28
+so the file watch is changed once.
+
+- **The tray restore, without `hyprctl`.** Hiding now closes the window and
+  restoring opens a new one, so `run()` is `iced::daemon` and every way out
+  ends in `iced::exit()` (`downloads.rs` already did). The activation-token
+  route is closed: ksni gives the token only inside `activate` and menu
+  clicks, tray-icon 0.25.1's `activate` only emits a Click, winit 0.30.13's
+  Wayland `focus_window` is empty and uses a token only when a window is
+  created, iced 0.14's `PlatformSpecific` has no field for one, and
+  raw-handle Wayland calls need `unsafe` (forbidden). Spike first (a tray
+  icon and a daemon window in a throwaway crate, no keyring): the user ran it
+  on KDE, and a window opened from a tray click came up and worked as
+  expected, for repeated hides and restores. `hide_to_tray` takes
+  `self.window`, clears `focused` and closes it; `show_from_tray` opens a
+  window of the last size and mode (`window_size`, `fullscreen`) and resets the
+  grids' `scroll_top`, since the new scrollable starts at the top and the next
+  resize reveals the selected card. A tray Quit while hidden with a download
+  running reopens the window first, as the question is asked there.
+  `--fullscreen` now also sets `Zendo.fullscreen`, so F11 starts right.
+- **No Heroic for GOG Galaxy.** `galaxy.rs` `service_exe`: Zendo's own copy in
+  `$XDG_DATA_HOME/zendo/galaxy/`, else Heroic's, else
+  `dummy-service.zip` from comet's latest release, unpacked with
+  `mods::add::unpack` (now `pub(crate)`) and checked to start with `MZ`.
+  The zip (checked 2026-11-12) holds `GalaxyCommunication.exe`,
+  `install-dummy-service.bat` and `update-permissions.exe` at its top level.
+- **Words.** `accounts-engine-missing` (both languages), the README and
+  `reference.md` name the engines' own GitHub releases; Heroic stays a
+  fallback.
+
+Checked: `cargo fmt --check`, pedantic clippy with no warning,
+`cargo test --workspace` green (232 core with a new `galaxy` test, 129
+window). `git grep -i hyprctl crates` finds nothing. On KDE, in a throwaway
+home with no session bus: the window opens, `kdotool` shows Zendo's pid, and
+`windowclose` with the tray off ends the process.
+
+Tried by the user on KDE the same day, with the real session bus [firm]: the
+tray hides and restores the window; Accounts sign-ins for Steam and GOG work;
+a GOG game installed through Zendo (GE-Proton installed from Settings too)
+and started without trouble, with Galaxy on (`gog_galaxy = true`) and
+no Heroic: `~/.local/share/zendo/galaxy/GalaxyCommunication.exe` is there
+(59,684 bytes, the size in the zip), so the download and unpack worked.
+Quitting from the tray while Steam
+was downloading a game showed no question and Zendo simply closed, which is as
+built: the question is for Zendo's own queue (`downloads.running`, the
+legendary, gogdl and nile installs), and a Steam download belongs to the
+Steam client, which kept going. Also tried and working: Quit from the tray,
+hidden, with a download of Zendo's own running, and the grids' scroll after a
+restore.

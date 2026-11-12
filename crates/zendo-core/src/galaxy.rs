@@ -5,9 +5,11 @@
 //! Galaxy service and the registry key naming Galaxy's folder, which some
 //! games look for before they talk to Galaxy.
 //!
-//! comet (Apache-2.0, `imLinguin/comet`) and its stand-in service,
-//! `GalaxyCommunication.exe`, come with Heroic, as gogdl does, and are run
-//! as separate programs. comet takes gogdl's tokens from Heroic's
+//! comet (Apache-2.0, `imLinguin/comet`) is run as a separate program, from
+//! `PATH` or Heroic's folder. Its stand-in service,
+//! `GalaxyCommunication.exe`, is Zendo's own copy in
+//! `$XDG_DATA_HOME/zendo/galaxy`, else Heroic's, else downloaded from
+//! comet's release (`dummy-service.zip`) when first needed. comet takes gogdl's tokens from Heroic's
 //! `auth.json`, which has gogdl's own layout, or from its command line,
 //! where other programs could read them. So Zendo points comet's
 //! `XDG_CONFIG_PATH` at a folder of its own whose
@@ -34,6 +36,11 @@ const SERVICE: &str = r"C:\ProgramData\GOG.com\Galaxy\redists\GalaxyCommunicatio
 /// The same, under the prefix's `drive_c`.
 const SERVICE_IN_PREFIX: &str =
     "drive_c/ProgramData/GOG.com/Galaxy/redists/GalaxyCommunication.exe";
+/// The stand-in service's file name.
+const SERVICE_FILE: &str = "GalaxyCommunication.exe";
+/// comet's release asset holding it.
+const SERVICE_ZIP: &str =
+    "https://github.com/imLinguin/comet/releases/latest/download/dummy-service.zip";
 /// How long comet gets to stop on its own after the game.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
@@ -66,10 +73,10 @@ pub fn service_needed(game: &Game) -> bool {
 ///
 /// # Errors
 ///
-/// When Heroic's copy is missing, or a step fails (said with the log).
+/// When the service cannot be found or downloaded, or a step fails (said
+/// with the log).
 pub fn install_service(game: &Game) -> anyhow::Result<()> {
-    let source = stores::bundled_windows("GalaxyCommunication.exe")
-        .context("GOG Galaxy's stand-in service is not installed (it comes with Heroic)")?;
+    let source = service_exe()?;
     let prefix = launch::prefix(game).context("no Wine prefix for the game")?;
     let log = service_log_path(&game.id).context("no folder for the log")?;
     if let Some(dir) = log.parent() {
@@ -104,6 +111,83 @@ pub fn install_service(game: &Game) -> anyhow::Result<()> {
         ],
         &log,
     )
+}
+
+/// Where Zendo keeps the stand-in service it downloaded.
+fn service_home() -> Option<PathBuf> {
+    paths::data_home().map(|home| home.join("zendo/galaxy").join(SERVICE_FILE))
+}
+
+/// The stand-in service's program: Zendo's own copy, else Heroic's, else
+/// comet's release downloaded into Zendo's folder.
+fn service_exe() -> anyhow::Result<PathBuf> {
+    let own = service_home().context("no data folder for the Galaxy service")?;
+    if own.is_file() {
+        return Ok(own);
+    }
+    if let Some(heroic) = stores::bundled_windows(SERVICE_FILE) {
+        return Ok(heroic);
+    }
+    download_service(&own)?;
+    Ok(own)
+}
+
+/// Downloads comet's `dummy-service.zip`, unpacks it beside `target` and
+/// moves the program into place. The release has no checksum, so the
+/// program is only checked to be a Windows executable.
+fn download_service(target: &Path) -> anyhow::Result<()> {
+    let dir = target.parent().context("no folder for the service")?;
+    fs::create_dir_all(dir).with_context(|| format!("could not make {}", dir.display()))?;
+    let zip = dir.join("dummy-service.zip");
+    let unpacked = dir.join("unpacking");
+    let _ = fs::remove_dir_all(&unpacked);
+    fs::create_dir_all(&unpacked)?;
+    let result = (|| {
+        crate::http::download(
+            SERVICE_ZIP,
+            &zip,
+            "GOG Galaxy's stand-in service",
+            None,
+            &std::sync::atomic::AtomicBool::new(false),
+            &mut |_, _| {},
+        )?;
+        crate::mods::add::unpack(&zip, &unpacked)?;
+        let found = find_file(&unpacked, SERVICE_FILE)
+            .with_context(|| format!("{SERVICE_FILE} is not in comet's dummy-service.zip"))?;
+        anyhow::ensure!(
+            is_pe(&found),
+            "{SERVICE_FILE} in the download is not a Windows program"
+        );
+        fs::rename(&found, target)
+            .with_context(|| format!("could not move the service to {}", target.display()))
+    })();
+    let _ = fs::remove_file(&zip);
+    let _ = fs::remove_dir_all(&unpacked);
+    result
+}
+
+/// The first file called `name` under `dir`, however deep.
+fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    for entry in fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file(&path, name) {
+                return Some(found);
+            }
+        } else if path.file_name().is_some_and(|file| file == name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Whether the file starts as a Windows program does (`MZ`).
+fn is_pe(file: &Path) -> bool {
+    let mut start = [0_u8; 2];
+    fs::File::open(file)
+        .and_then(|mut open| io::Read::read_exact(&mut open, &mut start))
+        .is_ok()
+        && &start == b"MZ"
 }
 
 /// Runs a Wine program in the game's prefix, through umu, into `log`.
@@ -275,6 +359,23 @@ mod tests {
             uri: "heroic://launch/gog/1".into(),
         };
         assert!(!applies(&game(Source::Gog, by_heroic)));
+    }
+
+    #[test]
+    fn finds_the_service_in_an_unpacked_zip_and_checks_it_is_a_program() {
+        let dir = std::env::temp_dir().join(format!("zendo-galaxy-{}", std::process::id()));
+        let inner = dir.join("dummy-service/bin");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join(SERVICE_FILE), b"MZ\x90\0").unwrap();
+        fs::write(dir.join("README.md"), b"MZ").unwrap();
+        let found = find_file(&dir, SERVICE_FILE).unwrap();
+        assert_eq!(found, inner.join(SERVICE_FILE));
+        assert!(is_pe(&found));
+        assert!(!is_pe(&dir.join("missing.exe")));
+        fs::write(&found, b"<html>").unwrap();
+        assert!(!is_pe(&found));
+        assert!(find_file(&dir, "other.exe").is_none());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

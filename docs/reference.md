@@ -30,6 +30,17 @@ Heroic bundles all three store engines under
 `/usr/lib/heroic-games-launcher/app.asar.unpacked/build/bin/x64/linux/`, so
 phase 4 can use those when nile (or the others) are not installed alone.
 
+Standalone releases, no Heroic needed (installed on Fedora 45 on 2026-11-12
+through mise's `github:` backend; each answered `--version` on `PATH`):
+legendary 0.21.1 (`derrod/legendary`; dnf has only 0.20.34), gogdl 1.4.0
+(`Heroic-Games-Launcher/heroic-gogdl`), nile 1.2.0 (`imLinguin/nile`), comet
+0.4.1 (`imLinguin/comet`) and umu-launcher 1.4.4 (`Open-Wine-Components/umu-launcher`,
+the zipapp; Fedora RPMs stop at fc44). comet's release also has
+`dummy-service.zip` (36 KB, three files at its top level:
+`GalaxyCommunication.exe`, an `MZ` program, `install-dummy-service.bat` and
+`update-permissions.exe`; checked 2026-11-12); Zendo downloads it into `$XDG_DATA_HOME/zendo/galaxy/`
+the first time a GOG Windows game needs it (`galaxy.rs`).
+
 What phase 1 reads from Heroic, checked in Heroic 2.22.4's own code: under
 `~/.config/heroic` (or Flatpak's `~/.var/app/com.heroicgameslauncher.hgl/config/heroic`),
 `legendaryConfig/legendary/installed.json`, `gog_store/installed.json` with

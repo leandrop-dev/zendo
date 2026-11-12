@@ -49,7 +49,7 @@ use crate::nexus::{self, Files};
 use crate::plugins::{self, Plugin};
 use crate::{Game, launch, paths};
 
-mod add;
+pub(crate) mod add;
 mod apply;
 mod files;
 mod known;

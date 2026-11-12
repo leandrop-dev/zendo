@@ -127,27 +127,38 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         if let Some(link) = link.clone() {
             zendo.nexus_pending(link);
         }
-        (zendo, task)
+        zendo.fullscreen = fullscreen;
+        let (id, open) = window::open(window_settings(START_SIZE, fullscreen));
+        zendo.window = Some(id);
+        (zendo, Task::batch([task, open.map(Message::WindowReady)]))
     };
-    iced::application(boot, Zendo::update, Zendo::view)
+    // A daemon, not an application: hiding to the tray closes the window and
+    // the tray's click opens a new one (a Wayland app cannot unminimise its
+    // own window), so closing the last window must not end the program. Every
+    // way out ends in `iced::exit()` instead.
+    iced::daemon(boot, Zendo::update, Zendo::view)
         .title("Zendo")
         .theme(Zendo::theme)
         .subscription(Zendo::subscription)
-        .window(window::Settings {
-            size: START_SIZE,
-            min_size: Some(Size::new(library::min_width(), 560.0)),
-            fullscreen,
-            // A running download asks before the window goes.
-            exit_on_close_request: false,
-            // The class Hyprland and other compositors match the window by.
-            platform_specific: window::settings::PlatformSpecific {
-                application_id: APP_ID.to_owned(),
-                ..window::settings::PlatformSpecific::default()
-            },
-            ..window::Settings::default()
-        })
         .run()?;
     Ok(())
+}
+
+/// A window's settings: the size and mode it opens with.
+fn window_settings(size: Size, fullscreen: bool) -> window::Settings {
+    window::Settings {
+        size,
+        min_size: Some(Size::new(library::min_width(), 560.0)),
+        fullscreen,
+        // A running download asks before the window goes.
+        exit_on_close_request: false,
+        // The class the compositor matches the window by.
+        platform_specific: window::settings::PlatformSpecific {
+            application_id: APP_ID.to_owned(),
+            ..window::settings::PlatformSpecific::default()
+        },
+        ..window::Settings::default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -366,6 +377,9 @@ struct Zendo {
     columns: usize,
     /// The window's width, for the game page's columns.
     window_width: f32,
+    /// The window's last size, for the one opened again from the tray.
+    window_size: Size,
+    /// The open window; `None` while hidden to the tray.
     window: Option<window::Id>,
     focused: bool,
     fullscreen: bool,
@@ -453,6 +467,7 @@ impl Zendo {
             selected_games: BTreeSet::new(),
             columns: library::columns_for(START_SIZE.width),
             window_width: START_SIZE.width,
+            window_size: START_SIZE,
             window: None,
             focused: false,
             fullscreen: false,
@@ -500,12 +515,8 @@ impl Zendo {
             watch_signature: None,
             persist: true,
         };
-        // The window's id, so F11 works before the first resize or focus
-        // event; focus itself arrives as its own message.
-        let window = window::latest().and_then(|id| Task::done(Message::WindowReady(id)));
         let tasks = [
             scan(),
-            window,
             accounts::check_all(),
             store::load_cached(),
             downloads::load(),
@@ -623,9 +634,15 @@ impl Zendo {
     }
 
     fn resized(&mut self, id: window::Id, size: Size) -> Task<Message> {
+        if self.hidden {
+            return Task::none();
+        }
         self.window = Some(id);
         self.columns = library::columns_for(size.width);
         self.window_width = size.width;
+        if !self.fullscreen {
+            self.window_size = size;
+        }
         self.reveal()
     }
 
@@ -1083,6 +1100,14 @@ impl Zendo {
         match message {
             TrayMessage::Toggle => self.toggle_window(),
             TrayMessage::Open => self.show_from_tray(),
+            TrayMessage::Quit if self.hidden && self.downloads.is_running() => {
+                // The question about the download is in the window, so the
+                // window comes back to ask it.
+                Task::batch([
+                    self.show_from_tray(),
+                    self.update_download(DownloadMessage::CloseRequested),
+                ])
+            }
             TrayMessage::Quit => self.update_download(DownloadMessage::CloseRequested),
         }
     }
@@ -1096,15 +1121,17 @@ impl Zendo {
         }
     }
 
-    /// Hides the window to the tray, leaving the icon to bring it back.
-    /// Minimising, not `Mode::Hidden`, since hiding is not possible on
-    /// Wayland but minimising is.
+    /// Hides the window to the tray by closing it, leaving the icon to
+    /// bring a new one back. Not minimising, since a Wayland app cannot
+    /// undo that, and not `Mode::Hidden`, which winit's Wayland backend
+    /// ignores. Closing also takes it off the taskbar.
     fn hide_to_tray(&mut self) -> Task<Message> {
-        let Some(id) = self.window else {
+        let Some(id) = self.window.take() else {
             return Task::none();
         };
         self.hidden = true;
-        window::minimize(id, true)
+        self.focused = false;
+        window::close(id)
     }
 
     /// Hides the window to the tray as a game starts, when the Window
@@ -1144,28 +1171,21 @@ impl Zendo {
         }
     }
 
-    /// Brings the window back from the tray and gives it focus. On X11 the
-    /// window restores itself; on Wayland it cannot (the compositor owns
-    /// it), so Hyprland is asked to focus it. hyprmonk's own helper does
-    /// that without moving the pointer; plain focus runs otherwise.
+    /// Brings the window back from the tray: a new window, as big as the
+    /// last one, since a Wayland app cannot unminimise its own. Checked on
+    /// `KWin` to come up in front with focus.
     fn show_from_tray(&mut self) -> Task<Message> {
-        let Some(id) = self.window else {
-            self.hidden = false;
-            return Task::none();
-        };
         self.hidden = false;
-        if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
-            let script = format!(
-                r#"if hyprmonk_focus then hyprmonk_focus("class:{APP_ID}") else hl.dispatch(hl.dsp.focus({{window="class:{APP_ID}"}})) end"#
-            );
-            let _ = Command::new("hyprctl")
-                .args(["eval", script.as_str()])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+        if let Some(id) = self.window {
+            return window::gain_focus(id);
         }
-        Task::batch([window::minimize(id, false), window::gain_focus(id)])
+        let (id, open) = window::open(window_settings(self.window_size, self.fullscreen));
+        self.window = Some(id);
+        // The new grid's scrollable starts at the top; the next resize
+        // scrolls the selected card back into view.
+        self.scroll_top = 0.0;
+        self.store.scroll_top = 0.0;
+        open.map(Message::WindowReady)
     }
 
     /// A controller button, by page: on a game's page Y pins and X hides.
@@ -1429,11 +1449,11 @@ impl Zendo {
     }
 
     /// Iced's theme from the colours the state holds, not a global.
-    fn theme(&self) -> iced::Theme {
+    fn theme(&self, _window: window::Id) -> iced::Theme {
         style::theme_of(self.themes.palette())
     }
 
-    fn view(&self) -> Element<'_, Message> {
+    fn view(&self, _window: window::Id) -> Element<'_, Message> {
         let page = match &self.page {
             Page::Library => self.library_page(),
             Page::Game(id) => match self.game(id) {

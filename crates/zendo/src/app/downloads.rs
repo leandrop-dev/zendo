@@ -178,6 +178,11 @@ impl DownloadsState {
             .map(|(index, job)| (job, index == 0 && self.running.is_some()))
     }
 
+    /// Whether a download is running now.
+    pub fn is_running(&self) -> bool {
+        self.running.is_some()
+    }
+
     /// The running job's progress, as a short line for the footer; or how
     /// many wait paused.
     pub fn summary(&self) -> Option<String> {

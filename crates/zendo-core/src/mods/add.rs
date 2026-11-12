@@ -529,7 +529,7 @@ pub(super) fn new_id(name: &str, taken: &[Entry]) -> String {
 }
 
 /// Unpacks an archive with 7-Zip, or bsdtar when 7-Zip is missing.
-pub(super) fn unpack(archive: &Path, into: &Path) -> anyhow::Result<()> {
+pub(crate) fn unpack(archive: &Path, into: &Path) -> anyhow::Result<()> {
     let seven = ["7z", "7zz", "7za"]
         .into_iter()
         .find(|program| launch::which(program).is_some());
@@ -546,7 +546,7 @@ pub(super) fn unpack(archive: &Path, into: &Path) -> anyhow::Result<()> {
         command.arg("-xf").arg(archive).arg("-C").arg(into);
         command
     } else {
-        bail!("unpacking mods needs 7-Zip (7zip) or bsdtar (libarchive)");
+        bail!("unpacking needs 7-Zip (7zip) or bsdtar (libarchive)");
     };
     let output = command
         .stdin(Stdio::null())

@@ -227,10 +227,10 @@ install it and give it its colours, but it runs on any Linux desktop.
   at most once a day, never shipped. The Wine prefix card lists a game's
   fixes with Heroic's notes and applies them again.
 - Starts the GOG games it installed with GOG Galaxy, as Heroic does:
-  comet (which comes with Heroic) runs beside the game and answers it as
+  comet (from its GitHub releases, or Heroic's copy) runs beside the game and answers it as
   the GOG account signed in, for achievements, the game's own sign-ins
   (a CD Projekt RED account linked to GOG, say) and the DLC it checks;
-  a Windows game's prefix gets Galaxy's stand-in service once. comet
+  a Windows game's prefix gets Galaxy's stand-in service once (Zendo downloads it from comet's release, `dummy-service.zip`, the first time). comet
   reads Zendo's GOG tokens through a link, never from its command line;
   its log is `~/.local/state/zendo/logs/<id>.comet.log`. Accounts' GOG
   card turns it off.
@@ -291,7 +291,7 @@ launcher is needed only for its own games:
 |------|-----|
 | Steam | Steam games; they start through the Steam client |
 | Heroic | The Epic, GOG and Amazon games it installed, and games added to it |
-| legendary, gogdl, nile | Signing in to Epic, GOG and Amazon, listing your games there and installing them; Heroic's own copies are used when these are not installed alone |
+| legendary, gogdl, nile, comet | Signing in to Epic, GOG and Amazon, listing your games there and installing them, and GOG Galaxy. From each project's GitHub releases ([legendary](https://github.com/derrod/legendary), [gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl), [nile](https://github.com/imLinguin/nile), [comet](https://github.com/imLinguin/comet)); Heroic's own copies are used when these are not installed alone |
 | WebKitGTK 4.1 (`webkit2gtk-4.1`) | The sign-in window; Zendo is built against it, so it is needed to build and run |
 | umu-launcher | Starting the Windows games Zendo installed; it uses the newest GE-Proton or other Proton in Steam's compatibility tools folders, or downloads UMU-Proton (another can be chosen per game). A game set to run without umu needs Steam Linux Runtime 4.0 instead (Steam's, or the copy umu keeps) |
 | MangoHud, GameMode, gamescope | Only for a game whose launch options turn them on |

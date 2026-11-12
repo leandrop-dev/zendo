@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 27 to 39, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 28 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -44,10 +44,12 @@ Item 20, the window (minimise to the tray, Discord presence, rescanning when
 a launcher's files change), was built and tried by the user on 2026-11-11
 (docs/history.md, item 20): the tray icon, the hide and restore, and the
 pointer staying put all work [firm]. On Wayland an app can minimise but not
-unminimise its own window, so restoring goes through Hyprland's `hyprctl`
-(hyprmonk's `hyprmonk_focus`, without moving the pointer); on X11 it restores
-normally. The Discord presence is off by default and needs Discord's Activity
-Status on. Next is item 27.
+unminimise its own window, so since item 27 hiding closes the window and the
+tray opens a new one (`iced::daemon`). The Discord presence is off by default and needs Discord's Activity
+Status on. Item 27 (the tray restore without `hyprctl`, GOG Galaxy without
+Heroic) was built on 2026-11-12; tried by the user the same day: the tray,
+Steam and GOG sign-ins, a GOG install and its start all work [firm]
+(docs/history.md). Next is item 28.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -155,7 +157,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Item 27, then 28 to 39: docs/backlog.md. Each item is planned in detail
+Item 28, then 29 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side
@@ -164,7 +166,7 @@ when it starts.
   needed there.
 - Proposed, not made: add Zendo's window class to plasmonk's
   `themes/mystical/better-blur-classes.txt` so a translucent Zendo blurs.
-- hyprmonk's `tone.json` support is removed in item 27.
+- hyprmonk's `tone.json` support is removed in item 28.
 
 ## Conventions
 
