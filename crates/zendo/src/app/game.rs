@@ -242,6 +242,14 @@ impl Zendo {
             Message::TogglePinned,
         ));
         bar = bar.push(action(
+            if self.is_queued(&game.id) {
+                t!("queue-remove-long")
+            } else {
+                t!("queue-add")
+            },
+            Message::Queue(super::queue::QueueMessage::ToggleQueued(game.id.clone())),
+        ));
+        bar = bar.push(action(
             if game.hidden {
                 t!("game-unhide")
             } else {

@@ -86,6 +86,29 @@ no route to a game's page (item 33).
 - Pick lists and switches are flat (`style::pick_list`, `menu`, `toggler`).
 - Mods stay a card on the game page.
 
+## Decided in item 34
+
+- Home, as design.md first described it (Jump back in, Continue playing, Up
+  next, Find your next game, Quick access), was built and then removed the same
+  day at the user's wish: the app has Library, Store and Downloads only. Game
+  Mode does not need it. Its pieces may come back with item 35 (play status).
+- Game Mode is F11 and Select (`--game-mode`, with `--fullscreen` the same). It
+  puts the window full screen and shows its own screen over the Library page: a
+  hero (meta line, title, description, PLAY, DETAILS, + UP NEXT, a large cover)
+  over a carousel of as many covers as fit, centred on the chosen one. A shelf
+  (Continue playing, Up next, All games) is chosen with LB and RB or Tab; empty
+  shelves are skipped. Y or Space queues the game; Start or Esc/B opens a menu
+  (Back to Game Mode, Library, Leave Game Mode). The menu's Library shows the
+  normal grid, and every other page keeps its normal chrome; while Game Mode is
+  on the top bar has a GAME MODE chip that returns to the screen.
+- The up-next queue is the user's own, in `state.json` as `up_next`, up to 100;
+  it is added to from the game page's "+ Up next", the hero, and Y or Space. No
+  page lists or reorders it yet.
+- The hero's description is a store game's summary, else who made it and for
+  what; descriptions for every game are item 38. The header's filter chips
+  (Show, Source, Sort, View, Search, Filters, Stats) are not built: Filters and
+  Stats depend on items 35 and 36.
+
 ## Not taken
 
 Console libraries and native ports (item 37 covers emulation its own way),

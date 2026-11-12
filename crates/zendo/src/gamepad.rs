@@ -21,7 +21,12 @@ pub enum Pad {
     Sort,
     Hide,
     ShowHidden,
-    ToggleFullscreen,
+    /// Select: Game Mode on or off.
+    ToggleGameMode,
+    /// The left shoulder button: the shelf before, in Game Mode.
+    PrevShelf,
+    /// The right shoulder button: the next shelf.
+    NextShelf,
 }
 
 /// How far a stick must lean to count as a press, and how close to the
@@ -75,7 +80,9 @@ fn button_pad(button: Button) -> Option<Pad> {
         Button::North => Pad::Sort,
         Button::West => Pad::Hide,
         Button::Start => Pad::ShowHidden,
-        Button::Select => Pad::ToggleFullscreen,
+        Button::Select => Pad::ToggleGameMode,
+        Button::LeftTrigger => Pad::PrevShelf,
+        Button::RightTrigger => Pad::NextShelf,
         _ => return None,
     })
 }

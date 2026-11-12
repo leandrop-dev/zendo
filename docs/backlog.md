@@ -67,8 +67,10 @@ Numbering continues from 27 so it never collides with the built items 1 to
 33. Built on 2026-11-12 (docs/history.md, item 33), tests green, checked on
     screen in part (history.md lists what was not). Redesign, the remaining pages: Store, Downloads,
     Accounts, Settings, the launch options sheet, mods and Nexus.
-34. Home and Game Mode, as in design.md. Game Mode replaces today's F11 full
-    screen.
+34. Built on 2026-11-12 (docs/history.md, item 34), checked on screen with
+    the user present except the controller. Game Mode, replacing today's F11
+    full screen. The Home page of design.md was built and removed at the
+    user's wish.
 35. Organize: play status (backlog, playing, completed, abandoned), tags,
     saved filters, bulk edits and a random pick. Builds on item 19.
 36. Play sessions and stats: a session history, a stats screen and a yearly

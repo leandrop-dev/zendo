@@ -17,6 +17,7 @@ mod engines;
 mod eos_overlay;
 mod format;
 mod game;
+mod game_mode;
 mod gog_changelog;
 mod gog_playtime;
 mod installer;
@@ -29,6 +30,7 @@ mod nexus_search;
 mod prefix;
 mod protondb;
 mod protons;
+mod queue;
 mod requirements;
 mod running;
 mod runtimes;
@@ -69,6 +71,7 @@ use downloads::{DownloadMessage, DownloadsState};
 use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
+use game_mode::{GameMode, GameModeMessage};
 use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
@@ -77,6 +80,7 @@ use nexus::{NexusMessage, NexusState};
 use nexus_search::{Search, SearchMessage};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
+use queue::QueueMessage;
 use running::{RunMessage, Running};
 use runtimes::{RuntimeMessage, RuntimesState};
 use settings::Diagnostics;
@@ -131,7 +135,9 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         if let Some(link) = link.clone() {
             zendo.nexus_pending(link);
         }
-        zendo.fullscreen = fullscreen;
+        if fullscreen {
+            zendo.start_in_game_mode();
+        }
         let (id, open) = window::open(window_settings(START_SIZE, fullscreen, opaque));
         zendo.window = Some(id);
         (zendo, Task::batch([task, open.map(Message::WindowReady)]))
@@ -207,13 +213,20 @@ enum Move {
 }
 
 /// The library read in a thread: the games, the saved sort, the user's
-/// categories and the settings.
-type Scanned = (Library, Sort, Vec<Category>, Result<Config, String>);
+/// categories, the settings and the up-next queue.
+type Scanned = (
+    Library,
+    Sort,
+    Vec<Category>,
+    Result<Config, String>,
+    Vec<String>,
+);
 
 #[derive(Debug, Clone)]
 enum Message {
     /// Boxed: the settings and the library are large.
     Loaded(Box<Scanned>),
+    Queue(QueueMessage),
     Refresh,
     /// An image download finished: the file, none found, or what went wrong.
     Image(String, Kind, Result<Option<PathBuf>, String>),
@@ -257,7 +270,9 @@ enum Message {
     SetView(library::View),
     /// Hidden games, or back to All.
     ShowHidden,
-    ToggleFullscreen,
+    /// F11, Select: Game Mode on or off.
+    ToggleGameMode,
+    GameMode(GameModeMessage),
     FocusSearch,
     /// A folder or web page, opened with `xdg-open`.
     Open(String),
@@ -403,6 +418,8 @@ struct Zendo {
     window: Option<window::Id>,
     focused: bool,
     fullscreen: bool,
+    /// Game Mode, while it is on (the window is then full screen).
+    game_mode: Option<GameMode>,
     /// Hidden to the tray (not minimised), waiting for a tray click.
     hidden: bool,
     scroll_top: f32,
@@ -421,6 +438,8 @@ struct Zendo {
     categories_sheet: Option<categories::Categories>,
     /// The user's categories as last read or written, with their games.
     categories: Vec<Category>,
+    /// The user's own queue of games to play next, by id.
+    up_next: Vec<String>,
     /// The art picker, open over a game's page.
     picker: Option<Picker>,
     /// The Nexus search, open over a game's page.
@@ -494,6 +513,7 @@ impl Zendo {
             window: None,
             focused: false,
             fullscreen: false,
+            game_mode: None,
             hidden: false,
             scroll_top: 0.0,
             viewport_height: START_SIZE.height,
@@ -507,6 +527,7 @@ impl Zendo {
             local: LocalState::default(),
             categories_sheet: None,
             categories: Vec::new(),
+            up_next: Vec::new(),
             picker: None,
             mod_search: None,
             mods: ModsState::default(),
@@ -657,6 +678,7 @@ impl Zendo {
             .or_else(|| self.categories_takes(message))
             .or_else(|| self.form_takes(message))
             .or_else(|| self.sheet_takes(message))
+            .or_else(|| self.game_mode_takes(message))
     }
 
     fn resized(&mut self, id: window::Id, size: Size) -> Task<Message> {
@@ -689,6 +711,7 @@ impl Zendo {
         }
         match message {
             Message::Loaded(loaded) => self.loaded(*loaded),
+            Message::Queue(message) => self.update_queue(message),
             Message::Refresh => self.refresh(),
             Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),
@@ -748,7 +771,8 @@ impl Zendo {
                     library::View::Hidden
                 };
             }),
-            Message::ToggleFullscreen => self.toggle_fullscreen(),
+            Message::ToggleGameMode => self.toggle_game_mode(),
+            Message::GameMode(message) => self.update_game_mode(message),
             Message::Tray(message) => self.tray_message(message),
             Message::CloseRequested => self.close_requested(),
             Message::WatchTick => self.watch_tick(),
@@ -835,12 +859,13 @@ impl Zendo {
         scan()
     }
 
-    fn loaded(&mut self, (library, sort, categories, config): Scanned) -> Task<Message> {
+    fn loaded(&mut self, (library, sort, categories, config, up_next): Scanned) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
         let after = self.local.after_scan.take();
         self.library = Some(library);
         self.categories = categories;
+        self.up_next = up_next;
         if let Some(library) = &self.library {
             let present: HashSet<&str> =
                 library.games.iter().map(|game| game.id.as_str()).collect();
@@ -1115,19 +1140,6 @@ impl Zendo {
         }
     }
 
-    fn toggle_fullscreen(&mut self) -> Task<Message> {
-        let Some(id) = self.window else {
-            return Task::none();
-        };
-        self.fullscreen = !self.fullscreen;
-        let mode = if self.fullscreen {
-            window::Mode::Fullscreen
-        } else {
-            window::Mode::Windowed
-        };
-        window::set_mode(id, mode)
-    }
-
     /// The window's close button: with the tray on, hide to it; otherwise
     /// the usual close, which asks before a running download is lost.
     fn close_requested(&mut self) -> Task<Message> {
@@ -1238,7 +1250,14 @@ impl Zendo {
     /// A controller button, by page: on a game's page Y pins and X hides.
     fn pad(&mut self, pad: Pad) -> Task<Message> {
         let on_game = matches!(self.page, Page::Game(_));
+        let in_game_mode = self.game_mode_screen();
         self.update(match pad {
+            // On the Game Mode screen: Y queues, Start opens the menu, and
+            // the shoulder buttons change the shelf.
+            Pad::Sort if in_game_mode => Message::GameMode(GameModeMessage::ToggleQueued),
+            Pad::ShowHidden if in_game_mode => Message::GameMode(GameModeMessage::OpenMenu),
+            Pad::PrevShelf => Message::GameMode(GameModeMessage::CycleShelf(-1)),
+            Pad::NextShelf => Message::GameMode(GameModeMessage::CycleShelf(1)),
             Pad::Left => Message::Move(Move::Left),
             Pad::Right => Message::Move(Move::Right),
             Pad::Up => Message::Move(Move::Up),
@@ -1249,7 +1268,7 @@ impl Zendo {
             Pad::Sort => Message::CycleSort,
             Pad::Hide => Message::ToggleHidden,
             Pad::ShowHidden => Message::ShowHidden,
-            Pad::ToggleFullscreen => Message::ToggleFullscreen,
+            Pad::ToggleGameMode => Message::ToggleGameMode,
         })
     }
 
@@ -1526,6 +1545,9 @@ impl Zendo {
     }
 
     fn view(&self, _window: window::Id) -> Element<'_, Message> {
+        if self.game_mode_screen() {
+            return self.game_mode_view();
+        }
         let page = match &self.page {
             Page::Library => self.library_page(),
             Page::Game(id) => match self.game(id) {
@@ -1604,7 +1626,13 @@ fn scan() -> Task<Message> {
         blocking(|| {
             let state = State::load().unwrap_or_default();
             let config = Config::load().map_err(|err| format!("{err:#}"));
-            (Library::scan(), state.sort, state.categories(), config)
+            (
+                Library::scan(),
+                state.sort,
+                state.categories(),
+                config,
+                state.up_next().to_vec(),
+            )
         }),
         |loaded| Message::Loaded(Box::new(loaded)),
     )
@@ -1717,7 +1745,7 @@ impl Fallback for Scanned {
             problems: vec![note.clone()],
             ..Library::default()
         };
-        (library, Sort::default(), Vec::new(), Err(note))
+        (library, Sort::default(), Vec::new(), Err(note), Vec::new())
     }
 }
 
@@ -1818,7 +1846,7 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             Named::Backspace => Message::Backspace,
             Named::F1 => Message::Navigate(Page::About),
             Named::F5 => Message::Refresh,
-            Named::F11 => Message::ToggleFullscreen,
+            Named::F11 => Message::ToggleGameMode,
             Named::Tab => Message::CycleSort,
             Named::Delete => Message::ToggleHidden,
             Named::Space if modifiers.control() => Message::ToggleSelected,
@@ -2040,6 +2068,7 @@ mod tests {
             Sort::default(),
             Vec::new(),
             Ok(Config::default()),
+            Vec::new(),
         ))));
         assert_eq!(
             zendo.selected_games.iter().collect::<Vec<_>>(),
@@ -2493,5 +2522,168 @@ mod tests {
             on_event(enter, event::Status::Ignored, id),
             Some(Message::Activate)
         ));
+    }
+
+    #[test]
+    fn zendo_starts_on_the_library() {
+        let (zendo, _) = Zendo::boot();
+        assert_eq!(zendo.page, Page::Library);
+        assert!(zendo.game_mode.is_none());
+    }
+
+    /// A library of four games, played in the order 1, 3, 0 (2 never).
+    fn played_zendo() -> Zendo {
+        let mut zendo = zendo_with(4, 4);
+        zendo.window = Some(window::Id::unique());
+        let library = zendo.library.as_mut().expect("a library");
+        for (id, last) in [("desktop:1", 300), ("desktop:3", 200), ("desktop:0", 100)] {
+            let game = library
+                .games
+                .iter_mut()
+                .find(|game| game.id == id)
+                .expect("a game");
+            game.played.last = Some(last);
+        }
+        zendo
+    }
+
+    #[test]
+    fn the_up_next_queue_adds_and_removes() {
+        let mut zendo = played_zendo();
+        for id in ["desktop:2", "desktop:0", "desktop:1"] {
+            let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(id.into())));
+        }
+        assert_eq!(zendo.up_next, ["desktop:2", "desktop:0", "desktop:1"]);
+        let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(
+            "desktop:0".into(),
+        )));
+        assert_eq!(
+            zendo.up_next,
+            ["desktop:2", "desktop:1"],
+            "again takes it out"
+        );
+    }
+
+    #[test]
+    fn game_mode_takes_over_the_library_and_hands_the_page_back() {
+        let mut zendo = played_zendo();
+        zendo.page = Page::Store;
+        let _ = zendo.update(Message::ToggleGameMode);
+        assert!(zendo.game_mode.is_some() && zendo.fullscreen);
+        assert_eq!(zendo.page, Page::Library);
+        assert!(zendo.game_mode_screen());
+
+        // Another page keeps its own look; the bar's chip comes back to the
+        // screen.
+        let _ = zendo.update(Message::Navigate(Page::Downloads));
+        assert!(!zendo.game_mode_screen());
+        let _ = zendo.update(Message::GameMode(GameModeMessage::Show));
+        assert!(zendo.game_mode_screen());
+
+        let _ = zendo.update(Message::ToggleGameMode);
+        assert!(zendo.game_mode.is_none() && !zendo.fullscreen);
+        assert_eq!(zendo.page, Page::Store, "the page it was left from");
+    }
+
+    #[test]
+    fn the_menus_library_choice_shows_the_grid_until_the_screen_is_asked_for() {
+        let mut zendo = played_zendo();
+        let _ = zendo.update(Message::ToggleGameMode);
+        let _ = zendo.update(Message::GameMode(GameModeMessage::OpenMenu));
+        let _ = zendo.update(Message::GameMode(GameModeMessage::MenuChoose(
+            game_mode::MenuChoice::Library,
+        )));
+        assert!(!zendo.game_mode_screen(), "the grid shows");
+        assert!(zendo.game_mode.is_some(), "still in Game Mode");
+        let _ = zendo.update(Message::GameMode(GameModeMessage::Show));
+        assert!(zendo.game_mode_screen());
+    }
+
+    #[test]
+    fn game_mode_moves_one_game_along_a_shelf_and_stops_at_the_ends() {
+        let mut zendo = played_zendo();
+        let _ = zendo.update(Message::ToggleGameMode);
+        // Continue playing: Game 01, Game 03, Game 00.
+        assert_eq!(
+            zendo.hero_game().map(|game| game.id.as_str()),
+            Some("desktop:1")
+        );
+        let _ = zendo.update(Message::Move(Move::Right));
+        assert_eq!(
+            zendo.hero_game().map(|game| game.id.as_str()),
+            Some("desktop:3")
+        );
+        for _ in 0..5 {
+            let _ = zendo.update(Message::Move(Move::Right));
+        }
+        assert_eq!(
+            zendo.hero_game().map(|game| game.id.as_str()),
+            Some("desktop:0")
+        );
+        let _ = zendo.update(Message::Move(Move::Up));
+        assert_eq!(
+            zendo.hero_game().map(|game| game.id.as_str()),
+            Some("desktop:0"),
+            "up does nothing"
+        );
+    }
+
+    #[test]
+    fn the_shelves_cycle_and_skip_an_empty_one() {
+        let mut zendo = played_zendo();
+        let _ = zendo.update(Message::ToggleGameMode);
+        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::Continue);
+        // Nothing queued: Up next is skipped.
+        let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
+        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::All);
+        let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
+        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::Continue);
+
+        let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(
+            "desktop:2".into(),
+        )));
+        let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
+        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::UpNext);
+        assert_eq!(
+            zendo.hero_game().map(|game| game.id.as_str()),
+            Some("desktop:2")
+        );
+    }
+
+    #[test]
+    fn with_nothing_played_game_mode_shows_every_game() {
+        let mut zendo = zendo_with(3, 3);
+        zendo.window = Some(window::Id::unique());
+        let _ = zendo.update(Message::ToggleGameMode);
+        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::All);
+        assert!(zendo.hero_game().is_some());
+    }
+
+    #[test]
+    fn the_controller_means_new_things_only_in_game_mode() {
+        let mut zendo = played_zendo();
+        let _ = zendo.update(Message::ToggleGameMode);
+        // Y queues the game in the hero; Start opens the menu; B closes it.
+        let _ = zendo.pad(Pad::Sort);
+        assert_eq!(zendo.up_next, ["desktop:1"]);
+        let _ = zendo.pad(Pad::ShowHidden);
+        assert_eq!(zendo.game_mode.as_ref().and_then(|mode| mode.menu), Some(0));
+        let _ = zendo.pad(Pad::Back);
+        assert!(
+            zendo
+                .game_mode
+                .as_ref()
+                .is_some_and(|mode| mode.menu.is_none())
+        );
+        // The menu's last choice leaves Game Mode.
+        let _ = zendo.pad(Pad::Back);
+        let _ = zendo.pad(Pad::Down);
+        let _ = zendo.pad(Pad::Down);
+        let _ = zendo.pad(Pad::Activate);
+        assert!(zendo.game_mode.is_none());
+
+        // Outside Game Mode, Start still shows the hidden games.
+        let _ = zendo.pad(Pad::ShowHidden);
+        assert_eq!(zendo.view, library::View::Hidden);
     }
 }

@@ -109,9 +109,15 @@ pub struct State {
     /// library's progress line before its page is opened.
     #[serde(default)]
     achievements: BTreeMap<String, (u32, u32)>,
+    /// The user's own queue of games to play next, in order.
+    #[serde(default)]
+    up_next: Vec<String>,
     #[serde(default)]
     pub sort: Sort,
 }
+
+/// How many games the up-next queue holds.
+pub const UP_NEXT_MAX: usize = 100;
 
 impl State {
     /// Where the state is kept.
@@ -210,6 +216,27 @@ impl State {
     #[must_use]
     pub fn is_pinned(&self, id: &str) -> bool {
         self.pinned.contains(id)
+    }
+
+    /// The games queued to play next, first to play first.
+    #[must_use]
+    pub fn up_next(&self) -> &[String] {
+        &self.up_next
+    }
+
+    /// Puts a game at the end of the queue; one already queued stays where
+    /// it is, and a full queue takes no more. Whether it was added.
+    pub fn queue_next(&mut self, id: &str) -> bool {
+        if self.up_next.len() >= UP_NEXT_MAX || self.up_next.iter().any(|queued| queued == id) {
+            return false;
+        }
+        self.up_next.push(id.to_owned());
+        true
+    }
+
+    /// Takes a game out of the queue.
+    pub fn unqueue(&mut self, id: &str) {
+        self.up_next.retain(|queued| queued != id);
     }
 
     /// Keeps how many achievements a game has and how many are unlocked.
@@ -355,6 +382,38 @@ mod tests {
         assert!(state.is_hidden("desktop:tool"));
         assert_eq!(state.sort, Sort::MostPlayed);
         assert_eq!(state.played("steam:1"), Played::default());
+    }
+
+    #[test]
+    fn the_up_next_queue_keeps_order_and_limits() {
+        let mut state = State::default();
+        assert!(state.queue_next("a"));
+        assert!(state.queue_next("b"));
+        assert!(state.queue_next("c"));
+        assert!(!state.queue_next("b"), "a game is queued once");
+        assert_eq!(state.up_next(), ["a", "b", "c"]);
+
+        state.unqueue("b");
+        assert_eq!(state.up_next(), ["a", "c"]);
+        state.unqueue("missing");
+        assert_eq!(state.up_next(), ["a", "c"]);
+
+        let mut full = State::default();
+        for n in 0..UP_NEXT_MAX {
+            assert!(full.queue_next(&n.to_string()));
+        }
+        assert!(!full.queue_next("one more"));
+        assert_eq!(full.up_next().len(), UP_NEXT_MAX);
+    }
+
+    #[test]
+    fn the_queue_is_saved_and_an_older_state_has_none() {
+        let mut state = State::default();
+        state.queue_next("gog:1");
+        let state: State = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state.up_next(), ["gog:1"]);
+        let old: State = serde_json::from_str(r#"{"hidden":["a"]}"#).unwrap();
+        assert_eq!(old.up_next(), [] as [String; 0]);
     }
 
     #[test]

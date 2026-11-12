@@ -473,7 +473,7 @@ pub fn progress_of((unlocked, total): (u32, u32)) -> Option<f32> {
 }
 
 /// The line under a card's title: how much it was played.
-fn played_line(game: &Game, now: u64) -> String {
+pub(super) fn played_line(game: &Game, now: u64) -> String {
     match (game.played.minutes, game.played.last) {
         (0, None) => t!("played-never"),
         (0, Some(last)) => t!("played-when", when = format::ago(last, now)),

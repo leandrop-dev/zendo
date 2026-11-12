@@ -22,7 +22,7 @@ zendo: every game in one library
 
 Usage:
   zendo                        open the library
-  zendo --fullscreen           open it full-screen (F11 toggles)
+  zendo --game-mode            open it in Game Mode (F11 toggles); --fullscreen is the same
   zendo list [--all] [--json]  print the games, in the window's order;
                                --all adds the hidden ones
   zendo launch <id>            start a game by the id `list` prints
@@ -71,7 +71,7 @@ fn main() -> ExitCode {
     }
     let result = match args.as_slice() {
         [] => app::run(false, None),
-        ["--fullscreen"] => app::run(true, None),
+        ["--game-mode" | "--fullscreen"] => app::run(true, None),
         [link]
             if link
                 .get(..6)

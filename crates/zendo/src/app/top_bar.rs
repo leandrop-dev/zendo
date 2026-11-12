@@ -5,6 +5,7 @@
 use iced::widget::{button, container, row, space, text, text_input};
 use iced::{Alignment, Background, Element, Length};
 
+use super::game_mode::GameModeMessage;
 use super::store::StoreMessage;
 use super::style::{self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, colors};
 use super::{Message, Page, Zendo, search_id, store_search_id};
@@ -68,6 +69,7 @@ impl Zendo {
             ),
             space::horizontal(),
             self.search_box(),
+            self.game_mode_chip(),
             button(style::button_text(t!("page-settings").to_uppercase()).font(BOLD))
                 .padding([SPACE_S, SPACE_M])
                 .style(style::chip(self.in_settings()))
@@ -87,6 +89,19 @@ impl Zendo {
                 .into(),
             rule(),
         ])
+    }
+
+    /// While Game Mode is on, the way back to its screen from any page;
+    /// nothing otherwise.
+    fn game_mode_chip(&self) -> Element<'_, Message> {
+        if self.game_mode.is_none() {
+            return space::horizontal().width(0).into();
+        }
+        button(style::button_text(t!("gm-screen")))
+            .padding([SPACE_S, SPACE_M])
+            .style(style::chip(false))
+            .on_press(Message::GameMode(GameModeMessage::Show))
+            .into()
     }
 
     /// Whether the page is one of the three the Settings button holds.

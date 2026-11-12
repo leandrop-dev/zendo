@@ -3077,3 +3077,44 @@ Seen and left:
   Downloads with jobs (the stat tiles), a signed-in Accounts page, the Add
   game, installer and art picker sheets, the mods card, Nexus search and its
   chooser, and a click on every pick list's open menu.
+
+## Item 34: Game Mode, 2026-11-12
+
+Planned with the user as Home plus a lean Game Mode. Home (a first tab and the
+start page, with Jump back in, Continue playing, an up-next list, suggestions
+and quick access) was built and checked on screen, then **removed the same day
+at the user's wish**: it made no sense to them, and Game Mode does not need it.
+The app keeps Library, Store and Downloads.
+
+- **Queue** (`zendo-core/src/state.rs`): `State.up_next`, `queue_next`,
+  `unqueue`, `UP_NEXT_MAX` 100; tests for order, no duplicates, the cap and an
+  older file without the field. The window keeps its copy (`Zendo.up_next`, read
+  with the scan in `Scanned`) and writes through `Zendo::save`. `app/queue.rs`
+  holds `QueueMessage` (Play, Details, ToggleQueued), `played_games`,
+  `queued_games` and `meta_line`, with tests. The game page has "+ Up next".
+- **Game Mode** (`app/game_mode.rs`): `Zendo.game_mode: Option<GameMode>`
+  (shelf, index, menu, `browsing`, the page it came from) beside `fullscreen`;
+  `ToggleFullscreen` became `ToggleGameMode`. The screen shows on the Library
+  page while Game Mode is on and `browsing` is false; `game_mode_takes` hears
+  Left/Right, Enter, Esc, Tab and Space first. `gamepad.rs` gained `PrevShelf`
+  and `NextShelf` (LB, RB); Select toggles Game Mode; in Game Mode Y queues and
+  Start opens the menu. `--game-mode` is new and `--fullscreen` starts it too.
+  The top bar has a GAME MODE chip while it is on.
+- Tests: toggling and returning to the page left, the chip returning to the
+  screen, the menu's Library choice, moving along a shelf and stopping at the
+  ends, shelf cycling past an empty one, nothing played showing every game, the
+  controller mapping in and out of Game Mode, the queue, and the start page.
+
+Checked: `cargo fmt`, clippy with no warning, tests green (150 and 250).
+On screen on KDE (2026-11-12, with the user present, throwaway home with a
+seeded `state.json`; `ydotoold`, pid check before every key and click): F11
+went full screen into Game Mode (2560x1080) with the hero and the carousel at
+the foot; Right moved to the next game, Tab changed the shelf, Esc opened the
+menu and Down, Enter chose an entry; the menu's Library showed the grid with
+the GAME MODE chip, a click on the chip returned to the screen, and F11 left
+(back to the windowed 1368x892 page it was left from). While Home existed the
+top bar overflowed in pt-PT at 960 px; with Home gone the bar, its 280 px search
+and its 960 px minimum are as before item 34.
+Not checked: a real controller (no device here; the mapping is unit tested
+only), PLAY from Game Mode (it would start a real game), the hero's description
+for a store game, and the game page's "+ Up next" button.
