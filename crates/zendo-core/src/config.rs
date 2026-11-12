@@ -27,9 +27,9 @@
 //! default_proton = "GE-Proton11-12-x86_64"
 //! # The window's language: "en" or "pt-PT". Left out, the system's.
 //! language = "pt-PT"
-//! # The window's colours: "zendo", Zendo's own; or, on a computer with
-//! # hyprmonk, "hyprmonk" to follow its tone. Left out, "zendo".
-//! theme = "hyprmonk"
+//! # The window's colours: "zendo", Zendo's own; "system" to follow the
+//! # KDE colour scheme in use; or a theme file's name. Left out, "zendo".
+//! theme = "system"
 //! # The window hides to the system tray instead of quitting: closing it
 //! # (X), and when a game starts, leaves it there with a tray icon to bring
 //! # it back. Off, closing quits as usual and there is no tray icon.
@@ -105,7 +105,7 @@ pub struct Config {
     /// unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
-    /// The window's colours by name (`zendo`, `hyprmonk`); Zendo's own
+    /// The window's colours by name (`zendo`, `system`); Zendo's own
     /// when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,

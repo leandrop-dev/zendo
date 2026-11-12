@@ -2730,3 +2730,34 @@ legendary, gogdl and nile installs), and a Steam download belongs to the
 Steam client, which kept going. Also tried and working: Quit from the tray,
 hidden, with a download of Zendo's own running, and the grids' scroll after a
 restore.
+
+## Item 28: the KDE colour scheme as a theme (2026-11-12)
+
+- **`kde.rs`** (zendo-core) replaces `tone.rs`: `Scheme::read` takes the
+  background and text from `kdeglobals`' `[Colors:Window]` and the accent
+  from `General`'s `AccentColor`, else `[Colors:View]` `DecorationFocus`,
+  else `[Colors:Selection]` `BackgroundNormal`. Colours are `r,g,b` (alpha
+  ignored); no colours means no scheme. `light` is the background being
+  brighter than the text. `ini.rs` is `desktop.rs`'s group reader, moved so
+  both share it. `Rgb` moved to `theme.rs`.
+- **Window.** `Choice::System` (tag `system`) next to Zendo's own, shown when
+  `kdeglobals` exists or when chosen; watched by the same 2 s look as the
+  tone was (`LookAtScheme`). Greys are mixed by `Colors::from_theme`; green
+  and red stay Zendo's, as plasmonk leaves KDE's at Breeze's defaults
+  (decided with the user). A saved `theme = "hyprmonk"` shows Zendo's own,
+  without a note.
+- Checked against the live `kdeglobals` (PlasmonkA): Window 37,39,47 on
+  227,226,230, accent 61,120,198 (no `AccentColor`, which plasmonk deletes).
+
+Checked: `cargo fmt`, clippy with no warning, `cargo test --workspace` green.
+Checked on screen on KDE (2026-11-12), in a throwaway home with a copy of the
+live `kdeglobals` and no session bus: the window starts on System from
+`theme = "system"` (blue-grey, accent 61,120,198) and Settings shows both
+chips and "Following the system's colour scheme: PlasmonkA". Editing the
+copy's `DecorationFocus` to 220,40,40 repainted the open window red within
+the 2 s look; removing `[Colors:Window]`'s `BackgroundNormal` showed Zendo's
+own colours and the "no KDE colour scheme" note; restoring the file brought
+the scheme back. Clicking the Zendo chip and then System worked and wrote
+`theme = "system"`. A saved `theme = "hyprmonk"` is covered by a unit test
+only. Not tried by the user on the real desktop (plasmonk's accent changing
+under an open Zendo).

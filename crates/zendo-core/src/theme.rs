@@ -21,17 +21,35 @@
 //! dim = "#737aa2"
 //! ```
 //!
-//! hyprmonk's tone ([`crate::tone`]) becomes a theme too.
+//! The KDE colour scheme in use ([`crate::kde`]) becomes a theme too.
 
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Context;
 use serde::Deserialize;
 
+use crate::kde::Scheme;
 use crate::paths;
-use crate::tone::{Rgb, Tone};
+
+/// A colour as `#rrggbb`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rgb(pub u8, pub u8, pub u8);
+
+impl FromStr for Rgb {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> anyhow::Result<Self> {
+        let hex = text
+            .strip_prefix('#')
+            .filter(|hex| hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+            .with_context(|| format!("“{text}” is not a #rrggbb colour"))?;
+        let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16);
+        Ok(Self(channel(0)?, channel(2)?, channel(4)?))
+    }
+}
 
 /// A theme's colours, as its file gives them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,18 +124,19 @@ impl Theme {
         })
     }
 
-    /// hyprmonk's tone as a theme, its greys left to mix.
+    /// The KDE colour scheme as a theme, its greys left to mix and its
+    /// green and red left to Zendo's.
     #[must_use]
-    pub fn from_tone(tone: &Tone) -> Self {
+    pub fn from_scheme(scheme: &Scheme) -> Self {
         Self {
-            id: "hyprmonk".to_owned(),
-            name: tone.label.clone(),
-            light: tone.light,
-            background: tone.background,
-            foreground: tone.foreground,
-            accent: tone.accent,
-            positive: tone.positive,
-            negative: tone.negative,
+            id: "system".to_owned(),
+            name: scheme.name.clone(),
+            light: scheme.light,
+            background: scheme.background,
+            foreground: scheme.foreground,
+            accent: scheme.accent,
+            positive: None,
+            negative: None,
             sidebar: None,
             surface: None,
             raised: None,
@@ -175,6 +194,14 @@ mod tests {
         assert_eq!(theme.dim, Some(Rgb(0x73, 0x7a, 0xa2)));
         assert_eq!(theme.surface, None);
         assert!(!theme.light);
+    }
+
+    #[test]
+    fn reads_colours() {
+        assert_eq!("#f25623".parse::<Rgb>().unwrap(), Rgb(0xf2, 0x56, 0x23));
+        assert!("f25623".parse::<Rgb>().is_err());
+        assert!("#f2562".parse::<Rgb>().is_err());
+        assert!("#gg5623".parse::<Rgb>().is_err());
     }
 
     #[test]

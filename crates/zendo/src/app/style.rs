@@ -10,8 +10,8 @@ use iced::widget::{
 };
 use iced::{Background, Border, Color, Element, Font, Theme, font};
 use zendo_core::Source;
+use zendo_core::theme::Rgb;
 use zendo_core::theme::Theme as ThemeFile;
-use zendo_core::tone::Rgb;
 
 /// The window's colours.
 #[derive(Debug, Clone, Copy, PartialEq)]

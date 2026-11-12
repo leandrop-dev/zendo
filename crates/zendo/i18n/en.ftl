@@ -986,13 +986,13 @@ sign-in-popup-title = Sign in · Zendo
 ## Theme
 
 theme-title = Theme
-theme-about = The window's colours: Zendo's own, a theme of your own (a file in { $folder }, read when Settings opens), or, on a computer with hyprmonk, hyprmonk's tone, which Zendo follows as it changes.
-theme-hyprmonk = hyprmonk's tone
+theme-about = The window's colours: Zendo's own, a theme of your own (a file in { $folder }, read when Settings opens), or the KDE colour scheme in use, which Zendo follows as it changes.
+theme-system = System
 theme-gone = No theme called “{ $theme }” is left, so Zendo's own colours show.
 theme-not-read = Not a theme: { $problem }
-theme-missing = hyprmonk has written no tone, so Zendo's own colours show.
-theme-following = Following hyprmonk's tone: { $tone }.
-theme-failed = hyprmonk's tone could not be read, so the colours stay as they were: { $error }
+theme-missing = No KDE colour scheme was found, so Zendo's own colours show.
+theme-following = Following the system's colour scheme: { $scheme }.
+theme-failed = The KDE colour scheme could not be read, so the colours stay as they were: { $error }
 
 ## The Wine prefix card
 

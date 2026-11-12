@@ -20,19 +20,11 @@ Numbering continues from 27 so it never collides with the built items 1 to
 
 27. Generic platform. Built on 2026-11-12 (docs/history.md, item 27): the
     tray restore without `hyprctl`, and no Heroic needed for GOG Galaxy.
-    Still to do, moved to 28: the hyprmonk tone. The engines' own
+    The hyprmonk tone went in 28. The engines' own
     downloader is item 29.
-28. The KDE colour scheme as a theme. A `kdeglobals` reader in zendo-core
-    replaces `tone.rs`, reusing `theme.rs`'s mixing and the file watch
-    (`themes.rs`' `LookAtTone`, `ticks`, `watching`, kept from item 27).
-    This also removes the hyprmonk tone: `tone.rs` (`Rgb` moves to
-    `theme.rs`, which `app/style.rs` uses), the hyprmonk choice in
-    `app/themes.rs` and its test, `config.rs`'s theme doc, the `theme-*`
-    strings in both `.ftl` files and the README's hyprmonk lines. A saved
-    `theme = "hyprmonk"` falls back to Zendo's own.
-    "System" becomes a theme choice next to Zendo's own. plasmonk keeps its
-    surfaces fixed dark greys and tints only the accent, links and
-    selection, so the result is an accent-tinted Zendo.
+28. The KDE colour scheme as a theme. Built on 2026-11-12 (docs/history.md,
+    item 28): "System" reads `~/.config/kdeglobals`; the hyprmonk tone is
+    gone, and a saved `theme = "hyprmonk"` falls back to Zendo's own.
 29. Engines and Protons downloaded by Zendo, decided 2026-11-12 [tentative
     until the user confirms]. Fedora 45 packages none of gogdl, nile, comet
     or umu-launcher and has legendary 0.20.34 (checked with `dnf repoquery`),

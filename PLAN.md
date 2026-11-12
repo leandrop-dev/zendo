@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 28 to 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 29 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -49,7 +49,8 @@ tray opens a new one (`iced::daemon`). The Discord presence is off by default an
 Status on. Item 27 (the tray restore without `hyprctl`, GOG Galaxy without
 Heroic) was built on 2026-11-12; tried by the user the same day: the tray,
 Steam and GOG sign-ins, a GOG install and its start all work [firm]
-(docs/history.md). Next is item 28.
+(docs/history.md). Item 28 (the KDE colour scheme as a theme, no hyprmonk tone)
+was built on 2026-11-12 and checked on screen in a throwaway home; not yet tried by the user. Next is item 29.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -105,7 +106,7 @@ docs/backlog.md]:
   most and lately.
 - Mods in a later phase: Nexus links, profiles, back to vanilla.
 - A normal app window by default, full-screen as an option [firm]. Follows
-  hyprmonk's tone when it finds it.
+  the KDE colour scheme when asked (Settings → Theme → System).
 
 ## Stack
 
@@ -119,7 +120,7 @@ Chosen over:
   and input would all be ours to write.
 - Qt/QML through cxx-qt: a heavier build and a Qt dependency.
 
-Controller input through the `gilrs` crate; hyprmonk's `tone.json` becomes an
+Controller input through the `gilrs` crate; the KDE colour scheme becomes an
 Iced theme.
 
 Layout [tentative], built this way: `crates/zendo-core` (library scan,
@@ -157,16 +158,15 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Item 28, then 29 to 40: docs/backlog.md. Each item is planned in detail
+Item 29, then 30 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side
 
-- Zendo follows the KDE colour scheme plasmonk writes (item 28); nothing is
+- Zendo follows the KDE colour scheme plasmonk writes (item 28, built); nothing is
   needed there.
 - Proposed, not made: add Zendo's window class to plasmonk's
   `themes/mystical/better-blur-classes.txt` so a translucent Zendo blurs.
-- hyprmonk's `tone.json` support is removed in item 28.
 
 ## Conventions
 

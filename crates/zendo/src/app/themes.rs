@@ -1,5 +1,5 @@
-//! The window's colours: a theme file, Zendo's own by default, or, on a
-//! computer with hyprmonk, hyprmonk's tone, followed as it changes.
+//! The window's colours: a theme file, Zendo's own by default, or the KDE
+//! colour scheme in use, followed as it changes.
 //! Settings' Theme section chooses.
 //!
 //! The built-in themes are the files in `crates/zendo/themes/`, listed in
@@ -14,15 +14,15 @@ use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, row, text};
 use iced::{Element, Task};
+use zendo_core::kde::Scheme;
 use zendo_core::theme::Theme;
-use zendo_core::tone::Tone;
 
 use super::settings::section;
 use super::style::{self, Colors, colors};
 use super::{Message, Zendo};
 use crate::i18n::t;
 
-/// How often Zendo looks whether hyprmonk wrote a new tone.
+/// How often Zendo looks whether the KDE colour scheme changed.
 const LOOK: Duration = Duration::from_secs(2);
 
 /// The themes built into Zendo: each file's name and text. Zendo's own
@@ -32,16 +32,16 @@ const BUILT_IN: &[(&str, &str)] = &[("zendo", include_str!("../../themes/zendo.t
 /// The theme used when none is chosen, or the one chosen is gone.
 const DEFAULT: &str = "zendo";
 
-/// What `config.toml`'s `theme` names for hyprmonk's tone.
-const HYPRMONK: &str = "hyprmonk";
+/// What `config.toml`'s `theme` names for the KDE colour scheme.
+const SYSTEM: &str = "system";
 
 /// A theme Settings offers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Choice {
     /// A theme file, by its name.
     File(String),
-    /// hyprmonk's tone when it writes one, else Zendo's own.
-    Hyprmonk,
+    /// The KDE colour scheme in use when there is one, else Zendo's own.
+    System,
 }
 
 impl Default for Choice {
@@ -55,14 +55,16 @@ impl Choice {
     pub fn tag(&self) -> &str {
         match self {
             Self::File(id) => id,
-            Self::Hyprmonk => HYPRMONK,
+            Self::System => SYSTEM,
         }
     }
 
-    /// The one the settings name; Zendo's own for none.
+    /// The one the settings name; Zendo's own for none, and for a
+    /// `hyprmonk` saved by an earlier Zendo.
     pub fn chosen(tag: Option<&str>) -> Self {
         match tag {
-            Some(HYPRMONK) => Self::Hyprmonk,
+            Some(SYSTEM) => Self::System,
+            Some("hyprmonk") => Self::default(),
             Some(id) if !id.trim().is_empty() => Self::File(id.to_owned()),
             _ => Self::default(),
         }
@@ -77,11 +79,11 @@ enum Found {
     File,
     /// The chosen theme file is not there: Zendo's own shows.
     Gone(String),
-    /// No `tone.json`: hyprmonk writes none yet.
-    Missing,
-    /// hyprmonk's tone, by its name.
+    /// No colours in `kdeglobals`: Zendo's own show.
+    NoScheme,
+    /// The KDE colour scheme, by its name.
     Following(String),
-    /// Why the tone could not be read; the colours stay as they were.
+    /// Why the scheme could not be read; the colours stay as they were.
     Failed(String),
 }
 
@@ -93,7 +95,7 @@ pub struct Themes {
     /// A line for each of the user's files that is not a theme.
     problems: Vec<String>,
     found: Found,
-    /// When `tone.json` last changed, as last read.
+    /// When `kdeglobals` last changed, as last read.
     modified: Option<SystemTime>,
     /// The colours last painted, so `view`'s theme comes from this state.
     colors: Colors,
@@ -142,13 +144,13 @@ impl Themes {
         }
     }
 
-    /// Sets the window's colours from the choice, reading the tone again
-    /// when it needs it.
+    /// Sets the window's colours from the choice, reading the KDE scheme
+    /// again when it needs it.
     pub(super) fn apply(&mut self) {
         self.modified = None;
         let id = match &self.choice {
             Choice::File(id) => id.clone(),
-            Choice::Hyprmonk => return self.apply_tone(),
+            Choice::System => return self.apply_scheme(),
         };
         if let Some(theme) = self.files.iter().find(|theme| theme.id == id) {
             self.paint(Colors::from_theme(theme));
@@ -159,16 +161,16 @@ impl Themes {
         }
     }
 
-    fn apply_tone(&mut self) {
-        self.modified = Tone::modified();
-        match Tone::read() {
-            Ok(Some(tone)) => {
-                self.paint(Colors::from_theme(&Theme::from_tone(&tone)));
-                self.found = Found::Following(tone.label);
+    fn apply_scheme(&mut self) {
+        self.modified = Scheme::modified();
+        match Scheme::read() {
+            Ok(Some(scheme)) => {
+                self.paint(Colors::from_theme(&Theme::from_scheme(&scheme)));
+                self.found = Found::Following(scheme.name);
             }
             Ok(None) => {
                 self.paint(self.default_colors());
-                self.found = Found::Missing;
+                self.found = Found::NoScheme;
             }
             // Perhaps caught half written: looked at again next time.
             Err(err) => {
@@ -197,14 +199,14 @@ impl Themes {
             .map_or(Colors::ZENDO, Colors::from_theme)
     }
 
-    /// Whether the window follows hyprmonk, so the tone is watched.
+    /// Whether the window follows the KDE scheme, so `kdeglobals` is watched.
     pub fn watching(&self) -> bool {
-        self.choice == Choice::Hyprmonk
+        self.choice == Choice::System
     }
 
-    /// A look at `tone.json`: a new one repaints the window.
+    /// A look at `kdeglobals`: a change repaints the window.
     pub fn look(&mut self) {
-        if self.watching() && Tone::modified() != self.modified {
+        if self.watching() && Scheme::modified() != self.modified {
             self.apply();
         }
     }
@@ -214,8 +216,8 @@ impl Themes {
         match &self.found {
             Found::File => None,
             Found::Gone(id) => Some((t!("theme-gone", theme = id.as_str()), false)),
-            Found::Missing => Some((t!("theme-missing"), true)),
-            Found::Following(label) => Some((t!("theme-following", tone = label.as_str()), true)),
+            Found::NoScheme => Some((t!("theme-missing"), true)),
+            Found::Following(name) => Some((t!("theme-following", scheme = name.as_str()), true)),
             Found::Failed(err) => Some((t!("theme-failed", error = err.as_str()), false)),
         }
     }
@@ -231,7 +233,7 @@ impl Zendo {
         task
     }
 
-    pub(super) fn look_at_tone(&mut self) -> Task<Message> {
+    pub(super) fn look_at_scheme(&mut self) -> Task<Message> {
         self.themes.look();
         Task::none()
     }
@@ -248,10 +250,10 @@ impl Zendo {
         for theme in &themes.files {
             choices = choices.push(chip(theme.name.clone(), Choice::File(theme.id.clone())));
         }
-        // hyprmonk's only where it is, or already chosen: elsewhere its tone
-        // cannot come.
-        if themes.choice == Choice::Hyprmonk || Tone::hyprmonk_found() {
-            choices = choices.push(chip(t!("theme-hyprmonk"), Choice::Hyprmonk));
+        // System's only where there is a `kdeglobals`, or when already
+        // chosen: elsewhere there is no scheme to follow.
+        if themes.choice == Choice::System || Scheme::found() {
+            choices = choices.push(chip(t!("theme-system"), Choice::System));
         }
         let colors = colors();
         let mut body = column![choices.wrap().vertical_spacing(8)].spacing(10);
@@ -300,7 +302,8 @@ mod tests {
     #[test]
     fn reads_the_settings_choice() {
         assert_eq!(Choice::chosen(None), Choice::File("zendo".into()));
-        assert_eq!(Choice::chosen(Some("hyprmonk")), Choice::Hyprmonk);
+        assert_eq!(Choice::chosen(Some("system")), Choice::System);
+        assert_eq!(Choice::chosen(Some("hyprmonk")), Choice::default());
         assert_eq!(Choice::chosen(Some("dusk")), Choice::File("dusk".into()));
         assert_eq!(Choice::chosen(Some(" ")), Choice::File("zendo".into()));
     }
@@ -347,16 +350,16 @@ mod tests {
         assert!(!gone.watching());
     }
 
-    /// hyprmonk's Noir is the tone Zendo's own colours come from: mixed
-    /// from it, they come out within a shade of them.
+    /// Zendo's own colours come from three: mixed from them alone, the
+    /// rest come out within a shade of them.
     #[test]
-    fn mixes_a_tone_as_zendos_own() {
-        let noir = Tone::parse(
-            r##"{"version": 1, "name": "noir", "label": "Noir",
-                "background": "#171717", "foreground": "#ccd0cf", "accent": "#f25623"}"##,
+    fn mixes_three_colours_as_zendos_own() {
+        let noir = Theme::parse(
+            "noir",
+            "background = \"#171717\"\nforeground = \"#ccd0cf\"\naccent = \"#f25623\"\n",
         )
         .unwrap();
-        let mixed = Colors::from_theme(&Theme::from_tone(&noir));
+        let mixed = Colors::from_theme(&noir);
         let own = Colors::ZENDO;
         let close = |a: iced::Color, b: iced::Color| {
             [(a.r, b.r), (a.g, b.g), (a.b, b.b)]

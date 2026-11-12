@@ -997,13 +997,13 @@ sign-in-popup-title = Iniciar sessão · Zendo
 ## Tema
 
 theme-title = Tema
-theme-about = As cores da janela: as do próprio Zendo, um tema seu (um ficheiro em { $folder }, lido quando as Definições abrem) ou, num computador com o hyprmonk, o tom do hyprmonk, que o Zendo segue quando muda.
-theme-hyprmonk = Tom do hyprmonk
+theme-about = As cores da janela: as do próprio Zendo, um tema seu (um ficheiro em { $folder }, lido quando as Definições abrem) ou o esquema de cores do KDE em uso, que o Zendo segue quando muda.
+theme-system = Sistema
 theme-gone = Já não há nenhum tema chamado “{ $theme }”, por isso aparecem as cores do próprio Zendo.
 theme-not-read = Não é um tema: { $problem }
-theme-missing = O hyprmonk não escreveu nenhum tom, por isso aparecem as cores do próprio Zendo.
-theme-following = A seguir o tom do hyprmonk: { $tone }.
-theme-failed = Não foi possível ler o tom do hyprmonk, por isso as cores ficam como estavam: { $error }
+theme-missing = Não foi encontrado nenhum esquema de cores do KDE, por isso aparecem as cores do próprio Zendo.
+theme-following = A seguir o esquema de cores do sistema: { $scheme }.
+theme-failed = Não foi possível ler o esquema de cores do KDE, por isso as cores ficam como estavam: { $error }
 
 ## O cartão do prefixo Wine
 

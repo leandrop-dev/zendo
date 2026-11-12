@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::ini::Group;
 use crate::{Game, Launch, Scan, Source, paths};
 
 /// Desktop file ids of launchers, stores and gaming tools that file
@@ -86,7 +87,7 @@ fn desktop_id(dir: &Path, file: &Path) -> Option<String> {
 
 /// The game an entry describes, or `None` when it is not a visible game.
 fn parse(id: &str, text: &str) -> Option<Game> {
-    let entry = Entry::parse(text);
+    let entry = Group::parse(text, "[Desktop Entry]");
     let shown = entry.get("Type") == Some("Application")
         && entry.get("NoDisplay") != Some("true")
         && entry.get("Hidden") != Some("true")
@@ -115,37 +116,6 @@ fn parse(id: &str, text: &str) -> Option<Game> {
                 .map(PathBuf::from),
         },
     ))
-}
-
-/// The keys of the `[Desktop Entry]` group, without the translated ones.
-struct Entry<'a> {
-    pairs: Vec<(&'a str, &'a str)>,
-}
-
-impl<'a> Entry<'a> {
-    fn parse(text: &'a str) -> Self {
-        let mut pairs = Vec::new();
-        let mut in_entry = false;
-        for line in text.lines().map(str::trim) {
-            if line.starts_with('[') {
-                in_entry = line == "[Desktop Entry]";
-            } else if in_entry
-                && !line.starts_with('#')
-                && let Some((key, value)) = line.split_once('=')
-                && !key.contains('[')
-            {
-                pairs.push((key.trim(), value.trim()));
-            }
-        }
-        Self { pairs }
-    }
-
-    fn get(&self, key: &str) -> Option<&'a str> {
-        self.pairs
-            .iter()
-            .find(|(name, _)| *name == key)
-            .map(|(_, value)| *value)
-    }
 }
 
 /// The string escapes every value may hold: `\s`, `\n`, `\t`, `\r`, `\\`.

@@ -280,8 +280,8 @@ enum Message {
     SetLanguage(Option<Language>),
     /// Settings' Theme section.
     SetTheme(Choice),
-    /// Time to look whether hyprmonk wrote a new tone.
-    LookAtTone,
+    /// Time to look whether the KDE colour scheme changed.
+    LookAtScheme,
     Account(AccountMessage),
     Download(DownloadMessage),
     Run(RunMessage),
@@ -743,7 +743,7 @@ impl Zendo {
             | Message::ConfigSaved(..)
             | Message::SetLanguage(_) => self.update_settings(message),
             Message::SetTheme(choice) => self.set_theme(&choice),
-            Message::LookAtTone => self.look_at_tone(),
+            Message::LookAtScheme => self.look_at_scheme(),
             Message::Account(message) => self.update_account(message),
             Message::Download(message) => self.update_download(message),
             Message::Run(message) => self.update_running(message),
@@ -1408,8 +1408,8 @@ impl Zendo {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let tone = if self.themes.watching() {
-            Subscription::run(themes::ticks).map(|()| Message::LookAtTone)
+        let scheme = if self.themes.watching() {
+            Subscription::run(themes::ticks).map(|()| Message::LookAtScheme)
         } else {
             Subscription::none()
         };
@@ -1436,7 +1436,7 @@ impl Zendo {
             Subscription::none()
         };
         Subscription::batch([
-            tone,
+            scheme,
             steam,
             tray,
             watch,
