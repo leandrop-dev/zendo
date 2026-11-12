@@ -53,7 +53,8 @@ Numbering continues from 27 so it never collides with the built items 1 to
     package reaches other users as a Zendo with no engines. Item 29 adds run-time
     needs the spec must list: `python3` (umu-run), `tar` with xz support,
     `sha256sum` and `sha512sum`.
-31. Redesign, the shell. First a throwaway spike: a transparent Iced 0.14
+31. Built on 2026-11-12 (docs/history.md, item 31), not yet tried by the
+    user. Redesign, the shell. First a throwaway spike: a transparent Iced 0.14
     window on KWin, checking whether the blur shows through; if it does not,
     the fallback is an opaque themed window, written down before going on.
     Then design tokens in `app/style.rs`, a bundled monospace font

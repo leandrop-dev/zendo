@@ -127,10 +127,44 @@ pub fn set_colors(colors: Colors) {
     *CURRENT.write().unwrap_or_else(PoisonError::into_inner) = colors;
 }
 
+/// How opaque the window is when it is translucent. The surface Iced gets
+/// on `KWin` is `Rgb10a2Unorm`, with two bits of alpha: only a third, two
+/// thirds and all of it can be shown, so 0.85 would draw opaque
+/// (docs/history.md, item 31's spike).
+const TRANSLUCENT: f32 = 2.0 / 3.0;
+
+/// The window's own background and text colour: the palette's, with the
+/// alpha above unless `opaque`.
+pub fn window(opaque: bool) -> iced::theme::Style {
+    let colors = colors();
+    iced::theme::Style {
+        background_color: Color {
+            a: if opaque { 1.0 } else { TRANSLUCENT },
+            ..colors.background
+        },
+        text_color: colors.text,
+    }
+}
+
+/// The window's type: `JetBrains Mono` (OFL-1.1), built into the binary
+/// from `crates/zendo/fonts/` and loaded in `app::run`.
+pub const FONT: Font = Font::with_name("JetBrains Mono");
+
 pub const BOLD: Font = Font {
     weight: font::Weight::Bold,
-    ..Font::DEFAULT
+    ..FONT
 };
+
+/// The spacing scale, in pixels: every gap and padding is one of these.
+pub const SPACE_S: f32 = 8.0;
+pub const SPACE_M: f32 = 12.0;
+pub const SPACE_L: f32 = 16.0;
+pub const SPACE_XL: f32 = 24.0;
+
+/// Controls (chips, buttons, inputs) are square-cornered; panels have a
+/// hair of rounding.
+const RADIUS_CONTROL: f32 = 0.0;
+const RADIUS_PANEL: f32 = 2.0;
 
 impl Default for Colors {
     fn default() -> Self {
@@ -144,7 +178,7 @@ pub fn placeholder(_: &Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(colors().surface)),
         border: Border {
-            radius: 8.0.into(),
+            radius: RADIUS_PANEL.into(),
             ..Border::default()
         },
         ..container::Style::default()
@@ -171,7 +205,7 @@ pub fn card_button(
                 Color::TRANSPARENT
             },
             width: 2.0,
-            radius: 12.0.into(),
+            radius: RADIUS_PANEL.into(),
         },
         ..button::Style::default()
     }
@@ -218,7 +252,7 @@ pub fn badge<'a, M: 'a>(label: impl text::IntoFragment<'a>, color: Color) -> Ele
             border: Border {
                 color: Color { a: 0.5, ..color },
                 width: 1.0,
-                radius: 5.0.into(),
+                radius: RADIUS_CONTROL.into(),
             },
             ..container::Style::default()
         })
@@ -246,7 +280,7 @@ pub fn pill(color: Color) -> impl Fn(&Theme, button::Status) -> button::Style {
                     ..color
                 },
                 width: 1.0,
-                radius: 5.0.into(),
+                radius: RADIUS_CONTROL.into(),
             },
             ..button::Style::default()
         }
@@ -260,19 +294,7 @@ pub fn card(_: &Theme) -> container::Style {
         border: Border {
             color: colors().line,
             width: 1.0,
-            radius: 12.0.into(),
-        },
-        ..container::Style::default()
-    }
-}
-
-pub fn sidebar(_: &Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Color(colors().sidebar)),
-        border: Border {
-            color: colors().line,
-            width: 1.0,
-            radius: 0.0.into(),
+            radius: RADIUS_PANEL.into(),
         },
         ..container::Style::default()
     }
@@ -293,7 +315,7 @@ pub fn primary(_: &Theme, status: button::Status) -> button::Style {
         background: Some(Background::Color(background)),
         text_color: colors.background,
         border: Border {
-            radius: 8.0.into(),
+            radius: RADIUS_CONTROL.into(),
             ..Border::default()
         },
         ..button::Style::default()
@@ -324,7 +346,7 @@ pub fn secondary(_: &Theme, status: button::Status) -> button::Style {
                 colors.line
             },
             width: 1.0,
-            radius: 8.0.into(),
+            radius: RADIUS_CONTROL.into(),
         },
         ..button::Style::default()
     }
@@ -345,7 +367,7 @@ pub fn danger(_: &Theme, status: button::Status) -> button::Style {
         background: Some(Background::Color(background)),
         text_color: colors.background,
         border: Border {
-            radius: 8.0.into(),
+            radius: RADIUS_CONTROL.into(),
             ..Border::default()
         },
         ..button::Style::default()
@@ -364,20 +386,16 @@ pub fn link(_: &Theme, status: button::Status) -> button::Style {
     }
 }
 
-/// A filter or sort chip, lit when chosen.
+/// A filter or sort chip: a flat box with a 1px rim; the chosen one is
+/// outlined in the accent.
 pub fn chip(chosen: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
         let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
         button::Style {
-            background: Some(Background::Color(if chosen {
-                Color {
-                    a: 0.16,
-                    ..colors().accent
-                }
-            } else if hovered {
+            background: Some(Background::Color(if hovered {
                 colors().raised
             } else {
-                colors().surface
+                Color::TRANSPARENT
             })),
             text_color: if chosen {
                 colors().accent
@@ -391,7 +409,7 @@ pub fn chip(chosen: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
                     colors().line
                 },
                 width: 1.0,
-                radius: 16.0.into(),
+                radius: RADIUS_CONTROL.into(),
             },
             ..button::Style::default()
         }
@@ -417,35 +435,35 @@ pub fn square(marked: bool) -> impl Fn(&Theme, button::Status) -> button::Style 
             border: Border {
                 color: if marked { colors().good } else { colors().line },
                 width: 1.5,
-                radius: 6.0.into(),
+                radius: RADIUS_CONTROL.into(),
             },
             ..button::Style::default()
         }
     }
 }
 
-/// An entry in the sidebar.
-pub fn nav(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+/// A tab in the top bar: text only, the current one in the accent with a
+/// rim.
+pub fn tab(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
         let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
         button::Style {
-            background: (current || hovered).then_some(Background::Color(if current {
-                colors().surface
+            background: hovered.then_some(Background::Color(colors().raised)),
+            text_color: if current {
+                colors().accent
+            } else if hovered {
+                colors().text
             } else {
-                Color {
-                    a: 0.5,
-                    ..colors().surface
-                }
-            })),
-            text_color: if current { colors().text } else { colors().dim },
+                colors().dim
+            },
             border: Border {
                 color: if current {
-                    colors().line
+                    colors().accent
                 } else {
                     Color::TRANSPARENT
                 },
                 width: 1.0,
-                radius: 8.0.into(),
+                radius: RADIUS_CONTROL.into(),
             },
             ..button::Style::default()
         }
@@ -488,7 +506,7 @@ pub fn checkbox(_: &Theme, status: checkbox_widget::Status) -> checkbox_widget::
         border: Border {
             color: border,
             width: 1.0,
-            radius: 4.0.into(),
+            radius: RADIUS_CONTROL.into(),
         },
         text_color: Some(if disabled { colors.dim } else { colors.text }),
     }
@@ -504,7 +522,7 @@ pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
                 colors().line
             },
             width: 1.0,
-            radius: 8.0.into(),
+            radius: RADIUS_CONTROL.into(),
         },
         icon: colors().dim,
         placeholder: colors().dim,
@@ -522,7 +540,7 @@ pub fn progress(_: &Theme) -> progress_bar::Style {
         background: Background::Color(colors().raised),
         bar: Background::Color(colors().accent),
         border: Border {
-            radius: 4.0.into(),
+            radius: RADIUS_PANEL.into(),
             ..Border::default()
         },
     }

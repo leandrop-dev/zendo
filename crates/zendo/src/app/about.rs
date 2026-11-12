@@ -56,14 +56,7 @@ pub fn page<'a>() -> Element<'a, Message> {
                         t!("about-built-ureq"),
                         t!("about-built-steamgriddb"),
                         t!("about-built-fluent"),
-                    ]
-                ),
-                card(
-                    t!("about-ideas-from"),
-                    vec![
-                        t!("about-ideas-hikari"),
-                        t!("about-ideas-omarchy"),
-                        t!("about-ideas-heroic"),
+                        t!("about-built-font"),
                     ]
                 ),
             ]

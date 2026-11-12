@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime};
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{button, column, row, text};
+use iced::widget::{button, column, row, text, toggler};
 use iced::{Element, Task};
 use zendo_core::kde::Scheme;
 use zendo_core::theme::Theme;
@@ -271,6 +271,12 @@ impl Zendo {
                     .color(colors.bad),
             );
         }
+        body = body.push(
+            toggler(self.config.opaque)
+                .label(t!("theme-opaque"))
+                .text_size(14)
+                .on_toggle(Message::SetOpaque),
+        );
         let folder = Theme::dir().map_or_else(String::new, |dir| dir.display().to_string());
         section(t!("theme-title"), t!("theme-about", folder = folder), body)
     }

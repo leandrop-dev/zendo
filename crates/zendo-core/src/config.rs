@@ -121,6 +121,10 @@ pub struct Config {
     /// before the copies Zendo downloaded.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub engines_on_path_first: bool,
+    /// Whether the window is drawn opaque, with no translucency or blur
+    /// behind it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub opaque: bool,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
     held: [Held; Key::ALL.len()],
@@ -181,6 +185,7 @@ impl PartialEq for Config {
             && self.minimize_to_tray == other.minimize_to_tray
             && self.discord_presence == other.discord_presence
             && self.engines_on_path_first == other.engines_on_path_first
+            && self.opaque == other.opaque
     }
 }
 
@@ -206,6 +211,7 @@ impl std::fmt::Debug for Config {
             .field("minimize_to_tray", &self.minimize_to_tray)
             .field("discord_presence", &self.discord_presence)
             .field("engines_on_path_first", &self.engines_on_path_first)
+            .field("opaque", &self.opaque)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
             .field("steam_session_kept", self.kept(Key::SteamSession))
@@ -232,6 +238,7 @@ impl Default for Config {
             minimize_to_tray: false,
             discord_presence: false,
             engines_on_path_first: false,
+            opaque: false,
             held: Default::default(),
             retired_steam_key: None,
         }

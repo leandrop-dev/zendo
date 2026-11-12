@@ -21,7 +21,7 @@ use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alo
 use super::steam_installs::SteamInstallMessage;
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
-use super::{Message, Page, Zendo, format, game_scroll_id, now, sidebar};
+use super::{Message, Page, Zendo, format, game_scroll_id, now};
 use crate::i18n::t;
 
 const HERO_HEIGHT: f32 = 340.0;
@@ -122,7 +122,7 @@ impl Zendo {
         main.extend(self.requirements_card(&game.id));
         let side = column![self.details_card(game), self.technical_card(game)].spacing(24);
 
-        let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;
+        let two = self.window_width >= TWO_COLUMNS;
         page = if main.is_empty() {
             page.push(side)
         } else if two {

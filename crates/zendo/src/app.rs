@@ -1,5 +1,5 @@
-//! The window: a sidebar of pages (Library, Store, Downloads, Accounts,
-//! Settings, About), the library and the store as grids of covers with
+//! The window: a top bar of pages (Library, Store, Downloads, and Settings
+//! with Accounts and About), the library and the store as grids of covers with
 //! chips, and a page for each game with its art, actions and details.
 //! Keyboard and controller drive all of it; missing covers and wide images
 //! download in the background, and store games install through a queue.
@@ -33,7 +33,6 @@ mod requirements;
 mod running;
 mod runtimes;
 mod settings;
-mod sidebar;
 mod steam;
 mod steam_deck;
 mod steam_installs;
@@ -41,6 +40,7 @@ mod store;
 mod store_game;
 mod style;
 mod themes;
+mod top_bar;
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -124,13 +124,15 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     i18n::set_from_settings();
     let boot = move || {
         let (mut zendo, task) = Zendo::boot();
-        let theme = Config::load_file().ok().and_then(|config| config.theme);
+        let config = Config::load_file().ok();
+        let opaque = config.as_ref().is_some_and(|config| config.opaque);
+        let theme = config.and_then(|config| config.theme);
         zendo.themes = Themes::chosen(theme.as_deref(), Theme::dir().as_deref());
         if let Some(link) = link.clone() {
             zendo.nexus_pending(link);
         }
         zendo.fullscreen = fullscreen;
-        let (id, open) = window::open(window_settings(START_SIZE, fullscreen));
+        let (id, open) = window::open(window_settings(START_SIZE, fullscreen, opaque));
         zendo.window = Some(id);
         (zendo, Task::batch([task, open.map(Message::WindowReady)]))
     };
@@ -140,16 +142,24 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     // way out ends in `iced::exit()` instead.
     iced::daemon(boot, Zendo::update, Zendo::view)
         .title("Zendo")
+        .font(include_bytes!("../fonts/JetBrainsMono-Regular.ttf").as_slice())
+        .font(include_bytes!("../fonts/JetBrainsMono-Bold.ttf").as_slice())
+        .default_font(style::FONT)
         .theme(Zendo::theme)
+        .style(Zendo::style)
         .subscription(Zendo::subscription)
         .run()?;
     Ok(())
 }
 
-/// A window's settings: the size and mode it opens with.
-fn window_settings(size: Size, fullscreen: bool) -> window::Settings {
+/// A window's settings: the size and mode it opens with, and whether the
+/// compositor may show the desktop through it (blurred, where it blurs).
+/// Fixed at creation, so changing `opaque` opens a new window.
+fn window_settings(size: Size, fullscreen: bool, opaque: bool) -> window::Settings {
     window::Settings {
         size,
+        transparent: !opaque,
+        blur: !opaque,
         min_size: Some(Size::new(library::min_width(), 560.0)),
         fullscreen,
         // A running download asks before the window goes.
@@ -263,6 +273,8 @@ enum Message {
     SetMinimizeToTray(bool),
     /// Settings' Discord section: rich presence on or off.
     SetDiscordPresence(bool),
+    /// Settings' Theme section: no translucency behind the window.
+    SetOpaque(bool),
     /// The tray icon was clicked, or one of its menu items was chosen.
     Tray(TrayMessage),
     /// The window's close button was pressed: hide to the tray, or quit.
@@ -742,6 +754,7 @@ impl Zendo {
             | Message::SetWorkers(_)
             | Message::SetMinimizeToTray(_)
             | Message::SetDiscordPresence(_)
+            | Message::SetOpaque(_)
             | Message::DownloadNow
             | Message::CopyReport
             | Message::ReportReady(_)
@@ -1189,7 +1202,11 @@ impl Zendo {
         if let Some(id) = self.window {
             return window::gain_focus(id);
         }
-        let (id, open) = window::open(window_settings(self.window_size, self.fullscreen));
+        let (id, open) = window::open(window_settings(
+            self.window_size,
+            self.fullscreen,
+            self.config.opaque,
+        ));
         self.window = Some(id);
         // The new grid's scrollable starts at the top; the next resize
         // scrolls the selected card back into view.
@@ -1463,6 +1480,31 @@ impl Zendo {
         style::theme_of(self.themes.palette())
     }
 
+    /// The window's own background and text: the palette's background,
+    /// translucent unless Settings asks for an opaque window.
+    fn style(&self, _theme: &iced::Theme) -> iced::theme::Style {
+        style::window(self.config.opaque)
+    }
+
+    /// Opens a window with the current settings and closes the old one,
+    /// as when `opaque` changes (a window's transparency is fixed when it
+    /// is created). Nothing to do while the window is hidden in the tray.
+    fn reopen_window(&mut self) -> Task<Message> {
+        let Some(old) = self.window else {
+            return Task::none();
+        };
+        let (id, open) = window::open(window_settings(
+            self.window_size,
+            self.fullscreen,
+            self.config.opaque,
+        ));
+        self.window = Some(id);
+        // The new grid's scrollable starts at the top, as after the tray.
+        self.scroll_top = 0.0;
+        self.store.scroll_top = 0.0;
+        Task::batch([open.map(Message::WindowReady), window::close(old)])
+    }
+
     fn view(&self, _window: window::Id) -> Element<'_, Message> {
         let page = match &self.page {
             Page::Library => self.library_page(),
@@ -1480,8 +1522,16 @@ impl Zendo {
                 None => centered(text(t!("owned-gone")).color(colors().dim)),
             },
         };
-        let main = column![page, self.footer()].width(Length::Fill);
-        let page = self.with_sheet(row![self.sidebar(), main].into());
+        let page = if self.in_settings() {
+            column![self.settings_tabs(), page].into()
+        } else {
+            page
+        };
+        let page = self.with_sheet(
+            column![self.top_bar(), page, self.footer()]
+                .width(Length::Fill)
+                .into(),
+        );
         let page = self.with_categories(self.with_form(page));
         self.with_installer(self.with_chooser(self.with_search(self.with_picker(page))))
     }

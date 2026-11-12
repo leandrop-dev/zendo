@@ -36,11 +36,7 @@ page-downloads = Transferências
 page-accounts = Contas
 page-settings = Definições
 page-about = Sobre
-sidebar-browse = NAVEGAR
-sidebar-system = SISTEMA
-sidebar-signed-in = { $count } de { $stores }
-sidebar-your-library = A SUA BIBLIOTECA
-sidebar-summary = { $sources } · { $time }
+top-bar-signed-in = { $count } de { $stores }
 
 ## Origens e ordens
 
@@ -129,10 +125,7 @@ about-built-keyvalues = keyvalues-parser, para os ficheiros do Steam
 about-built-ureq = ureq, serde e toml
 about-built-steamgriddb = SteamGridDB, para as capas que nenhuma loja tem
 about-built-fluent = Fluent, para os idiomas da janela
-about-ideas-from = Ideias de
-about-ideas-hikari = Hikari: a barra lateral, a biblioteca e as páginas dos jogos
-about-ideas-omarchy = omarchy-games-menu: escrever em qualquer lado para filtrar
-about-ideas-heroic = Heroic: onde guarda os jogos e as suas ligações de lançamento
+about-built-font = JetBrains Mono (SIL Open Font License), para o tipo de letra
 
 ## A janela
 
@@ -1013,6 +1006,7 @@ sign-in-popup-title = Iniciar sessão · Zendo
 theme-title = Tema
 theme-about = As cores da janela: as do próprio Zendo, um tema seu (um ficheiro em { $folder }, lido quando as Definições abrem) ou o esquema de cores do KDE em uso, que o Zendo segue quando muda.
 theme-system = Sistema
+theme-opaque = Janela opaca (sem transparência nem desfoque por trás)
 theme-gone = Já não há nenhum tema chamado “{ $theme }”, por isso aparecem as cores do próprio Zendo.
 theme-not-read = Não é um tema: { $problem }
 theme-missing = Não foi encontrado nenhum esquema de cores do KDE, por isso aparecem as cores do próprio Zendo.

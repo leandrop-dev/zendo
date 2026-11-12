@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 30 to 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 32 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -55,7 +55,10 @@ legendary, gogdl, nile, comet and umu-launcher; Proton-CachyOS next to GE-Proton
 built the same day, checked against the real GitHub and on screen in a
 throwaway home (docs/history.md); not yet tried by the user. Item 30 (the Fedora RPM, `packaging/fedora/`
 and `.copr/`) builds offline in a Fedora 45 mock chroot with its tests passing;
-the COPR project and a first COPR build are the user's to make. Next is item 31.
+the COPR project `leandrop/zendo` builds for Fedora 45 and Rawhide and the
+RPM was installed and started on 2026-11-12. Item 31 (the top bar, the
+translucent window, JetBrains Mono, the new icons) was built and checked on
+screen the same day, not yet tried by the user. Next is item 32.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -163,15 +166,17 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Items 31 to 40: docs/backlog.md. Each item is planned in detail
+Items 32 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side
 
 - Zendo follows the KDE colour scheme plasmonk writes (item 28, built); nothing is
   needed there.
-- Proposed, not made: add Zendo's window class to plasmonk's
-  `themes/mystical/better-blur-classes.txt` so a translucent Zendo blurs.
+- Needed for the blur: Zendo's window class `zendo` in plasmonk's
+  `themes/mystical/better-blur-classes.txt` (and in the user's own Better Blur
+  DX `WindowClasses`); under Better Blur DX only listed classes blur, and
+  without it Zendo is translucent but sharp (docs/history.md, item 31's spike).
 
 ## Conventions
 

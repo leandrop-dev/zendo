@@ -52,6 +52,7 @@ pub(super) enum Setting {
     MinimizeToTray(bool),
     DiscordPresence(bool),
     EnginesPathFirst(bool),
+    Opaque(bool),
 }
 
 /// What the Settings page says once the `SteamGridDB` key is written.
@@ -92,6 +93,7 @@ impl Setting {
             Self::MinimizeToTray(on) => config.minimize_to_tray = *on,
             Self::DiscordPresence(on) => config.discord_presence = *on,
             Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
+            Self::Opaque(on) => config.opaque = *on,
         }
     }
 }
@@ -165,6 +167,7 @@ impl Zendo {
             Message::SetWorkers(workers) => self.save_setting(Setting::Workers(workers)),
             Message::SetMinimizeToTray(on) => self.save_setting(Setting::MinimizeToTray(on)),
             Message::SetDiscordPresence(on) => self.save_setting(Setting::DiscordPresence(on)),
+            Message::SetOpaque(on) => self.save_setting(Setting::Opaque(on)),
             Message::CopyReport => {
                 if self.diagnostics.gathering {
                     return Task::none();
@@ -381,6 +384,7 @@ impl Zendo {
                 self.engines.refresh();
                 Task::none()
             }
+            Setting::Opaque(_) => self.reopen_window(),
             _ => Task::none(),
         }
     }

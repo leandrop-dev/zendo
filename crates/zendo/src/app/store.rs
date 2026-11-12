@@ -4,9 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use iced::widget::{
-    button, checkbox, column, container, progress_bar, row, space, text, text_input,
-};
+use iced::widget::{button, checkbox, column, container, progress_bar, row, space, text};
 use iced::{Alignment, Element, Task};
 use zendo_core::Sort;
 use zendo_core::downloads::{self, Job};
@@ -20,7 +18,7 @@ use super::format;
 use super::library::{Card, GRID_PADDING, Window, card, cards_grid, chip};
 use super::steam_installs::{Following, SteamInstallMessage, percent, progress_line};
 use super::style::{self, BOLD, colors};
-use super::{Message, Page, Zendo, blocking, centered, store_search_id};
+use super::{Message, Page, Zendo, blocking, centered};
 use crate::i18n::t;
 
 #[derive(Debug, Default)]
@@ -403,14 +401,6 @@ impl Zendo {
             ]
             .spacing(2),
             space::horizontal(),
-            text_input(&t!("store-search"), &self.store.search)
-                .id(store_search_id())
-                .on_input(|search| Message::Store(StoreMessage::Search(search)))
-                .on_submit(Message::Activate)
-                .padding([8, 12])
-                .size(14)
-                .width(280)
-                .style(style::input),
             button(
                 text(if asking.is_empty() {
                     t!("library-refresh")

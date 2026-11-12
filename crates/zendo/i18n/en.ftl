@@ -37,11 +37,7 @@ page-downloads = Downloads
 page-accounts = Accounts
 page-settings = Settings
 page-about = About
-sidebar-browse = BROWSE
-sidebar-system = SYSTEM
-sidebar-signed-in = { $count } of { $stores }
-sidebar-your-library = YOUR LIBRARY
-sidebar-summary = { $sources } · { $time }
+top-bar-signed-in = { $count } of { $stores }
 
 ## Sources and orders
 
@@ -127,10 +123,7 @@ about-built-keyvalues = keyvalues-parser, for Steam's files
 about-built-ureq = ureq, serde and toml
 about-built-steamgriddb = SteamGridDB, for covers no store has
 about-built-fluent = Fluent, for the window's languages
-about-ideas-from = Ideas from
-about-ideas-hikari = Hikari: the sidebar, the library and the game pages
-about-ideas-omarchy = omarchy-games-menu: typing anywhere to filter
-about-ideas-heroic = Heroic: where its games are kept, and its launch links
+about-built-font = JetBrains Mono (SIL Open Font License), for the type
 
 ## The window
 
@@ -1002,6 +995,7 @@ sign-in-popup-title = Sign in · Zendo
 theme-title = Theme
 theme-about = The window's colours: Zendo's own, a theme of your own (a file in { $folder }, read when Settings opens), or the KDE colour scheme in use, which Zendo follows as it changes.
 theme-system = System
+theme-opaque = Opaque window (no translucency or blur behind it)
 theme-gone = No theme called “{ $theme }” is left, so Zendo's own colours show.
 theme-not-read = Not a theme: { $problem }
 theme-missing = No KDE colour scheme was found, so Zendo's own colours show.

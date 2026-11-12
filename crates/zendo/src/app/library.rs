@@ -1,9 +1,7 @@
 //! The Library page: a header with the search, the store and sort chips,
 //! and the grid of covers.
 
-use iced::widget::{
-    button, column, container, image, row, scrollable, space, stack, text, text_input,
-};
+use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -12,7 +10,8 @@ use zendo_core::{Game, Sort, Source};
 
 use super::categories::CategoriesMessage;
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo, centered, format, grid_id, now, search_id, sidebar};
+use super::top_bar;
+use super::{Message, Zendo, centered, format, grid_id, now};
 use crate::i18n::t;
 
 pub const COVER_WIDTH: f32 = 180.0;
@@ -28,9 +27,9 @@ pub const GRID_PADDING: f32 = 24.0;
 /// Room kept for the scrollbar beside the grid.
 const SCROLLBAR: f32 = 12.0;
 
-/// How many cards fit across a window this wide, beside the sidebar.
+/// How many cards fit across a window this wide.
 pub fn columns_for(window_width: f32) -> usize {
-    let room = window_width - sidebar::WIDTH - 2.0 * GRID_PADDING - SCROLLBAR + SPACING;
+    let room = window_width - 2.0 * GRID_PADDING - SCROLLBAR + SPACING;
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -40,9 +39,9 @@ pub fn columns_for(window_width: f32) -> usize {
     columns
 }
 
-/// The narrowest window: the sidebar and two columns.
+/// The narrowest window: the top bar, or two columns if they are wider.
 pub fn min_width() -> f32 {
-    sidebar::WIDTH + 2.0 * GRID_PADDING + SCROLLBAR + 2.0 * CARD_WIDTH + SPACING
+    (2.0 * GRID_PADDING + SCROLLBAR + 2.0 * CARD_WIDTH + SPACING).max(top_bar::MIN_WIDTH)
 }
 
 impl Zendo {
@@ -117,14 +116,6 @@ impl Zendo {
             ]
             .spacing(2),
             space::horizontal(),
-            text_input(&t!("library-search"), &self.search)
-                .id(search_id())
-                .on_input(Message::Search)
-                .on_submit(Message::Activate)
-                .padding([8, 12])
-                .size(14)
-                .width(280)
-                .style(style::input),
             button(text(t!("library-add-game")).size(14))
                 .padding([8, 14])
                 .style(style::secondary)
@@ -543,13 +534,12 @@ mod tests {
     }
 
     #[test]
-    fn fits_whole_cards_beside_the_sidebar() {
+    fn fits_whole_cards_across_the_window() {
         assert_eq!(columns_for(100.0), 1);
-        let five =
-            sidebar::WIDTH + 2.0 * GRID_PADDING + SCROLLBAR + 5.0 * CARD_WIDTH + 4.0 * SPACING;
+        let five = 2.0 * GRID_PADDING + SCROLLBAR + 5.0 * CARD_WIDTH + 4.0 * SPACING;
         assert_eq!(columns_for(five), 5);
         assert_eq!(columns_for(five - 1.0), 4);
-        assert_eq!(columns_for(min_width()), 2);
+        assert!(columns_for(min_width()) >= 2);
     }
 
     #[test]

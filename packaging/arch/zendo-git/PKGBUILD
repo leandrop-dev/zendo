@@ -79,5 +79,6 @@ package() {
       "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/zendo.png"
   done
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 crates/zendo/fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL-JetBrainsMono.txt"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

@@ -2851,3 +2851,91 @@ library, `desktop-file-validate` passes, the window opened and listed the three
 KDE entries, and closed cleanly. Not checked: Fedora 44, the tray from the
 package. COPR's homepage and contact
 fields are set in the web page; `copr-cli` has no option for them.
+
+## Item 31, the spike: a transparent Iced window on KWin (2026-11-12)
+
+A throwaway crate (Iced 0.14.0, `transparent: true`, `blur: true`, a
+`.style()` background of `rgba(23,23,23,a)`), run in a throwaway home with no
+session bus; checked with a full-screen `spectacle -b -n -f` still and a
+pixel sample against the wallpaper (118,118,118 behind).
+
+- **Alpha 0.85 shows as fully opaque.** The pixel read exactly 23,23,23.
+  Iced's log says the Vulkan surface offers `Opaque` and `PreMultiplied`,
+  and that it selects format `Rgb10a2Unorm` with `PreMultiplied`
+  (`iced_wgpu` 0.14.0 `window/compositor.rs` takes the first non-sRGB
+  format, with no setting to change it). That format has 2 bits of alpha:
+  four levels (0, 1/3, 2/3, 1), so 0.85 rounds to 1.
+- **Alpha 0.6667 works**: the pixel read 86,87,83 and the wallpaper shows
+  through. So Zendo's translucency is 2/3 or 1/3 opacity, not a free value.
+- **Blur works through Better Blur DX only for listed classes.** On this
+  machine the stock Blur effect is off (`blurEnabled=false`) and Better Blur
+  DX blurs the classes in `~/.config/kwinrc` `[Effect-better-blur-dx]
+  WindowClasses`; `zendo` is not in it, so a window of class `zendo-spike`
+  was translucent but sharp. With the class `kate` (already listed) the
+  same window was blurred: the wallpaper's detail and the terminal's text
+  behind it were unreadable. So `blur: true` is not what blurs under Better
+  Blur DX; the class list is, and the stock Blur effect would honour the
+  request.
+- Decision [tentative]: the default is 2/3 opacity, with the Opaque switch;
+  plasmonk's class list gets `zendo` (PLAN.md, "On plasmonk's side"). No
+  fallback to an opaque window is needed.
+
+## Item 31: the shell, 2026-11-12
+
+Built after the spike above. **Icons** first, as their own commit: the
+user's new app icon (601×580) and round tray icon (288×284), padded to a
+square on a transparent canvas, are `data/icons/zendo-{16,22,24,32,48,64,
+128,256,512}.png` (installed under `hicolor/<n>x<n>/apps/` by the spec and the
+PKGBUILD; `data/zendo.svg`, the ensō, is gone) and `crates/zendo/tray-icon.png`
+at 64 px. Mock-built on Fedora 45, `rpm -qpl` lists the nine icons.
+
+- **Translucency**: `Config.opaque` (off by default, written only when on),
+  `window_settings(size, fullscreen, opaque)` sets `transparent` and `blur`
+  unless opaque, and the daemon's `.style(Zendo::style)` paints the palette's
+  background at 2/3 alpha (`style::window`, the spike's finding; 0.85 would
+  draw opaque). Settings → Theme has the "Opaque window" switch; it saves
+  and `reopen_window` opens a new window and closes the old one, since
+  transparency is fixed at creation.
+- **Type**: JetBrains Mono 2.304 (OFL-1.1) Regular and Bold in
+  `crates/zendo/fonts/` with its OFL.txt and AUTHORS.txt, loaded in
+  `app::run` and set as the default font; `style::FONT`, `BOLD` is its bold.
+  The spec lists `License: MIT AND OFL-1.1` and `%license` for the OFL, the
+  PKGBUILD installs it, and About credits it.
+- **Tokens and flat controls** in `style.rs`: `SPACE_S/M/L/XL`,
+  `RADIUS_CONTROL` (0) and `RADIUS_PANEL` (2); chips, buttons, inputs and
+  checkboxes square, the chosen chip outlined in the accent with no fill.
+  The uppercase `label` helper and `SPACE_XS` were left out: nothing used
+  them yet (Iced 0.14 text has no letter spacing, so it would be uppercase
+  only); items 32 and 33 add them where the pages need them.
+- **The top bar** (`top_bar.rs`, replacing `sidebar.rs`): ZENDO and the
+  accent dot, LIBRARY, STORE and DOWNLOADS tabs with their counts, the search
+  (the library's on Library, the Store's on Store, none elsewhere, since
+  Enter means Play on a game's page) and a SETTINGS button. Settings,
+  Accounts and About share a row of chips under the bar. The bar's
+  background is the palette's `sidebar` colour. `library_header` and the
+  Store's header lost their search box; the library summary of the sidebar
+  went (the subtitle already says games and sources). `sidebar::WIDTH` is
+  gone from `columns_for`, `min_width` (now at least `top_bar::MIN_WIDTH`,
+  960) and the two game pages; its i18n keys went, and `sidebar-signed-in`
+  became `top-bar-signed-in`.
+
+Checked: `cargo fmt`, clippy with no warning, tests green (133 and 247).
+On screen on KDE (2026-11-12, with the user present, throwaway home, no
+session bus): Library, Store, Downloads, Settings, Accounts and About drawn;
+each control clicked once with `ydotool` after a pid check: the three tabs,
+the Settings button, the three sub-tabs, search on Library (typing "kmi"
+left KMines) and on Store, and the Opaque switch, which wrote and removed
+`opaque = true` and reopened the window solid and translucent again
+(same pid, new window id). The reopened window came up at a different place
+(KWin placed it at 649,137 instead of 596,115), which threw off a first set
+of clicks aimed with the old position; the app was fine.
+
+Then tried by the user with `cargo build` (2026-11-12): blur works with
+`zendo` in their Better Blur DX class list, the tray shows the new icon, and
+the minimum width looks right. The window list and decoration still showed
+the old ensō: the installed RPM (git 9d89054) ships
+`/usr/share/icons/hicolor/scalable/apps/zendo.svg`, which KDE prefers; the
+new package ships PNGs only, so installing it fixes that, and a Wayland app
+cannot set its own window icon. About's "Ideas from" card is gone (the
+credits belong on GitHub). Not checked: a light KDE colour scheme (the user
+leaves it for later) and a COPR build with the font and icons.

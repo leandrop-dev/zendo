@@ -7,7 +7,7 @@ Name:           zendo
 Version:        0.1.0^%{snapdate}git%{shortcommit}
 Release:        1%{?dist}
 Summary:        Every game in one library: Steam, Epic, GOG, Amazon and your own
-License:        MIT
+License:        MIT AND OFL-1.1
 URL:            https://github.com/leandrop-dev/zendo
 Source0:        zendo-%{shortcommit}.tar.gz
 # cargo vendor --locked, made by .copr/Makefile (the build itself has no network)
@@ -83,6 +83,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/zendo.desktop
 %license LICENSE
 %license LICENSE.dependencies
 %license cargo-vendor.txt
+%license crates/zendo/fonts/OFL.txt
 %doc README.md
 %{_bindir}/zendo
 %{_datadir}/applications/zendo.desktop

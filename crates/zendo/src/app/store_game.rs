@@ -11,7 +11,6 @@ use super::format;
 use super::game::{
     GameViewMessage, Hero, TWO_COLUMNS, about_card, card, hero, label_row, plain, store_facts,
 };
-use super::sidebar;
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, game_scroll_id, now};
@@ -75,7 +74,7 @@ impl Zendo {
         ]
         .spacing(20);
 
-        let two = self.window_width - sidebar::WIDTH >= TWO_COLUMNS;
+        let two = self.window_width >= TWO_COLUMNS;
         page = if main.is_empty() {
             page.push(side)
         } else if two {
