@@ -301,6 +301,20 @@ launcher is needed only for its own games:
 
 ## Install
 
+On Fedora (x86_64, 44 and later), the latest commit on main is built in
+[COPR](https://copr.fedorainfracloud.org/coprs/leandrop/zendo/):
+
+```bash
+sudo dnf copr enable leandrop/zendo
+sudo dnf install zendo
+```
+
+The package holds Zendo only. The store engines (legendary, gogdl, nile,
+comet), umu-launcher and the Protons are downloaded from Settings → Engines
+and Settings → Protons, which is why `python3`, `tar`, `xz` and `coreutils`
+are required. Steam, gamescope, MangoHud and GameMode are suggested, not
+required.
+
 On Arch and its relatives, `zendo-git` builds the latest commit on main;
 its PKGBUILD is in `packaging/arch/zendo-git/`:
 

@@ -45,7 +45,8 @@ Numbering continues from 27 so it never collides with the built items 1 to
     when it starts: where the engines go, how updates are noticed, and how a
     Proton CachyOS names the unpacked folder (`proton.rs` already knows the
     `proton-cachyos-slr` name).
-30. Fedora package: an RPM spec and COPR (was 22), with the README's Fedora
+30. Built on 2026-11-12 (docs/history.md, item 30), COPR project still to
+    be made by the user. Fedora package: an RPM spec and COPR (was 22), with the README's Fedora
     install path. The Arch package stays. The RPM bundles no engines
     (decided 2026-11-12 [tentative], see item 29): Zendo downloads them, so
     the package needs only Zendo and what it links. Item 29 comes first, or the

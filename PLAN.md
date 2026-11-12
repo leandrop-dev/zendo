@@ -53,7 +53,9 @@ Steam and GOG sign-ins, a GOG install and its start all work [firm]
 was built on 2026-11-12 and checked on screen in a throwaway home; not yet tried by the user. Item 29 (Settings → Engines downloads
 legendary, gogdl, nile, comet and umu-launcher; Proton-CachyOS next to GE-Proton) was
 built the same day, checked against the real GitHub and on screen in a
-throwaway home (docs/history.md); not yet tried by the user. Next is item 30.
+throwaway home (docs/history.md); not yet tried by the user. Item 30 (the Fedora RPM, `packaging/fedora/`
+and `.copr/`) builds offline in a Fedora 45 mock chroot with its tests passing;
+the COPR project and a first COPR build are the user's to make. Next is item 31.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -161,7 +163,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Items 30 to 40: docs/backlog.md. Each item is planned in detail
+Items 31 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side

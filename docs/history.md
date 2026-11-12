@@ -2816,3 +2816,29 @@ disabled state while a game runs. Not tried by the user.
 Two wrinkles seen, then fixed: the Automatic label said "newest GE-Proton
 first" while naming a CachyOS build, and the Proton blurb spoke of GE-Proton
 only.
+
+## Item 30: the Fedora package (2026-11-12)
+
+`packaging/fedora/zendo.spec` and `.copr/Makefile` (COPR's `make_srpm`
+entry). The Makefile exports HEAD with `git archive`, runs `cargo vendor
+--locked` on it (the chroot build has no network), writes the commit, short
+commit and date over the spec's three defaults and runs `rpmbuild -bs`. The
+spec is a snapshot version, `0.1.0^<date>git<short>`, builds with
+`cargo-rpm-macros` (`%cargo_prep -v vendor`, `%cargo_build`, `%cargo_test`)
+and installs the binary, the desktop file and the icon. No engines in the
+package (item 29 downloads them); `Requires` lists what Iced loads at run
+time and rpm cannot see (`vulkan-loader`, `libxkbcommon`,
+`libxkbcommon-x11`, `libwayland-client`, found with `strings` on the binary),
+and what Settings → Engines needs (`python3`, `tar`, `xz`, `coreutils`).
+Mods and `dummy-service.zip` need `(7zip or bsdtar)`.
+
+Checked on 2026-11-12: the SRPM from HEAD, then `mock -r fedora-45-x86_64`
+(no network) built it: 133 core and 247 window tests pass (25 ignored),
+`desktop-file-validate` passes. A first mock run failed because mock re-runs
+`rpmbuild -bs` on the spec inside the SRPM, where the `--define`s were gone;
+the Makefile now bakes the values in. rpmlint: no error that matters
+(`explicit-lib-dependency` is wanted, the libraries are dlopened; spelling
+errors on tool names). Every `Requires` name exists in Fedora's repos
+(`dnf repoquery`). Not checked: the COPR build itself (needs the user's COPR
+project and a pushed commit), installing the RPM and starting it on a clean
+machine, Fedora 44.
