@@ -2,13 +2,17 @@
 
 A game launcher for Linux: every game in one library, in a normal window with
 a full-screen mode for the couch, launched with the right tools, and mods
-later. A sister project of [hyprmonk](../hyprmonk), MIT like it.
+later. MIT. Developed on Fedora with KDE Plasma next to
+[plasmonk-kde](../plasmonk-kde); it began as a sister project of hyprmonk.
 
 Status: planned on 2026-11-04 from a hyprmonk session; the whole of phases 1
 to 7 built by 2026-11-07, then items 1 to 19 of the list after them, the last
 of those (the library's categories) on 2026-11-10, the 25 must-fix faults of
 that day's review closed the same day, and item 20 (the window) built and
 tried by the user on 2026-11-11.
+
+Reformulated on 2026-11-12, after the move to a fresh Fedora 45 + KDE
+machine (see "Direction"): the backlog now runs from item 27.
 
 ## Documents
 
@@ -17,7 +21,8 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 21 to 26, the work left, in order | starting one of them |
+| `docs/backlog.md` | items 27 to 39, the work left, in order, and what is on hold | starting one of them |
+| `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
@@ -42,7 +47,7 @@ pointer staying put all work [firm]. On Wayland an app can minimise but not
 unminimise its own window, so restoring goes through Hyprland's `hyprctl`
 (hyprmonk's `hyprmonk_focus`, without moving the pointer); on X11 it restores
 normally. The Discord presence is off by default and needs Discord's Activity
-Status on. Next is item 21.
+Status on. Next is item 27.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -67,6 +72,24 @@ Chosen on 2026-11-06:
 - Order: the new shell first, with the SteamGridDB key entered in Settings;
   then accounts, Store and Downloads; then launch options; then local games
   and mods.
+
+Reformulated on 2026-11-12 [tentative until the user confirms the order in
+docs/backlog.md]:
+
+- Generic platform: no Hyprland-specific code (the tray restore through
+  `hyprctl`, hyprmonk's `tone.json`); Wayland and X11 through standard
+  means. Fedora first: the RPM through COPR moves up, Arch's package stays.
+- The theme follows the active KDE colour scheme (`~/.config/kdeglobals`),
+  which plasmonk sets. Zendo keeps its own colours elsewhere.
+- A complete redesign in the style of
+  [omakade](https://github.com/btsouth/omakade), built in Iced: a top bar
+  with tabs instead of the sidebar, a translucent window, monospace type,
+  Home and a controller-first Game Mode. omakade is GPL-3.0-or-later, so
+  its ideas and look only, no code and no assets (`docs/design.md`). Qt/QML
+  stays rejected.
+- The store engines (legendary, gogdl, nile, comet) and umu-launcher are
+  used from their own releases, with no need for Heroic.
+- Recompiled games are on hold. Emulation moves up.
 
 ## What it should do
 
@@ -125,24 +148,23 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 | Tool | Needed for |
 |---|---|
 | Steam | Steam games. The library is read from files, but launching goes through the client. |
-| Heroic | Its installed games are imported. From phase 4 also a source of the store engines when they are not installed alone. |
-| legendary, gogdl, nile | Phase 4: Epic, GOG and Amazon accounts, owned games and installs. |
-| umu-launcher | Windows games installed by hand. Check whether it fetches Proton itself. |
+| Heroic | Optional: its installed games are imported, and its bundled engines are a fallback. |
+| legendary, gogdl, nile, comet | Epic, GOG and Amazon accounts, owned games and installs, and GOG Galaxy. From each project's GitHub releases (on Fedora through mise's `github:` backend); Heroic is not needed. |
+| umu-launcher | Windows games installed by hand; the zipapp release on Fedora 45 (RPMs stop at fc44). Check whether it fetches Proton itself. |
 | MangoHud, GameMode, gamescope | Only games where they are switched on. |
 
 ## Next
 
-Item 21, then 22 to 26: docs/backlog.md, in the user's firm order. Each
-item is planned in detail when it starts.
+Item 27, then 28 to 39: docs/backlog.md. Each item is planned in detail
+when it starts.
 
-## On hyprmonk's side
+## On plasmonk's side
 
-- Install it (package list or the installer) and bind a key (Super+G).
-- The tone: Zendo reads `~/.local/state/hyprmonk/theme/tone.json`; what it
-  holds and when to write it is in hyprmonk's `docs/zendo-tone.md`. hyprmonk
-  writes it since its commit 9f98c4a (2026-11-07); Zendo follows it when
-  Settings' Theme is hyprmonk, and keeps its own colours by default.
-- hyprmonk's roadmap points here; this file is the plan.
+- Zendo follows the KDE colour scheme plasmonk writes (item 28); nothing is
+  needed there.
+- Proposed, not made: add Zendo's window class to plasmonk's
+  `themes/mystical/better-blur-classes.txt` so a translucent Zendo blurs.
+- hyprmonk's `tone.json` support is removed in item 27.
 
 ## Conventions
 

@@ -317,7 +317,10 @@ pacman lists what each one adds.
 ## Build
 
 Rust 1.98 or newer, and WebKitGTK 4.1 with GTK 3 (on Arch, `webkit2gtk-4.1`;
-on Debian and Ubuntu, `libwebkit2gtk-4.1-dev`):
+on Debian and Ubuntu, `libwebkit2gtk-4.1-dev`; on Fedora, `gtk3-devel
+webkit2gtk4.1-devel libsoup3-devel javascriptcoregtk4.1-devel
+systemd-devel`, checked on Fedora 45). The repository's `mise.toml` pins
+Rust 1.99.1 for [mise](https://mise.jdx.dev) users (`mise install`):
 
 ```bash
 git clone https://github.com/leandrop-dev/zendo.git
@@ -598,6 +601,11 @@ Ideas, no code, from:
 - [Heroic](https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher)
   (GPL-3.0): where it keeps its installed games, and its `heroic://launch`
   links.
+- [omakade](https://github.com/btsouth/omakade) (GPL-3.0-or-later): the
+  look Zendo's redesign follows (a top bar instead of a sidebar, a
+  translucent window, monospace type, Home and a controller-first Game
+  Mode, Organize, play sessions and stats). Ideas and look only; no code or
+  assets are used (`docs/design.md`).
 
 Built on [Iced](https://iced.rs) (MIT), [gilrs](https://gitlab.com/gilrs-project/gilrs)
 (MIT or Apache-2.0), [keyvalues-parser](https://codeberg.org/CosmicHarper/vdf-rs)

@@ -2628,3 +2628,52 @@ Left open: on Wayland the minimised window stays in hyprmonk's dock rather
 than vanishing from it, as that dock is built to restore minimised windows;
 and restoring off Hyprland (another Wayland compositor) still needs the
 compositor rather than Zendo.
+
+## The move to Fedora 45 and the reformulation, 2026-11-12
+
+The user reinstalled the PC with Fedora 45 (KDE Plasma 6, Wayland); until
+then Zendo was built on Arch with Hyprland, next to hyprmonk. The sibling
+project on disk is now `plasmonk-kde` (KDE, matugen colours), and hyprmonk is
+not there. Heroic, its engines, umu-launcher and every game manifest are gone
+with the old install, and so is `.mallet/reviews/2026-11-10/` (gitignored).
+
+Set up, by the user's own commands (Claude only checked):
+
+- `sudo dnf install gtk3-devel webkit2gtk4.1-devel libsoup3-devel
+  javascriptcoregtk4.1-devel systemd-devel ydotool kdotool`. Fedora 45 still
+  ships WebKitGTK 4.1 for GTK 3 (2.54.2), so the sign-in window is unchanged.
+- Rust 1.99.1 through mise (`mise use rust@1.99.1`, which wrote `mise.toml`;
+  mise links it to a rustup toolchain in `~/.cargo/bin`, clippy and rustfmt
+  included).
+- Without Heroic, from each project's GitHub release through mise's `github:`
+  backend: legendary 0.21.1 (derrod's; dnf has only 0.20.34), gogdl 1.4.0,
+  nile 1.2.0, comet 0.4.1 (its release also holds `dummy-service.zip` with
+  `GalaxyCommunication.exe`) and umu-launcher 1.4.4 (the zipapp; Fedora RPMs
+  stop at fc44). All answered `--version` on `PATH` under their plain names.
+  Zendo already looks on `PATH` before Heroic's folders
+  (`stores.rs` `bundled`); only `GalaxyCommunication.exe` is taken from
+  Heroic's folder alone (`galaxy.rs` `install_service`), which item 27 fixes.
+
+Checked on the new machine: `cargo build --workspace` (1m44),
+`cargo test --workspace` (129 core and 231 window pass, 23 ignored, none
+failing) and `cargo clippy --workspace --all-targets` (no warning). On KDE, in
+a throwaway home with no session bus: the window opens and draws; KWin sees
+it as class `zendo`; `spectacle -b -n -a -o` takes a still of it; a Tab
+through `ydotool` (run as the user, since Fedora's `ydotool.service` is a
+root system unit and a socket path over 108 characters fails) moved the sort
+chip from Recent to Most played; `kdotool` minimised, reactivated and closed
+it. The three games it listed were KDE's own `.desktop` entries.
+
+Not checked: the tray hide and restore on KDE. Zendo reads its API keys from
+the keyring at start, so a run with the tray needs the real session bus and
+so the user's real KDE Wallet; the user chose to skip it until item 27 has
+reworked the restore, which was only ever tried on Hyprland. Also not seen:
+whether `grim` and `wtype` work on KWin (not installed), the dummy-service
+step without Heroic, and any store feature with a real account.
+
+Decisions [tentative until the user confirms the order in docs/backlog.md]:
+generic platform with no Hyprland code, Fedora first, the theme from the KDE
+colour scheme, and a complete redesign in the style of omakade, built in Iced
+with ideas and look only (it is GPL-3.0-or-later; `docs/design.md`).
+Recompiled games are on hold; emulation moves up. The backlog is renumbered
+from 27 so it does not collide with the built items cited above.
