@@ -3,31 +3,31 @@
 //! panel of details, with the technical ones folded under it.
 
 use std::collections::BTreeSet;
-use std::f32::consts::{FRAC_PI_2, PI};
 use std::path::Path;
 
-use iced::gradient::Linear;
 use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
-use iced::{
-    Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians, Task,
-};
+use iced::{Alignment, ContentFit, Element, Font, Length, Task};
 use zendo_core::downloads::{Action, Job};
 use zendo_core::launch;
 use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source};
 
+use super::artwork::ArtMessage;
 use super::categories::CategoriesMessage;
 use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alone, update_line};
+use super::protondb::RatingState;
 use super::steam_installs::SteamInstallMessage;
 use super::store::InfoState;
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
 use crate::i18n::t;
 
-const HERO_HEIGHT: f32 = 340.0;
-const COVER_WIDTH: f32 = 140.0;
-const COVER_HEIGHT: f32 = 210.0;
-const RADIUS: f32 = 14.0;
+/// The page's top: the cover, two buttons under it, and the padding.
+const HEADER_HEIGHT: f32 = 408.0;
+const COVER_WIDTH: f32 = 200.0;
+const COVER_HEIGHT: f32 = 300.0;
+/// How much of the wide art shows behind the header.
+const BACKDROP_OPACITY: f32 = 0.22;
 pub(super) const LABEL_WIDTH: f32 = 130.0;
 /// The page's width from which the details go beside the rest.
 pub(super) const TWO_COLUMNS: f32 = 960.0;
@@ -75,15 +75,10 @@ impl Zendo {
     }
 
     pub(super) fn game_page<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
-        let trail = row![
-            button(text(t!("game-back")).size(14))
-                .padding(0)
-                .style(style::link)
-                .on_press(Message::Navigate(Page::Library)),
-            text("/").size(14).color(colors().dim),
-            text(&game.title).size(14).color(colors().dim),
-        ]
-        .spacing(8);
+        let trail = button(text(t!("game-back").to_uppercase()).size(14))
+            .padding(0)
+            .style(style::link)
+            .on_press(Message::Navigate(Page::Library));
 
         let update = matches!(
             self.downloads.updates.get(&game.id),
@@ -91,12 +86,14 @@ impl Zendo {
         );
         let mut page = column![
             trail,
-            game_hero(game, update, self.hero_pills(&game.id)),
+            self.game_header(game, update),
             self.action_bar(game, update),
+            Self::organize_bar(game),
+            stat_tiles(game),
         ]
-        .spacing(24)
-        .padding(24);
-        if self.game_view.more {
+        .spacing(SPACE_XL)
+        .padding(SPACE_XL);
+        if self.game_view.more && has_more(game) {
             page = page.push(self.more_row(game));
         }
 
@@ -142,8 +139,135 @@ impl Zendo {
             .into()
     }
 
-    /// Play, Update when one waits, Launch options, Pin and More, then the
-    /// job queued for the game or the last thing said.
+    /// The top of the page: the game's wide art faint behind, the portrait
+    /// cover on the left with the ways to change the pictures, and on the
+    /// right the title, where it comes from and the links to read more.
+    fn game_header<'a>(&'a self, game: &'a Game, update: bool) -> Element<'a, Message> {
+        let cover: Element<'a, Message> = match &game.cover {
+            Some(path) => image(image::Handle::from_path(path))
+                .width(COVER_WIDTH)
+                .height(COVER_HEIGHT)
+                .content_fit(ContentFit::Cover)
+                .border_radius(style::RADIUS_PANEL)
+                .into(),
+            None => container(text(&game.title).size(20).center())
+                .padding(SPACE_M)
+                .center(Length::Fill)
+                .width(COVER_WIDTH)
+                .height(COVER_HEIGHT)
+                .style(style::placeholder)
+                .into(),
+        };
+        let change = |label: String, message: Message| {
+            button(text(label.to_uppercase()).size(12))
+                .padding([SPACE_XS, SPACE_S])
+                .width(Length::Fill)
+                .style(style::secondary)
+                .on_press(message)
+        };
+        let pictures = column![
+            cover,
+            change(
+                t!("game-change-cover"),
+                Message::Art(ArtMessage::Open(game.id.clone())),
+            ),
+            change(
+                t!("game-change-backdrop"),
+                Message::Art(ArtMessage::OpenHero(game.id.clone())),
+            ),
+        ]
+        .spacing(SPACE_S)
+        .width(COVER_WIDTH);
+
+        let mut source = vec![format::source(game.source)];
+        source.extend(game.details.developer.clone());
+        source.extend(game.details.platform.as_deref().map(platform_label));
+        let mut links = row![].spacing(SPACE_S).align_y(Alignment::Center);
+        if update {
+            links = links.push(style::badge(t!("badge-update"), colors().accent));
+        }
+        if game.pinned {
+            links = links.push(style::badge(t!("badge-favorite"), colors().accent));
+        }
+        if game.hidden {
+            links = links.push(style::badge(t!("badge-hidden"), colors().dim));
+        }
+        links = links.extend(self.hero_pills(&game.id));
+        links = links.push(self.wiki_chip(game));
+        let info = column![
+            text(&game.title).size(34).font(BOLD),
+            text(source.join(" · ").to_uppercase())
+                .size(13)
+                .color(colors().dim),
+            container(links.wrap().vertical_spacing(SPACE_S)).padding([SPACE_S, 0.0]),
+        ]
+        .spacing(SPACE_S)
+        .width(Length::Fill);
+
+        let content = container(
+            row![pictures, info]
+                .spacing(SPACE_XL)
+                .align_y(Alignment::Start),
+        )
+        .padding(SPACE_L)
+        .width(Length::Fill)
+        .height(HEADER_HEIGHT);
+        match &game.hero {
+            Some(path) => stack![
+                image(image::Handle::from_path(path))
+                    .width(Length::Fill)
+                    .height(HEADER_HEIGHT)
+                    .content_fit(ContentFit::Cover)
+                    .opacity(BACKDROP_OPACITY),
+                content,
+            ]
+            .into(),
+            None => content.into(),
+        }
+    }
+
+    /// The `PCGamingWiki` chip: by Steam's app id when the game has one (its
+    /// own, or the one `ProtonDB` found), else a search by title.
+    fn wiki_chip<'a>(&self, game: &Game) -> Element<'a, Message> {
+        let app = steam_app(game)
+            .and_then(|app| app.parse::<u32>().ok())
+            .or_else(|| match self.ratings.get(&game.id) {
+                Some(RatingState::Got(Some(rating))) => Some(rating.app),
+                _ => None,
+            });
+        button(text("PCGAMINGWIKI").size(11).font(BOLD))
+            .padding([2, 7])
+            .style(style::pill(colors().dim))
+            .on_press(Message::Open(pcgamingwiki_url(app, &game.title)))
+            .into()
+    }
+
+    /// The game's categories, and the way to change them.
+    fn organize_bar(game: &Game) -> Element<'_, Message> {
+        let mut bar =
+            row![container(style::label(&t!("library-organize"))).padding([SPACE_XS, 0.0]),]
+                .spacing(SPACE_S)
+                .align_y(Alignment::Center);
+        if game.categories.is_empty() {
+            bar = bar.push(text(t!("categories-none")).size(13).color(colors().dim));
+        }
+        for name in &game.categories {
+            bar = bar.push(style::badge(name.to_uppercase(), colors().text));
+        }
+        bar.push(
+            button(text(t!("game-edit-categories").to_uppercase()).size(12))
+                .padding([SPACE_XS, SPACE_S])
+                .style(style::secondary)
+                .on_press(change_categories(game)),
+        )
+        .wrap()
+        .vertical_spacing(SPACE_S)
+        .into()
+    }
+
+    /// Play, Update when one waits, Favorite, Launch options, Hide, Manage
+    /// in Steam and More, then the job queued for the game or the last
+    /// thing said.
     fn action_bar<'a>(&'a self, game: &'a Game, update: bool) -> Element<'a, Message> {
         let job = self.downloads.job_for(&game.id);
         let mut bar = row![self.play_buttons(game)]
@@ -164,41 +288,52 @@ impl Zendo {
         if super::launch_options::applies(game) {
             bar = bar.push(launch_options_button(game));
         }
-        bar = bar
-            .push(
-                button(
-                    text(if game.pinned {
-                        t!("game-unpin")
-                    } else {
-                        t!("game-pin")
-                    })
-                    .size(14),
-                )
+        let action = |label: String, message: Message| {
+            button(text(label.to_uppercase()).size(14))
                 .padding([10, 18])
                 .style(style::secondary)
-                .on_press(Message::TogglePinned),
-            )
-            .push(
-                button(
-                    text(if self.game_view.more {
-                        t!("game-less")
-                    } else {
-                        t!("game-more")
-                    })
-                    .size(14),
-                )
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::GameView(GameViewMessage::ToggleMore)),
-            )
-            .push(space::horizontal());
+                .on_press(message)
+        };
+        bar = bar.push(action(
+            if game.pinned {
+                t!("game-unfavorite")
+            } else {
+                t!("game-favorite")
+            },
+            Message::TogglePinned,
+        ));
+        bar = bar.push(action(
+            if game.hidden {
+                t!("game-unhide")
+            } else {
+                t!("game-hide")
+            },
+            Message::ToggleHidden,
+        ));
+        if let Some(app) = steam_app(game) {
+            bar = bar.push(action(
+                t!("game-manage-steam"),
+                Message::Open(format!("steam://nav/games/details/{app}")),
+            ));
+        }
+        if has_more(game) {
+            bar = bar.push(action(
+                if self.game_view.more {
+                    t!("game-less")
+                } else {
+                    t!("game-more")
+                },
+                Message::GameView(GameViewMessage::ToggleMore),
+            ));
+        }
+        let mut line = row![].spacing(10).align_y(Alignment::Center);
         if let Some((job, running)) = job {
             let state = match (running, job.paused) {
                 (true, _) => "now",
                 (false, true) => "paused",
                 (false, false) => "queued",
             };
-            bar = bar
+            line = line
                 .push(
                     text(t!(
                         "downloads-job-state",
@@ -216,30 +351,18 @@ impl Zendo {
                 );
         } else {
             let status = self.status.clone().unwrap_or_else(|| t!("game-ready"));
-            bar = bar.push(text(status).size(14).color(colors().dim));
+            line = line.push(text(status).size(14).color(colors().dim));
         }
-        bar.into()
+        column![bar.wrap().vertical_spacing(SPACE_S), line]
+            .spacing(SPACE_S)
+            .into()
     }
 
-    /// The less used actions: Hide, and for a game Zendo installed Check for
-    /// updates, Repair, Move and Uninstall; for one added by hand Edit and
-    /// Remove.
+    /// The less used actions: for a game Zendo installed Check for updates,
+    /// Repair, Move and Uninstall; for a Steam game Verify and Uninstall;
+    /// for one added by hand Edit and Remove.
     fn more_row<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
-        let mut more = row![
-            button(
-                text(if game.hidden {
-                    t!("game-unhide")
-                } else {
-                    t!("game-hide")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
-            .style(style::secondary)
-            .on_press(Message::ToggleHidden),
-        ]
-        .spacing(10)
-        .align_y(Alignment::Center);
+        let mut more = row![].spacing(10).align_y(Alignment::Center);
         if game.installed_by_zendo() {
             let free = self.downloads.job_for(&game.id).is_none();
             let checking = self.downloads.updates.get(&game.id) == Some(&UpdateState::Checking);
@@ -341,25 +464,6 @@ impl Zendo {
         };
         add(t!("fact-store"), plain(format::source(game.source)));
         add(t!("fact-started-by"), plain(game.launcher()));
-        let mut categories: Vec<Element<'a, Message>> = vec![if game.categories.is_empty() {
-            text(t!("categories-none"))
-                .size(14)
-                .color(colors().dim)
-                .into()
-        } else {
-            plain(game.categories.join(" · "))
-        }];
-        categories.push(
-            button(text(t!("categories-edit")).size(12))
-                .padding([4, 10])
-                .style(style::secondary)
-                .on_press(change_categories(game))
-                .into(),
-        );
-        add(
-            t!("fact-categories"),
-            row(categories).spacing(8).align_y(Alignment::Center).into(),
-        );
         if let Some(platform) = &game.details.platform {
             add(t!("fact-platform"), plain(platform_label(platform)));
         }
@@ -397,20 +501,6 @@ impl Zendo {
                 ]
                 .spacing(6)
                 .into(),
-            );
-        }
-        add(
-            t!("fact-last-played"),
-            plain(
-                game.played
-                    .last
-                    .map_or_else(|| t!("fact-never"), |last| format::ago(last, now())),
-            ),
-        );
-        if game.played.minutes > 0 {
-            add(
-                t!("fact-play-time"),
-                plain(format::play_time(game.played.minutes)),
             );
         }
         add(
@@ -474,8 +564,12 @@ fn queue(game: &Game, action: Action) -> Option<Message> {
 }
 
 /// A card with a heading.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "callers hand over a heading they just built"
+)]
 pub(super) fn card(heading: String, body: Element<'_, Message>) -> Element<'_, Message> {
-    container(column![text(heading).size(18).font(BOLD), body].spacing(16))
+    container(column![text(heading.to_uppercase()).size(14).font(BOLD), body].spacing(16))
         .padding(20)
         .width(Length::Fill)
         .style(style::card)
@@ -541,201 +635,6 @@ fn path_row<'a>(label: String, path: &Path) -> Element<'a, Message> {
         .spacing(6)
         .into(),
     )
-}
-
-/// What the wide art at the top of a game's page shows.
-pub struct Hero<'a> {
-    pub title: &'a str,
-    pub source: Source,
-    pub art: Option<&'a Path>,
-    pub cover: Option<&'a Path>,
-    pub badges: Vec<(String, Color)>,
-    pub developer: Option<&'a str>,
-    pub facts: Vec<String>,
-    /// The `ProtonDB` and Steam Deck pills, beside the badges.
-    pub pills: Vec<Element<'a, Message>>,
-    /// The game whose art "Change art" picks.
-    pub id: &'a str,
-}
-
-fn game_hero<'a>(
-    game: &'a Game,
-    update: bool,
-    pills: Vec<Element<'a, Message>>,
-) -> Element<'a, Message> {
-    let mut badges = Vec::new();
-    if update {
-        badges.push((t!("badge-update"), colors().accent));
-    }
-    if let Some(platform) = &game.details.platform {
-        badges.push((platform_label(platform), colors().dim));
-    }
-    if game.pinned {
-        badges.push((t!("badge-pinned"), colors().accent));
-    }
-    if game.hidden {
-        badges.push((t!("badge-hidden"), colors().dim));
-    }
-    hero(Hero {
-        title: &game.title,
-        source: game.source,
-        art: game.hero.as_deref(),
-        cover: game.cover.as_deref(),
-        badges,
-        developer: game.details.developer.as_deref(),
-        facts: facts(game),
-        pills,
-        id: &game.id,
-    })
-}
-
-pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
-    let art: Element<'_, Message> = if let Some(path) = hero.art {
-        image(image::Handle::from_path(path))
-            .width(Length::Fill)
-            .height(HERO_HEIGHT)
-            .content_fit(ContentFit::Cover)
-            .border_radius(RADIUS)
-            .into()
-    } else {
-        let tint = style::source_color(hero.source);
-        shade(
-            Linear::new(Radians(FRAC_PI_2))
-                .add_stop(0.0, colors().surface)
-                .add_stop(1.0, Color { a: 0.25, ..tint }),
-        )
-    };
-    // Darkened toward the bottom and the left, where the title sits.
-    let down = shade(
-        Linear::new(Radians(PI))
-            .add_stop(0.0, Color::TRANSPARENT)
-            .add_stop(
-                0.45,
-                Color {
-                    a: 0.2,
-                    ..colors().background
-                },
-            )
-            .add_stop(
-                1.0,
-                Color {
-                    a: 0.95,
-                    ..colors().background
-                },
-            ),
-    );
-    let across = shade(
-        Linear::new(Radians(FRAC_PI_2))
-            .add_stop(
-                0.0,
-                Color {
-                    a: 0.7,
-                    ..colors().background
-                },
-            )
-            .add_stop(0.6, Color::TRANSPARENT),
-    );
-
-    let mut badges = row![style::badge(
-        format::source(hero.source),
-        style::source_color(hero.source)
-    )]
-    .spacing(6);
-    for (label, color) in hero.badges {
-        badges = badges.push(style::badge(label, color));
-    }
-    badges = badges.extend(hero.pills);
-    let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
-    if let Some(developer) = hero.developer {
-        info = info.push(text(developer).size(14).color(colors().dim));
-    }
-    let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
-    if !facts.is_empty() {
-        info = info.push(row(facts).spacing(8));
-    }
-
-    let mut content = row![info.width(Length::Fill)]
-        .spacing(24)
-        .align_y(Alignment::End);
-    if let Some(cover) = hero.cover {
-        content = content.push(
-            image(image::Handle::from_path(cover))
-                .width(COVER_WIDTH)
-                .height(COVER_HEIGHT)
-                .content_fit(ContentFit::Cover)
-                .border_radius(10.0),
-        );
-    }
-    let content = container(content)
-        .padding(28)
-        .width(Length::Fill)
-        .height(HERO_HEIGHT)
-        .align_y(Alignment::End);
-    let change = container(
-        button(text(t!("game-change-art")).size(13))
-            .padding([6, 12])
-            .style(style::secondary)
-            .on_press(Message::Art(super::artwork::ArtMessage::Open(
-                hero.id.to_owned(),
-            ))),
-    )
-    .padding(16)
-    .width(Length::Fill)
-    .align_x(Alignment::End);
-
-    stack![art, down, across, content, change].into()
-}
-
-/// A rounded panel the hero's size filled with a gradient.
-fn shade<'a>(gradient: Linear) -> Element<'a, Message> {
-    container(space::horizontal())
-        .width(Length::Fill)
-        .height(HERO_HEIGHT)
-        .style(move |_| container::Style {
-            background: Some(Background::Gradient(gradient.into())),
-            border: Border {
-                radius: RADIUS.into(),
-                ..Border::default()
-            },
-            ..container::Style::default()
-        })
-        .into()
-}
-
-/// The few numbers worth seeing first.
-fn facts(game: &Game) -> Vec<String> {
-    let mut facts = Vec::new();
-    if game.played.minutes > 0 {
-        facts.push(t!(
-            "played-time",
-            time = format::play_time(game.played.minutes)
-        ));
-    }
-    if let Some(last) = game.played.last {
-        facts.push(t!("game-last-played", when = format::ago(last, now())));
-    }
-    if let Some(size) = &game.details.size {
-        facts.push(size.to_string());
-    }
-    facts
-}
-
-fn fact_chip<'a>(fact: String) -> Element<'a, Message> {
-    container(text(fact).size(13))
-        .padding([4, 10])
-        .style(|_| container::Style {
-            background: Some(Background::Color(Color {
-                a: 0.7,
-                ..colors().surface
-            })),
-            border: Border {
-                color: colors().line,
-                width: 1.0,
-                radius: 14.0.into(),
-            },
-            ..container::Style::default()
-        })
-        .into()
 }
 
 /// Stores write platforms as `Windows`, `windows`, `linux`; shown alike.
@@ -813,6 +712,72 @@ pub fn store_facts(
     facts
 }
 
+/// Whether the More row has anything for the game.
+fn has_more(game: &Game) -> bool {
+    game.installed_by_zendo() || steam_app(game).is_some() || game.source == Source::Local
+}
+
+/// The page of the game on `PCGamingWiki`: the redirect for a Steam app id,
+/// else a search for the title.
+fn pcgamingwiki_url(app: Option<u32>, title: &str) -> String {
+    if let Some(app) = app {
+        return format!("https://www.pcgamingwiki.com/api/appid.php?appid={app}");
+    }
+    let search: String = title
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect();
+    format!("https://www.pcgamingwiki.com/w/index.php?search={search}")
+}
+
+/// Four tiles with the numbers worth seeing first: the time played, when it
+/// was last played, the achievements unlocked and the share of them.
+fn stat_tiles(game: &Game) -> Element<'_, Message> {
+    let dash = || "—".to_owned();
+    let tile = |label: String, value: String| {
+        container(column![style::label(&label), text(value).size(22).font(BOLD),].spacing(SPACE_S))
+            .padding(SPACE_L)
+            .width(Length::FillPortion(1))
+            .style(style::card)
+    };
+    let (unlocked, share) = game.achievements.map_or_else(
+        || (dash(), dash()),
+        |(unlocked, total)| {
+            (
+                format!("{unlocked} / {total}"),
+                super::library::progress_of((unlocked, total))
+                    .map_or_else(dash, |share| format!("{:.0}%", share * 100.0)),
+            )
+        },
+    );
+    row![
+        tile(
+            t!("fact-play-time"),
+            if game.played.minutes > 0 {
+                format::play_time(game.played.minutes)
+            } else {
+                dash()
+            },
+        ),
+        tile(
+            t!("fact-last-played"),
+            game.played
+                .last
+                .map_or_else(dash, |last| format::ago(last, now())),
+        ),
+        tile(t!("achievements-title"), unlocked),
+        tile(t!("stat-completion"), share),
+    ]
+    .spacing(SPACE_M)
+    .into()
+}
+
 /// A game Steam installed, by its app id.
 fn steam_app(game: &Game) -> Option<&str> {
     (game.source == Source::Steam)
@@ -850,6 +815,18 @@ fn launch_options_button(game: &Game) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn links_to_pcgamingwiki_by_app_id_or_by_title() {
+        assert_eq!(
+            pcgamingwiki_url(Some(620), "Portal 2"),
+            "https://www.pcgamingwiki.com/api/appid.php?appid=620"
+        );
+        assert_eq!(
+            pcgamingwiki_url(None, "Baldur's Gate 3 – GOTY"),
+            "https://www.pcgamingwiki.com/w/index.php?search=Baldur%27s%20Gate%203%20%E2%80%93%20GOTY"
+        );
+    }
 
     #[test]
     fn the_page_sections_open_and_close() {

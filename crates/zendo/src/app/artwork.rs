@@ -52,7 +52,10 @@ pub struct Picker {
 
 #[derive(Debug, Clone)]
 pub enum ArtMessage {
+    /// The picker, open on covers.
     Open(String),
+    /// The picker, open on the wide images.
+    OpenHero(String),
     Kind(Kind),
     Query(String),
     Search,
@@ -79,7 +82,10 @@ fn kind_name(kind: Kind) -> &'static str {
 impl Zendo {
     pub(super) fn update_art(&mut self, message: ArtMessage) -> Task<Message> {
         if let ArtMessage::Open(id) = message {
-            return self.open_picker(id);
+            return self.open_picker(id, Kind::Cover);
+        }
+        if let ArtMessage::OpenHero(id) = message {
+            return self.open_picker(id, Kind::Hero);
         }
         if let ArtMessage::Chosen(id, kind, result) = message {
             return self.art_chosen(&id, kind, result);
@@ -157,19 +163,19 @@ impl Zendo {
         Task::none()
     }
 
-    fn open_picker(&mut self, id: String) -> Task<Message> {
+    fn open_picker(&mut self, id: String, kind: Kind) -> Task<Message> {
         let title = match (self.game(&id), self.store.owned(&id)) {
             (Some(game), _) => game.title.clone(),
             (None, Some(owned)) => owned.title.clone(),
             (None, None) => return Task::none(),
         };
-        let chosen = self.persist && covers::chosen(&id, Kind::Cover).is_some();
+        let chosen = self.persist && covers::chosen(&id, kind).is_some();
         let steam = id.strip_prefix("steam:").map(str::to_owned);
         self.picker = Some(Picker {
             id,
             query: title.clone(),
             title,
-            kind: Kind::Cover,
+            kind,
             games: Vec::new(),
             game: None,
             images: Vec::new(),

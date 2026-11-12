@@ -61,7 +61,8 @@ Numbering continues from 27 so it never collides with the built items 1 to
     (JetBrains Mono, OFL-1.1), uppercase labels and flat bordered chips, and
     a top bar with Library, Store and Downloads tabs, search and a Settings
     button for Accounts, Settings and About. Replaces `sidebar.rs`.
-32. Redesign, the Library and the game page, as in design.md, with Zendo's
+32. Built on 2026-11-12 (docs/history.md, item 32), checked on screen with the user
+    present, not yet tried by the user. Redesign, the Library and the game page, as in design.md, with Zendo's
     pins, hiding, categories, play time, achievements and ProtonDB.
 33. Redesign, the remaining pages: Store, Downloads, Accounts, Settings,
     the launch options sheet, mods and Nexus.

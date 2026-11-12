@@ -7,10 +7,6 @@ count-games = { $count ->
     [one] { $count } jogo
    *[other] { $count } jogos
 }
-count-sources = { $count ->
-    [one] { $count } origem
-   *[other] { $count } origens
-}
 count-files = { $count ->
     [one] { $count } ficheiro
    *[other] { $count } ficheiros
@@ -42,7 +38,7 @@ top-bar-signed-in = { $count } de { $stores }
 
 source-desktop = Ambiente de trabalho
 source-added = Adicionados
-sort-recent = Recentes
+sort-recent = Último jogo
 sort-most-played = Mais jogados
 sort-title = A–Z
 
@@ -54,30 +50,29 @@ library-none-found-about = O Zendo lê as bibliotecas do Steam, os jogos que o H
 library-no-match = Nada corresponde a “{ $search }”
 library-none-here = Não há jogos aqui · escolha Todos para ver todas as lojas
 library-all-hidden = Todos os jogos estão ocultos · Ctrl+H ou Start mostra-os
-library-subtitle = { $games } de { $sources }
-library-subtitle-hidden = { $hidden ->
-    [one] { $subtitle } · 1 oculto
-   *[other] { $subtitle } · { $hidden } ocultos
-}
+library-no-favorites = Ainda sem favoritos · Marque um jogo como favorito na sua página
+library-no-recent = Nada jogado nos últimos 30 dias
+library-no-hidden = Nenhum jogo oculto
+library-favorites = Favoritos
+library-recent = Recentes
+library-organize = Organizar
+library-sort-keys = Ordenar · Tab
 library-scanning = A procurar…
 library-refresh = Atualizar
 library-search = Pesquisar na biblioteca
 library-add-game = Adicionar jogo
 library-all = Todos
 library-sort = Ordenar
-library-show-hidden = Mostrar ocultos
 library-selected = { $count } marcados
 library-clear-selection = Limpar
 categories-assign = Juntar a uma categoria…
 library-hidden = Oculto
 badge-running = A CORRER
-badge-pinned = FIXADO
+badge-favorite = FAVORITO
 played-never = Ainda não jogado
 played-when = Jogado { $when }
 played-time = { $time } jogados
 
-fact-categories = Categorias
-categories-edit = Mudar…
 categories-none = Nenhuma
 
 ## Categorias
@@ -145,12 +140,12 @@ footer-unreadable = { $count ->
 }
 status-hid = { $title } ocultado · Ctrl+H mostra os jogos ocultos
 status-unhid = { $title } voltou à biblioteca
-status-pinned = { $title } fixado: aparece primeiro na biblioteca
-status-unpinned = { $title } deixou de estar fixado
-hints-library = Enter abrir · Tab ordenar · Ctrl+P fixar · Ctrl+Space marcar · Del ocultar · Ctrl+H ocultos · F11 ecrã inteiro
+status-pinned = { $title } é um favorito: aparece primeiro na biblioteca
+status-unpinned = { $title } deixou de ser um favorito
+hints-library = Enter abrir · Tab ordenar · Ctrl+P favorito · Ctrl+Space marcar · Del ocultar · Ctrl+H ocultos · F11 ecrã inteiro
 hints-selection = Enter abre · Esc limpa as marcas · F11 ecrã inteiro
 hints-sheet = Enter guardar · Esc cancelar
-hints-game = Enter jogar · Esc voltar · Ctrl+P fixar · Del ocultar · F11 ecrã inteiro
+hints-game = Enter jogar · Esc voltar · Ctrl+P favorito · Del ocultar · F11 ecrã inteiro
 hints-store = Enter abrir · escreva para pesquisar · Esc limpar · F11 ecrã inteiro
 hints-owned = Enter instalar ou abrir · Esc voltar · F11 ecrã inteiro
 hints-closing = Enter fechar mesmo assim · Esc continuar a transferir
@@ -466,15 +461,19 @@ installer-no-description = Sem descrição.
 
 game-back = ← Biblioteca
 game-ready = Pronto quando quiser
-game-pin = Fixar
-game-unpin = Desafixar
+game-favorite = Favorito
+game-unfavorite = Tirar dos favoritos
+game-manage-steam = Gerir no Steam
+game-change-cover = Mudar capa
+game-change-backdrop = Mudar fundo
+game-edit-categories = Editar categorias
+stat-completion = Conclusão
 game-hide = Ocultar
 game-unhide = Mostrar
 game-more = Mais
 game-less = Menos
 game-technical = Técnico
 game-change-art = Mudar imagens
-game-last-played = Jogado pela última vez { $when }
 game-about = Sobre
 game-details = Detalhes do jogo
 game-launch-options = Opções de lançamento

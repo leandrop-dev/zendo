@@ -156,6 +156,7 @@ pub const BOLD: Font = Font {
 };
 
 /// The spacing scale, in pixels: every gap and padding is one of these.
+pub const SPACE_XS: f32 = 4.0;
 pub const SPACE_S: f32 = 8.0;
 pub const SPACE_M: f32 = 12.0;
 pub const SPACE_L: f32 = 16.0;
@@ -164,7 +165,33 @@ pub const SPACE_XL: f32 = 24.0;
 /// Controls (chips, buttons, inputs) are square-cornered; panels have a
 /// hair of rounding.
 const RADIUS_CONTROL: f32 = 0.0;
-const RADIUS_PANEL: f32 = 2.0;
+pub const RADIUS_PANEL: f32 = 2.0;
+
+/// A small uppercase label in the dim colour: the name of a row of chips or
+/// a stat tile. (Iced 0.14 text has no letter spacing, so uppercase only.)
+pub fn label<'a>(value: &str) -> text::Text<'a> {
+    text(value.to_uppercase()).size(11).color(colors().dim)
+}
+
+/// A fade from clear to the window's colour toward the bottom, under a
+/// title drawn over a cover.
+pub fn cover_fade(_: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Gradient(
+            iced::gradient::Linear::new(iced::Radians(std::f32::consts::PI))
+                .add_stop(0.0, Color::TRANSPARENT)
+                .add_stop(
+                    1.0,
+                    Color {
+                        a: 0.9,
+                        ..colors().background
+                    },
+                )
+                .into(),
+        )),
+        ..container::Style::default()
+    }
+}
 
 impl Default for Colors {
     fn default() -> Self {

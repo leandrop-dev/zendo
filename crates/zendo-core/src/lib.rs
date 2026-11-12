@@ -245,6 +245,8 @@ pub struct Game {
     pub pinned: bool,
     /// The user's categories holding it, by name, sorted.
     pub categories: Vec<String>,
+    /// Achievements unlocked and in all, once its store has been asked.
+    pub achievements: Option<(u32, u32)>,
 }
 
 impl Game {
@@ -265,6 +267,7 @@ impl Game {
             hidden: false,
             pinned: false,
             categories: Vec::new(),
+            achievements: None,
         }
     }
 
@@ -419,6 +422,7 @@ impl Library {
             game.hidden = state.is_hidden(&game.id);
             game.pinned = state.is_pinned(&game.id);
             game.categories = state.categories_of(&game.id);
+            game.achievements = state.achievements_of(&game.id);
         }
     }
 

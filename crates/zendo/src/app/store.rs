@@ -477,6 +477,7 @@ impl Zendo {
             visible.into_iter().enumerate().map(|(index, game)| {
                 card(Card {
                     check: None,
+                    progress: None,
                     title: &game.title,
                     source: game.source(),
                     cover: game.cover.as_deref(),

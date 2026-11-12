@@ -56,6 +56,14 @@ Mode). omakade also starts it on a chosen display, silences notifications,
 switches the sound output and holds launcher windows while a game starts;
 none of that is planned for Zendo yet.
 
+## Decided in item 32
+
+Favorites are Zendo's pins, renamed, and still lead every sort. Recent is
+played in the last 30 days; Hidden shows only hidden games. The card's line is
+the achievements share, known once a game's page was opened. The wide art is a
+faint backdrop behind the game page's header. The insights block waits for
+item 36, and "Manage in the launcher" is Steam's only until item 33.
+
 ## Not taken
 
 Console libraries and native ports (item 37 covers emulation its own way),

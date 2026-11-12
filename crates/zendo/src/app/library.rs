@@ -9,7 +9,7 @@ use iced::{Alignment, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source};
 
 use super::categories::CategoriesMessage;
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, SPACE_L, SPACE_S, SPACE_XL, colors};
 use super::top_bar;
 use super::{Message, Zendo, centered, format, grid_id, now};
 use crate::i18n::t;
@@ -22,10 +22,48 @@ const CARD_PADDING: f32 = 6.0;
 pub const CARD_WIDTH: f32 = COVER_WIDTH + 2.0 * CARD_PADDING;
 pub const CARD_HEIGHT: f32 = COVER_HEIGHT + CAPTION_HEIGHT + 4.0 + 2.0 * CARD_PADDING;
 pub const SPACING: f32 = 16.0;
+/// The progress line along a cover's foot.
+const PROGRESS_HEIGHT: f32 = 3.0;
 /// Around the grid, inside its scrollable.
 pub const GRID_PADDING: f32 = 24.0;
 /// Room kept for the scrollbar beside the grid.
 const SCROLLBAR: f32 = 12.0;
+
+/// How many days back a game counts as recently played.
+pub const RECENT_DAYS: u64 = 30;
+
+/// Which of the games the view chips show.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum View {
+    /// Every game not hidden.
+    #[default]
+    All,
+    Favorites,
+    /// Played in the last [`RECENT_DAYS`].
+    Recent,
+    /// Only the games hidden by the user.
+    Hidden,
+}
+
+impl View {
+    pub const ALL: [Self; 4] = [Self::All, Self::Favorites, Self::Recent, Self::Hidden];
+
+    /// Whether the view shows `game`, `now` being Unix seconds.
+    pub fn shows(self, game: &Game, now: u64) -> bool {
+        match self {
+            Self::Hidden => game.hidden,
+            Self::All => !game.hidden,
+            Self::Favorites => !game.hidden && game.pinned,
+            Self::Recent => {
+                !game.hidden
+                    && game
+                        .played
+                        .last
+                        .is_some_and(|last| now.saturating_sub(last) <= RECENT_DAYS * 86_400)
+            }
+        }
+    }
+}
 
 /// How many cards fit across a window this wide.
 pub fn columns_for(window_width: f32) -> usize {
@@ -63,93 +101,104 @@ impl Zendo {
             Some(_) if visible.is_empty() && (self.source.is_some() || self.category.is_some()) => {
                 centered(text(t!("library-none-here")).color(colors().dim))
             }
-            Some(_) if visible.is_empty() => {
-                centered(text(t!("library-all-hidden")).color(colors().dim))
-            }
+            Some(_) if visible.is_empty() => centered(
+                text(match self.view {
+                    View::All => t!("library-all-hidden"),
+                    View::Favorites => t!("library-no-favorites"),
+                    View::Recent => t!("library-no-recent"),
+                    View::Hidden => t!("library-no-hidden"),
+                })
+                .color(colors().dim),
+            ),
             Some(_) => self.grid(&visible),
         };
-        column![self.library_header(), self.toolbar(), body]
-            .spacing(4)
-            .into()
+        column![
+            self.view_row(),
+            self.source_row(),
+            self.organize_row(),
+            body
+        ]
+        .spacing(4)
+        .into()
     }
 
-    fn library_header(&self) -> Element<'_, Message> {
+    /// The view chips with their counts, then Add game and Refresh.
+    fn view_row(&self) -> Element<'_, Message> {
         let games: Vec<&Game> = self
             .library
             .iter()
             .flat_map(|library| &library.games)
             .collect();
-        let shown = games.iter().filter(|game| !game.hidden).count();
-        let hidden = games.len() - shown;
-        let stores = Source::ALL
-            .iter()
-            .filter(|source| games.iter().any(|game| game.source == **source))
-            .count();
-        let mut subtitle = t!(
-            "library-subtitle",
-            games = t!("count-games", count = shown),
-            sources = t!("count-sources", count = stores)
-        );
-        if hidden > 0 {
-            subtitle = t!(
-                "library-subtitle-hidden",
-                subtitle = subtitle,
-                hidden = hidden
-            );
+        let now = now();
+        let hidden = games.iter().filter(|game| game.hidden).count();
+        let mut chips: Vec<Element<'_, Message>> = Vec::new();
+        for view in View::ALL {
+            // Hidden is offered only when something is hidden, or is open.
+            if view == View::Hidden && hidden == 0 && self.view != View::Hidden {
+                continue;
+            }
+            let count = games.iter().filter(|game| view.shows(game, now)).count();
+            chips.push(chip(
+                match view {
+                    View::All => t!("library-all"),
+                    View::Favorites => t!("library-favorites"),
+                    View::Recent => t!("library-recent"),
+                    View::Hidden => t!("library-hidden"),
+                },
+                Some(count),
+                self.view == view,
+                Message::SetView(view),
+            ));
         }
-
         let refresh = button(
-            text(if self.scanning {
-                t!("library-scanning")
-            } else {
-                t!("library-refresh")
-            })
-            .size(14),
+            text(
+                if self.scanning {
+                    t!("library-scanning")
+                } else {
+                    t!("library-refresh")
+                }
+                .to_uppercase(),
+            )
+            .size(13),
         )
-        .padding([8, 14])
+        .padding([4, 12])
         .style(style::secondary)
         .on_press_maybe((!self.scanning).then_some(Message::Refresh));
         row![
-            column![
-                text(t!("page-library")).size(28).font(BOLD),
-                text(subtitle).size(13).color(colors().dim),
-            ]
-            .spacing(2),
+            row(chips).spacing(SPACE_S).wrap().vertical_spacing(SPACE_S),
             space::horizontal(),
-            button(text(t!("library-add-game")).size(14))
-                .padding([8, 14])
+            button(text(t!("library-add-game").to_uppercase()).size(13))
+                .padding([4, 12])
                 .style(style::secondary)
                 .on_press(Message::Local(super::local::LocalMessage::Add)),
             refresh,
         ]
-        .spacing(12)
+        .spacing(SPACE_S)
         .align_y(Alignment::Center)
         .padding(iced::Padding {
-            top: 24.0,
+            top: SPACE_XL,
             right: GRID_PADDING,
-            bottom: 8.0,
+            bottom: SPACE_S,
             left: GRID_PADDING,
         })
         .into()
     }
 
-    /// Store chips, then the sort, the hidden games and the user's
-    /// categories.
-    fn toolbar(&self) -> Element<'_, Message> {
-        let games: Vec<&Game> = self
-            .library
+    /// The games the view lets through, before the store and category
+    /// chips narrow them.
+    fn in_view(&self) -> Vec<&Game> {
+        let now = now();
+        self.library
             .iter()
             .flat_map(|library| &library.games)
-            .filter(|game| self.show_hidden || !game.hidden)
-            .collect();
-        let hidden = self
-            .library
-            .iter()
-            .flat_map(|library| &library.games)
-            .filter(|game| game.hidden)
-            .count();
+            .filter(|game| self.view.shows(game, now))
+            .collect()
+    }
 
-        let mut filters: Vec<Element<'_, Message>> = vec![chip(
+    /// The store chips, then the sort chips with their key.
+    fn source_row(&self) -> Element<'_, Message> {
+        let games = self.in_view();
+        let mut sources: Vec<Element<'_, Message>> = vec![chip(
             t!("library-all"),
             Some(games.len()),
             self.source.is_none() && self.category.is_none(),
@@ -158,7 +207,7 @@ impl Zendo {
         for source in Source::ALL {
             let count = games.iter().filter(|game| game.source == source).count();
             if count > 0 {
-                filters.push(chip(
+                sources.push(chip(
                     format::source(source),
                     Some(count),
                     self.source == Some(source),
@@ -167,7 +216,7 @@ impl Zendo {
             }
         }
         let mut sorts: Vec<Element<'_, Message>> = vec![
-            container(text(t!("library-sort")).size(13).color(colors().dim))
+            container(style::label(&t!("library-sort-keys")))
                 .padding([6, 0])
                 .into(),
         ];
@@ -179,49 +228,51 @@ impl Zendo {
                 Message::SetSort(sort),
             ));
         }
-        let mut narrow: Vec<Element<'_, Message>> = Vec::new();
-        if hidden > 0 || self.show_hidden {
-            narrow.push(chip(
-                t!("library-show-hidden"),
-                Some(hidden),
-                self.show_hidden,
-                Message::ShowHidden,
+        row![
+            row(sources).spacing(SPACE_S),
+            row(sorts).spacing(SPACE_S).align_y(Alignment::Center),
+        ]
+        .spacing(SPACE_L)
+        .padding([4.0, GRID_PADDING])
+        .wrap()
+        .vertical_spacing(SPACE_S)
+        .into()
+    }
+
+    /// Organize: the user's categories, the way to change them, and what
+    /// is marked in the grid.
+    fn organize_row(&self) -> Element<'_, Message> {
+        let games = self.in_view();
+        let mut chips: Vec<Element<'_, Message>> = vec![
+            container(style::label(&t!("library-organize")))
+                .padding([6, 0])
+                .into(),
+        ];
+        for category in &self.categories {
+            let count = games
+                .iter()
+                .filter(|game| game.categories.contains(&category.name))
+                .count();
+            chips.push(chip(
+                category.name.clone(),
+                Some(count),
+                self.category.as_deref() == Some(category.name.as_str()),
+                Message::SetCategory(Some(category.name.clone())),
             ));
         }
-        if !self.categories.is_empty() {
-            for category in &self.categories {
-                let count = games
-                    .iter()
-                    .filter(|game| game.categories.contains(&category.name))
-                    .count();
-                narrow.push(chip(
-                    category.name.clone(),
-                    Some(count),
-                    self.category.as_deref() == Some(category.name.as_str()),
-                    Message::SetCategory(Some(category.name.clone())),
-                ));
-            }
-        }
-        let mut actions: Vec<Element<'_, Message>> = vec![chip(
+        chips.push(chip(
             t!("categories-open"),
             (!self.categories.is_empty()).then_some(self.categories.len()),
             false,
             Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
-        )];
-        self.selection_chips(&mut actions);
-        let mut groups: Vec<Element<'_, Message>> = vec![
-            row(filters).spacing(8).into(),
-            row(sorts).spacing(8).align_y(Alignment::Center).into(),
-        ];
-        if !narrow.is_empty() {
-            groups.push(row(narrow).spacing(8).into());
-        }
-        groups.push(row(actions).spacing(8).into());
-        row(groups)
-            .spacing(16)
+        ));
+        self.selection_chips(&mut chips);
+        row(chips)
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center)
             .padding([4.0, GRID_PADDING])
             .wrap()
-            .vertical_spacing(8)
+            .vertical_spacing(SPACE_S)
             .into()
     }
 
@@ -271,8 +322,9 @@ impl Zendo {
                 badge: if self.running.is_running(&game.id) {
                     Some((t!("badge-running"), colors().good))
                 } else {
-                    game.pinned.then(|| (t!("badge-pinned"), colors().accent))
+                    game.pinned.then(|| (t!("badge-favorite"), colors().accent))
                 },
+                progress: game.achievements.and_then(progress_of),
                 check: Some((
                     self.selected_games.contains(&game.id),
                     Message::ToggleSelectedAt(game.id.clone()),
@@ -380,13 +432,17 @@ pub fn cards_grid<'a>(
 }
 
 /// A toggle in a page's toolbar, with a count when given.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "callers hand over a label they just built"
+)]
 pub(super) fn chip<'a>(
     label: String,
     count: Option<usize>,
     chosen: bool,
     message: Message,
 ) -> Element<'a, Message> {
-    let mut content = row![text(label).size(13)].spacing(6);
+    let mut content = row![text(label.to_uppercase()).size(13)].spacing(6);
     if let Some(count) = count {
         content = content.push(text(count.to_string()).size(12).color(if chosen {
             colors().accent
@@ -412,6 +468,13 @@ fn check_button<'a>(ticked: bool, message: Message) -> Element<'a, Message> {
         .into()
 }
 
+/// The share of achievements unlocked, for a card's line: nothing for a
+/// game with none.
+pub fn progress_of((unlocked, total): (u32, u32)) -> Option<f32> {
+    #[expect(clippy::cast_precision_loss, reason = "counts of achievements")]
+    (total > 0).then(|| unlocked.min(total) as f32 / total as f32)
+}
+
 /// The line under a card's title: how much it was played.
 fn played_line(game: &Game, now: u64) -> String {
     match (game.played.minutes, game.played.last) {
@@ -419,6 +482,48 @@ fn played_line(game: &Game, now: u64) -> String {
         (0, Some(last)) => t!("played-when", when = format::ago(last, now)),
         (minutes, _) => t!("played-time", time = format::play_time(minutes)),
     }
+}
+
+/// The foot of a cover: the title over a fade (a cover with none shows it
+/// in the middle already), then the progress line.
+fn cover_foot(title: &str, has_cover: bool, progress: Option<f32>) -> Element<'_, Message> {
+    let mut foot = column![].width(Length::Fill);
+    if has_cover {
+        foot = foot.push(
+            container(
+                text(title.to_uppercase())
+                    .size(12)
+                    .font(BOLD)
+                    .wrapping(text::Wrapping::WordOrGlyph),
+            )
+            .padding(iced::Padding {
+                top: SPACE_L,
+                ..iced::Padding::new(SPACE_S)
+            })
+            .width(Length::Fill)
+            .max_height(COVER_HEIGHT / 2.0)
+            .clip(true)
+            .style(style::cover_fade),
+        );
+    }
+    if let Some(share) = progress {
+        foot = foot.push(
+            container(
+                container(space::vertical().height(PROGRESS_HEIGHT))
+                    .width(COVER_WIDTH * share.clamp(0.0, 1.0))
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Color(colors().accent)),
+                        ..container::Style::default()
+                    }),
+            )
+            .width(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(colors().raised)),
+                ..container::Style::default()
+            }),
+        );
+    }
+    foot.into()
 }
 
 /// What a card shows.
@@ -429,9 +534,11 @@ pub struct Card<'a> {
     pub faded: bool,
     /// A label in the cover's top right corner.
     pub badge: Option<(String, Color)>,
-    /// A tick in the cover's bottom right corner and the message that marks
-    /// the card, when the grid can mark.
+    /// A box in the cover's top left corner and the message that marks the
+    /// card, when the grid can mark.
     pub check: Option<(bool, Message)>,
+    /// A thin line along the cover's foot, filled this much (0 to 1).
+    pub progress: Option<f32>,
     pub line: String,
     pub line_color: Color,
     pub selected: bool,
@@ -446,18 +553,20 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         faded,
         badge,
         check,
+        progress,
         line,
         line_color,
         selected,
         on_press,
     } = card;
     let ticked = check.as_ref().is_some_and(|(ticked, _)| *ticked);
+    let has_cover = cover.is_some();
     let cover: Element<'_, Message> = match cover {
         Some(path) => image(image::Handle::from_path(path))
             .width(COVER_WIDTH)
             .height(COVER_HEIGHT)
             .content_fit(ContentFit::Cover)
-            .border_radius(8.0)
+            .border_radius(style::RADIUS_PANEL)
             .opacity(if faded { 0.35_f32 } else { 1.0_f32 })
             .into(),
         None => container(text(title).size(18).center())
@@ -468,32 +577,35 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
             .style(style::placeholder)
             .into(),
     };
-    let mut badges = row![style::badge(
-        format::source(source),
-        style::source_color(source)
-    )]
-    .width(Length::Fill);
-    if let Some((label, color)) = badge {
-        badges = badges
-            .push(space::horizontal())
-            .push(style::badge(label, color));
-    }
-    let mut over = column![badges, space::vertical()];
+    // The mark box top left, the badge top right.
+    let mut corners = row![].width(Length::Fill);
     if let Some((ticked, message)) = check {
-        over =
-            over.push(row![space::horizontal(), check_button(ticked, message)].width(Length::Fill));
+        corners = corners.push(check_button(ticked, message));
     }
+    corners = corners.push(space::horizontal());
+    if let Some((label, color)) = badge {
+        corners = corners.push(style::badge(label, color));
+    }
+    let foot = cover_foot(title, has_cover, progress);
     let art = stack![
         cover,
-        container(over)
-            .padding(8)
-            .width(COVER_WIDTH)
-            .height(COVER_HEIGHT),
+        container(column![
+            container(corners).padding(SPACE_S),
+            space::vertical(),
+            foot
+        ])
+        .width(COVER_WIDTH)
+        .height(COVER_HEIGHT),
     ];
 
     let caption = column![
         text(title).size(14).wrapping(text::Wrapping::WordOrGlyph),
-        text(line).size(12).color(line_color),
+        text(format!(
+            "{} · {line}",
+            format::source(source).to_uppercase()
+        ))
+        .size(12)
+        .color(line_color),
     ]
     .spacing(2)
     .height(CAPTION_HEIGHT)

@@ -253,6 +253,9 @@ enum Message {
     /// Hides the current game, or brings it back when it is hidden.
     ToggleHidden,
     TogglePinned,
+    /// A view chip: All, Favorites, Recent or Hidden.
+    SetView(library::View),
+    /// Hidden games, or back to All.
     ShowHidden,
     ToggleFullscreen,
     FocusSearch,
@@ -404,7 +407,7 @@ struct Zendo {
     viewport_height: f32,
     status: Option<String>,
     sort: Sort,
-    show_hidden: bool,
+    view: library::View,
     images: ImageDownloads,
     downloads: DownloadsState,
     running: Running,
@@ -492,7 +495,7 @@ impl Zendo {
             viewport_height: START_SIZE.height,
             status: None,
             sort: Sort::default(),
-            show_hidden: false,
+            view: library::View::default(),
             images: ImageDownloads::default(),
             downloads: DownloadsState::default(),
             running: Running::default(),
@@ -570,10 +573,11 @@ impl Zendo {
             .map(str::to_lowercase)
             .collect();
         // The lowered title once per game, not twice per comparison.
+        let now = now();
         let mut games: Vec<(&Game, String)> = library
             .games
             .iter()
-            .filter(|game| self.show_hidden || !game.hidden)
+            .filter(|game| self.view.shows(game, now))
             .filter(|game| self.source.is_none_or(|source| game.source == source))
             .filter(|game| {
                 self.category
@@ -730,7 +734,15 @@ impl Zendo {
             }
             Message::ToggleHidden => self.toggle_hidden(),
             Message::TogglePinned => self.toggle_pinned(),
-            Message::ShowHidden => self.filter(|zendo| zendo.show_hidden = !zendo.show_hidden),
+            Message::SetView(view) => self.filter(|zendo| zendo.view = view),
+            // The key and the Start button: the hidden games, and back.
+            Message::ShowHidden => self.filter(|zendo| {
+                zendo.view = if zendo.view == library::View::Hidden {
+                    library::View::All
+                } else {
+                    library::View::Hidden
+                };
+            }),
             Message::ToggleFullscreen => self.toggle_fullscreen(),
             Message::Tray(message) => self.tray_message(message),
             Message::CloseRequested => self.close_requested(),
@@ -2227,16 +2239,69 @@ mod tests {
         let _ = zendo.update(Message::ToggleHidden);
         assert_eq!(titles(&zendo), ["Game 00", "Game 02"]);
         assert_eq!(zendo.selected, 1, "the cursor stays in place");
-        // The cursor is on Game 02 now, and follows it when the hidden
-        // game comes back between them.
+        // The Hidden view holds only the hidden game.
         let _ = zendo.update(Message::ShowHidden);
-        assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
-        assert_eq!(zendo.selected, 2);
-        // Bringing Game 01 back keeps it once hidden games are left out.
-        zendo.selected = 1;
+        assert_eq!(titles(&zendo), ["Game 01"]);
+        // Bringing it back leaves the Hidden view empty; All has all three.
+        zendo.selected = 0;
         let _ = zendo.update(Message::ToggleHidden);
+        assert_eq!(titles(&zendo), [] as [&str; 0]);
         let _ = zendo.update(Message::ShowHidden);
+        assert_eq!(zendo.view, library::View::All);
         assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
+    }
+
+    #[test]
+    fn achievements_that_arrive_mark_the_games_card() {
+        use zendo_core::achievements::{Achievement, Achievements};
+        let mut zendo = zendo_with(1, 1);
+        let one = |unlocked: Option<u64>| Achievement {
+            name: String::new(),
+            description: String::new(),
+            hidden: false,
+            unlocked,
+            rarity: None,
+            icon: None,
+        };
+        let found = |known: bool| Achievements {
+            list: vec![one(Some(1)), one(None), one(None), one(None)],
+            unlocks_known: known,
+        };
+        let _ = zendo.update(Message::Achievements(
+            "desktop:0".into(),
+            Ok(Some(found(false))),
+        ));
+        assert_eq!(zendo.game("desktop:0").unwrap().achievements, None);
+        let _ = zendo.update(Message::Achievements(
+            "desktop:0".into(),
+            Ok(Some(found(true))),
+        ));
+        let game = zendo.game("desktop:0").unwrap();
+        assert_eq!(game.achievements, Some((1, 4)));
+        assert_eq!(library::progress_of((1, 4)), Some(0.25));
+        assert_eq!(library::progress_of((0, 0)), None);
+    }
+
+    #[test]
+    fn each_view_lets_through_its_games() {
+        let mut zendo = zendo_with(4, 4);
+        let now = now();
+        if let Some(library) = zendo.library.as_mut() {
+            library.games[0].pinned = true;
+            library.games[1].played.last = Some(now - 86_400);
+            library.games[2].played.last = Some(now - 90 * 86_400);
+            library.games[3].hidden = true;
+            library.games[3].pinned = true;
+            library.games[3].played.last = Some(now);
+        }
+        let _ = zendo.update(Message::SetView(library::View::All));
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01", "Game 02"]);
+        let _ = zendo.update(Message::SetView(library::View::Favorites));
+        assert_eq!(titles(&zendo), ["Game 00"]);
+        let _ = zendo.update(Message::SetView(library::View::Recent));
+        assert_eq!(titles(&zendo), ["Game 01"]);
+        let _ = zendo.update(Message::SetView(library::View::Hidden));
+        assert_eq!(titles(&zendo), ["Game 03"]);
     }
 
     #[test]

@@ -117,7 +117,8 @@ page with mode 0600 because it holds the key (comments added by hand are not
 kept; Hikari uses the system keyring first, which Zendo could add later
 [tentative]); `~/.local/state/zendo/state.json`
 for what Zendo remembers (launches, hidden and pinned games, the sort, and
-the categories with the games in each),
+the categories with the games in each, and `achievements`: game id to
+`[unlocked, total]`, kept since item 32 for the library's progress line),
 written by the window and the command alike; and `~/.cache/zendo/covers/`
 with `<id>.<ext>` covers, `<id>.hero.<ext>` wide images and a
 `misses.json` (keys `<id>` and `<id>#hero`) so a game without one is asked

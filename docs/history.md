@@ -2939,3 +2939,74 @@ new package ships PNGs only, so installing it fixes that, and a Wayland app
 cannot set its own window icon. About's "Ideas from" card is gone (the
 credits belong on GitHub). Not checked: a light KDE colour scheme (the user
 leaves it for later) and a COPR build with the font and icons.
+
+## Item 32: the Library and the game page, 2026-11-12
+
+Built from the plan agreed the same day (pins become Favorites, the card's
+progress line is the achievements share, the wide art is a faint backdrop,
+the Store's game page waits for item 33).
+
+- **Views**: `library::View` (All, Favorites, Recent, Hidden) replaces
+  `show_hidden`. Recent is played in the last 30 days; Hidden shows only the
+  hidden games; each view has its own empty text. `Message::SetView` is the
+  chips; `Message::ShowHidden` (Ctrl+H, Start) toggles Hidden and All.
+  The sort chip Recent is labelled "Last played" so it is not mistaken for the
+  view. The Library header is three rows: views with Add game and Refresh,
+  stores with the sort chips and their Tab hint, and Organize (categories,
+  marked games). `style::label` is the small uppercase label item 31 left out.
+- **Card** (also the Store's grid): the title in uppercase over a fade at the
+  cover's foot, a 3px accent line for the achievements share (`progress`, the
+  Store passes none), the mark box top left, FAVORITE or RUNNING top right, and
+  under the card the title and `STORE · played line`. Chip labels are uppercase
+  everywhere.
+- **Achievements cache**: `state.json` gets `achievements` (id to unlocked and
+  total), written when a game's achievements arrive with the unlocks known
+  (`achievements_arrived`), read into `Game.achievements` by `Library::apply`.
+  A game shows its line only after its page was opened once.
+- **Game page**: the portrait cover (200×300) with Change cover and Change
+  backdrop (`ArtMessage::OpenHero` opens the picker on wide images), the wide
+  art at 22 % opacity behind the header, the title, the source line and the
+  ProtonDB, Steam Deck and PCGamingWiki chips; an action row that wraps (Play,
+  Update, Favorite, Launch options, Hide, Manage in Steam, More); Organize
+  (the game's categories and Edit categories); four stat tiles (play time, last
+  played, achievements, completion); then the two columns as before. Hide moved
+  out of More; More shows only when it has something. `hero`, `Hero` and
+  `shade` moved to `store_game.rs` unchanged for item 33.
+- **Links**: PCGamingWiki by Steam app id (`api/appid.php?appid=`, documented in
+  its `PCGamingWiki/api` repository; curl gets a Cloudflare challenge, so not
+  fetched here) else a search by title; Manage in Steam is
+  `steam://nav/games/details/<app>` (Valve's community wiki lists it and warns
+  some commands no longer work).
+- Deferred: design.md's insights block to item 36; Manage in Heroic to item 33
+  (no verified URI).
+
+Checked: `cargo fmt`, clippy with no warning, tests green (136 and 248),
+including each view, the achievements cache and the PCGamingWiki URLs.
+
+On screen on KDE (2026-11-12, with the user present, throwaway home, no
+session bus, `ydotoold` on `/run/user/1000/ydt.sock`, a pid check before every
+click and key): the home held KPat's and KMahjongg's real covers copied from
+the cache, KPat's wide art, a favorite (KPat), a hidden game (KMines) and
+`achievements` `[4, 15]` for KPat. Clicked once each: the four view chips (the
+counts and the games were right), a source chip, a sort chip, the Categories
+chip (the sheet opened, Escape closed it), a card's mark box (twice: "1
+marked", Add to category and Clear appeared, then went), a card, and on the
+game page Back, Change cover (the picker opened on Cover), Change backdrop,
+Launch options, Edit categories, Unfavorite and Favorite, Hide and Unhide,
+and PCGamingWiki (Firefox opened; its window was minimised afterwards). The
+progress line, the FAVORITE badge, the four tiles (2 h 5 min, today, 4 / 15,
+27 %) all showed. In Portuguese at 960 px wide the Library and the game page
+fit with nothing outside the window.
+- **Backdrop seam**: the first build faded the wide art with a gradient, and
+  over the translucent window it showed a hard line (a light band above, flat
+  dark below): item 31's two bits of alpha again. The gradient is gone; the art
+  is a constant 22 % and showed as a flat faint block with no seam.
+- The status line said "Unpinned"; the status and key-hint strings now say
+  favorite (en and pt-PT).
+- Dim and accent text on the translucent window is hard to read over this
+  machine's mid-grey wallpaper (the window's colour is about 86,86,86 there); it
+  read clearly over a dark window behind. Not changed.
+- Not checked: Change backdrop opening the picker on Wide image (the click
+  worked, no still was taken), Manage in Steam (no Steam game in the throwaway
+  home, and the URI is not tried on the real Steam), the Opaque switch for this
+  page, Edit categories' sheet (opened and closed, no still).

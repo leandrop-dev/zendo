@@ -8,10 +8,6 @@ count-games = { $count ->
     [one] { $count } game
    *[other] { $count } games
 }
-count-sources = { $count ->
-    [one] { $count } source
-   *[other] { $count } sources
-}
 count-files = { $count ->
     [one] { $count } file
    *[other] { $count } files
@@ -43,7 +39,7 @@ top-bar-signed-in = { $count } of { $stores }
 
 source-desktop = Desktop
 source-added = Added
-sort-recent = Recent
+sort-recent = Last played
 sort-most-played = Most played
 sort-title = A–Z
 
@@ -55,27 +51,29 @@ library-none-found-about = Zendo reads Steam's libraries, the games Heroic insta
 library-no-match = Nothing matches “{ $search }”
 library-none-here = No games here · choose All to see every store
 library-all-hidden = Every game is hidden · Ctrl+H or Start shows them
-library-subtitle = { $games } from { $sources }
-library-subtitle-hidden = { $subtitle } · { $hidden } hidden
+library-no-favorites = No favorites yet · Favorite a game on its page
+library-no-recent = Nothing played in the last 30 days
+library-no-hidden = No hidden games
+library-favorites = Favorites
+library-recent = Recent
+library-organize = Organize
+library-sort-keys = Sort · Tab
 library-scanning = Scanning…
 library-refresh = Refresh
 library-search = Search your library
 library-add-game = Add game
 library-all = All
 library-sort = Sort
-library-show-hidden = Show hidden
 library-selected = { $count } marked
 library-clear-selection = Clear
 categories-assign = Add to category…
 library-hidden = Hidden
 badge-running = RUNNING
-badge-pinned = PINNED
+badge-favorite = FAVORITE
 played-never = Not played yet
 played-when = Played { $when }
 played-time = { $time } played
 
-fact-categories = Categories
-categories-edit = Change…
 categories-none = None
 
 ## Categories
@@ -140,12 +138,12 @@ footer-unreadable = { $count ->
 }
 status-hid = Hid { $title } · Ctrl+H shows hidden games
 status-unhid = { $title } is back in the library
-status-pinned = Pinned { $title }: it leads the library
-status-unpinned = Unpinned { $title }
-hints-library = Enter open · Tab sort · Ctrl+P pin · Ctrl+Space mark · Del hide · Ctrl+H hidden · F11 full-screen
+status-pinned = { $title } is a favorite: it leads the library
+status-unpinned = { $title } is no longer a favorite
+hints-library = Enter open · Tab sort · Ctrl+P favorite · Ctrl+Space mark · Del hide · Ctrl+H hidden · F11 full-screen
 hints-selection = Enter open · Esc clear the marks · F11 full-screen
 hints-sheet = Enter save · Esc cancel
-hints-game = Enter play · Esc back · Ctrl+P pin · Del hide · F11 full-screen
+hints-game = Enter play · Esc back · Ctrl+P favorite · Del hide · F11 full-screen
 hints-store = Enter open · type to search · Esc clear · F11 full-screen
 hints-owned = Enter install or open · Esc back · F11 full-screen
 hints-closing = Enter close anyway · Esc keep downloading
@@ -455,15 +453,19 @@ installer-no-description = No description.
 
 game-back = ← Library
 game-ready = Ready when you are
-game-pin = Pin
-game-unpin = Unpin
+game-favorite = Favorite
+game-unfavorite = Unfavorite
+game-manage-steam = Manage in Steam
+game-change-cover = Change cover
+game-change-backdrop = Change backdrop
+game-edit-categories = Edit categories
+stat-completion = Completion
 game-hide = Hide
 game-unhide = Unhide
 game-more = More
 game-less = Less
 game-technical = Technical
 game-change-art = Change art
-game-last-played = Last played { $when }
 game-about = About
 game-details = Game details
 game-launch-options = Launch options

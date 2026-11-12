@@ -2,15 +2,17 @@
 //! actions, then About and the DLC owned beside the details, in two columns
 //! on a wide window.
 
-use iced::widget::{button, column, container, row, scrollable, space, text};
-use iced::{Alignment, Color, Element, Font, Length};
-use zendo_core::Size;
+use std::f32::consts::{FRAC_PI_2, PI};
+use std::path::Path;
+
+use iced::gradient::Linear;
+use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
+use iced::{Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians};
 use zendo_core::owned::{Owned, PlayedOn};
+use zendo_core::{Size, Source};
 
 use super::format;
-use super::game::{
-    GameViewMessage, Hero, TWO_COLUMNS, about_card, card, hero, label_row, plain, store_facts,
-};
+use super::game::{GameViewMessage, TWO_COLUMNS, about_card, card, label_row, plain, store_facts};
 use super::store::InfoState;
 use super::style::{self, BOLD, colors};
 use super::{Message, Page, Zendo, game_scroll_id, now};
@@ -220,4 +222,155 @@ fn played_on(minutes: PlayedOn) -> Option<String> {
     .map(|(system, minutes)| format!("{system} {}", format::play_time(minutes)))
     .collect();
     (!systems.is_empty()).then(|| systems.join(" · "))
+}
+
+const HERO_HEIGHT: f32 = 340.0;
+const COVER_WIDTH: f32 = 140.0;
+const COVER_HEIGHT: f32 = 210.0;
+const RADIUS: f32 = 14.0;
+
+/// What the wide art at the top of a game's page shows.
+pub struct Hero<'a> {
+    pub title: &'a str,
+    pub source: Source,
+    pub art: Option<&'a Path>,
+    pub cover: Option<&'a Path>,
+    pub badges: Vec<(String, Color)>,
+    pub developer: Option<&'a str>,
+    pub facts: Vec<String>,
+    /// The `ProtonDB` and Steam Deck pills, beside the badges.
+    pub pills: Vec<Element<'a, Message>>,
+    /// The game whose art "Change art" picks.
+    pub id: &'a str,
+}
+
+pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
+    let art: Element<'_, Message> = if let Some(path) = hero.art {
+        image(image::Handle::from_path(path))
+            .width(Length::Fill)
+            .height(HERO_HEIGHT)
+            .content_fit(ContentFit::Cover)
+            .border_radius(RADIUS)
+            .into()
+    } else {
+        let tint = style::source_color(hero.source);
+        shade(
+            Linear::new(Radians(FRAC_PI_2))
+                .add_stop(0.0, colors().surface)
+                .add_stop(1.0, Color { a: 0.25, ..tint }),
+        )
+    };
+    // Darkened toward the bottom and the left, where the title sits.
+    let down = shade(
+        Linear::new(Radians(PI))
+            .add_stop(0.0, Color::TRANSPARENT)
+            .add_stop(
+                0.45,
+                Color {
+                    a: 0.2,
+                    ..colors().background
+                },
+            )
+            .add_stop(
+                1.0,
+                Color {
+                    a: 0.95,
+                    ..colors().background
+                },
+            ),
+    );
+    let across = shade(
+        Linear::new(Radians(FRAC_PI_2))
+            .add_stop(
+                0.0,
+                Color {
+                    a: 0.7,
+                    ..colors().background
+                },
+            )
+            .add_stop(0.6, Color::TRANSPARENT),
+    );
+
+    let mut badges = row![style::badge(
+        format::source(hero.source),
+        style::source_color(hero.source)
+    )]
+    .spacing(6);
+    for (label, color) in hero.badges {
+        badges = badges.push(style::badge(label, color));
+    }
+    badges = badges.extend(hero.pills);
+    let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
+    if let Some(developer) = hero.developer {
+        info = info.push(text(developer).size(14).color(colors().dim));
+    }
+    let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
+    if !facts.is_empty() {
+        info = info.push(row(facts).spacing(8));
+    }
+
+    let mut content = row![info.width(Length::Fill)]
+        .spacing(24)
+        .align_y(Alignment::End);
+    if let Some(cover) = hero.cover {
+        content = content.push(
+            image(image::Handle::from_path(cover))
+                .width(COVER_WIDTH)
+                .height(COVER_HEIGHT)
+                .content_fit(ContentFit::Cover)
+                .border_radius(10.0),
+        );
+    }
+    let content = container(content)
+        .padding(28)
+        .width(Length::Fill)
+        .height(HERO_HEIGHT)
+        .align_y(Alignment::End);
+    let change = container(
+        button(text(t!("game-change-art")).size(13))
+            .padding([6, 12])
+            .style(style::secondary)
+            .on_press(Message::Art(super::artwork::ArtMessage::Open(
+                hero.id.to_owned(),
+            ))),
+    )
+    .padding(16)
+    .width(Length::Fill)
+    .align_x(Alignment::End);
+
+    stack![art, down, across, content, change].into()
+}
+
+/// A rounded panel the hero's size filled with a gradient.
+fn shade<'a>(gradient: Linear) -> Element<'a, Message> {
+    container(space::horizontal())
+        .width(Length::Fill)
+        .height(HERO_HEIGHT)
+        .style(move |_| container::Style {
+            background: Some(Background::Gradient(gradient.into())),
+            border: Border {
+                radius: RADIUS.into(),
+                ..Border::default()
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
+fn fact_chip<'a>(fact: String) -> Element<'a, Message> {
+    container(text(fact).size(13))
+        .padding([4, 10])
+        .style(|_| container::Style {
+            background: Some(Background::Color(Color {
+                a: 0.7,
+                ..colors().surface
+            })),
+            border: Border {
+                color: colors().line,
+                width: 1.0,
+                radius: 14.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
 }

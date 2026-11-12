@@ -105,6 +105,10 @@ pub struct State {
     /// games in it. A game may be in several.
     #[serde(default)]
     categories: BTreeMap<String, BTreeSet<String>>,
+    /// Each game's achievements as last seen, unlocked and total, for the
+    /// library's progress line before its page is opened.
+    #[serde(default)]
+    achievements: BTreeMap<String, (u32, u32)>,
     #[serde(default)]
     pub sort: Sort,
 }
@@ -206,6 +210,17 @@ impl State {
     #[must_use]
     pub fn is_pinned(&self, id: &str) -> bool {
         self.pinned.contains(id)
+    }
+
+    /// Keeps how many achievements a game has and how many are unlocked.
+    pub fn set_achievements(&mut self, id: &str, unlocked: u32, total: u32) {
+        self.achievements.insert(id.to_owned(), (unlocked, total));
+    }
+
+    /// Unlocked and total, when they were seen.
+    #[must_use]
+    pub fn achievements_of(&self, id: &str) -> Option<(u32, u32)> {
+        self.achievements.get(id).copied()
     }
 
     #[must_use]
@@ -340,6 +355,17 @@ mod tests {
         assert!(state.is_hidden("desktop:tool"));
         assert_eq!(state.sort, Sort::MostPlayed);
         assert_eq!(state.played("steam:1"), Played::default());
+    }
+
+    #[test]
+    fn keeps_achievements_and_loads_a_state_without_them() {
+        let mut state = State::default();
+        assert_eq!(state.achievements_of("gog:1"), None);
+        state.set_achievements("gog:1", 4, 15);
+        let state: State = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state.achievements_of("gog:1"), Some((4, 15)));
+        let old: State = serde_json::from_str(r#"{"hidden":["a"]}"#).unwrap();
+        assert_eq!(old.achievements_of("a"), None);
     }
 
     #[test]

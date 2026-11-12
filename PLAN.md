@@ -58,7 +58,9 @@ and `.copr/`) builds offline in a Fedora 45 mock chroot with its tests passing;
 the COPR project `leandrop/zendo` builds for Fedora 45 and Rawhide and the
 RPM was installed and started on 2026-11-12. Item 31 (the top bar, the
 translucent window, JetBrains Mono, the new icons) was built and checked on
-screen the same day, not yet tried by the user. Next is item 32.
+screen the same day, not yet tried by the user. Item 32 (the Library's views
+and cards, the game page) is built with its tests green and checked on screen on 2026-11-12, not yet
+tried by the user (docs/history.md). Next is item 33.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"

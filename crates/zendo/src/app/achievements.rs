@@ -75,10 +75,24 @@ impl Zendo {
         id: String,
         result: Result<Option<Achievements>, String>,
     ) -> Task<Message> {
+        // Kept for the library's progress line, when the unlocks are known.
+        let seen = match &result {
+            Ok(Some(found)) if found.unlocks_known => {
+                let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+                Some((count(found.unlocked()), count(found.list.len())))
+            }
+            _ => None,
+        };
         let state = match result {
             Ok(found) => AchievementsState::Got(found),
             Err(err) => AchievementsState::Failed(err),
         };
+        if let Some((unlocked, total)) = seen {
+            if let Some(game) = self.game_mut(&id) {
+                game.achievements = Some((unlocked, total));
+            }
+            self.save(|state| state.set_achievements(&id, unlocked, total));
+        }
         self.achievements.insert(id, state);
         Task::none()
     }
