@@ -73,7 +73,11 @@ package() {
   cd "$_pkgname"
   install -Dm755 target/release/zendo "$pkgdir/usr/bin/zendo"
   install -Dm644 data/zendo.desktop "$pkgdir/usr/share/applications/zendo.desktop"
-  install -Dm644 data/zendo.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/zendo.svg"
+  local size
+  for size in 16 22 24 32 48 64 128 256 512; do
+    install -Dm644 "data/icons/zendo-$size.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/zendo.png"
+  done
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

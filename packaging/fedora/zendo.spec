@@ -70,7 +70,10 @@ the Protons are downloaded from Settings, not packaged here.
 %install
 install -Dpm0755 target/rpm/zendo %{buildroot}%{_bindir}/zendo
 install -Dpm0644 data/zendo.desktop %{buildroot}%{_datadir}/applications/zendo.desktop
-install -Dpm0644 data/zendo.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/zendo.svg
+for size in 16 22 24 32 48 64 128 256 512; do
+    install -Dpm0644 data/icons/zendo-$size.png \
+        %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/zendo.png
+done
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/zendo.desktop
@@ -83,7 +86,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/zendo.desktop
 %doc README.md
 %{_bindir}/zendo
 %{_datadir}/applications/zendo.desktop
-%{_datadir}/icons/hicolor/scalable/apps/zendo.svg
+%{_datadir}/icons/hicolor/*/apps/zendo.png
 
 %changelog
 * Thu Nov 12 2026 Leandro Paixão <leo@codemonk.eu> - 0.1.0^%{snapdate}git%{shortcommit}-1

@@ -19,8 +19,8 @@ use crate::i18n::t;
 /// The icon's size, in pixels, both ways.
 const SIZE: u32 = 64;
 
-/// The icon, as PNG bytes built into the binary (the same art as the
-/// desktop icon, rasterised from `data/zendo.svg`).
+/// The icon, as PNG bytes built into the binary: the round tray version
+/// of the desktop icon.
 const ICON_PNG: &[u8] = include_bytes!("../tray-icon.png");
 
 /// Something the tray asks of the window.
