@@ -658,8 +658,9 @@ fn umu_setup(
         words.push("waitforexitandrun".into());
         words
     } else {
-        let umu = which("umu-run")
-            .context("umu-launcher is needed to start Windows games: install it (umu-launcher)")?;
+        let umu = crate::engines::find("umu-run").context(
+            "umu-launcher is needed to start Windows games: download it in Settings → Engines",
+        )?;
         if let Some(proton) = chosen {
             env.push(("PROTONPATH", proton.path.into_os_string()));
         }

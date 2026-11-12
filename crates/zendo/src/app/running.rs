@@ -101,6 +101,11 @@ impl Running {
         self.games.get(id).is_some_and(|session| session.seen)
     }
 
+    /// Whether any game is starting or running.
+    pub fn busy(&self) -> bool {
+        !self.games.is_empty()
+    }
+
     /// Whether the game is starting (its prefix being set up, say) or
     /// running: its files are in use either way.
     pub fn is_open(&self, id: &str) -> bool {

@@ -13,6 +13,7 @@ mod categories;
 mod cloud_saves;
 mod dlc;
 mod downloads;
+mod engines;
 mod eos_overlay;
 mod format;
 mod game;
@@ -65,6 +66,7 @@ use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use categories::CategoriesMessage;
 use downloads::{DownloadMessage, DownloadsState};
+use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
 use installer::{InstallerMessage, InstallerState};
@@ -295,6 +297,7 @@ enum Message {
     NexusSearch(SearchMessage),
     Installer(InstallerMessage),
     Proton(ProtonMessage),
+    Engine(EngineMessage),
     Runtime(RuntimeMessage),
     Overlay(OverlayMessage),
     Steam(SteamMessage),
@@ -413,6 +416,7 @@ struct Zendo {
     installer: InstallerState,
     /// The Proton section of Settings.
     protons: Protons,
+    engines: Engines,
     runtimes: RuntimesState,
     overlay: OverlayState,
     cloud: cloud_saves::CloudState,
@@ -490,6 +494,7 @@ impl Zendo {
             nexus: NexusState::default(),
             installer: InstallerState::default(),
             protons: Protons::default(),
+            engines: Engines::default(),
             runtimes: RuntimesState::default(),
             overlay: OverlayState::default(),
             cloud: cloud_saves::CloudState::load(),
@@ -756,6 +761,7 @@ impl Zendo {
             Message::Nexus(message) => self.update_nexus(message),
             Message::Installer(message) => self.update_installer(message),
             Message::Proton(message) => self.update_protons(message),
+            Message::Engine(message) => self.update_engines(message),
             Message::Runtime(message) => self.update_runtimes(message),
             Message::Overlay(message) => self.update_overlay(message),
             Message::Steam(message) => self.update_steam(message),
@@ -966,7 +972,11 @@ impl Zendo {
                 }
                 self.want_overlay();
                 self.settings_paths();
-                Task::batch([self.want_protons(), self.want_runtimes()])
+                Task::batch([
+                    self.want_engines(),
+                    self.want_protons(),
+                    self.want_runtimes(),
+                ])
             }
             Page::Accounts | Page::Downloads | Page::About => Task::none(),
         }

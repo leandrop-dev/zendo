@@ -16,6 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use crate::config::{Config, Kept};
+use crate::engines::{self, Engine, Located, Origin};
 use crate::runtimes::{self, Found, Runtime};
 use crate::secrets::Key;
 use crate::stores::Store;
@@ -33,7 +34,6 @@ const VERSION_WAIT: Duration = Duration::from_secs(5);
 /// The programs Zendo uses besides the store engines, each with the
 /// argument that makes it say its version, when it has a safe one.
 const TOOLS: &[(&str, Option<&str>)] = &[
-    ("umu-run", Some("--version")),
     ("gamescope", Some("--version")),
     ("mangohud", None),
     ("gamemoderun", None),
@@ -207,27 +207,36 @@ fn tools(lines: &mut Vec<String>) {
     };
     lines.push(format!("{:<12} {}", "Steam", found_in(steam::roots())));
     lines.push(format!("{:<12} {}", "Heroic", found_in(heroic::roots())));
-    for store in Store::ALL {
+    for engine in Engine::ALL {
         lines.push(tool_line(
-            store.engine_name(),
-            store.engine(),
+            engine.program(),
+            engines::find_with_origin(engine.program()),
             Some("--version"),
         ));
     }
     for (name, version) in TOOLS {
-        lines.push(tool_line(name, launch::which(name), *version));
+        let found = launch::which(name).map(|path| Located {
+            path,
+            origin: Origin::Path,
+        });
+        lines.push(tool_line(name, found, *version));
     }
 }
 
-fn tool_line(name: &str, path: Option<PathBuf>, version_arg: Option<&str>) -> String {
-    let Some(path) = path else {
+fn tool_line(name: &str, found: Option<Located>, version_arg: Option<&str>) -> String {
+    let Some(Located { path, origin }) = found else {
         return format!("{name:<12} not found");
     };
     let version = version_arg
         .and_then(|arg| version(&path, arg))
         .map(|version| format!(", {version}"))
         .unwrap_or_default();
-    format!("{name:<12} {}{version}", path.display())
+    let origin = match origin {
+        Origin::Zendo => " (Zendo's copy)",
+        Origin::Path => "",
+        Origin::Heroic => " (Heroic's copy)",
+    };
+    format!("{name:<12} {}{version}{origin}", path.display())
 }
 
 /// The first line a program prints when asked its version, waiting for it

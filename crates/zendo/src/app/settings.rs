@@ -5,14 +5,14 @@
 use std::path::{Path, PathBuf};
 
 use iced::widget::{
-    button, column, container, operation, row, scrollable, text, text_input, toggler,
+    button, column, container, operation, progress_bar, row, scrollable, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::config::{Config, Kept};
 use zendo_core::covers::{self, KeyCheck};
 use zendo_core::nexus::User;
 use zendo_core::secrets::Key;
-use zendo_core::{Source, State, launch, report};
+use zendo_core::{Size, Source, State, launch, report};
 
 use super::downloads::UpdateState;
 use super::style::{self, BOLD, colors};
@@ -51,6 +51,7 @@ pub(super) enum Setting {
     DefaultProton(Option<String>),
     MinimizeToTray(bool),
     DiscordPresence(bool),
+    EnginesPathFirst(bool),
 }
 
 /// What the Settings page says once the `SteamGridDB` key is written.
@@ -90,6 +91,7 @@ impl Setting {
             Self::DefaultProton(name) => config.default_proton.clone_from(name),
             Self::MinimizeToTray(on) => config.minimize_to_tray = *on,
             Self::DiscordPresence(on) => config.discord_presence = *on,
+            Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
         }
     }
 }
@@ -375,6 +377,10 @@ impl Zendo {
                 self.update_presence();
                 Task::none()
             }
+            Setting::EnginesPathFirst(_) => {
+                self.engines.refresh();
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
@@ -415,6 +421,7 @@ impl Zendo {
                     self.nexus_section(),
                     self.covers_section(),
                     self.downloads_section(),
+                    self.engines_section(),
                     self.protons_section(),
                     self.runtimes_section(),
                     self.overlay_section(),
@@ -771,6 +778,47 @@ pub(super) fn kept_note<'a>(kept: &Kept) -> Option<Element<'a, Message>> {
         Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), colors().bad),
     };
     Some(text(note).size(13).color(color).into())
+}
+
+/// A download's name, bytes so far and a bar, with Stop (`on_stop`).
+pub(super) fn download_bar<'a>(
+    name: &str,
+    done: u64,
+    total: u64,
+    stopping: bool,
+    on_stop: Message,
+) -> Element<'a, Message> {
+    #[expect(clippy::cast_precision_loss, reason = "a bar's width")]
+    let percent = if total == 0 {
+        0.0
+    } else {
+        done as f32 * 100.0 / total as f32
+    };
+    column![
+        row![
+            text(t!("protons-downloading", name = name))
+                .size(14)
+                .width(Length::Fill),
+            text(t!(
+                "size-of",
+                done = Size::Bytes(done).to_string(),
+                total = Size::Bytes(total).to_string()
+            ))
+            .size(13)
+            .color(colors().dim),
+            button(text(if stopping { t!("stopping") } else { t!("stop") }).size(13))
+                .padding([6, 12])
+                .style(style::secondary)
+                .on_press_maybe((!stopping).then_some(on_stop)),
+        ]
+        .spacing(12)
+        .align_y(Alignment::Center),
+        progress_bar(0.0..=100.0, percent)
+            .girth(8)
+            .style(style::progress),
+    ]
+    .spacing(8)
+    .into()
 }
 
 pub(super) fn section<'a>(

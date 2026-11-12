@@ -1,7 +1,7 @@
 //! The Proton section of Settings: the default Proton, the Protons found,
-//! GE-Proton releases to download (the latest few, older ones on asking),
-//! one at a time with its progress, and Remove for the ones in the user's
-//! own tools folder.
+//! GE-Proton or Proton-CachyOS releases to download (the latest few, older
+//! ones on asking), one at a time with its progress, and Remove for the
+//! ones in the user's own tools folder.
 
 use std::fmt;
 use std::sync::Arc;
@@ -10,14 +10,14 @@ use std::thread;
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{button, column, pick_list, progress_bar, row, text};
+use iced::widget::{button, column, pick_list, row, text};
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::Size;
-use zendo_core::ge_proton::{self, Release};
+use zendo_core::ge_proton::{self, Build, Release};
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::proton::{self, Proton};
 
-use super::settings::section;
+use super::settings::{download_bar, section};
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -27,9 +27,9 @@ const SHOWN: usize = 5;
 /// How many more each "Show older versions" adds.
 const OLDER: usize = 10;
 
+/// What is known of one build's releases.
 #[derive(Debug)]
-pub struct Protons {
-    installed: Vec<Proton>,
+struct List {
     /// The releases read so far, newest first.
     releases: Vec<Release>,
     /// Pages of GitHub's list read; 0 until asked.
@@ -40,6 +40,35 @@ pub struct Protons {
     shown: usize,
     error: Option<String>,
     asking: bool,
+}
+
+impl Default for List {
+    fn default() -> Self {
+        Self {
+            releases: Vec::new(),
+            pages: 0,
+            more: false,
+            shown: SHOWN,
+            error: None,
+            asking: false,
+        }
+    }
+}
+
+fn slot(build: Build) -> usize {
+    match build {
+        Build::Ge => 0,
+        Build::CachyOs => 1,
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Protons {
+    installed: Vec<Proton>,
+    /// The build whose releases are on show.
+    build: Build,
+    /// Each build's releases, by [`slot`].
+    lists: [List; 2],
     download: Option<Download>,
     /// The Proton whose Remove was pressed once, and the games using it,
     /// counted then rather than in `view`.
@@ -48,20 +77,13 @@ pub struct Protons {
     note: Option<(String, bool)>,
 }
 
-impl Default for Protons {
-    fn default() -> Self {
-        Self {
-            installed: Vec::new(),
-            releases: Vec::new(),
-            pages: 0,
-            more: false,
-            shown: SHOWN,
-            error: None,
-            asking: false,
-            download: None,
-            confirm_remove: None,
-            note: None,
-        }
+impl Protons {
+    fn list(&self) -> &List {
+        &self.lists[slot(self.build)]
+    }
+
+    fn list_mut(&mut self, build: Build) -> &mut List {
+        &mut self.lists[slot(build)]
     }
 }
 
@@ -89,10 +111,12 @@ struct Download {
 
 #[derive(Debug, Clone)]
 pub enum ProtonMessage {
-    /// A page of GitHub's list, and whether more follow.
-    Releases(u32, Result<(Vec<Release>, bool), String>),
+    /// A page of a build's GitHub list, and whether more follow.
+    Releases(Build, u32, Result<(Vec<Release>, bool), String>),
     Refresh,
     ShowOlder,
+    /// Which build's releases to show.
+    SetBuild(Build),
     SetDefault(DefaultChoice),
     Download(Release),
     Progress(String, u64, u64),
@@ -117,53 +141,67 @@ impl Zendo {
     /// once a session.
     pub(super) fn want_protons(&mut self) -> Task<Message> {
         self.protons.installed = proton::installed();
-        if !self.persist || self.protons.pages > 0 || self.protons.asking {
+        let list = self.protons.list();
+        if !self.persist || list.pages > 0 || list.asking {
             return Task::none();
         }
-        self.ask_page(1)
+        self.ask_page(self.protons.build, 1)
     }
 
-    fn ask_page(&mut self, page: u32) -> Task<Message> {
-        self.protons.asking = true;
-        self.protons.error = None;
+    fn ask_page(&mut self, build: Build, page: u32) -> Task<Message> {
+        let list = self.protons.list_mut(build);
+        list.asking = true;
+        list.error = None;
         if !self.persist {
             return Task::none();
         }
         Task::perform(
-            blocking(move || ge_proton::releases(page).map_err(|err| format!("{err:#}"))),
-            move |result| Message::Proton(ProtonMessage::Releases(page, result)),
+            blocking(move || ge_proton::releases(build, page).map_err(|err| format!("{err:#}"))),
+            move |result| Message::Proton(ProtonMessage::Releases(build, page, result)),
         )
     }
 
     pub(super) fn update_protons(&mut self, message: ProtonMessage) -> Task<Message> {
         let protons = &mut self.protons;
         match message {
-            ProtonMessage::Releases(page, result) => {
-                protons.asking = false;
+            ProtonMessage::Releases(build, page, result) => {
+                let list = protons.list_mut(build);
+                list.asking = false;
                 match result {
                     Ok((releases, more)) => {
                         if page == 1 {
-                            protons.releases.clear();
+                            list.releases.clear();
                         }
-                        protons.releases.extend(releases);
-                        protons.pages = page;
-                        protons.more = more;
+                        list.releases.extend(releases);
+                        list.pages = page;
+                        list.more = more;
                     }
-                    Err(err) => protons.error = Some(err),
+                    Err(err) => list.error = Some(err),
                 }
             }
             ProtonMessage::Refresh => {
                 protons.installed = proton::installed();
-                protons.shown = SHOWN;
-                if !protons.asking {
-                    return self.ask_page(1);
+                let build = protons.build;
+                let list = protons.list_mut(build);
+                list.shown = SHOWN;
+                if !list.asking {
+                    return self.ask_page(build, 1);
                 }
             }
             ProtonMessage::ShowOlder => {
-                protons.shown += OLDER;
-                if protons.shown > protons.releases.len() && protons.more && !protons.asking {
-                    let next = protons.pages + 1;
-                    return self.ask_page(next);
+                let build = protons.build;
+                let list = protons.list_mut(build);
+                list.shown += OLDER;
+                if list.shown > list.releases.len() && list.more && !list.asking {
+                    let next = list.pages + 1;
+                    return self.ask_page(build, next);
+                }
+            }
+            ProtonMessage::SetBuild(build) => {
+                protons.build = build;
+                let list = protons.list();
+                if list.pages == 0 && !list.asking {
+                    return self.ask_page(build, 1);
                 }
             }
             ProtonMessage::SetDefault(choice) => return self.set_default_proton(choice.name),
@@ -325,27 +363,45 @@ impl Zendo {
             body = body.push(self.installed_row(found));
         }
 
+        let chips = Build::ALL
+            .into_iter()
+            .fold(row![].spacing(6), |chips, build| {
+                chips.push(
+                    button(text(build.label()).size(13))
+                        .padding([4, 10])
+                        .style(if build == protons.build {
+                            style::primary
+                        } else {
+                            style::secondary
+                        })
+                        .on_press(Message::Proton(ProtonMessage::SetBuild(build))),
+                )
+            });
+        let list = protons.list();
         body = body.push(
             row![
-                text(t!("protons-releases")).size(15).font(BOLD),
+                text(t!("protons-releases", build = protons.build.label()))
+                    .size(15)
+                    .font(BOLD),
+                chips,
                 button(text(t!("protons-check-again")).size(13))
                     .padding([4, 10])
                     .style(style::secondary)
                     .on_press_maybe(
-                        (!protons.asking).then_some(Message::Proton(ProtonMessage::Refresh))
+                        (!list.asking).then_some(Message::Proton(ProtonMessage::Refresh))
                     ),
             ]
             .spacing(12)
             .align_y(Alignment::Center),
         );
-        for release in protons.releases.iter().take(protons.shown) {
+        for release in list.releases.iter().take(list.shown) {
             body = body.push(self.release_row(release));
         }
-        if protons.asking {
+        if list.asking {
             body = body.push(text(t!("protons-asking")).size(14).color(colors().dim));
-        } else if let Some(err) = &protons.error {
+        } else if let Some(err) = &list.error {
             body = body.push(text(err).size(13).color(colors().bad));
-        } else if protons.releases.len() > protons.shown || protons.more {
+        } else if list.releases.len() > list.shown || list.more {
             body = body.push(
                 button(text(t!("protons-show-older")).size(13))
                     .padding([6, 12])
@@ -354,7 +410,13 @@ impl Zendo {
             );
         }
         if let Some(download) = &protons.download {
-            body = body.push(download_bar(download));
+            body = body.push(download_bar(
+                &download.name,
+                download.done,
+                download.total,
+                download.stop.load(Ordering::Relaxed),
+                Message::Proton(ProtonMessage::Cancel),
+            ));
         }
         if let Some((note, good)) = &protons.note {
             body = body.push(text(note).size(13).color(if *good {
@@ -475,41 +537,6 @@ fn games_using(name: &str) -> usize {
     })
 }
 
-fn download_bar(download: &Download) -> Element<'_, Message> {
-    #[expect(clippy::cast_precision_loss, reason = "a bar's width")]
-    let percent = if download.total == 0 {
-        0.0
-    } else {
-        download.done as f32 * 100.0 / download.total as f32
-    };
-    let stopping = download.stop.load(Ordering::Relaxed);
-    column![
-        row![
-            text(t!("protons-downloading", name = download.name.as_str()))
-                .size(14)
-                .width(Length::Fill),
-            text(t!(
-                "size-of",
-                done = Size::Bytes(download.done).to_string(),
-                total = Size::Bytes(download.total).to_string()
-            ))
-            .size(13)
-            .color(colors().dim),
-            button(text(if stopping { t!("stopping") } else { t!("stop") }).size(13))
-                .padding([6, 12])
-                .style(style::secondary)
-                .on_press_maybe((!stopping).then_some(Message::Proton(ProtonMessage::Cancel))),
-        ]
-        .spacing(12)
-        .align_y(Alignment::Center),
-        progress_bar(0.0..=100.0, percent)
-            .girth(8)
-            .style(style::progress),
-    ]
-    .spacing(8)
-    .into()
-}
-
 /// Downloads and unpacks a release on a thread, saying how far it got.
 fn install(release: Release, stop: Arc<AtomicBool>) -> impl Stream<Item = ProtonMessage> {
     iced::stream::channel(16, async move |mut output| {
@@ -539,8 +566,10 @@ mod tests {
 
     fn release(name: &str) -> Release {
         Release {
+            build: Build::Ge,
             name: name.into(),
             published: "2026-11-03".into(),
+            file: format!("{name}.tar.gz"),
             tarball: String::new(),
             size: 1000,
             checksum: None,
@@ -625,23 +654,55 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            Build::Ge,
             1,
             Ok((page(0, 12), true)),
         )));
-        assert_eq!(zendo.protons.shown, SHOWN);
+        assert_eq!(zendo.protons.list().shown, SHOWN);
         let _ = zendo.update(Message::Proton(ProtonMessage::ShowOlder));
-        assert_eq!(zendo.protons.shown, SHOWN + OLDER);
+        assert_eq!(zendo.protons.list().shown, SHOWN + OLDER);
         assert!(
-            zendo.protons.asking,
+            zendo.protons.list().asking,
             "past what was read, the next page is asked"
         );
         let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            Build::Ge,
             2,
             Ok((page(12, 20), false)),
         )));
-        assert_eq!(zendo.protons.releases.len(), 20);
-        assert_eq!(zendo.protons.pages, 2);
-        assert!(!zendo.protons.more);
+        assert_eq!(zendo.protons.list().releases.len(), 20);
+        assert_eq!(zendo.protons.list().pages, 2);
+        assert!(!zendo.protons.list().more);
+    }
+
+    #[test]
+    fn each_build_keeps_its_own_releases() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            Build::Ge,
+            1,
+            Ok((vec![release("GE-Proton11-12")], false)),
+        )));
+        let _ = zendo.update(Message::Proton(ProtonMessage::SetBuild(Build::CachyOs)));
+        assert_eq!(zendo.protons.build, Build::CachyOs);
+        assert_eq!(zendo.protons.list().releases, []);
+        assert!(zendo.protons.list().asking, "a build not read yet is asked");
+        let _ = zendo.update(Message::Proton(ProtonMessage::Releases(
+            Build::CachyOs,
+            1,
+            Ok((
+                vec![release("proton-cachyos-11.0-20261015-slr-x86_64")],
+                false,
+            )),
+        )));
+        let _ = zendo.update(Message::Proton(ProtonMessage::SetBuild(Build::Ge)));
+        assert_eq!(zendo.protons.list().releases.len(), 1);
+        assert_eq!(zendo.protons.list().releases[0].name, "GE-Proton11-12");
+        assert!(
+            !zendo.protons.list().asking,
+            "already read, not asked again"
+        );
     }
 
     #[test]

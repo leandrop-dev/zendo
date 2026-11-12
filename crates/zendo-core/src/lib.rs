@@ -17,6 +17,7 @@ pub mod config;
 pub mod covers;
 mod desktop;
 pub mod downloads;
+pub mod engines;
 pub mod eos_overlay;
 pub mod fomod;
 pub mod galaxy;

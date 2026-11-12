@@ -36,6 +36,9 @@
 //! minimize_to_tray = false
 //! # Discord shows what Zendo is playing (rich presence). Off by default.
 //! discord_presence = false
+//! # Look for legendary, gogdl, nile, comet and umu-run on PATH before the
+//! # copies Zendo downloaded (Settings → Engines). Off: Zendo's own first.
+//! engines_on_path_first = false
 //! ```
 //!
 //! The API keys are kept in the system keyring ([`secrets`]) when one
@@ -114,6 +117,10 @@ pub struct Config {
     pub minimize_to_tray: bool,
     /// Whether Discord shows what Zendo is playing (rich presence).
     pub discord_presence: bool,
+    /// Whether the store engines and umu-run are looked for on `PATH`
+    /// before the copies Zendo downloaded.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub engines_on_path_first: bool,
     /// Where each key is kept, and its value there.
     #[serde(skip)]
     held: [Held; Key::ALL.len()],
@@ -173,6 +180,7 @@ impl PartialEq for Config {
             && self.theme == other.theme
             && self.minimize_to_tray == other.minimize_to_tray
             && self.discord_presence == other.discord_presence
+            && self.engines_on_path_first == other.engines_on_path_first
     }
 }
 
@@ -197,6 +205,7 @@ impl std::fmt::Debug for Config {
             .field("theme", &self.theme)
             .field("minimize_to_tray", &self.minimize_to_tray)
             .field("discord_presence", &self.discord_presence)
+            .field("engines_on_path_first", &self.engines_on_path_first)
             .field("steamgriddb_kept", self.kept(Key::SteamGridDb))
             .field("nexus_kept", self.kept(Key::Nexus))
             .field("steam_session_kept", self.kept(Key::SteamSession))
@@ -222,6 +231,7 @@ impl Default for Config {
             theme: None,
             minimize_to_tray: false,
             discord_presence: false,
+            engines_on_path_first: false,
             held: Default::default(),
             retired_steam_key: None,
         }

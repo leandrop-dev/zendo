@@ -41,6 +41,28 @@ the zipapp; Fedora RPMs stop at fc44). comet's release also has
 `update-permissions.exe`; checked 2026-11-12); Zendo downloads it into `$XDG_DATA_HOME/zendo/galaxy/`
 the first time a GOG Windows game needs it (`galaxy.rs`).
 
+Release assets Zendo downloads (`gh api repos/.../releases/latest`, checked
+2026-11-12; x86_64 and aarch64 names). Every asset has a `digest`
+(`sha256:<hex>`) in the API, though no release has a checksum file:
+
+- legendary 0.21.1: `legendary_linux_x64`, `legendary_linux_arm64` (0.20.34
+  had a bare `legendary`)
+- gogdl v1.4.0: `gogdl_linux_x86_64`, `gogdl_linux_arm64`
+- nile v1.2.0: `nile_linux_x86_64`, `nile_linux_arm64`
+- comet v0.4.1: `comet-x86_64-unknown-linux-gnu`,
+  `comet-aarch64-unknown-linux-gnu`, and `dummy-service.zip`
+- umu-launcher 1.4.4: `umu-launcher-1.4.4-zipapp.tar`, holding `umu/umu-run`
+  (a python3 zipapp, `#!/usr/bin/env python3`) and `umu/umu_run.py` linking to
+  it
+- Proton-CachyOS `cachyos-11.0-20261015-slr`:
+  `proton-cachyos-<version>-slr-{x86_64,x86_64_v3,arm64}.tar.xz` (~340 MB) and
+  a `.sha512sum` each; the tarball's top folder is
+  `proton-cachyos-<version>-slr-x86_64`; the `x86_64_v3` one unpacks to
+  `proton-cachyos-<version>-slr-x86_64_v3` (checked 2026-11-12)
+
+Zendo keeps its copies in `$XDG_DATA_HOME/zendo/engines/<engine>/` (`gogdl/gogdl`,
+`umu/umu-run`, with a `release` file holding the tag).
+
 What phase 1 reads from Heroic, checked in Heroic 2.22.4's own code: under
 `~/.config/heroic` (or Flatpak's `~/.var/app/com.heroicgameslauncher.hgl/config/heroic`),
 `legendaryConfig/legendary/installed.json`, `gog_store/installed.json` with

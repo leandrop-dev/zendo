@@ -1,9 +1,12 @@
-//! GE-Proton, downloaded from its GitHub releases into Steam's
+//! Proton builds downloaded from their GitHub releases into Steam's
 //! compatibility tools folder (`~/.local/share/Steam/compatibilitytools.d`),
-//! where Steam, Heroic, umu and Zendo's own launch options all find it.
+//! where Steam, Heroic, umu and Zendo's own launch options all find them:
+//! GE-Proton and Proton-CachyOS.
 //!
-//! Each release has a tarball and its `.sha512sum`: `GE-Proton11-12-x86_64.tar.gz`
-//! since GE-Proton11, `GE-Proton10-4.tar.gz` before. The tarball is
+//! Each release has a tarball and its `.sha512sum`. GE-Proton's tarball is
+//! `GE-Proton11-12-x86_64.tar.gz` since GE-Proton11, `GE-Proton10-4.tar.gz`
+//! before; Proton-CachyOS's is `proton-cachyos-<version>-slr-<variant>.tar.xz`
+//! (`x86_64`, `x86_64_v3` for CPUs that have it, `arm64`). The tarball is
 //! downloaded into Zendo's cache, checked against the sum, unpacked with
 //! `tar` into a folder beside the others that is renamed into place only
 //! when complete, and deleted.
@@ -20,15 +23,44 @@ use serde::Deserialize;
 use crate::paths;
 use crate::proton::Proton;
 
-const RELEASES: &str = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases";
+/// Which Proton a release is of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Build {
+    #[default]
+    Ge,
+    CachyOs,
+}
 
-/// A GE-Proton release.
+impl Build {
+    pub const ALL: [Self; 2] = [Self::Ge, Self::CachyOs];
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Ge => "GE-Proton",
+            Self::CachyOs => "Proton-CachyOS",
+        }
+    }
+
+    fn releases_url(self) -> &'static str {
+        match self {
+            Self::Ge => "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases",
+            Self::CachyOs => "https://api.github.com/repos/CachyOS/proton-cachyos/releases",
+        }
+    }
+}
+
+/// A Proton release.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
-    /// `GE-Proton11-12`.
+    pub build: Build,
+    /// `GE-Proton11-12`, `proton-cachyos-11.0-20261015-slr-x86_64_v3`: the
+    /// folder the tarball unpacks to.
     pub name: String,
     /// `2026-11-03`.
     pub published: String,
+    /// The tarball's file name.
+    pub file: String,
     pub tarball: String,
     pub size: u64,
     pub checksum: Option<String>,
@@ -48,6 +80,32 @@ fn agent() -> ureq::Agent {
 /// How many releases a page of GitHub's list holds.
 pub const PAGE: usize = 30;
 
+/// The Proton-CachyOS builds this CPU can run, best first.
+fn cachyos_variants() -> Vec<&'static str> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let v3 = is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("bmi1")
+            && is_x86_feature_detected!("bmi2")
+            && is_x86_feature_detected!("fma")
+            && is_x86_feature_detected!("f16c")
+            && is_x86_feature_detected!("lzcnt")
+            && is_x86_feature_detected!("movbe");
+        if v3 {
+            return vec!["x86_64_v3", "x86_64"];
+        }
+        vec!["x86_64"]
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        vec!["arm64"]
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        Vec::new()
+    }
+}
+
 /// A page of the releases with a build for this machine, newest first
 /// (page 1 the latest), and whether GitHub has more after it.
 ///
@@ -55,7 +113,25 @@ pub const PAGE: usize = 30;
 ///
 /// When GitHub cannot be reached or answers oddly (it allows 60 requests an
 /// hour without an account).
-pub fn releases(page: u32) -> anyhow::Result<(Vec<Release>, bool)> {
+pub fn releases(build: Build, page: u32) -> anyhow::Result<(Vec<Release>, bool)> {
+    let body = agent()
+        .get(build.releases_url())
+        .query("per_page", PAGE.to_string())
+        .query("page", page.to_string())
+        .header("Accept", "application/vnd.github+json")
+        .call()
+        .context("could not reach GitHub")?
+        .into_body()
+        .read_to_string()?;
+    parse_releases(build, &body, std::env::consts::ARCH, &cachyos_variants())
+}
+
+fn parse_releases(
+    build: Build,
+    body: &str,
+    arch: &str,
+    variants: &[&str],
+) -> anyhow::Result<(Vec<Release>, bool)> {
     #[derive(Deserialize)]
     struct Entry {
         tag_name: String,
@@ -70,40 +146,48 @@ pub fn releases(page: u32) -> anyhow::Result<(Vec<Release>, bool)> {
         size: u64,
         browser_download_url: String,
     }
-    let body = agent()
-        .get(RELEASES)
-        .query("per_page", PAGE.to_string())
-        .query("page", page.to_string())
-        .header("Accept", "application/vnd.github+json")
-        .call()
-        .context("could not reach GitHub")?
-        .into_body()
-        .read_to_string()?;
     let entries: Vec<Entry> =
-        serde_json::from_str(&body).context("GitHub's list of releases answered oddly")?;
-    let arch = std::env::consts::ARCH;
+        serde_json::from_str(body).context("GitHub's list of releases answered oddly")?;
     let more = entries.len() == PAGE;
     let releases = entries
         .into_iter()
         .filter(|entry| !entry.prerelease)
         .filter_map(|entry| {
-            let name = entry.tag_name;
-            let wanted = [format!("{name}-{arch}.tar.gz"), format!("{name}.tar.gz")];
-            let tarball = entry
-                .assets
+            let wanted: Vec<String> = match build {
+                Build::Ge => vec![
+                    format!("{}-{arch}.tar.gz", entry.tag_name),
+                    format!("{}.tar.gz", entry.tag_name),
+                ],
+                Build::CachyOs => {
+                    let version = entry.tag_name.strip_prefix("cachyos-")?;
+                    variants
+                        .iter()
+                        .map(|variant| format!("proton-cachyos-{version}-{variant}.tar.xz"))
+                        .collect()
+                }
+            };
+            // The first name wanted that the release has.
+            let tarball = wanted
                 .iter()
-                .find(|asset| wanted.contains(&asset.name))?;
-            let sum = format!("{}.sha512sum", tarball.name.trim_end_matches(".tar.gz"));
+                .find_map(|want| entry.assets.iter().find(|asset| &asset.name == want))?;
+            let name = tarball
+                .name
+                .trim_end_matches(".tar.gz")
+                .trim_end_matches(".tar.xz")
+                .to_owned();
+            let sum = format!("{name}.sha512sum");
             let checksum = entry
                 .assets
                 .iter()
                 .find(|asset| asset.name == sum)
                 .map(|asset| asset.browser_download_url.clone());
             Some(Release {
+                build,
                 published: entry
                     .published_at
                     .map(|date| date.chars().take(10).collect())
                     .unwrap_or_default(),
+                file: tarball.name.clone(),
                 tarball: tarball.browser_download_url.clone(),
                 size: tarball.size,
                 checksum,
@@ -114,11 +198,25 @@ pub fn releases(page: u32) -> anyhow::Result<(Vec<Release>, bool)> {
     Ok((releases, more))
 }
 
-/// Whether a Proton found on the machine is this release.
+/// The name without the CPU variant Proton-CachyOS adds.
+fn without_variant(name: &str) -> &str {
+    ["-x86_64_v3", "-x86_64", "-arm64"]
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .unwrap_or(name)
+}
+
+/// Whether a Proton found on the machine is this release (for
+/// Proton-CachyOS, whichever CPU variant of it).
 #[must_use]
 pub fn is_release(proton: &Proton, release: &Release) -> bool {
-    proton.name == release.name
-        || proton.name == format!("{}-{}", release.name, std::env::consts::ARCH)
+    match release.build {
+        Build::Ge => {
+            proton.name == release.name
+                || proton.name == format!("{}-{}", release.name, std::env::consts::ARCH)
+        }
+        Build::CachyOs => without_variant(&proton.name) == without_variant(&release.name),
+    }
 }
 
 /// Downloads, checks and unpacks a release, reporting the bytes downloaded
@@ -140,7 +238,7 @@ pub fn install(
         .join("zendo/ge-proton");
     fs::create_dir_all(&cache).with_context(|| format!("could not make {}", cache.display()))?;
     clear_leftovers(&cache, &tools);
-    let tarball = cache.join(format!("{}.tar.gz", release.name));
+    let tarball = cache.join(&release.file);
     let result = download(release, &tarball, stop, progress)
         .and_then(|()| check(release, &tarball))
         .and_then(|()| unpack(&tarball, &tools, &release.name));
@@ -152,7 +250,8 @@ pub fn install(
 /// the cache, and half-unpacked folders beside the Protons.
 fn clear_leftovers(cache: &Path, tools: &Path) {
     for entry in fs::read_dir(cache).into_iter().flatten().flatten() {
-        if entry.file_name().to_string_lossy().ends_with(".tar.gz") {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".tar.gz") || name.ends_with(".tar.xz") {
             let _ = fs::remove_file(entry.path());
         }
     }
@@ -231,7 +330,7 @@ fn unpack(tarball: &Path, tools: &Path, name: &str) -> anyhow::Result<PathBuf> {
     fs::create_dir(&partial).with_context(|| format!("could not make {}", partial.display()))?;
     let result = (|| {
         let status = Command::new("tar")
-            .arg("-xzf")
+            .arg("-xf")
             .arg(tarball)
             .arg("-C")
             .arg(&partial)
@@ -325,8 +424,10 @@ mod tests {
     #[test]
     fn knows_a_release_by_either_name() {
         let release = Release {
+            build: Build::Ge,
             name: "GE-Proton11-12".into(),
             published: "2026-11-03".into(),
+            file: "GE-Proton11-12-x86_64.tar.gz".into(),
             tarball: String::new(),
             size: 0,
             checksum: None,
@@ -341,6 +442,85 @@ mod tests {
             &release
         ));
         assert!(!is_release(&proton("GE-Proton11-1"), &release));
+    }
+
+    /// What GitHub answers for Proton-CachyOS, as seen on 2026-11-12.
+    const CACHYOS: &str = r#"[{
+        "tag_name": "cachyos-11.0-20261015-slr", "prerelease": false,
+        "published_at": "2026-10-20T10:00:00Z",
+        "assets": [
+          {"name": "proton-cachyos-11.0-20261015-slr-arm64.tar.xz", "size": 367630532, "browser_download_url": "https://x/arm64"},
+          {"name": "proton-cachyos-11.0-20261015-slr-x86_64.tar.xz", "size": 347335620, "browser_download_url": "https://x/v2"},
+          {"name": "proton-cachyos-11.0-20261015-slr-x86_64.sha512sum", "size": 177, "browser_download_url": "https://x/v2.sum"},
+          {"name": "proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz", "size": 341465288, "browser_download_url": "https://x/v3"},
+          {"name": "proton-cachyos-11.0-20261015-slr-x86_64_v3.sha512sum", "size": 180, "browser_download_url": "https://x/v3.sum"}
+        ]}]"#;
+
+    #[test]
+    fn picks_the_cachyos_build_for_the_cpu() {
+        let (v3, _) =
+            parse_releases(Build::CachyOs, CACHYOS, "x86_64", &["x86_64_v3", "x86_64"]).unwrap();
+        assert_eq!(v3.len(), 1);
+        assert_eq!(v3[0].name, "proton-cachyos-11.0-20261015-slr-x86_64_v3");
+        assert_eq!(
+            v3[0].file,
+            "proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz"
+        );
+        assert_eq!(v3[0].checksum.as_deref(), Some("https://x/v3.sum"));
+        assert_eq!(v3[0].published, "2026-10-20");
+        let (plain, _) = parse_releases(Build::CachyOs, CACHYOS, "x86_64", &["x86_64"]).unwrap();
+        assert_eq!(plain[0].tarball, "https://x/v2");
+        let (arm, _) = parse_releases(Build::CachyOs, CACHYOS, "aarch64", &["arm64"]).unwrap();
+        assert_eq!(arm[0].tarball, "https://x/arm64");
+        assert_eq!(arm[0].checksum, None, "arm64 sum absent in this fixture");
+        let (none, _) = parse_releases(Build::CachyOs, CACHYOS, "riscv64", &[]).unwrap();
+        assert_eq!(none, []);
+    }
+
+    #[test]
+    fn knows_a_cachyos_release_by_either_cpu_variant() {
+        let (found, _) =
+            parse_releases(Build::CachyOs, CACHYOS, "x86_64", &["x86_64_v3", "x86_64"]).unwrap();
+        let proton = |name: &str| Proton {
+            name: name.into(),
+            path: PathBuf::new(),
+        };
+        let release = &found[0];
+        assert!(is_release(
+            &proton("proton-cachyos-11.0-20261015-slr-x86_64_v3"),
+            release
+        ));
+        assert!(is_release(
+            &proton("proton-cachyos-11.0-20261015-slr-x86_64"),
+            release
+        ));
+        assert!(!is_release(
+            &proton("proton-cachyos-11.0-20261014-slr-x86_64_v3"),
+            release
+        ));
+        assert!(!is_release(&proton("proton-cachyos-slr"), release));
+    }
+
+    #[test]
+    fn unpacks_an_xz_tarball() {
+        let dir = std::env::temp_dir().join(format!("zendo-cachy-{}", std::process::id()));
+        let source = dir.join("source/proton-cachyos-99.0-20260101-slr-x86_64");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("proton"), "#!/bin/sh\n").unwrap();
+        let tarball = dir.join("p.tar.xz");
+        let status = Command::new("tar")
+            .arg("-cJf")
+            .arg(&tarball)
+            .arg("-C")
+            .arg(dir.join("source"))
+            .arg("proton-cachyos-99.0-20260101-slr-x86_64")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let tools = dir.join("tools");
+        let target = unpack(&tarball, &tools, "proton-cachyos-99.0-20260101-slr-x86_64").unwrap();
+        assert!(target.join("proton").is_file());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -360,16 +540,18 @@ mod online {
     #[test]
     #[ignore = "needs the network"]
     fn lists_real_releases() {
-        let (releases, more) = super::releases(2).unwrap();
-        println!("more after page 2: {more}");
-        for release in releases {
-            println!(
-                "{} {} {} {}",
-                release.name,
-                release.published,
-                release.size,
-                release.checksum.is_some()
-            );
+        for build in super::Build::ALL {
+            let (releases, more) = super::releases(build, 1).unwrap();
+            println!("{} more after page 1: {more}", build.label());
+            for release in releases.into_iter().take(3) {
+                println!(
+                    "{} {} {} {}",
+                    release.name,
+                    release.published,
+                    release.size,
+                    release.checksum.is_some()
+                );
+            }
         }
     }
 }

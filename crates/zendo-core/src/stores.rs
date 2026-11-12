@@ -89,7 +89,8 @@ impl Store {
         paths::data_home().map(|dir| dir.join("zendo/stores").join(self.source_key()))
     }
 
-    /// The engine, from `PATH` first, then Heroic's bundled copy.
+    /// The engine: Zendo's downloaded copy, `PATH`, then Heroic's bundled
+    /// copy.
     #[must_use]
     pub fn engine(self) -> Option<PathBuf> {
         bundled(self.engine_name())
@@ -111,7 +112,7 @@ impl Store {
     pub(crate) fn command(self) -> anyhow::Result<Command> {
         let engine = self.engine().with_context(|| {
             format!(
-                "{} not found: install it, or Heroic, which bundles it",
+                "{} not found: download it in Settings → Engines",
                 self.engine_name()
             )
         })?;
@@ -474,14 +475,15 @@ fn private_dir(dir: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("could not protect {}", dir.display()))
 }
 
-/// A program Heroic bundles beside its engines (comet as well), from
-/// `PATH` first.
+/// Where Heroic's bundled engines are.
+pub(crate) fn heroic_engine_dirs() -> Vec<PathBuf> {
+    HEROIC_ENGINES.iter().map(PathBuf::from).collect()
+}
+
+/// An engine (comet as well): Zendo's downloaded copy, `PATH`, then the
+/// one Heroic bundles ([`crate::engines::find`]).
 pub(crate) fn bundled(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
-        .chain(HEROIC_ENGINES.iter().map(PathBuf::from))
-        .map(|dir| dir.join(name))
-        .find(|file| is_executable(file))
+    crate::engines::find(name)
 }
 
 /// A Windows program Heroic bundles for its prefixes, beside its engines.
@@ -490,11 +492,6 @@ pub(crate) fn bundled_windows(name: &str) -> Option<PathBuf> {
         .iter()
         .map(|dir| Path::new(dir).with_file_name("win32").join(name))
         .find(|file| file.is_file())
-}
-
-fn is_executable(file: &Path) -> bool {
-    file.metadata()
-        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
 }
 
 /// The last thing an engine said, for an error message.

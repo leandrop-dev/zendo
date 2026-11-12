@@ -196,4 +196,22 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn dated_cachyos_folders_sort_newest_first() {
+        let mut names = vec![
+            "proton-cachyos-11.0-20261014-slr-x86_64_v3",
+            "proton-cachyos-11.0-20261015-slr-x86_64_v3",
+            "GE-Proton11-12-x86_64",
+        ];
+        names.sort_by(|a, b| preference(a, b));
+        assert_eq!(
+            names,
+            [
+                "GE-Proton11-12-x86_64",
+                "proton-cachyos-11.0-20261015-slr-x86_64_v3",
+                "proton-cachyos-11.0-20261014-slr-x86_64_v3",
+            ]
+        );
+    }
 }

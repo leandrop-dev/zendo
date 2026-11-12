@@ -740,6 +740,20 @@ size-of = { $done } de { $total }
 
 ## Proton
 
+engines-title = Motores
+engines-about = Os programas que o Zendo usa: legendary (Epic), gogdl (GOG), nile (Amazon), comet (GOG Galaxy) e umu-launcher (jogos de Windows). O Zendo descarrega cada um da sua versão no GitHub para uma pasta própria, por isso o Heroic não é preciso, e confere-o com a soma de verificação que o GitHub dá.
+engines-path-first = Procurar no PATH antes das cópias do Zendo
+engines-found-zendo = cópia do Zendo
+engines-found-path = do PATH
+engines-found-heroic = cópia do Heroic
+engines-missing = Não encontrado
+engines-latest = Mais recente: { $tag }
+engines-up-to-date = Atualizado
+engines-update = Atualizar para { $tag }
+engines-download-tag = Descarregar { $tag }
+engines-busy = Há um jogo ou uma transferência a correr; atualize ou remova quando acabar
+engines-installed-note = O { $name } { $tag } está instalado
+engines-removed-note = Removida a cópia do { $name } do Zendo
 protons-installed-note = { $name } está instalado; as opções de lançamento podem escolhê-lo
 protons-stopped = Transferência de { $name } parada
 protons-removed-default = { $name } removido; era o predefinido, por isso passa a ser usado o Automático
@@ -747,18 +761,18 @@ protons-removed = { $name } removido
 protons-reset = { $name } removido; { $count } jogos voltam ao Automático
 protons-umu = UMU-Proton, que o umu transfere
 protons-default-set = Os jogos sem Proton próprio passam a correr com { $name }
-protons-automatic = Automático: o GE-Proton mais recente primeiro ({ $name })
+protons-automatic = Automático: { $name }, a melhor versão encontrada (GE-Proton primeiro)
 protons-automatic-umu = Automático: UMU-Proton, transferido pelo umu
 protons-missing = { $name } (não instalado; é usado o Automático)
 protons-default = Predefinido
 protons-default-about = Para os jogos de Windows cujas opções de lançamento deixam o Proton como vem.
 protons-here = Neste computador
 protons-none = Ainda nenhum: o umu transfere o UMU-Proton da primeira vez que um jogo de Windows inicia.
-protons-releases = Versões do GE-Proton
+protons-releases = Versões do { $build }
 protons-check-again = Verificar de novo
 protons-asking = A perguntar ao GitHub…
 protons-show-older = Mostrar versões mais antigas
-protons-about = Corre os jogos de Windows que o Zendo instalou; as opções de lançamento de cada jogo escolhem um. O GE-Proton traz mais correções e vai para a pasta de ferramentas de compatibilidade do Steam, onde o Steam e o Heroic também o encontram.
+protons-about = Corre os jogos de Windows que o Zendo instalou; as opções de lançamento de cada jogo escolhem um. O GE-Proton traz mais correções. O GE-Proton e o Proton-CachyOS vão para a pasta de ferramentas de compatibilidade do Steam, onde o Steam e o Heroic também os encontram.
 protons-chosen-by = { $count ->
     [one] 1 jogo escolheu-o; vai correr com o predefinido
    *[other] { $count } jogos escolheram-no; vão correr com o predefinido

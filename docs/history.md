@@ -2761,3 +2761,58 @@ the scheme back. Clicking the Zendo chip and then System worked and wrote
 `theme = "system"`. A saved `theme = "hyprmonk"` is covered by a unit test
 only. Not tried by the user on the real desktop (plasmonk's accent changing
 under an open Zendo).
+
+## Item 29: engines and Protons downloaded by Zendo (2026-11-12)
+
+Decided with the user the same day: Zendo's own copies are found first
+(`PATH`, then Heroic's bundle, after them), with a Settings switch for
+`PATH` first; updates are noticed once a session when Settings opens and
+applied on a click.
+
+- **`engines.rs` (core).** `Engine` is legendary, gogdl, nile, comet or
+  umu-launcher. `latest` asks `releases/latest`; `install` downloads into
+  `$XDG_CACHE_HOME/zendo/engines/`, checks the SHA-256 GitHub gives each asset
+  (`digest`; an asset without one is refused) with `sha256sum`, builds
+  `$XDG_DATA_HOME/zendo/engines/<engine>/` (the program named as it runs, a
+  `release` file with the tag) in a hidden `.partial` folder, and swaps it for
+  the old one. umu's zipapp tar gives `umu/umu-run`. comet's install also
+  replaces `zendo/galaxy/GalaxyCommunication.exe` from the same release's
+  `dummy-service.zip` (`galaxy::replace_service`, checked against its digest);
+  the on-demand download in `galaxy.rs` stays as the fallback for a comet found
+  elsewhere. `find` is the one lookup: `stores::bundled` and `launch.rs`'s
+  umu-run go through it, and it reads `engines_on_path_first` from
+  `config.toml` on every call. The diagnostics report names whose copy each
+  tool is.
+- **`ge_proton.rs`.** `Build::{Ge, CachyOs}`. Proton-CachyOS: repo
+  `CachyOS/proton-cachyos`, `proton-cachyos-<version>-slr-<variant>.tar.xz`
+  with a `.sha512sum`; `x86_64_v3` is chosen when the CPU has avx2, bmi1,
+  bmi2, fma, f16c, lzcnt and movbe. A release counts as installed under either
+  variant's folder. Automatic is unchanged (`rank`): CachyOS comes after
+  GE-Proton and UMU-Proton, and dated folders sort by their numbers.
+- **Window.** Settings → Engines (`app/engines.rs`): a row per engine with the
+  copy in use and whose, the latest tag, Download/Update, and Remove (asks
+  twice). Update and Remove are disabled while a game or a store download runs
+  (umu-run is a zipapp that lives as long as the game; not tested whether
+  replacing it would break one). Settings → Proton has a GE-Proton /
+  Proton-CachyOS chip pair, each build keeping its own list. The download bar
+  moved to `settings.rs`, shared by both.
+
+Checked: `cargo fmt`, clippy with no warning, `cargo test` green. Against the
+real GitHub on 2026-11-12, in a throwaway `XDG_*` (ignored tests): gogdl
+v1.4.0, nile v1.2.0 and umu-launcher 1.4.4 installed, digest-checked, found by
+`find` and answered `--version` from Zendo's folder; both Proton lists read
+(GE-Proton11-12; proton-cachyos-11.0-20261015-slr-x86_64_v3, with sums).
+Checked on screen on KDE (2026-11-12, with the user present), in a throwaway
+home with no session bus and `PATH` without the mise shims: Settings → Engines
+lists all five as "Not found" with the latest tags; Download on gogdl
+installed it ("Zendo's copy", its path, "Up to date", Remove); Remove asked
+"Really remove" and then deleted the folder, with its note; the PATH switch
+wrote `engines_on_path_first = true`; Check again re-asked. In Proton the
+Proton-CachyOS chip loaded its list on demand, and a full download (325.65 MiB,
+under 15 s) unpacked to `proton-cachyos-11.0-20261015-slr-x86_64_v3`, showed
+"Installed" and became Automatic. Not checked: comet's install and its Galaxy
+service in a real GOG start; Update (no older copy to update from); the
+disabled state while a game runs. Not tried by the user.
+Two wrinkles seen, then fixed: the Automatic label said "newest GE-Proton
+first" while naming a CachyOS build, and the Proton blurb spoke of GE-Proton
+only.

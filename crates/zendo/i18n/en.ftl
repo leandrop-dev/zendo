@@ -729,6 +729,20 @@ size-of = { $done } of { $total }
 
 ## Proton
 
+engines-title = Engines
+engines-about = The programs Zendo drives: legendary (Epic), gogdl (GOG), nile (Amazon), comet (GOG Galaxy) and umu-launcher (Windows games). Zendo downloads each from its own GitHub release into a folder of its own, so Heroic is not needed, and checks it against the checksum GitHub gives.
+engines-path-first = Look on PATH before Zendo's own copies
+engines-found-zendo = Zendo's copy
+engines-found-path = from PATH
+engines-found-heroic = Heroic's copy
+engines-missing = Not found
+engines-latest = Latest: { $tag }
+engines-up-to-date = Up to date
+engines-update = Update to { $tag }
+engines-download-tag = Download { $tag }
+engines-busy = A game or a download is running; update or remove it when it ends
+engines-installed-note = { $name } { $tag } is installed
+engines-removed-note = Removed Zendo's copy of { $name }
 protons-installed-note = { $name } is installed; launch options can choose it
 protons-stopped = Stopped downloading { $name }
 protons-removed-default = Removed { $name }; it was the default, so Automatic is used now
@@ -736,18 +750,18 @@ protons-removed = Removed { $name }
 protons-reset = Removed { $name }; { $count } games go back to Automatic
 protons-umu = UMU-Proton, which umu downloads
 protons-default-set = Games without a Proton of their own now run with { $name }
-protons-automatic = Automatic: newest GE-Proton first ({ $name })
+protons-automatic = Automatic: { $name }, the best build found (GE-Proton first)
 protons-automatic-umu = Automatic: UMU-Proton, downloaded by umu
 protons-missing = { $name } (not installed; Automatic is used)
 protons-default = Default
 protons-default-about = For the Windows games whose launch options leave Proton as it comes.
 protons-here = On this computer
 protons-none = None yet: umu downloads UMU-Proton the first time a Windows game starts.
-protons-releases = GE-Proton releases
+protons-releases = { $build } releases
 protons-check-again = Check again
 protons-asking = Asking GitHub…
 protons-show-older = Show older versions
-protons-about = Runs the Windows games Zendo installed; each game's launch options choose one. GE-Proton carries the most fixes, and goes into Steam's compatibility tools folder, where Steam and Heroic find it too.
+protons-about = Runs the Windows games Zendo installed; each game's launch options choose one. GE-Proton carries the most fixes. GE-Proton and Proton-CachyOS go into Steam's compatibility tools folder, where Steam and Heroic find them too.
 protons-chosen-by = { $count ->
     [one] 1 game chose it; it will run with the default
    *[other] { $count } games chose it; they will run with the default

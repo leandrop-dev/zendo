@@ -25,8 +25,10 @@ Numbering continues from 27 so it never collides with the built items 1 to
 28. The KDE colour scheme as a theme. Built on 2026-11-12 (docs/history.md,
     item 28): "System" reads `~/.config/kdeglobals`; the hyprmonk tone is
     gone, and a saved `theme = "hyprmonk"` falls back to Zendo's own.
-29. Engines and Protons downloaded by Zendo, decided 2026-11-12 [tentative
-    until the user confirms]. Fedora 45 packages none of gogdl, nile, comet
+29. Built on 2026-11-12 (docs/history.md, item 29): Settings → Engines and
+    Proton-CachyOS; the text below is the original plan, with the questions
+    settled in history. Engines and Protons downloaded by Zendo, decided
+    2026-11-12 [tentative until the user confirms]. Fedora 45 packages none of gogdl, nile, comet
     or umu-launcher and has legendary 0.20.34 (checked with `dnf repoquery`),
     so neither `Requires` nor a bundled copy in the RPM works well. Settings →
     Engines downloads and updates, from each project's GitHub release, as
@@ -47,7 +49,9 @@ Numbering continues from 27 so it never collides with the built items 1 to
     install path. The Arch package stays. The RPM bundles no engines
     (decided 2026-11-12 [tentative], see item 29): Zendo downloads them, so
     the package needs only Zendo and what it links. Item 29 comes first, or the
-    package reaches other users as a Zendo with no engines.
+    package reaches other users as a Zendo with no engines. Item 29 adds run-time
+    needs the spec must list: `python3` (umu-run), `tar` with xz support,
+    `sha256sum` and `sha512sum`.
 31. Redesign, the shell. First a throwaway spike: a transparent Iced 0.14
     window on KWin, checking whether the blur shows through; if it does not,
     the fallback is an opaque themed window, written down before going on.

@@ -132,10 +132,37 @@ fn service_exe() -> anyhow::Result<PathBuf> {
     Ok(own)
 }
 
-/// Downloads comet's `dummy-service.zip`, unpacks it beside `target` and
-/// moves the program into place. The release has no checksum, so the
-/// program is only checked to be a Windows executable.
+/// Replaces Zendo's copy of the service with the one in the comet release
+/// Zendo just installed, checked against the release's digest, so comet
+/// and its service match.
+pub(crate) fn replace_service(
+    asset: &crate::engines::Asset,
+    stop: &std::sync::atomic::AtomicBool,
+) -> anyhow::Result<()> {
+    let target = service_home().context("no data folder for the Galaxy service")?;
+    download_service_from(&asset.url, Some(&asset.sha256), stop, &target)
+}
+
+/// Downloads comet's latest `dummy-service.zip` for [`service_exe`]. That
+/// release's digest is not asked for here, so the program is only checked
+/// to be a Windows executable.
 fn download_service(target: &Path) -> anyhow::Result<()> {
+    download_service_from(
+        SERVICE_ZIP,
+        None,
+        &std::sync::atomic::AtomicBool::new(false),
+        target,
+    )
+}
+
+/// Downloads the zip, checks it against `sha256` when given, unpacks it
+/// beside `target` and moves the program into place.
+fn download_service_from(
+    url: &str,
+    sha256: Option<&str>,
+    stop: &std::sync::atomic::AtomicBool,
+    target: &Path,
+) -> anyhow::Result<()> {
     let dir = target.parent().context("no folder for the service")?;
     fs::create_dir_all(dir).with_context(|| format!("could not make {}", dir.display()))?;
     let zip = dir.join("dummy-service.zip");
@@ -144,13 +171,16 @@ fn download_service(target: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(&unpacked)?;
     let result = (|| {
         crate::http::download(
-            SERVICE_ZIP,
+            url,
             &zip,
             "GOG Galaxy's stand-in service",
             None,
-            &std::sync::atomic::AtomicBool::new(false),
+            stop,
             &mut |_, _| {},
         )?;
+        if let Some(sha256) = sha256 {
+            crate::engines::check_sha256(&zip, sha256)?;
+        }
         crate::mods::add::unpack(&zip, &unpacked)?;
         let found = find_file(&unpacked, SERVICE_FILE)
             .with_context(|| format!("{SERVICE_FILE} is not in comet's dummy-service.zip"))?;
@@ -249,8 +279,8 @@ pub fn start(game: &Game) -> anyhow::Result<Option<Comet>> {
     if !wanted(game) {
         return Ok(None);
     }
-    let comet =
-        stores::bundled("comet").context("comet is not installed (it comes with Heroic)")?;
+    let comet = stores::bundled("comet")
+        .context("comet is not installed: download it in Settings → Engines")?;
     // Refreshes gogdl's tokens, which comet then reads.
     let Some(credentials) = Store::Gog.gog_token()? else {
         return Ok(None);

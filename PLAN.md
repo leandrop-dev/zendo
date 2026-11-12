@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 29 to 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 30 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -50,7 +50,10 @@ Status on. Item 27 (the tray restore without `hyprctl`, GOG Galaxy without
 Heroic) was built on 2026-11-12; tried by the user the same day: the tray,
 Steam and GOG sign-ins, a GOG install and its start all work [firm]
 (docs/history.md). Item 28 (the KDE colour scheme as a theme, no hyprmonk tone)
-was built on 2026-11-12 and checked on screen in a throwaway home; not yet tried by the user. Next is item 29.
+was built on 2026-11-12 and checked on screen in a throwaway home; not yet tried by the user. Item 29 (Settings → Engines downloads
+legendary, gogdl, nile, comet and umu-launcher; Proton-CachyOS next to GE-Proton) was
+built the same day, checked against the real GitHub and on screen in a
+throwaway home (docs/history.md); not yet tried by the user. Next is item 30.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -152,13 +155,13 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 |---|---|
 | Steam | Steam games. The library is read from files, but launching goes through the client. |
 | Heroic | Optional: its installed games are imported, and its bundled engines are a fallback. |
-| legendary, gogdl, nile, comet | Epic, GOG and Amazon accounts, owned games and installs, and GOG Galaxy. From each project's GitHub releases (on Fedora through mise's `github:` backend); Heroic is not needed. |
-| umu-launcher | Windows games installed by hand; the zipapp release on Fedora 45 (RPMs stop at fc44). Check whether it fetches Proton itself. |
+| legendary, gogdl, nile, comet | Epic, GOG and Amazon accounts, owned games and installs, and GOG Galaxy. Settings → Engines downloads each from its GitHub release; a copy on `PATH` or Heroic's also works. |
+| umu-launcher | Windows games; the zipapp release, also from Settings → Engines (needs `python3`). |
 | MangoHud, GameMode, gamescope | Only games where they are switched on. |
 
 ## Next
 
-Item 29, then 30 to 40: docs/backlog.md. Each item is planned in detail
+Items 30 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side
