@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use iced::widget::{button, checkbox, column, container, progress_bar, row, space, text};
-use iced::{Alignment, Element, Task};
+use iced::{Alignment, Element, Length, Task};
 use zendo_core::Sort;
 use zendo_core::downloads::{self, Job};
 use zendo_core::info::{self, Dlc, GameInfo};
@@ -17,7 +17,9 @@ use super::downloads::{DownloadMessage, FolderFor, action_doing_alone};
 use super::format;
 use super::library::{Card, GRID_PADDING, Window, card, cards_grid, chip};
 use super::steam_installs::{Following, SteamInstallMessage, percent, progress_line};
-use super::style::{self, BOLD, colors};
+use super::style::{
+    self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, button_text, colors,
+};
 use super::{Message, Page, Zendo, blocking, centered};
 use crate::i18n::t;
 
@@ -385,49 +387,28 @@ impl Zendo {
             .filter(|shop| self.store.asking.contains(shop))
             .map(Shop::label)
             .collect();
-        let subtitle = if asking.is_empty() {
-            format!(
-                "{} · {}",
-                t!("store-owned", count = shown.len()),
-                t!("store-installed", count = installed)
-            )
-        } else {
-            t!("store-asking-stores", stores = asking.join(", "))
-        };
-        let header = row![
-            column![
-                text(t!("page-store")).size(28).font(BOLD),
-                text(subtitle).size(13).color(colors().dim),
-            ]
-            .spacing(2),
-            space::horizontal(),
-            button(
-                text(if asking.is_empty() {
-                    t!("library-refresh")
-                } else {
-                    t!("store-asking")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
-            .style(style::secondary)
-            .on_press_maybe(
-                (asking.is_empty() && !signed_in.is_empty())
-                    .then_some(Message::Store(StoreMessage::Refresh))
-            ),
-        ]
-        .spacing(12)
-        .align_y(Alignment::Center)
-        .padding(iced::Padding {
-            top: 20.0,
-            right: GRID_PADDING,
-            bottom: 8.0,
-            left: GRID_PADDING,
-        });
+        let refresh = button(style::button_text(
+            if asking.is_empty() {
+                t!("library-refresh")
+            } else {
+                t!("store-asking")
+            }
+            .to_uppercase(),
+        ))
+        .padding(style::BUTTON_SMALL)
+        .style(style::secondary)
+        .on_press_maybe(
+            (asking.is_empty() && !signed_in.is_empty())
+                .then_some(Message::Store(StoreMessage::Refresh)),
+        );
+        // The counts are on the chips; the line says only what is going on.
+        let status = (!asking.is_empty())
+            .then(|| style::label(&t!("store-asking-stores", stores = asking.join(", "))));
+        let toolbar = self.store_toolbar(&shown, installed, refresh.into(), status);
 
-        let toolbar = self.store_toolbar(&shown, installed);
-
-        let mut problems = column![].spacing(4).padding([0.0, GRID_PADDING]);
+        // What went wrong, in a card, since it is dim-red text that must be
+        // read over the window.
+        let mut problems = column![].spacing(SPACE_XS);
         for shop in Shop::ALL {
             if let Some(err) = self.store.errors.get(&shop) {
                 problems = problems.push(
@@ -437,13 +418,25 @@ impl Zendo {
                 );
             }
         }
+        let problems: Element<'_, Message> = if self.store.errors.is_empty() {
+            space::vertical().height(0).into()
+        } else {
+            container(
+                container(problems)
+                    .padding(SPACE_M)
+                    .width(Length::Fill)
+                    .style(style::card),
+            )
+            .padding([0.0, GRID_PADDING])
+            .into()
+        };
 
         let body: Element<'_, Message> = if signed_in.is_empty() && shown.is_empty() {
             centered(
                 column![
                     text(t!("store-sign-in-first")).size(18),
-                    button(text(t!("store-go-accounts")).size(14))
-                        .padding([8, 14])
+                    button(button_text(t!("store-go-accounts")))
+                        .padding(style::BUTTON)
                         .style(style::secondary)
                         .on_press(Message::Navigate(Page::Accounts)),
                 ]
@@ -464,7 +457,7 @@ impl Zendo {
         } else {
             self.store_grid(visible)
         };
-        column![header, toolbar, problems, body].spacing(4).into()
+        column![toolbar, problems, body].spacing(SPACE_XS).into()
     }
 
     fn store_grid<'a>(&'a self, visible: Vec<&'a Owned>) -> Element<'a, Message> {
@@ -497,9 +490,17 @@ impl Zendo {
         )
     }
 
-    /// A chip for each store, and one to leave the installed games out.
-    fn store_toolbar(&self, shown: &[&Owned], installed: usize) -> Element<'_, Message> {
-        let mut chips: Vec<Element<'_, Message>> = vec![chip(
+    /// A chip for each store and one to leave the installed games out, with
+    /// Refresh at the right; under them the sort chips with their key, and
+    /// what the stores are being asked.
+    fn store_toolbar<'a>(
+        &'a self,
+        shown: &[&Owned],
+        installed: usize,
+        refresh: Element<'a, Message>,
+        status: Option<text::Text<'a>>,
+    ) -> Element<'a, Message> {
+        let mut chips: Vec<Element<'a, Message>> = vec![chip(
             t!("library-all"),
             Some(shown.len()),
             self.store.source.is_none(),
@@ -516,33 +517,50 @@ impl Zendo {
                 ));
             }
         }
-        chips.push(space::horizontal().width(16).into());
         chips.push(chip(
             t!("store-not-installed-only"),
             Some(shown.len() - installed),
             self.store.hide_installed,
             Message::Store(StoreMessage::ToggleInstalled),
         ));
-        chips.push(space::horizontal().width(16).into());
-        chips.push(
-            container(text(t!("library-sort")).size(13).color(colors().dim))
+        let first = row![
+            row(chips).spacing(SPACE_S).wrap().vertical_spacing(SPACE_S),
+            space::horizontal(),
+            refresh,
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center)
+        .padding(iced::Padding {
+            top: SPACE_XL,
+            right: GRID_PADDING,
+            bottom: SPACE_S,
+            left: GRID_PADDING,
+        });
+
+        let mut sorts: Vec<Element<'a, Message>> = vec![
+            container(style::label(&t!("library-sort-keys")))
                 .padding([6, 0])
                 .into(),
-        );
+        ];
         for sort in [Sort::Title, Sort::Recent, Sort::MostPlayed] {
-            chips.push(chip(
+            sorts.push(chip(
                 format::sort(sort),
                 None,
                 self.store.sort.0 == sort,
                 Message::Store(StoreMessage::Sort(sort)),
             ));
         }
-        row(chips)
-            .spacing(8)
-            .padding([4.0, GRID_PADDING])
-            .wrap()
-            .vertical_spacing(8)
-            .into()
+        let mut second = row![row(sorts).spacing(SPACE_S).align_y(Alignment::Center)]
+            .spacing(SPACE_L)
+            .align_y(Alignment::Center);
+        if let Some(status) = status {
+            second = second.push(status);
+        }
+        column![
+            first,
+            container(second.wrap().vertical_spacing(SPACE_S)).padding([SPACE_XS, GRID_PADDING])
+        ]
+        .into()
     }
 
     /// Installing this store game where Settings says, unless it is queued,
@@ -607,8 +625,8 @@ impl Zendo {
     ) -> Element<'a, Message> {
         if installed {
             row![
-                button(text(t!("store-open-in-library")).size(16).font(BOLD))
-                    .padding([10, 24])
+                button(button_text(t!("store-open-in-library")).size(16).font(BOLD))
+                    .padding(style::BUTTON_LARGE)
                     .style(style::primary)
                     .on_press(Message::Navigate(Page::Game(game.id.clone()))),
                 space::horizontal(),
@@ -626,12 +644,12 @@ impl Zendo {
                 (false, false) => (t!("queued"), None),
             };
             row![
-                button(text(label).size(16).font(BOLD))
-                    .padding([10, 32])
+                button(button_text(label).size(16).font(BOLD))
+                    .padding(style::BUTTON_LARGE)
                     .style(style::primary)
                     .on_press_maybe(press),
-                button(text(t!("see-downloads")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("see-downloads")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Navigate(Page::Downloads)),
                 space::horizontal(),
@@ -659,12 +677,12 @@ impl Zendo {
                 (None, _) => t!("store-no-home"),
             };
             let install = row![
-                button(text(t!("install")).size(16).font(BOLD))
-                    .padding([10, 32])
+                button(button_text(t!("install")).size(16).font(BOLD))
+                    .padding(style::BUTTON_LARGE)
                     .style(style::primary)
                     .on_press_maybe(job.map(|job| Message::Download(DownloadMessage::Queue(job)))),
-                button(text(t!("downloads-import")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("downloads-import")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Download(DownloadMessage::ChooseFolder(
                         FolderFor::Import,
@@ -730,8 +748,8 @@ impl Zendo {
         let following = self.steam_installs.following(app);
         let asked = matches!(following, Some(Following::Asked));
         let mut actions = row![
-            button(text(label).size(16).font(BOLD))
-                .padding([10, 32])
+            button(button_text(label).size(16).font(BOLD))
+                .padding(style::BUTTON_LARGE)
                 .style(style::primary)
                 .on_press_maybe(press),
         ]
@@ -739,8 +757,8 @@ impl Zendo {
         .align_y(Alignment::Center);
         if asked {
             actions = actions.push(
-                button(text(t!("steam-stop-waiting")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("steam-stop-waiting")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press(Message::SteamInstall(SteamInstallMessage::Forget(
                         app.to_owned(),
@@ -749,8 +767,8 @@ impl Zendo {
         }
         if following.is_some() {
             actions = actions.push(
-                button(text(t!("see-downloads")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("see-downloads")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Navigate(Page::Downloads)),
             );

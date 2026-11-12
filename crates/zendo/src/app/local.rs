@@ -249,19 +249,16 @@ impl Zendo {
         }
         let confirming = self.local.confirm_remove.as_deref() == Some(game.id.as_str());
         row![
-            button(text(t!("edit")).size(14))
-                .padding([10, 18])
+            button(style::button_text(t!("edit")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(Message::Local(LocalMessage::Edit(game.id.clone()))),
-            button(
-                text(if confirming {
-                    t!("really-remove")
-                } else {
-                    t!("remove")
-                })
-                .size(14)
-            )
-            .padding([10, 18])
+            button(style::button_text(if confirming {
+                t!("really-remove")
+            } else {
+                t!("remove")
+            }))
+            .padding(style::BUTTON)
             .style(if confirming {
                 style::danger
             } else {
@@ -269,7 +266,7 @@ impl Zendo {
             })
             .on_press(Message::Local(LocalMessage::Remove(game.id.clone()))),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .into()
     }
 }
@@ -289,7 +286,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
         t!("local-about-linux")
     };
     let mut body = column![
-        text(heading).size(20).font(BOLD),
+        style::sheet_title(heading),
         text(about).size(13).color(colors().dim),
         field(
             t!("local-program"),
@@ -298,21 +295,18 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                     .on_input(|value| Message::Local(LocalMessage::Program(value)))
                     .on_submit(Message::Local(LocalMessage::Save))
                     .size(14)
-                    .padding([8, 12])
+                    .padding([style::SPACE_S, style::SPACE_M])
                     .style(style::input),
-                button(
-                    text(if form.picking {
-                        t!("choosing")
-                    } else {
-                        t!("choose")
-                    })
-                    .size(14)
-                )
-                .padding([8, 14])
+                button(style::button_text(if form.picking {
+                    t!("choosing")
+                } else {
+                    t!("choose")
+                }))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press_maybe((!form.picking).then_some(Message::Local(LocalMessage::Pick))),
             ]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center),
         ),
         field(
@@ -321,7 +315,7 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                 .on_input(|value| Message::Local(LocalMessage::Title(value)))
                 .on_submit(Message::Local(LocalMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
         ),
         field(
@@ -330,46 +324,45 @@ fn form_card(form: &Form) -> Element<'_, Message> {
                 .on_input(|value| Message::Local(LocalMessage::Arguments(value)))
                 .on_submit(Message::Local(LocalMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
         ),
         text(t!("local-cover-note")).size(13).color(colors().dim),
     ]
-    .spacing(16);
+    .spacing(style::SPACE_L);
     if let Some(error) = &form.error {
         body = body.push(text(error).size(13).color(colors().bad));
     }
     body = body.push(
         row![
             space::horizontal(),
-            button(text(t!("cancel")).size(14))
-                .padding([10, 18])
+            button(style::button_text(t!("cancel")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(Message::Local(LocalMessage::Close)),
             button(
-                text(if form.id.is_some() {
+                style::button_text(if form.id.is_some() {
                     t!("save")
                 } else {
                     t!("add")
                 })
-                .size(14)
                 .font(BOLD)
             )
-            .padding([10, 24])
+            .padding(style::BUTTON_LARGE)
             .style(style::primary)
             .on_press(Message::Local(LocalMessage::Save)),
         ]
-        .spacing(10),
+        .spacing(style::SPACE_M),
     );
-    container(scrollable(body.padding(24)))
+    container(scrollable(body.padding(style::SPACE_XL)))
         .max_width(620)
         .style(style::card)
         .into()
 }
 
 fn field<'a>(label: String, input: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
-    column![text(label).size(15).font(BOLD), input.into()]
-        .spacing(6)
+    column![style::subheading(label), input.into()]
+        .spacing(style::SPACE_S)
         .width(Length::Fill)
         .into()
 }

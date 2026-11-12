@@ -4,50 +4,58 @@ use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 
 use super::Message;
-use super::style::{self, BOLD, colors};
+use super::game::card;
+use super::style::{self, BOLD, BUTTON, SPACE_L, SPACE_S, SPACE_XL, SPACE_XS, button_text, colors};
 use crate::i18n::t;
 
 const REPOSITORY: &str = "https://github.com/leandrop-dev/zendo";
 
 pub fn page<'a>() -> Element<'a, Message> {
     let links = row![
-        button(text(t!("about-source-code")).size(14))
-            .padding([8, 14])
+        button(button_text(t!("about-source-code")))
+            .padding(BUTTON)
             .style(style::secondary)
             .on_press(Message::Open(REPOSITORY.to_owned())),
-        button(text(t!("about-report-problem")).size(14))
-            .padding([8, 14])
+        button(button_text(t!("about-report-problem")))
+            .padding(BUTTON)
             .style(style::secondary)
             .on_press(Message::Open(format!("{REPOSITORY}/issues"))),
     ]
-    .spacing(8);
+    .spacing(SPACE_S);
 
-    let card = |title: String, lines: Vec<String>| -> Element<'a, Message> {
-        container(
-            column![text(title).size(18).font(BOLD)]
-                .extend(lines.into_iter().map(|line| text(line).size(14).into()))
-                .spacing(8),
+    let block = |title: String, lines: Vec<String>| -> Element<'a, Message> {
+        card(
+            title,
+            column(lines.into_iter().map(|line| text(line).size(14).into()))
+                .spacing(SPACE_S)
+                .into(),
         )
-        .padding(20)
-        .width(Length::Fill)
-        .style(style::card)
-        .into()
     };
+
+    let intro = container(
+        column![
+            column![
+                text("Zendo").size(40).font(BOLD),
+                text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
+                    .size(14)
+                    .color(colors().dim),
+            ]
+            .spacing(SPACE_XS),
+            text(t!("about-intro")).size(15),
+            links,
+        ]
+        .spacing(SPACE_L),
+    )
+    .padding(SPACE_L)
+    .width(Length::Fill)
+    .style(style::card);
 
     scrollable(
         container(
             column![
-                column![
-                    text("Zendo").size(40).font(BOLD),
-                    text(t!("about-version", version = env!("CARGO_PKG_VERSION")))
-                        .size(14)
-                        .color(colors().dim),
-                ]
-                .spacing(2),
-                text(t!("about-intro")).size(15),
-                links,
-                card(t!("about-licence"), vec![t!("about-licence-text")]),
-                card(
+                intro,
+                block(t!("about-licence"), vec![t!("about-licence-text")]),
+                block(
                     t!("about-built-on"),
                     vec![
                         t!("about-built-iced"),
@@ -60,8 +68,8 @@ pub fn page<'a>() -> Element<'a, Message> {
                     ]
                 ),
             ]
-            .spacing(20)
-            .padding(24)
+            .spacing(SPACE_L)
+            .padding(SPACE_XL)
             .max_width(860),
         )
         .center_x(Length::Fill),

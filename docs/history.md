@@ -3010,3 +3010,70 @@ fit with nothing outside the window.
   worked, no still was taken), Manage in Steam (no Steam game in the throwaway
   home, and the URI is not tried on the real Steam), the Opaque switch for this
   page, Edit categories' sheet (opened and closed, no still).
+
+## Item 33: the remaining pages, 2026-11-12
+
+Planned with the user the same day (Settings grouped under chips; page titles
+dropped; mods stay a card). Built in this order:
+
+- **Shared pieces** (`style.rs`): `BUTTON_SMALL`, `BUTTON`, `BUTTON_LARGE`
+  paddings, `button_text`, `subheading`, `sheet_title`, and flat `pick_list`,
+  `menu` and `toggler` styles (iced_widget 0.14.2's `Style` types, read in the
+  cargo registry). `game::card` and `settings::section` share one heading
+  (uppercase, bold, 14); `about.rs`'s own copy is gone and the intro sits in a
+  card. `launch_options::frame` is the sheet layout (launch options,
+  Categories, the Nexus chooser).
+- **Store game page**: `game::header(Header { .. })` is the one header; the
+  installed game's page and `owned_page` both call it. `hero`, `Hero`, `shade`,
+  `fact_chip` and their constants went, and so did `game-change-art`.
+  `owned_page` has the uppercase trail and a play-time tile when the store
+  counted time.
+- **Store**: the title is gone. Row one holds the shop chips and "Not installed
+  only" with Refresh at the right; row two the sort chips (`Sort · Tab`) and,
+  while asking, the stores being asked. Errors sit in a card. The grid reads its
+  height from the scrollable's own bounds (`app.rs`, `viewport_height`), so the
+  header's height does not matter to its row maths.
+- **Downloads**: three stat tiles (up next, paused, finished) replace the title;
+  the section labels are `style::label` and ordinary case in en and pt-PT.
+  `downloads-nothing`, `downloads-in-queue*`, `store-owned`, `store-installed`,
+  `library-sort` and `settings-subtitle` went (the i18n test lists unused keys).
+- **Accounts**: no title; `accounts-about` is in a card; the store name is
+  uppercase 16.
+- **Settings**: `settings::Group` (General, Keys, Library, Engines, Proton,
+  Diagnostics) with `Message::SettingsGroup`, not saved. Typing or pasting on
+  Settings starts the key only under Keys; `ArtMessage::Settings` opens Keys.
+  Test: `typing_on_settings_starts_the_key_only_under_keys`.
+- A token pass over the other pages' buttons, paddings and spacings (SPACE_*),
+  and the sub-headings (Proton, Plugins, Options) as `style::subheading`.
+- **Manage in Heroic: not taken.** Heroic's `protocol.ts` (blob b4fa1c1) knows
+  only `ping` and `launch` (docs/reference.md).
+
+Checked: `cargo fmt`, clippy with no warning, tests green (137 and 248).
+
+On screen on KDE (2026-11-12, with the user present, throwaway home with the
+store cache and covers copied in, no session bus, `ydotoold` on
+`/run/user/1000/ydt.sock`, a guarded click helper that clicks only when
+Zendo's window is both under the pointer and active): drawn and clicked once
+each: the Library, Store, Downloads and Settings tabs; the six Settings group
+chips (General, Keys, Library, Engines, Proton, Diagnostics) and the
+Accounts and About sub-tabs; a game page (KPatience: shared header, action
+row, Organize, four tiles); the Launch options sheet (the frame, flat
+switches, the flat pick list, Save and Cancel, which closed it); the
+Categories sheet (the frame, Cancel, which closed it). In pt-PT at 960 px wide
+the Store and Settings fit with nothing outside the window.
+
+Seen and left:
+- Buttons whose text was built from data stayed mixed case (Engines' "Download
+  0.21.1", Anti-Cheat's "Download", "Copy report", the key fields' "Show" and
+  "Check") and "GE-Proton releases" was a size-15 heading. Fixed afterwards:
+  every button takes `style::button_text` (uppercase, 13; Play, Install and
+  Open in library keep 16), and the heading is `style::subheading`. The
+  language and download-worker chips keep their names as written. Built, with
+  clippy clean and tests green; not looked at on screen again.
+- Dim text straight on the translucent window (the "Sort · Tab" label, the
+  hint line, "Ordenar") is hard to read over this wallpaper, as in item 32.
+- The Store's cached list does not show without a sign-in, so the owned grid
+  and a store game's page are **not checked on screen**. Also not checked:
+  Downloads with jobs (the stat tiles), a signed-in Accounts page, the Add
+  game, installer and art picker sheets, the mods card, Nexus search and its
+  chooser, and a click on every pick list's open menu.

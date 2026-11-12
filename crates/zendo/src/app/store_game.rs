@@ -1,20 +1,19 @@
-//! A store game's page, laid out as an installed game's: the hero, the
-//! actions, then About and the DLC owned beside the details, in two columns
-//! on a wide window.
+//! A store game's page, laid out as an installed game's: the shared header,
+//! the actions, then About and the DLC owned beside the details, in two
+//! columns on a wide window.
 
-use std::f32::consts::{FRAC_PI_2, PI};
-use std::path::Path;
-
-use iced::gradient::Linear;
-use iced::widget::{button, column, container, image, row, scrollable, space, stack, text};
-use iced::{Alignment, Background, Border, Color, ContentFit, Element, Font, Length, Radians};
+use iced::widget::{button, column, container, row, scrollable, space, text};
+use iced::{Alignment, Element, Font, Length};
+use zendo_core::Size;
 use zendo_core::owned::{Owned, PlayedOn};
-use zendo_core::{Size, Source};
 
 use super::format;
-use super::game::{GameViewMessage, TWO_COLUMNS, about_card, card, label_row, plain, store_facts};
+use super::game::{
+    GameViewMessage, Header, TWO_COLUMNS, about_card, card, header, label_row, plain, stat_tile,
+    store_facts,
+};
 use super::store::InfoState;
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, SPACE_M, SPACE_S, SPACE_XL, colors};
 use super::{Message, Page, Zendo, game_scroll_id, now};
 use crate::i18n::t;
 
@@ -22,43 +21,47 @@ impl Zendo {
     pub(super) fn owned_page<'a>(&'a self, game: &'a Owned) -> Element<'a, Message> {
         let installed = self.is_installed(&game.id);
         let trail = row![
-            button(text(t!("store-back")).size(14))
+            button(style::button_text(t!("store-back").to_uppercase()))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Navigate(Page::Store)),
             text("/").size(14).color(colors().dim),
-            text(&game.title).size(14).color(colors().dim),
+            text(game.title.to_uppercase()).size(14).color(colors().dim),
         ]
-        .spacing(8);
+        .spacing(SPACE_S);
 
-        let mut badges: Vec<(String, Color)> = game
+        let mut badges: Vec<Element<'a, Message>> = game
             .platforms
             .iter()
-            .map(|platform| (platform.clone(), colors().dim))
+            .map(|platform| style::badge(platform.to_uppercase(), colors().dim))
             .collect();
         if installed {
-            badges.push((t!("badge-installed"), colors().good));
+            badges.push(style::badge(t!("badge-installed"), colors().good));
         }
-        let art = hero(Hero {
-            title: &game.title,
-            source: game.source(),
-            art: game.hero.as_deref(),
-            cover: game.cover.as_deref(),
-            badges,
-            developer: game.developer.as_deref(),
-            facts: game
-                .minutes
-                .filter(|minutes| *minutes > 0)
-                .map(|minutes| t!("played-time", time = format::play_time(minutes)))
-                .into_iter()
-                .collect(),
-            pills: self.hero_pills(&game.id),
+        badges.extend(self.hero_pills(&game.id));
+        let mut source = vec![format::source(game.source())];
+        source.extend(game.developer.clone());
+        let top = header(Header {
             id: &game.id,
+            title: &game.title,
+            source: source.join(" · "),
+            cover: game.cover.as_deref(),
+            backdrop: game.hero.as_deref(),
+            badges,
         });
 
-        let mut page = column![trail, art, self.owned_actions(game, installed)]
-            .spacing(20)
-            .padding(24);
+        let mut page = column![trail, top, self.owned_actions(game, installed)]
+            .spacing(SPACE_XL)
+            .padding(SPACE_XL);
+        if let Some(minutes) = game.minutes.filter(|minutes| *minutes > 0) {
+            page = page.push(
+                row![
+                    stat_tile(t!("fact-play-time"), format::play_time(minutes)),
+                    space::horizontal().width(Length::FillPortion(3)),
+                ]
+                .spacing(SPACE_M),
+            );
+        }
 
         let mut main: Vec<Element<'a, Message>> = Vec::new();
         if let Some(summary) = &game.summary {
@@ -74,7 +77,7 @@ impl Zendo {
             self.owned_details_card(game, installed),
             self.owned_technical_card(game)
         ]
-        .spacing(20);
+        .spacing(SPACE_XL);
 
         let two = self.window_width >= TWO_COLUMNS;
         page = if main.is_empty() {
@@ -82,10 +85,10 @@ impl Zendo {
         } else if two {
             page.push(
                 row![
-                    column(main).spacing(20).width(Length::FillPortion(3)),
+                    column(main).spacing(SPACE_XL).width(Length::FillPortion(3)),
                     side.width(Length::FillPortion(2)),
                 ]
-                .spacing(20),
+                .spacing(SPACE_XL),
             )
         } else {
             page.extend(main).push(side)
@@ -183,10 +186,12 @@ impl Zendo {
         let open = self.game_view.technical;
         let header = button(
             row![
-                text(t!("game-technical")).size(18).font(BOLD),
+                text(t!("game-technical").to_uppercase())
+                    .size(14)
+                    .font(BOLD),
                 space::horizontal(),
                 text(if open { "−" } else { "+" })
-                    .size(18)
+                    .size(14)
                     .color(colors().dim),
             ]
             .align_y(Alignment::Center),
@@ -222,155 +227,4 @@ fn played_on(minutes: PlayedOn) -> Option<String> {
     .map(|(system, minutes)| format!("{system} {}", format::play_time(minutes)))
     .collect();
     (!systems.is_empty()).then(|| systems.join(" · "))
-}
-
-const HERO_HEIGHT: f32 = 340.0;
-const COVER_WIDTH: f32 = 140.0;
-const COVER_HEIGHT: f32 = 210.0;
-const RADIUS: f32 = 14.0;
-
-/// What the wide art at the top of a game's page shows.
-pub struct Hero<'a> {
-    pub title: &'a str,
-    pub source: Source,
-    pub art: Option<&'a Path>,
-    pub cover: Option<&'a Path>,
-    pub badges: Vec<(String, Color)>,
-    pub developer: Option<&'a str>,
-    pub facts: Vec<String>,
-    /// The `ProtonDB` and Steam Deck pills, beside the badges.
-    pub pills: Vec<Element<'a, Message>>,
-    /// The game whose art "Change art" picks.
-    pub id: &'a str,
-}
-
-pub fn hero(hero: Hero<'_>) -> Element<'_, Message> {
-    let art: Element<'_, Message> = if let Some(path) = hero.art {
-        image(image::Handle::from_path(path))
-            .width(Length::Fill)
-            .height(HERO_HEIGHT)
-            .content_fit(ContentFit::Cover)
-            .border_radius(RADIUS)
-            .into()
-    } else {
-        let tint = style::source_color(hero.source);
-        shade(
-            Linear::new(Radians(FRAC_PI_2))
-                .add_stop(0.0, colors().surface)
-                .add_stop(1.0, Color { a: 0.25, ..tint }),
-        )
-    };
-    // Darkened toward the bottom and the left, where the title sits.
-    let down = shade(
-        Linear::new(Radians(PI))
-            .add_stop(0.0, Color::TRANSPARENT)
-            .add_stop(
-                0.45,
-                Color {
-                    a: 0.2,
-                    ..colors().background
-                },
-            )
-            .add_stop(
-                1.0,
-                Color {
-                    a: 0.95,
-                    ..colors().background
-                },
-            ),
-    );
-    let across = shade(
-        Linear::new(Radians(FRAC_PI_2))
-            .add_stop(
-                0.0,
-                Color {
-                    a: 0.7,
-                    ..colors().background
-                },
-            )
-            .add_stop(0.6, Color::TRANSPARENT),
-    );
-
-    let mut badges = row![style::badge(
-        format::source(hero.source),
-        style::source_color(hero.source)
-    )]
-    .spacing(6);
-    for (label, color) in hero.badges {
-        badges = badges.push(style::badge(label, color));
-    }
-    badges = badges.extend(hero.pills);
-    let mut info = column![badges, text(hero.title).size(38).font(BOLD)].spacing(8);
-    if let Some(developer) = hero.developer {
-        info = info.push(text(developer).size(14).color(colors().dim));
-    }
-    let facts: Vec<Element<'_, Message>> = hero.facts.into_iter().map(fact_chip).collect();
-    if !facts.is_empty() {
-        info = info.push(row(facts).spacing(8));
-    }
-
-    let mut content = row![info.width(Length::Fill)]
-        .spacing(24)
-        .align_y(Alignment::End);
-    if let Some(cover) = hero.cover {
-        content = content.push(
-            image(image::Handle::from_path(cover))
-                .width(COVER_WIDTH)
-                .height(COVER_HEIGHT)
-                .content_fit(ContentFit::Cover)
-                .border_radius(10.0),
-        );
-    }
-    let content = container(content)
-        .padding(28)
-        .width(Length::Fill)
-        .height(HERO_HEIGHT)
-        .align_y(Alignment::End);
-    let change = container(
-        button(text(t!("game-change-art")).size(13))
-            .padding([6, 12])
-            .style(style::secondary)
-            .on_press(Message::Art(super::artwork::ArtMessage::Open(
-                hero.id.to_owned(),
-            ))),
-    )
-    .padding(16)
-    .width(Length::Fill)
-    .align_x(Alignment::End);
-
-    stack![art, down, across, content, change].into()
-}
-
-/// A rounded panel the hero's size filled with a gradient.
-fn shade<'a>(gradient: Linear) -> Element<'a, Message> {
-    container(space::horizontal())
-        .width(Length::Fill)
-        .height(HERO_HEIGHT)
-        .style(move |_| container::Style {
-            background: Some(Background::Gradient(gradient.into())),
-            border: Border {
-                radius: RADIUS.into(),
-                ..Border::default()
-            },
-            ..container::Style::default()
-        })
-        .into()
-}
-
-fn fact_chip<'a>(fact: String) -> Element<'a, Message> {
-    container(text(fact).size(13))
-        .padding([4, 10])
-        .style(|_| container::Style {
-            background: Some(Background::Color(Color {
-                a: 0.7,
-                ..colors().surface
-            })),
-            border: Border {
-                color: colors().line,
-                width: 1.0,
-                radius: 14.0.into(),
-            },
-            ..container::Style::default()
-        })
-        .into()
 }

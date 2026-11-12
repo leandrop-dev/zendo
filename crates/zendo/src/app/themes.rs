@@ -246,7 +246,7 @@ impl Zendo {
                 .style(style::chip(themes.choice == choice))
                 .on_press(Message::SetTheme(choice))
         };
-        let mut choices = row![].spacing(8);
+        let mut choices = row![].spacing(style::SPACE_S);
         for theme in &themes.files {
             choices = choices.push(chip(theme.name.clone(), Choice::File(theme.id.clone())));
         }
@@ -256,7 +256,7 @@ impl Zendo {
             choices = choices.push(chip(t!("theme-system"), Choice::System));
         }
         let colors = colors();
-        let mut body = column![choices.wrap().vertical_spacing(8)].spacing(10);
+        let mut body = column![choices.wrap().vertical_spacing(8)].spacing(style::SPACE_M);
         if let Some((note, fine)) = themes.note() {
             body = body.push(
                 text(note)
@@ -275,6 +275,7 @@ impl Zendo {
             toggler(self.config.opaque)
                 .label(t!("theme-opaque"))
                 .text_size(14)
+                .style(style::toggler)
                 .on_toggle(Message::SetOpaque),
         );
         let folder = Theme::dir().map_or_else(String::new, |dir| dir.display().to_string());

@@ -119,34 +119,31 @@ impl Zendo {
             t!("overlay-no-legendary")
         };
         let ready = state.engine && !working;
-        let install = button(
-            text(if state.installed {
-                t!("overlay-update")
-            } else {
-                t!("overlay-install")
-            })
-            .size(14),
-        )
-        .padding([8, 16])
+        let install = button(style::button_text(if state.installed {
+            t!("overlay-update")
+        } else {
+            t!("overlay-install")
+        }))
+        .padding(style::BUTTON)
         .style(style::secondary)
         .on_press_maybe(ready.then_some(Message::Overlay(OverlayMessage::Install)));
-        let mut buttons = row![install].spacing(10).align_y(Alignment::Center);
+        let mut buttons = row![install]
+            .spacing(style::SPACE_M)
+            .align_y(Alignment::Center);
         if state.installed {
             buttons = buttons.push(
-                button(
-                    text(if state.step == Step::ConfirmRemove {
-                        t!("really-remove")
-                    } else {
-                        t!("remove")
-                    })
-                    .size(14),
-                )
-                .padding([8, 16])
+                button(style::button_text(if state.step == Step::ConfirmRemove {
+                    t!("really-remove")
+                } else {
+                    t!("remove")
+                }))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press_maybe(ready.then_some(Message::Overlay(OverlayMessage::Remove))),
             );
         }
-        let mut body = column![text(status).size(13).color(colors().dim), buttons].spacing(12);
+        let mut body =
+            column![text(status).size(13).color(colors().dim), buttons].spacing(style::SPACE_M);
         if let Some((note, good)) = &state.note {
             body = body.push(text(note).size(13).color(if *good {
                 colors().good

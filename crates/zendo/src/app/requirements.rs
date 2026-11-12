@@ -9,7 +9,7 @@ use iced::{Element, Length, Task};
 use zendo_core::requirements::{self, From, Requirements, System};
 
 use super::game::{LABEL_WIDTH, card, failed_card};
-use super::style::{BOLD, colors};
+use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -96,7 +96,7 @@ fn requirements_card(found: &Requirements) -> Element<'_, Message> {
         From::Steam => t!("requirements-from-steam", system = system),
     };
     let both = found.has_recommended();
-    let mut body = column![text(source).size(13).color(colors().dim)].spacing(10);
+    let mut body = column![text(source).size(13).color(colors().dim)].spacing(style::SPACE_M);
     if both {
         body = body.push(line(
             String::new(),
@@ -138,7 +138,7 @@ fn line<'a>(
         text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
         cell(minimum),
     ]
-    .spacing(12);
+    .spacing(style::SPACE_M);
     if let Some(recommended) = recommended {
         cells = cells.push(cell(Some(recommended)));
     }

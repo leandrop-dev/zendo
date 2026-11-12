@@ -325,7 +325,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         installer.name.clone()
     };
     let mut header = column![
-        text(title).size(20).font(BOLD),
+        style::sheet_title(title),
         text(t!(
             "installer-step",
             at = at + 1,
@@ -335,7 +335,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         .size(13)
         .color(colors().dim),
     ]
-    .spacing(2);
+    .spacing(style::SPACE_XS);
     if installer
         .needs
         .as_ref()
@@ -347,29 +347,28 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     let list = option_list(sheet);
     let about = about_panel(sheet);
     let footer = row![
-        button(text(t!("cancel")).size(14))
-            .padding([8, 16])
+        button(style::button_text(t!("cancel")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press(Message::Installer(InstallerMessage::Cancel)),
         space::horizontal(),
-        button(text(t!("installer-back")).size(14))
-            .padding([8, 16])
+        button(style::button_text(t!("installer-back")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe((at > 0).then_some(Message::Installer(InstallerMessage::Back))),
         button(
-            text(if final_step {
+            style::button_text(if final_step {
                 t!("installer-install")
             } else {
                 t!("installer-next")
             })
-            .size(14)
             .font(BOLD)
         )
         .padding([8, 22])
         .style(style::primary)
         .on_press(Message::Installer(InstallerMessage::Next)),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center);
 
     container(
@@ -383,13 +382,13 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
                     .height(Length::Fill)
                     .width(Length::FillPortion(2)),
             ]
-            .spacing(20)
+            .spacing(style::SPACE_XL)
             .height(Length::Fill),
             footer,
         ]
-        .spacing(16),
+        .spacing(style::SPACE_L),
     )
-    .padding(24)
+    .padding(style::SPACE_XL)
     .max_width(920)
     .height(Length::Fill)
     .style(style::card)
@@ -401,7 +400,7 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
     let installer = &sheet.pending.installer;
     let step = &installer.steps[sheet.step];
     let types = installer.types(&sheet.selection, sheet.step, &sheet.pending.present);
-    let mut list = column![].spacing(16);
+    let mut list = column![].spacing(style::SPACE_L);
     for (g, group) in step.groups.iter().enumerate() {
         let picks = sheet.selection.group(sheet.step, g);
         let mut options = column![
@@ -409,7 +408,7 @@ fn option_list(sheet: &Sheet) -> Element<'_, Message> {
                 .size(14)
                 .font(BOLD)
         ]
-        .spacing(6);
+        .spacing(style::SPACE_S);
         for (o, option) in group.options.iter().enumerate() {
             let kind = types[g][o];
             let name = label(&option.name, kind);
@@ -467,7 +466,7 @@ fn about_panel(sheet: &Sheet) -> Element<'_, Message> {
         .and_then(|option| option.image.as_deref())
         .or(installer.image.as_deref())
         .and_then(|path| sheet.pending.image(path));
-    let mut about = column![].spacing(10);
+    let mut about = column![].spacing(style::SPACE_M);
     if let Some(picture) = picture {
         about = about.push(
             image(image::Handle::from_path(picture))

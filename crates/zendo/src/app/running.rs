@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{button, row, text};
+use iced::widget::{button, row};
 use iced::{Alignment, Element, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
@@ -366,7 +366,7 @@ impl Zendo {
     /// Play, or Running with Stop while the game runs.
     pub(super) fn play_buttons(&self, game: &Game) -> Element<'_, Message> {
         let Some(session) = self.running.games.get(&game.id) else {
-            return button(text(t!("run-play")).size(16).font(BOLD))
+            return button(style::button_text(t!("run-play")).size(16).font(BOLD))
                 .padding([10, 32])
                 .style(style::primary)
                 .on_press(Message::Play)
@@ -383,10 +383,10 @@ impl Zendo {
             t!("run-stop")
         };
         row![
-            button(text(state).size(16).font(BOLD))
+            button(style::button_text(state).size(16).font(BOLD))
                 .padding([10, 32])
                 .style(style::primary),
-            button(text(stop).size(14).font(BOLD))
+            button(style::button_text(stop).font(BOLD))
                 .padding([10, 18])
                 .style(style::danger)
                 .on_press_maybe(

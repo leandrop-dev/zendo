@@ -153,7 +153,7 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
         ),
         text(t!("options-sizes-about")).size(13).color(colors().dim),
     ]
-    .spacing(8);
+    .spacing(style::SPACE_S);
     if let Some((Field::Gamescope, error)) = &sheet.error {
         sizes = sizes.push(text(error).size(13).color(colors().bad));
     }
@@ -167,7 +167,9 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
                 move |kind| set(Setting::Window(kind)),
             )
             .text_size(14)
-            .padding([8, 12]),
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu),
         ),
         sizes,
         scaling,
@@ -177,7 +179,7 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
                 .on_input(move |value| set(Setting::Fps(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .width(200)
                 .style(style::input),
         ),
@@ -188,11 +190,11 @@ pub fn view(sheet: &Sheet) -> Element<'_, Message> {
                 .on_input(move |value| set(Setting::More(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
         ),
     ]
-    .spacing(14)
+    .spacing(style::SPACE_L)
     .padding([0, 20])
     .into()
 }
@@ -217,7 +219,9 @@ fn scaling(options: &LaunchOptions) -> Element<'_, Message> {
                 move |pick| set(Setting::Scaler(pick)),
             )
             .text_size(14)
-            .padding([8, 12]),
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu),
         ),
         labelled(
             t!("options-filter"),
@@ -227,10 +231,12 @@ fn scaling(options: &LaunchOptions) -> Element<'_, Message> {
                 move |pick| set(Setting::Filter(pick)),
             )
             .text_size(14)
-            .padding([8, 12]),
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu),
         ),
     ]
-    .spacing(16);
+    .spacing(style::SPACE_L);
     if options.gamescope_filter.is_some_and(Filter::sharpens) {
         let sharpness = Pick::list(
             t!("options-gamescope-own"),
@@ -251,7 +257,9 @@ fn scaling(options: &LaunchOptions) -> Element<'_, Message> {
                 move |pick| set(Setting::Sharpness(pick)),
             )
             .text_size(14)
-            .padding([8, 12]),
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu),
         ));
     }
     scaling.into()
@@ -260,7 +268,7 @@ fn scaling(options: &LaunchOptions) -> Element<'_, Message> {
 /// A setting with its name before it.
 fn labelled<'a>(label: String, input: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
     row![text(label).size(14).color(colors().dim), input.into()]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .into()
 }
@@ -277,7 +285,7 @@ fn size_row<'a>(
         text("×").size(14).color(colors().dim),
         size_input(&t!("options-height"), height, on_height),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .into()
 }

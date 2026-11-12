@@ -75,7 +75,7 @@ impl Zendo {
     }
 
     pub(super) fn game_page<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
-        let trail = button(text(t!("game-back").to_uppercase()).size(14))
+        let trail = button(style::button_text(t!("game-back").to_uppercase()))
             .padding(0)
             .style(style::link)
             .on_press(Message::Navigate(Page::Library));
@@ -117,7 +117,8 @@ impl Zendo {
         }
         main.extend(self.achievements_card(&game.id));
         main.extend(self.requirements_card(&game.id));
-        let side = column![self.details_card(game), self.technical_card(game)].spacing(24);
+        let side =
+            column![self.details_card(game), self.technical_card(game)].spacing(style::SPACE_XL);
 
         let two = self.window_width >= TWO_COLUMNS;
         page = if main.is_empty() {
@@ -125,10 +126,12 @@ impl Zendo {
         } else if two {
             page.push(
                 row![
-                    column(main).spacing(24).width(Length::FillPortion(3)),
+                    column(main)
+                        .spacing(style::SPACE_XL)
+                        .width(Length::FillPortion(3)),
                     side.width(Length::FillPortion(2)),
                 ]
-                .spacing(24),
+                .spacing(style::SPACE_XL),
             )
         } else {
             page.extend(main).push(side)
@@ -139,91 +142,31 @@ impl Zendo {
             .into()
     }
 
-    /// The top of the page: the game's wide art faint behind, the portrait
-    /// cover on the left with the ways to change the pictures, and on the
-    /// right the title, where it comes from and the links to read more.
+    /// The top of an installed game's page, from its own record.
     fn game_header<'a>(&'a self, game: &'a Game, update: bool) -> Element<'a, Message> {
-        let cover: Element<'a, Message> = match &game.cover {
-            Some(path) => image(image::Handle::from_path(path))
-                .width(COVER_WIDTH)
-                .height(COVER_HEIGHT)
-                .content_fit(ContentFit::Cover)
-                .border_radius(style::RADIUS_PANEL)
-                .into(),
-            None => container(text(&game.title).size(20).center())
-                .padding(SPACE_M)
-                .center(Length::Fill)
-                .width(COVER_WIDTH)
-                .height(COVER_HEIGHT)
-                .style(style::placeholder)
-                .into(),
-        };
-        let change = |label: String, message: Message| {
-            button(text(label.to_uppercase()).size(12))
-                .padding([SPACE_XS, SPACE_S])
-                .width(Length::Fill)
-                .style(style::secondary)
-                .on_press(message)
-        };
-        let pictures = column![
-            cover,
-            change(
-                t!("game-change-cover"),
-                Message::Art(ArtMessage::Open(game.id.clone())),
-            ),
-            change(
-                t!("game-change-backdrop"),
-                Message::Art(ArtMessage::OpenHero(game.id.clone())),
-            ),
-        ]
-        .spacing(SPACE_S)
-        .width(COVER_WIDTH);
-
         let mut source = vec![format::source(game.source)];
         source.extend(game.details.developer.clone());
         source.extend(game.details.platform.as_deref().map(platform_label));
-        let mut links = row![].spacing(SPACE_S).align_y(Alignment::Center);
+        let mut badges: Vec<Element<'a, Message>> = Vec::new();
         if update {
-            links = links.push(style::badge(t!("badge-update"), colors().accent));
+            badges.push(style::badge(t!("badge-update"), colors().accent));
         }
         if game.pinned {
-            links = links.push(style::badge(t!("badge-favorite"), colors().accent));
+            badges.push(style::badge(t!("badge-favorite"), colors().accent));
         }
         if game.hidden {
-            links = links.push(style::badge(t!("badge-hidden"), colors().dim));
+            badges.push(style::badge(t!("badge-hidden"), colors().dim));
         }
-        links = links.extend(self.hero_pills(&game.id));
-        links = links.push(self.wiki_chip(game));
-        let info = column![
-            text(&game.title).size(34).font(BOLD),
-            text(source.join(" · ").to_uppercase())
-                .size(13)
-                .color(colors().dim),
-            container(links.wrap().vertical_spacing(SPACE_S)).padding([SPACE_S, 0.0]),
-        ]
-        .spacing(SPACE_S)
-        .width(Length::Fill);
-
-        let content = container(
-            row![pictures, info]
-                .spacing(SPACE_XL)
-                .align_y(Alignment::Start),
-        )
-        .padding(SPACE_L)
-        .width(Length::Fill)
-        .height(HEADER_HEIGHT);
-        match &game.hero {
-            Some(path) => stack![
-                image(image::Handle::from_path(path))
-                    .width(Length::Fill)
-                    .height(HEADER_HEIGHT)
-                    .content_fit(ContentFit::Cover)
-                    .opacity(BACKDROP_OPACITY),
-                content,
-            ]
-            .into(),
-            None => content.into(),
-        }
+        badges.extend(self.hero_pills(&game.id));
+        badges.push(self.wiki_chip(game));
+        header(Header {
+            id: &game.id,
+            title: &game.title,
+            source: source.join(" · "),
+            cover: game.cover.as_deref(),
+            backdrop: game.hero.as_deref(),
+            badges,
+        })
     }
 
     /// The `PCGamingWiki` chip: by Steam's app id when the game has one (its
@@ -271,26 +214,22 @@ impl Zendo {
     fn action_bar<'a>(&'a self, game: &'a Game, update: bool) -> Element<'a, Message> {
         let job = self.downloads.job_for(&game.id);
         let mut bar = row![self.play_buttons(game)]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center);
         if update && game.installed_by_zendo() {
             bar = bar.push(
-                button(
-                    text(t!("action-label", action = "update"))
-                        .size(14)
-                        .font(BOLD),
-                )
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press_maybe(queue(game, Action::Update).filter(|_| job.is_none())),
+                button(style::button_text(t!("action-label", action = "update")).font(BOLD))
+                    .padding(style::BUTTON)
+                    .style(style::secondary)
+                    .on_press_maybe(queue(game, Action::Update).filter(|_| job.is_none())),
             );
         }
         if super::launch_options::applies(game) {
             bar = bar.push(launch_options_button(game));
         }
         let action = |label: String, message: Message| {
-            button(text(label.to_uppercase()).size(14))
-                .padding([10, 18])
+            button(style::button_text(label.to_uppercase()))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(message)
         };
@@ -326,7 +265,7 @@ impl Zendo {
                 Message::GameView(GameViewMessage::ToggleMore),
             ));
         }
-        let mut line = row![].spacing(10).align_y(Alignment::Center);
+        let mut line = row![].spacing(style::SPACE_M).align_y(Alignment::Center);
         if let Some((job, running)) = job {
             let state = match (running, job.paused) {
                 (true, _) => "now",
@@ -344,8 +283,8 @@ impl Zendo {
                     .color(colors().dim),
                 )
                 .push(
-                    button(text(t!("see-downloads")).size(13))
-                        .padding([6, 12])
+                    button(style::button_text(t!("see-downloads")))
+                        .padding(style::BUTTON_SMALL)
                         .style(style::secondary)
                         .on_press(Message::Navigate(Page::Downloads)),
                 );
@@ -362,29 +301,29 @@ impl Zendo {
     /// Repair, Move and Uninstall; for a Steam game Verify and Uninstall;
     /// for one added by hand Edit and Remove.
     fn more_row<'a>(&'a self, game: &'a Game) -> Element<'a, Message> {
-        let mut more = row![].spacing(10).align_y(Alignment::Center);
+        let mut more = row![].spacing(style::SPACE_M).align_y(Alignment::Center);
         if game.installed_by_zendo() {
             let free = self.downloads.job_for(&game.id).is_none();
             let checking = self.downloads.updates.get(&game.id) == Some(&UpdateState::Checking);
             more =
                 more.push(
-                    button(text(t!("downloads-check-updates")).size(14))
-                        .padding([8, 14])
+                    button(style::button_text(t!("downloads-check-updates")))
+                        .padding(style::BUTTON)
                         .style(style::secondary)
                         .on_press_maybe((!checking).then(|| {
                             Message::Download(DownloadMessage::CheckUpdate(game.id.clone()))
                         })),
                 );
             more = more.push(
-                button(text(t!("action-label", action = "repair")).size(14))
-                    .padding([8, 14])
+                button(style::button_text(t!("action-label", action = "repair")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press_maybe(queue(game, Action::Repair).filter(|_| free)),
             );
             let movable = free && !self.running.is_open(&game.id);
             more = more.push(
-                button(text(t!("downloads-move")).size(14))
-                    .padding([8, 14])
+                button(style::button_text(t!("downloads-move")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press_maybe(movable.then(|| {
                         Message::Download(DownloadMessage::ChooseFolder(
@@ -396,13 +335,13 @@ impl Zendo {
             let confirming = self.downloads.confirm_uninstall.as_deref() == Some(game.id.as_str());
             more =
                 more.push(if confirming {
-                    button(text(t!("downloads-press-again")).size(14).font(BOLD))
-                        .padding([8, 14])
+                    button(style::button_text(t!("downloads-press-again")).font(BOLD))
+                        .padding(style::BUTTON)
                         .style(style::danger)
                         .on_press_maybe(queue(game, Action::Uninstall).filter(|_| free))
                 } else {
-                    button(text(t!("action-label", action = "uninstall")).size(14))
-                        .padding([8, 14])
+                    button(style::button_text(t!("action-label", action = "uninstall")))
+                        .padding(style::BUTTON)
                         .style(style::secondary)
                         .on_press_maybe(free.then(|| {
                             Message::Download(DownloadMessage::AskUninstall(game.id.clone()))
@@ -435,23 +374,20 @@ impl Zendo {
             t!("steam-uninstall")
         };
         row![
-            button(
-                text(if verifying {
-                    t!("steam-verifying")
-                } else {
-                    t!("steam-verify")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(style::button_text(if verifying {
+                t!("steam-verifying")
+            } else {
+                t!("steam-verify")
+            }))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe((!verifying).then(|| ask(SteamInstallMessage::Verify))),
-            button(text(uninstall).size(14))
-                .padding([8, 14])
+            button(style::button_text(uninstall))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(ask(SteamInstallMessage::Uninstall)),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .into()
     }
 
@@ -499,7 +435,7 @@ impl Zendo {
                         .font(Font::MONOSPACE),
                     open_button(t!("files-open-folder"), path),
                 ]
-                .spacing(6)
+                .spacing(style::SPACE_S)
                 .into(),
             );
         }
@@ -507,7 +443,10 @@ impl Zendo {
             t!("fact-started-from-zendo"),
             plain(t!("count-times", count = game.played.launches)),
         );
-        card(t!("game-details"), column(rows).spacing(12).into())
+        card(
+            t!("game-details"),
+            column(rows).spacing(style::SPACE_M).into(),
+        )
     }
 
     /// The launch command, Zendo's id, and for a game Zendo starts its Wine
@@ -516,10 +455,12 @@ impl Zendo {
         let open = self.game_view.technical;
         let header = button(
             row![
-                text(t!("game-technical")).size(18).font(BOLD),
+                text(t!("game-technical").to_uppercase())
+                    .size(14)
+                    .font(BOLD),
                 space::horizontal(),
                 text(if open { "−" } else { "+" })
-                    .size(18)
+                    .size(14)
                     .color(colors().dim),
             ]
             .align_y(Alignment::Center),
@@ -527,7 +468,7 @@ impl Zendo {
         .padding(0)
         .style(style::link)
         .on_press(Message::GameView(GameViewMessage::ToggleTechnical));
-        let mut body = column![header].spacing(16);
+        let mut body = column![header].spacing(SPACE_M);
         if open {
             let code = |value: String| -> Element<'a, Message> {
                 text(value).size(12).font(Font::MONOSPACE).into()
@@ -536,7 +477,7 @@ impl Zendo {
                 label_row(t!("fact-launch-command"), code(game.command_line())),
                 label_row(t!("fact-zendo-id"), code(game.id.clone())),
             ]
-            .spacing(12);
+            .spacing(style::SPACE_M);
             let starts_itself = game.installed_by_zendo() || game.source == Source::Local;
             if starts_itself
                 && launch::needs_proton(game)
@@ -551,7 +492,7 @@ impl Zendo {
             body = body.push(rows);
         }
         container(body)
-            .padding(20)
+            .padding(SPACE_L)
             .width(Length::Fill)
             .style(style::card)
             .into()
@@ -563,14 +504,101 @@ fn queue(game: &Game, action: Action) -> Option<Message> {
     Job::for_game(game, action).map(|job| Message::Download(DownloadMessage::Queue(job)))
 }
 
+/// What a game's page shows at its top, installed or not.
+pub(super) struct Header<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    /// The store and who made it, as one line.
+    pub source: String,
+    pub cover: Option<&'a Path>,
+    pub backdrop: Option<&'a Path>,
+    /// Badges and links, in a row under the source.
+    pub badges: Vec<Element<'a, Message>>,
+}
+
+/// The top of a game's page: the wide art faint behind, the portrait cover
+/// on the left with the ways to change the pictures, and on the right the
+/// title, where it comes from and the badges and links.
+pub(super) fn header(header: Header<'_>) -> Element<'_, Message> {
+    let cover: Element<'_, Message> = match header.cover {
+        Some(path) => image(image::Handle::from_path(path))
+            .width(COVER_WIDTH)
+            .height(COVER_HEIGHT)
+            .content_fit(ContentFit::Cover)
+            .border_radius(style::RADIUS_PANEL)
+            .into(),
+        None => container(text(header.title).size(20).center())
+            .padding(SPACE_M)
+            .center(Length::Fill)
+            .width(COVER_WIDTH)
+            .height(COVER_HEIGHT)
+            .style(style::placeholder)
+            .into(),
+    };
+    let change = |label: String, message: Message| {
+        button(text(label.to_uppercase()).size(12))
+            .padding([SPACE_XS, SPACE_S])
+            .width(Length::Fill)
+            .style(style::secondary)
+            .on_press(message)
+    };
+    let pictures = column![
+        cover,
+        change(
+            t!("game-change-cover"),
+            Message::Art(ArtMessage::Open(header.id.to_owned())),
+        ),
+        change(
+            t!("game-change-backdrop"),
+            Message::Art(ArtMessage::OpenHero(header.id.to_owned())),
+        ),
+    ]
+    .spacing(SPACE_S)
+    .width(COVER_WIDTH);
+
+    let links = row(header.badges)
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center);
+    let info = column![
+        text(header.title).size(34).font(BOLD),
+        text(header.source.to_uppercase())
+            .size(13)
+            .color(colors().dim),
+        container(links.wrap().vertical_spacing(SPACE_S)).padding([SPACE_S, 0.0]),
+    ]
+    .spacing(SPACE_S)
+    .width(Length::Fill);
+
+    let content = container(
+        row![pictures, info]
+            .spacing(SPACE_XL)
+            .align_y(Alignment::Start),
+    )
+    .padding(SPACE_L)
+    .width(Length::Fill)
+    .height(HEADER_HEIGHT);
+    match header.backdrop {
+        Some(path) => stack![
+            image(image::Handle::from_path(path))
+                .width(Length::Fill)
+                .height(HEADER_HEIGHT)
+                .content_fit(ContentFit::Cover)
+                .opacity(BACKDROP_OPACITY),
+            content,
+        ]
+        .into(),
+        None => content.into(),
+    }
+}
+
 /// A card with a heading.
 #[expect(
     clippy::needless_pass_by_value,
     reason = "callers hand over a heading they just built"
 )]
 pub(super) fn card(heading: String, body: Element<'_, Message>) -> Element<'_, Message> {
-    container(column![text(heading.to_uppercase()).size(14).font(BOLD), body].spacing(16))
-        .padding(20)
+    container(column![text(heading.to_uppercase()).size(14).font(BOLD), body].spacing(SPACE_M))
+        .padding(SPACE_L)
         .width(Length::Fill)
         .style(style::card)
         .into()
@@ -584,12 +612,12 @@ pub(super) fn failed_card<'a>(heading: String, id: &str, error: &str) -> Element
             text(t!("card-failed", error = error))
                 .size(13)
                 .color(colors().dim),
-            button(text(t!("try-again")).size(13))
-                .padding([6, 12])
+            button(style::button_text(t!("try-again")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::Retry(id.to_owned())),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .into(),
     )
 }
@@ -599,7 +627,7 @@ pub(super) fn label_row(label: String, value: Element<'_, Message>) -> Element<'
         text(label).size(14).color(colors().dim).width(LABEL_WIDTH),
         container(value).width(Length::Fill),
     ]
-    .spacing(8)
+    .spacing(style::SPACE_S)
     .into()
 }
 
@@ -615,8 +643,8 @@ pub(super) fn plain<'a>(value: String) -> Element<'a, Message> {
 fn open_button<'a>(label: String, path: &Path) -> Element<'a, Message> {
     // Offered whether or not the folder is there: a `stat` here would run
     // on every redraw, and opening a missing one says so on the status line.
-    button(text(label).size(13))
-        .padding([4, 10])
+    button(style::button_text(label))
+        .padding(style::BUTTON_SMALL)
         .style(style::secondary)
         .on_press(Message::Open(path.to_string_lossy().into_owned()))
         .into()
@@ -632,7 +660,7 @@ fn path_row<'a>(label: String, path: &Path) -> Element<'a, Message> {
                 .font(Font::MONOSPACE),
             open_button(t!("run-open"), path),
         ]
-        .spacing(6)
+        .spacing(style::SPACE_S)
         .into(),
     )
 }
@@ -736,16 +764,26 @@ fn pcgamingwiki_url(app: Option<u32>, title: &str) -> String {
     format!("https://www.pcgamingwiki.com/w/index.php?search={search}")
 }
 
+/// One number under its small label, in a card.
+pub(super) fn stat_tile<'a>(label: impl AsRef<str>, value: String) -> Element<'a, Message> {
+    container(
+        column![
+            style::label(label.as_ref()),
+            text(value).size(22).font(BOLD)
+        ]
+        .spacing(SPACE_S),
+    )
+    .padding(SPACE_L)
+    .width(Length::FillPortion(1))
+    .style(style::card)
+    .into()
+}
+
 /// Four tiles with the numbers worth seeing first: the time played, when it
 /// was last played, the achievements unlocked and the share of them.
 fn stat_tiles(game: &Game) -> Element<'_, Message> {
     let dash = || "—".to_owned();
-    let tile = |label: String, value: String| {
-        container(column![style::label(&label), text(value).size(22).font(BOLD),].spacing(SPACE_S))
-            .padding(SPACE_L)
-            .width(Length::FillPortion(1))
-            .style(style::card)
-    };
+    let tile = stat_tile;
     let (unlocked, share) = game.achievements.map_or_else(
         || (dash(), dash()),
         |(unlocked, total)| {
@@ -787,17 +825,10 @@ fn steam_app(game: &Game) -> Option<&str> {
 
 /// What the store says the game is about.
 pub fn about_card(summary: &str) -> Element<'_, Message> {
-    container(
-        column![
-            text(t!("game-about")).size(18).font(BOLD),
-            text(summary).size(14).line_height(1.5),
-        ]
-        .spacing(12),
+    card(
+        t!("game-about"),
+        text(summary).size(14).line_height(1.5).into(),
     )
-    .padding(20)
-    .width(Length::Fill)
-    .style(style::card)
-    .into()
 }
 
 /// Opens the launch options sheet, for the games Zendo starts itself.
@@ -805,8 +836,8 @@ fn launch_options_button(game: &Game) -> Element<'_, Message> {
     if !super::launch_options::applies(game) {
         return space::horizontal().width(0).into();
     }
-    button(text(t!("game-launch-options")).size(14))
-        .padding([10, 18])
+    button(style::button_text(t!("game-launch-options")))
+        .padding(style::BUTTON)
         .style(style::secondary)
         .on_press(Message::Sheet(super::launch_options::SheetMessage::Open))
         .into()

@@ -230,13 +230,14 @@ impl Zendo {
             toggler(self.config.engines_on_path_first)
                 .label(t!("engines-path-first"))
                 .text_size(14)
+                .style(style::toggler)
                 .on_toggle(|on| Message::Engine(EngineMessage::PathFirst(on))),
-            button(text(t!("protons-check-again")).size(13))
-                .padding([4, 10])
+            button(style::button_text(t!("protons-check-again")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::Engine(EngineMessage::CheckAgain)),
         ]
-        .spacing(10);
+        .spacing(style::SPACE_M);
         for row in &state.rows {
             body = body.push(self.engine_row(row, busy));
         }
@@ -275,10 +276,10 @@ impl Zendo {
                 text(engine.purpose()).size(13).color(colors().dim),
                 text(whose).size(13).color(colors().dim),
             ]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .wrap(),
         ]
-        .spacing(2);
+        .spacing(style::SPACE_XS);
         if let Some(found) = &row_state.found {
             info = info.push(
                 text(found.path.display().to_string())
@@ -306,7 +307,7 @@ impl Zendo {
         }
         let downloading = state.download.is_some();
         let mut line = row![info.width(Length::Fill)]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center);
         let known = match latest {
             Some(Latest::Known(release)) => Some(release),
@@ -315,13 +316,16 @@ impl Zendo {
         match (&row_state.installed, known) {
             (Some(tag), Some(release)) if &release.tag != tag => {
                 line = line.push(
-                    button(text(t!("engines-update", tag = release.tag.as_str())).size(13))
-                        .padding([6, 12])
-                        .style(style::secondary)
-                        .on_press_maybe(
-                            (!downloading && !busy)
-                                .then(|| Message::Engine(EngineMessage::Download(engine))),
-                        ),
+                    button(style::button_text(t!(
+                        "engines-update",
+                        tag = release.tag.as_str()
+                    )))
+                    .padding(style::BUTTON_SMALL)
+                    .style(style::secondary)
+                    .on_press_maybe(
+                        (!downloading && !busy)
+                            .then(|| Message::Engine(EngineMessage::Download(engine))),
+                    ),
                 );
             }
             (Some(_), Some(_)) => {
@@ -329,13 +333,15 @@ impl Zendo {
             }
             (None, Some(release)) => {
                 line = line.push(
-                    button(text(t!("engines-download-tag", tag = release.tag.as_str())).size(13))
-                        .padding([6, 12])
-                        .style(style::secondary)
-                        .on_press_maybe(
-                            (!downloading)
-                                .then(|| Message::Engine(EngineMessage::Download(engine))),
-                        ),
+                    button(style::button_text(t!(
+                        "engines-download-tag",
+                        tag = release.tag.as_str()
+                    )))
+                    .padding(style::BUTTON_SMALL)
+                    .style(style::secondary)
+                    .on_press_maybe(
+                        (!downloading).then(|| Message::Engine(EngineMessage::Download(engine))),
+                    ),
                 );
             }
             _ => {}
@@ -343,15 +349,12 @@ impl Zendo {
         if row_state.installed.is_some() {
             let confirming = state.confirm_remove == Some(engine);
             line = line.push(
-                button(
-                    text(if confirming {
-                        t!("really-remove")
-                    } else {
-                        t!("remove")
-                    })
-                    .size(13),
-                )
-                .padding([6, 12])
+                button(style::button_text(if confirming {
+                    t!("really-remove")
+                } else {
+                    t!("remove")
+                }))
+                .padding(style::BUTTON_SMALL)
                 .style(if confirming {
                     style::danger
                 } else {
@@ -362,7 +365,7 @@ impl Zendo {
         }
         if busy && row_state.installed.is_some() {
             return column![line, text(t!("engines-busy")).size(12).color(colors().dim)]
-                .spacing(4)
+                .spacing(style::SPACE_XS)
                 .into();
         }
         line.into()

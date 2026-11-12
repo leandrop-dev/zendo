@@ -496,15 +496,15 @@ impl Zendo {
             Shown::Failed(err) => text(err).size(13).color(colors().bad).into(),
             Shown::Ready(overview) => self.mods_body(id, overview, free),
         };
-        let add = button(text(t!("mods-add")).size(14))
-            .padding([8, 14])
+        let add = button(style::button_text(t!("mods-add")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe(free.then(|| Message::Mods(ModsMessage::Pick(id.clone()))));
         let mut header = row![
-            text(t!("mods-title")).size(18).font(BOLD),
+            text(t!("mods-title").to_uppercase()).size(14).font(BOLD),
             space::horizontal()
         ]
-        .spacing(8)
+        .spacing(style::SPACE_S)
         .align_y(Alignment::Center);
         if let Some(domain) = self
             .mods_overview(id)
@@ -512,19 +512,19 @@ impl Zendo {
         {
             header = header
                 .push(
-                    button(text(t!("mods-search-nexus")).size(14))
-                        .padding([8, 14])
+                    button(style::button_text(t!("mods-search-nexus")))
+                        .padding(style::BUTTON)
                         .style(style::secondary)
                         .on_press(Message::NexusSearch(SearchMessage::Open(id.clone()))),
                 )
                 .push(
-                    button(text(t!("mods-find-on-nexus")).size(14))
-                        .padding([8, 14])
+                    button(style::button_text(t!("mods-find-on-nexus")))
+                        .padding(style::BUTTON)
                         .style(style::secondary)
                         .on_press(Message::Open(nexus::game_url(domain))),
                 );
         }
-        let mut card = column![header.push(add)].spacing(12);
+        let mut card = column![header.push(add)].spacing(style::SPACE_M);
         for download in self.nexus_downloads_for(id) {
             card = card.push(download_row(download));
         }
@@ -534,7 +534,7 @@ impl Zendo {
         }
         Some(
             container(card)
-                .padding(20)
+                .padding(style::SPACE_XL)
                 .width(Length::Fill)
                 .style(style::card)
                 .into(),
@@ -566,7 +566,7 @@ impl Zendo {
                 .size(13)
                 .font(Font::MONOSPACE),
         ]
-        .spacing(10);
+        .spacing(style::SPACE_M);
 
         if overview.mods.is_empty() {
             body = body.push(text(t!("mods-none")).size(14).color(colors().dim));
@@ -591,8 +591,8 @@ impl Zendo {
                         .size(13)
                         .color(colors().dim)
                         .width(Length::Fill),
-                    button(text(delete_label(asking)).size(13))
-                        .padding([4, 10])
+                    button(style::button_text(delete_label(asking)))
+                        .padding(style::BUTTON_SMALL)
                         .style(if asking {
                             style::danger
                         } else {
@@ -602,7 +602,7 @@ impl Zendo {
                             free.then(|| Message::Mods(ModsMessage::ClearOverwrite(id.to_owned()))),
                         ),
                 ]
-                .spacing(10)
+                .spacing(style::SPACE_M)
                 .align_y(Alignment::Center),
             );
         }
@@ -645,16 +645,16 @@ impl Zendo {
         };
         let step =
             |label: &'static str, up: bool, can: bool| {
-                button(text(label).size(13))
-                    .padding([4, 10])
+                button(style::button_text(label))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe((free && can).then(|| {
                         Message::Mods(ModsMessage::Move(game.clone(), mod_id.clone(), up))
                     }))
             };
         let options = info.installer.then(|| {
-            button(text(t!("mods-options")).size(13))
-                .padding([4, 10])
+            button(style::button_text(t!("mods-options")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press_maybe(
                     free.then(|| Message::Mods(ModsMessage::Options(game.clone(), mod_id.clone()))),
@@ -670,7 +670,7 @@ impl Zendo {
                 None => t!("mods-update"),
             };
             button(text(label).size(13).color(colors().good))
-                .padding([4, 10])
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::Nexus(NexusMessage::Update(
                     game.clone(),
@@ -686,7 +686,7 @@ impl Zendo {
                 text(&info.name).size(14),
                 text(facts.join(" · ")).size(12).color(colors().dim),
             ]
-            .spacing(2)
+            .spacing(style::SPACE_XS)
             .width(Length::Fill),
         ]
         .push(update)
@@ -695,8 +695,8 @@ impl Zendo {
             row![
                 step("↑", true, !first),
                 step("↓", false, !last),
-                button(text(delete_label(asking)).size(13))
-                    .padding([4, 10])
+                button(style::button_text(delete_label(asking)))
+                    .padding(style::BUTTON_SMALL)
                     .style(if asking {
                         style::danger
                     } else {
@@ -709,10 +709,10 @@ impl Zendo {
                         ))),
                     ),
             ]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center),
         )
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .into()
     }
@@ -730,8 +730,8 @@ impl Zendo {
             .color(colors().dim)
             .width(110);
         let small = |label: String| {
-            button(text(label).size(13))
-                .padding([6, 12])
+            button(style::button_text(label))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
         };
         if let Some((_, naming)) = self.mods.naming.as_ref().filter(|(game, _)| game == id) {
@@ -748,7 +748,7 @@ impl Zendo {
                 .on_input(|name| Message::Mods(ModsMessage::ProfileName(id.to_owned(), name)))
                 .on_submit(Message::Mods(ModsMessage::SaveProfile(id.to_owned())))
                 .size(13)
-                .padding([6, 10])
+                .padding(style::BUTTON_SMALL)
                 .style(style::input),
                 small(t!("key-save")).on_press_maybe(
                     (free && !naming.name.trim().is_empty())
@@ -756,7 +756,7 @@ impl Zendo {
                 ),
                 small(t!("cancel")).on_press(Message::Mods(ModsMessage::CancelProfile)),
             ]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center)
             .into();
         }
@@ -771,7 +771,9 @@ impl Zendo {
             move |name| Message::Mods(ModsMessage::Profile(id.to_owned(), name)),
         )
         .text_size(13)
-        .padding([6, 10])
+        .padding([style::SPACE_S, style::SPACE_M])
+        .style(style::pick_list)
+        .menu_style(style::menu)
         .width(Length::Fill);
         row![
             label,
@@ -782,8 +784,8 @@ impl Zendo {
             small(t!("mods-profile-rename-button")).on_press_maybe(
                 free.then(|| Message::Mods(ModsMessage::RenameProfile(id.to_owned())))
             ),
-            button(text(delete_label(asking)).size(13))
-                .padding([6, 12])
+            button(style::button_text(delete_label(asking)))
+                .padding(style::BUTTON_SMALL)
                 .style(if asking {
                     style::danger
                 } else {
@@ -794,7 +796,7 @@ impl Zendo {
                         .then(|| Message::Mods(ModsMessage::DeleteProfile(id.to_owned()))),
                 ),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .into()
     }
@@ -825,15 +827,15 @@ impl Zendo {
                 }))
                 .on_submit(Message::Mods(ModsMessage::SaveFolder(id.to_owned())))
                 .size(13)
-                .padding([6, 10])
+                .padding(style::BUTTON_SMALL)
                 .style(style::input),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center);
         if typed.is_some_and(|typed| typed != overview.folder) {
             folder = folder.push(
-                button(text(t!("key-save")).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("key-save")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(
                         free.then(|| Message::Mods(ModsMessage::SaveFolder(id.to_owned()))),
@@ -842,8 +844,8 @@ impl Zendo {
         }
         if overview.custom_folder && !applied {
             folder = folder.push(
-                button(text(t!("mods-folder-known")).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("mods-folder-known")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(
                         free.then(|| Message::Mods(ModsMessage::KnownFolder(id.to_owned()))),
@@ -884,22 +886,22 @@ impl Zendo {
             || writes_plugins;
         row![
             text(state).size(13).color(color).width(Length::Fill),
-            button(text(t!("mods-back-to-vanilla")).size(14))
-                .padding([10, 18])
+            button(style::button_text(t!("mods-back-to-vanilla")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press_maybe(
                     (can && overview.applied != Applied::No)
                         .then(|| Message::Mods(ModsMessage::Restore(id.to_owned()))),
                 ),
-            button(text(t!("mods-apply")).size(14).font(BOLD))
-                .padding([10, 24])
+            button(style::button_text(t!("mods-apply")).font(BOLD))
+                .padding(style::BUTTON_LARGE)
                 .style(style::primary)
                 .on_press_maybe(
                     (can && (any_on || overview.applied != Applied::No))
                         .then(|| Message::Mods(ModsMessage::Apply(id.to_owned()))),
                 ),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .into()
     }
@@ -928,14 +930,14 @@ fn plugins_section<'a>(
         (None, _) => t!("plugins-note-no-prefix"),
     };
     let mut section = column![
-        text(t!("plugins-title")).size(15).font(BOLD),
+        style::subheading(t!("plugins-title")),
         text(note).size(13).color(if plugins.file.is_some() {
             colors().dim
         } else {
             colors().bad
         }),
     ]
-    .spacing(8);
+    .spacing(style::SPACE_S);
     if let Some(file) = &plugins.file {
         section = section.push(
             text(file.display().to_string())
@@ -987,8 +989,8 @@ fn plugin_row<'a>(
     };
     let step =
         |label: &'static str, up: bool| {
-            button(text(label).size(13))
-                .padding([4, 10])
+            button(style::button_text(label))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press_maybe((free && plugins::can_move(list, at, up)).then(|| {
                     Message::Mods(ModsMessage::MovePlugin(id.to_owned(), name.clone(), up))
@@ -998,7 +1000,7 @@ fn plugin_row<'a>(
         text(&plugin.name).size(14),
         text(facts.join(" · ")).size(12).color(colors().dim),
     ]
-    .spacing(2)
+    .spacing(style::SPACE_XS)
     .width(Length::Fill);
     if !problems.is_empty() {
         about = about.push(text(problems.join(" · ")).size(12).color(colors().bad));
@@ -1012,7 +1014,7 @@ fn plugin_row<'a>(
         step("↑", true),
         step("↓", false),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .into()
 }

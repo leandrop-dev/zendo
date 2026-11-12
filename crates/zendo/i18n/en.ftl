@@ -63,7 +63,6 @@ library-refresh = Refresh
 library-search = Search your library
 library-add-game = Add game
 library-all = All
-library-sort = Sort
 library-selected = { $count } marked
 library-clear-selection = Clear
 categories-assign = Add to category…
@@ -154,7 +153,12 @@ card-failed = Could not ask: { $error }
 
 ## Settings
 
-settings-subtitle = The language, covers, Nexus Mods, Proton, the sources Zendo reads and its own files
+settings-group-general = General
+settings-group-keys = Keys
+settings-group-library = Library
+settings-group-engines = Engines
+settings-group-proton = Proton
+settings-group-diagnostics = Diagnostics
 language-title = Language
 language-about = The window's language. System follows your desktop's; the command line stays in English.
 language-system = System ({ $language })
@@ -465,7 +469,6 @@ game-unhide = Unhide
 game-more = More
 game-less = Less
 game-technical = Technical
-game-change-art = Change art
 game-about = About
 game-details = Game details
 game-launch-options = Launch options
@@ -848,14 +851,6 @@ see-downloads = See downloads
 badge-installed = INSTALLED
 fact-platforms = Platforms
 fact-developer = Developer
-store-owned = { $count ->
-    [one] 1 game owned
-   *[other] { $count } games owned
-}
-store-installed = { $count ->
-    [one] 1 installed
-   *[other] { $count } installed
-}
 store-asking-stores = Asking { $stores } for your games…
 store-search = Search your games
 store-asking = Asking…
@@ -956,14 +951,11 @@ downloads-up-to-date = Up to date
 downloads-update-version = Update available: { $version }
 downloads-update-available = Update available
 downloads-update-failed = Could not check for updates: { $error }
-downloads-nothing = Nothing to download
-downloads-in-queue = { $count } in the queue
-downloads-in-queue-paused = { $count } in the queue, { $paused } paused
 downloads-empty = Install games from the Store and they show up here
 downloads-go-store = Go to the Store
-downloads-up-next = UP NEXT
-downloads-paused = PAUSED
-downloads-finished = FINISHED
+downloads-up-next = Up next
+downloads-paused = Paused
+downloads-finished = Finished
 downloads-clear = Clear
 downloads-running-title = A download is running
 downloads-running-about = Closing pauses it, with what it has so far; resume it from here next time

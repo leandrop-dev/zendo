@@ -13,7 +13,7 @@ use zendo_core::steam_web::{self, Family, Session, WebAnswer};
 
 use super::settings::kept_note;
 use super::store::StoreMessage;
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, BUTTON, SPACE_L, SPACE_M, SPACE_S, button_text, colors};
 use super::{Message, Zendo, blocking, now};
 use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
@@ -199,12 +199,12 @@ impl Zendo {
     pub(super) fn steam_card(&self) -> Element<'_, Message> {
         let title = row![
             style::badge(Source::Steam.label(), style::source_color(Source::Steam)),
-            text("Steam").size(18).font(BOLD),
+            text("STEAM").size(16).font(BOLD),
             space::horizontal(),
         ]
-        .spacing(10)
+        .spacing(SPACE_M)
         .align_y(Alignment::Center);
-        let mut body = column![title].spacing(8);
+        let mut body = column![title].spacing(SPACE_S);
         let session = self.steam_session();
         match (&session, &self.steam.signing_in) {
             (Some(session), _) => {
@@ -215,8 +215,8 @@ impl Zendo {
                             .size(14)
                             .color(colors().good),
                         space::horizontal(),
-                        button(text(t!("accounts-sign-out")).size(14))
-                            .padding([8, 14])
+                        button(button_text(t!("accounts-sign-out")))
+                            .padding(BUTTON)
                             .style(style::secondary)
                             .on_press(Message::Steam(SteamMessage::SignOut)),
                     ]
@@ -244,8 +244,8 @@ impl Zendo {
                     row![
                         text(t!("steam-signing-in")).size(14),
                         space::horizontal(),
-                        button(text(t!("cancel")).size(14))
-                            .padding([8, 14])
+                        button(button_text(t!("cancel")))
+                            .padding(BUTTON)
                             .style(style::secondary)
                             .on_press(Message::Steam(SteamMessage::CancelSignIn)),
                     ]
@@ -255,8 +255,8 @@ impl Zendo {
             (None, None) => {
                 body = body.push(text(t!("steam-sign-in-about")).size(13).color(colors().dim));
                 body = body.push(
-                    button(text(t!("steam-sign-in")).size(14).font(BOLD))
-                        .padding([8, 18])
+                    button(button_text(t!("steam-sign-in")).font(BOLD))
+                        .padding(BUTTON)
                         .style(style::primary)
                         .on_press(Message::Steam(SteamMessage::SignIn)),
                 );
@@ -278,7 +278,7 @@ impl Zendo {
         }
         body = body.push(kept_note(self.config.kept(Key::SteamSession)));
         container(body)
-            .padding(20)
+            .padding(SPACE_L)
             .width(Length::Fill)
             .style(style::card)
             .into()

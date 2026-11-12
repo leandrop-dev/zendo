@@ -69,6 +69,10 @@ What phase 1 reads from Heroic, checked in Heroic 2.22.4's own code: under
 titles from `store_cache/gog_library.json`, `nile_config/nile/installed.json`
 with titles from its `library.json`, and `sideload_apps/library.json`. Games
 start with `heroic://launch?appName=<id>&runner=legendary|gog|nile|sideload`.
+Heroic's protocol handler (`src/backend/protocol.ts` on main, blob b4fa1c1, read
+through `gh api` on 2026-11-12) switches on the URL's host and knows only `ping`
+and `launch`: there is no route that opens a game's page, so Zendo offers no
+"Manage in Heroic".
 
 `.desktop` files: launchers and tools also file themselves under `Game`
 alone (Faugus, Goverlay, Heroic, Lutris, Steam), so no category tells them

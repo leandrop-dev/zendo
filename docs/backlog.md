@@ -64,8 +64,9 @@ Numbering continues from 27 so it never collides with the built items 1 to
 32. Built on 2026-11-12 (docs/history.md, item 32), checked on screen with the user
     present, not yet tried by the user. Redesign, the Library and the game page, as in design.md, with Zendo's
     pins, hiding, categories, play time, achievements and ProtonDB.
-33. Redesign, the remaining pages: Store, Downloads, Accounts, Settings,
-    the launch options sheet, mods and Nexus.
+33. Built on 2026-11-12 (docs/history.md, item 33), tests green, checked on
+    screen in part (history.md lists what was not). Redesign, the remaining pages: Store, Downloads,
+    Accounts, Settings, the launch options sheet, mods and Nexus.
 34. Home and Game Mode, as in design.md. Game Mode replaces today's F11 full
     screen.
 35. Organize: play status (backlog, playing, completed, abandoned), tags,

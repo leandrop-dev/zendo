@@ -106,7 +106,7 @@ impl Zendo {
             return None;
         };
         let total = found.list.len();
-        let mut body = column![].spacing(12);
+        let mut body = column![].spacing(style::SPACE_M);
         if found.unlocks_known {
             let unlocked = found.unlocked();
             #[expect(
@@ -126,7 +126,7 @@ impl Zendo {
                         .girth(6)
                         .style(style::progress),
                 ]
-                .spacing(12)
+                .spacing(style::SPACE_M)
                 .align_y(Alignment::Center),
             );
         } else {
@@ -145,8 +145,8 @@ impl Zendo {
         let left = total - shown;
         if left > 0 {
             body = body.push(
-                button(text(t!("achievements-more", count = left)).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("achievements-more", count = left)))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press(Message::GameView(GameViewMessage::MoreAchievements)),
             );
@@ -177,7 +177,7 @@ fn line(achievement: &Achievement, now: u64) -> Element<'_, Message> {
     } else {
         (achievement.name.clone(), achievement.description.clone())
     };
-    let mut words = column![text(name).size(14).font(BOLD)].spacing(2);
+    let mut words = column![text(name).size(14).font(BOLD)].spacing(style::SPACE_XS);
     if !description.is_empty() {
         words = words.push(text(description).size(13).color(colors().dim));
     }
@@ -202,7 +202,7 @@ fn line(achievement: &Achievement, now: u64) -> Element<'_, Message> {
         space::horizontal().width(8),
         side
     ]
-    .spacing(12)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .into()
 }

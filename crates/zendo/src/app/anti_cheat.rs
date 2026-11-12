@@ -129,7 +129,7 @@ impl Zendo {
 fn anti_cheat_card(entry: &Entry) -> Element<'_, Message> {
     let color = status_color(entry.status);
     let mut head = row![style::badge(status_label(entry.status), color)]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(iced::Alignment::Center);
     if !entry.anti_cheats.is_empty() {
         head = head.push(
@@ -143,7 +143,7 @@ fn anti_cheat_card(entry: &Entry) -> Element<'_, Message> {
         head,
         text(status_about(entry.status)).size(14).line_height(1.5),
     ]
-    .spacing(12);
+    .spacing(style::SPACE_M);
     if let Some((latest, date)) = &entry.latest {
         let line = if date.is_empty() {
             t!("anti-cheat-latest", change = latest.text.as_str())
@@ -160,8 +160,8 @@ fn anti_cheat_card(entry: &Entry) -> Element<'_, Message> {
         body = body.push(note_line(note.text.clone(), note));
     }
     body = body.push(
-        button(text(t!("anti-cheat-open")).size(13))
-            .padding([6, 12])
+        button(style::button_text(t!("anti-cheat-open")))
+            .padding(style::BUTTON_SMALL)
             .style(style::secondary)
             .on_press(Message::Open(entry.url())),
     );
@@ -180,9 +180,9 @@ fn note_line<'a>(line: String, note: &Note) -> Element<'a, Message> {
                 .style(style::link)
                 .on_press(Message::Open(source.clone())),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .into(),
-        None => row![bullet, words].spacing(10).into(),
+        None => row![bullet, words].spacing(style::SPACE_M).into(),
     }
 }
 

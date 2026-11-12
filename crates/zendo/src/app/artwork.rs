@@ -18,7 +18,7 @@ use zendo_core::covers::{self, Kind};
 use zendo_core::steamgriddb::{self, Found, Page as ImagePage};
 
 use super::launch_options::overlay;
-use super::style::{self, BOLD, colors};
+use super::style::{self, colors};
 use super::{Message, Page, Zendo, blocking};
 use crate::i18n::t;
 
@@ -155,6 +155,8 @@ impl Zendo {
             ArtMessage::Automatic => return self.automatic_art(),
             ArtMessage::Settings => {
                 self.picker = None;
+                // The key is what the picker is asking for.
+                self.settings_group = super::settings::Group::Keys;
                 return self.navigate(Page::Settings);
             }
             ArtMessage::Close => self.picker = None,
@@ -479,43 +481,41 @@ pub(super) fn thumbnails(
 
 fn picker_card(picker: &Picker) -> Element<'_, Message> {
     let tabs = row![
-        button(text(t!("art-cover")).size(14))
+        button(style::button_text(t!("art-cover")))
             .padding([6, 14])
             .style(style::chip(picker.kind == Kind::Cover))
             .on_press(Message::Art(ArtMessage::Kind(Kind::Cover))),
-        button(text(t!("art-hero")).size(14))
+        button(style::button_text(t!("art-hero")))
             .padding([6, 14])
             .style(style::chip(picker.kind == Kind::Hero))
             .on_press(Message::Art(ArtMessage::Kind(Kind::Hero))),
     ]
-    .spacing(8);
+    .spacing(style::SPACE_S);
     let search = row![
         text_input(&t!("art-search-placeholder"), &picker.query)
             .on_input(|query| Message::Art(ArtMessage::Query(query)))
             .on_submit(Message::Art(ArtMessage::Search))
             .size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
             .style(style::input),
-        button(text(t!("art-search")).size(14))
-            .padding([8, 14])
+        button(style::button_text(t!("art-search")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press(Message::Art(ArtMessage::Search)),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center);
 
     let mut body = column![
         row![
-            text(t!("art-title", title = picker.title.as_str()))
-                .size(20)
-                .font(BOLD),
+            style::sheet_title(t!("art-title", title = picker.title.as_str())),
             space::horizontal(),
             tabs,
         ]
         .align_y(Alignment::Center),
         search,
     ]
-    .spacing(16);
+    .spacing(style::SPACE_L);
 
     if !picker.games.is_empty() {
         let games = picker.games.iter().take(GAMES_SHOWN).map(|game| {
@@ -523,21 +523,31 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
                 Some(year) => format!("{} ({year})", game.name),
                 None => game.name.clone(),
             };
-            button(text(label).size(13))
-                .padding([5, 12])
+            button(style::button_text(label))
+                .padding(style::BUTTON_SMALL)
                 .style(style::chip(picker.game == Some(game.id)))
                 .on_press(Message::Art(ArtMessage::Game(game.id)))
                 .into()
         });
-        body = body.push(row(games).spacing(8).wrap().vertical_spacing(8));
+        body = body.push(
+            row(games)
+                .spacing(style::SPACE_S)
+                .wrap()
+                .vertical_spacing(8),
+        );
     }
 
     let thumbs = picker.images.iter().map(|found| thumb(picker, found));
-    body = body.push(row(thumbs).spacing(12).wrap().vertical_spacing(12));
+    body = body.push(
+        row(thumbs)
+            .spacing(style::SPACE_M)
+            .wrap()
+            .vertical_spacing(12),
+    );
     if picker.more {
         body = body.push(
-            button(text(t!("art-show-more")).size(14))
-                .padding([8, 14])
+            button(style::button_text(t!("art-show-more")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press_maybe(
                     picker
@@ -556,7 +566,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
     };
     container(
         column![
-            scrollable(body.padding(24)).height(height),
+            scrollable(body.padding(style::SPACE_XL)).height(height),
             container(picker_footer(picker)).padding([16, 24]),
         ]
         .spacing(0),
@@ -568,7 +578,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
 
 /// What the picker is doing or what went wrong, and its buttons.
 fn picker_footer(picker: &Picker) -> Element<'_, Message> {
-    let mut footer = row![].spacing(10).align_y(Alignment::Center);
+    let mut footer = row![].spacing(style::SPACE_M).align_y(Alignment::Center);
     if let Some(busy) = &picker.busy {
         footer = footer.push(text(busy).size(13).color(colors().dim));
     } else if let Some(note) = &picker.note {
@@ -581,23 +591,26 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
         .is_some_and(|note| *note == t!("art-needs-key"))
     {
         footer = footer.push(
-            button(text(t!("art-open-settings")).size(14))
-                .padding([10, 18])
+            button(style::button_text(t!("art-open-settings")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(Message::Art(ArtMessage::Settings)),
         );
     }
     if picker.chosen {
         footer = footer.push(
-            button(text(t!("art-use-automatic", kind = kind_name(picker.kind))).size(14))
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::Art(ArtMessage::Automatic)),
+            button(style::button_text(t!(
+                "art-use-automatic",
+                kind = kind_name(picker.kind)
+            )))
+            .padding(style::BUTTON)
+            .style(style::secondary)
+            .on_press(Message::Art(ArtMessage::Automatic)),
         );
     }
     footer = footer.push(
-        button(text(t!("close")).size(14))
-            .padding([10, 18])
+        button(style::button_text(t!("close")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press(Message::Art(ArtMessage::Close)),
     );

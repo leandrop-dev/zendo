@@ -23,7 +23,10 @@ use zendo_core::Game;
 use zendo_core::downloads::{self, Action, Ended, Event, Job, Progress, Stop};
 use zendo_core::info::{self, Update};
 
-use super::style::{self, BOLD, colors};
+use super::game::stat_tile;
+use super::style::{
+    self, BOLD, BUTTON, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, button_text, colors,
+};
 use super::{Message, Page, Zendo, blocking, centered};
 use crate::i18n::t;
 
@@ -697,18 +700,21 @@ impl Zendo {
     pub(super) fn downloads_page(&self) -> Element<'_, Message> {
         let state = &self.downloads;
         let paused = state.paused();
-        let subtitle = match (state.queue.len(), paused) {
-            (0, _) => t!("downloads-nothing"),
-            (count, 0) => t!("downloads-in-queue", count = count),
-            (count, paused) => t!("downloads-in-queue-paused", count = count, paused = paused),
-        };
-        let header = column![
-            text(t!("page-downloads")).size(28).font(BOLD),
-            text(subtitle).size(13).color(colors().dim),
-        ]
-        .spacing(2);
-
-        let mut body = column![header].spacing(16).padding(24);
+        // The counts, as tiles; nothing to count is no tiles.
+        let mut body = column![].spacing(SPACE_L).padding(SPACE_XL);
+        if !state.queue.is_empty() || !state.finished.is_empty() {
+            body = body.push(
+                row![
+                    stat_tile(
+                        t!("downloads-up-next"),
+                        state.queue.len().saturating_sub(paused).to_string()
+                    ),
+                    stat_tile(t!("downloads-paused"), paused.to_string()),
+                    stat_tile(t!("downloads-finished"), state.finished.len().to_string()),
+                ]
+                .spacing(SPACE_M),
+            );
+        }
         if state.confirm_close {
             body = body.push(close_banner());
         }
@@ -728,12 +734,12 @@ impl Zendo {
                 centered(
                     column![
                         text(t!("downloads-empty")).size(18),
-                        button(text(t!("downloads-go-store")).size(14))
-                            .padding([8, 14])
+                        button(button_text(t!("downloads-go-store")))
+                            .padding(BUTTON)
                             .style(style::secondary)
                             .on_press(Message::Navigate(Page::Store)),
                     ]
-                    .spacing(12)
+                    .spacing(SPACE_M)
                     .align_x(Alignment::Center),
                 ),
             ])
@@ -747,24 +753,14 @@ impl Zendo {
         let start = usize::from(state.running.is_some());
         let rest = || state.queue.iter().skip(start);
         if rest().any(|job| !job.paused) {
-            body = body.push(
-                text(t!("downloads-up-next"))
-                    .size(11)
-                    .font(BOLD)
-                    .color(colors().dim),
-            );
+            body = body.push(style::label(&t!("downloads-up-next")));
             for job in rest().filter(|job| !job.paused) {
                 let waits = self.held_by_game(job);
                 body = body.push(queued_row(job, None, waits));
             }
         }
         if rest().any(|job| job.paused) {
-            body = body.push(
-                text(t!("downloads-paused"))
-                    .size(11)
-                    .font(BOLD)
-                    .color(colors().dim),
-            );
+            body = body.push(style::label(&t!("downloads-paused")));
             for job in rest().filter(|job| job.paused) {
                 body = body.push(queued_row(job, state.errors.get(&job.id()), false));
             }
@@ -772,13 +768,10 @@ impl Zendo {
         if !state.finished.is_empty() {
             body = body.push(
                 row![
-                    text(t!("downloads-finished"))
-                        .size(11)
-                        .font(BOLD)
-                        .color(colors().dim),
+                    style::label(&t!("downloads-finished")),
                     space::horizontal(),
-                    button(text(t!("downloads-clear")).size(13))
-                        .padding([4, 10])
+                    button(button_text(t!("downloads-clear")))
+                        .padding(style::BUTTON_SMALL)
                         .style(style::secondary)
                         .on_press(Message::Download(DownloadMessage::ClearFinished)),
                 ]
@@ -818,20 +811,20 @@ fn close_banner<'a>() -> Element<'a, Message> {
                 .size(13)
                 .color(colors().dim),
             row![
-                button(text(t!("downloads-close-anyway")).size(14).font(BOLD))
-                    .padding([8, 14])
+                button(button_text(t!("downloads-close-anyway")).font(BOLD))
+                    .padding(BUTTON)
                     .style(style::primary)
                     .on_press(Message::Download(DownloadMessage::CloseAnyway)),
-                button(text(t!("downloads-keep")).size(14))
-                    .padding([8, 14])
+                button(button_text(t!("downloads-keep")))
+                    .padding(BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Download(DownloadMessage::StayOpen)),
             ]
-            .spacing(10),
+            .spacing(SPACE_M),
         ]
-        .spacing(6),
+        .spacing(SPACE_S),
     )
-    .padding(16)
+    .padding(SPACE_L)
     .width(Length::Fill)
     .style(style::card)
     .into()
@@ -855,17 +848,14 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
                 .size(13)
                 .color(colors().accent),
             ]
-            .spacing(2),
+            .spacing(SPACE_XS),
             space::horizontal(),
-            button(
-                text(if running.then == Some(Then::Pause) {
-                    t!("pausing")
-                } else {
-                    t!("pause")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(button_text(if running.then == Some(Then::Pause) {
+                t!("pausing")
+            } else {
+                t!("pause")
+            }))
+            .padding(BUTTON)
             .style(style::secondary)
             .on_press_maybe(
                 running
@@ -873,25 +863,22 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
                     .is_none()
                     .then(|| Message::Download(DownloadMessage::Pause(job.id())))
             ),
-            button(
-                text(if running.then == Some(Then::Cancel) {
-                    t!("cancelling")
-                } else {
-                    t!("cancel")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(button_text(if running.then == Some(Then::Cancel) {
+                t!("cancelling")
+            } else {
+                t!("cancel")
+            }))
+            .padding(BUTTON)
             .style(style::secondary)
             .on_press_maybe(
                 (running.then != Some(Then::Cancel))
                     .then(|| Message::Download(DownloadMessage::Cancel(job.id())))
             ),
         ]
-        .spacing(10)
+        .spacing(SPACE_M)
         .align_y(Alignment::Center),
     ]
-    .spacing(10);
+    .spacing(SPACE_M);
     // A bar at zero says "stalled"; without a percentage the line below
     // already says the engine is starting.
     if let Some(percent) = progress.percent {
@@ -903,7 +890,7 @@ fn running_card<'a>(job: &'a Job, running: &'a Running) -> Element<'a, Message> 
     }
     content = content.push(text(line).size(13).color(colors().dim));
     container(content)
-        .padding(16)
+        .padding(SPACE_L)
         .width(Length::Fill)
         .style(style::card)
         .into()
@@ -951,7 +938,7 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>, waits: bool) -> Eleme
         .size(12)
         .color(colors().dim),
     ]
-    .spacing(2);
+    .spacing(SPACE_XS);
     if waits {
         about = about.push(
             text(t!("downloads-waits-running"))
@@ -981,23 +968,23 @@ fn queued_row<'a>(job: &'a Job, error: Option<&'a String>, waits: bool) -> Eleme
     container(
         row![
             about.width(Length::Fill),
-            button(text(first).size(13))
-                .padding([6, 12])
+            button(button_text(first))
+                .padding(style::BUTTON_SMALL)
                 .style(if job.paused {
                     style::primary
                 } else {
                     style::secondary
                 })
                 .on_press(Message::Download(message)),
-            button(text(t!("cancel")).size(13))
-                .padding([6, 12])
+            button(button_text(t!("cancel")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::Download(DownloadMessage::Cancel(id))),
         ]
-        .spacing(10)
+        .spacing(SPACE_M)
         .align_y(Alignment::Center),
     )
-    .padding([10, 16])
+    .padding([SPACE_S, SPACE_L])
     .width(Length::Fill)
     .style(style::card)
     .into()
@@ -1020,8 +1007,8 @@ fn finished_row<'a>(
         } else {
             Page::Owned(job.id())
         };
-        button(text(t!("open")).size(13))
-            .padding([6, 12])
+        button(button_text(t!("open")))
+            .padding(style::BUTTON_SMALL)
             .style(style::secondary)
             .on_press(Message::Navigate(page))
     });
@@ -1037,7 +1024,7 @@ fn finished_row<'a>(
                 .size(12)
                 .color(colors().dim),
             ]
-            .spacing(2)
+            .spacing(SPACE_XS)
             .width(Length::FillPortion(2)),
             text(verdict)
                 .size(13)
@@ -1048,7 +1035,7 @@ fn finished_row<'a>(
         .spacing(12)
         .align_y(Alignment::Center),
     )
-    .padding([10, 16])
+    .padding([SPACE_S, SPACE_L])
     .width(Length::Fill)
     .style(style::card)
     .into()

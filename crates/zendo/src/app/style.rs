@@ -5,8 +5,10 @@
 
 use std::sync::{PoisonError, RwLock};
 
+use iced::widget::overlay::menu as menu_widget;
 use iced::widget::{
-    button, checkbox as checkbox_widget, container, progress_bar, text, text_input,
+    button, checkbox as checkbox_widget, container, pick_list as pick_list_widget, progress_bar,
+    text, text_input, toggler as toggler_widget,
 };
 use iced::{Background, Border, Color, Element, Font, Theme, font};
 use zendo_core::Source;
@@ -166,6 +168,27 @@ pub const SPACE_XL: f32 = 24.0;
 /// hair of rounding.
 const RADIUS_CONTROL: f32 = 0.0;
 pub const RADIUS_PANEL: f32 = 2.0;
+
+/// The three sizes of a button's padding: small (a row's Open or Remove),
+/// normal, and large (Play, Save, Apply).
+pub const BUTTON_SMALL: [f32; 2] = [SPACE_XS, SPACE_M];
+pub const BUTTON: [f32; 2] = [SPACE_S, SPACE_L];
+pub const BUTTON_LARGE: [f32; 2] = [SPACE_M, SPACE_XL];
+
+/// A button's text: uppercase at the size every page uses.
+pub fn button_text<'a>(value: impl AsRef<str>) -> text::Text<'a> {
+    text(value.as_ref().to_uppercase()).size(13)
+}
+
+/// A sheet's title: uppercase, bold, a step above a card's heading.
+pub fn sheet_title<'a>(value: impl AsRef<str>) -> text::Text<'a> {
+    text(value.as_ref().to_uppercase()).size(16).font(BOLD)
+}
+
+/// A sub-heading inside a card: uppercase and bold, in the text colour.
+pub fn subheading<'a>(value: impl AsRef<str>) -> text::Text<'a> {
+    text(value.as_ref().to_uppercase()).size(12).font(BOLD)
+}
 
 /// A small uppercase label in the dim colour: the name of a row of chips or
 /// a stat tile. (Iced 0.14 text has no letter spacing, so uppercase only.)
@@ -558,6 +581,84 @@ pub fn input(_: &Theme, status: text_input::Status) -> text_input::Style {
             a: 0.35,
             ..colors().accent
         },
+    }
+}
+
+/// A pick list: a flat input-like box, the accent rim while open.
+pub fn pick_list(_: &Theme, status: pick_list_widget::Status) -> pick_list_widget::Style {
+    let colors = colors();
+    let open = matches!(status, pick_list_widget::Status::Opened { .. });
+    let hovered = matches!(status, pick_list_widget::Status::Hovered);
+    pick_list_widget::Style {
+        text_color: colors.text,
+        placeholder_color: colors.dim,
+        handle_color: colors.dim,
+        background: Background::Color(if hovered {
+            colors.raised
+        } else {
+            colors.surface
+        }),
+        border: Border {
+            color: if open { colors.accent } else { colors.line },
+            width: 1.0,
+            radius: RADIUS_CONTROL.into(),
+        },
+    }
+}
+
+/// A pick list's open menu: opaque, so the options read over any window.
+pub fn menu(_: &Theme) -> menu_widget::Style {
+    let colors = colors();
+    menu_widget::Style {
+        background: Background::Color(colors.surface),
+        border: Border {
+            color: colors.line,
+            width: 1.0,
+            radius: RADIUS_CONTROL.into(),
+        },
+        text_color: colors.text,
+        selected_text_color: colors.accent,
+        selected_background: Background::Color(colors.raised),
+        shadow: iced::Shadow::default(),
+    }
+}
+
+/// A switch: a square track, the accent when on.
+pub fn toggler(_: &Theme, status: toggler_widget::Status) -> toggler_widget::Style {
+    let colors = colors();
+    let (on, hovered, disabled) = match status {
+        toggler_widget::Status::Active { is_toggled } => (is_toggled, false, false),
+        toggler_widget::Status::Hovered { is_toggled } => (is_toggled, true, false),
+        toggler_widget::Status::Disabled { is_toggled } => (is_toggled, false, true),
+    };
+    let fade = if disabled { 0.4 } else { 1.0 };
+    let track = if on {
+        Color {
+            a: fade,
+            ..colors.accent
+        }
+    } else if hovered {
+        colors.raised
+    } else {
+        colors.surface
+    };
+    toggler_widget::Style {
+        background: Background::Color(track),
+        background_border_width: 1.0,
+        background_border_color: if on {
+            Color {
+                a: fade,
+                ..colors.accent
+            }
+        } else {
+            colors.line
+        },
+        foreground: Background::Color(if on { colors.background } else { colors.dim }),
+        foreground_border_width: 0.0,
+        foreground_border_color: Color::TRANSPARENT,
+        text_color: Some(if disabled { colors.dim } else { colors.text }),
+        border_radius: Some(RADIUS_CONTROL.into()),
+        padding_ratio: 0.2,
     }
 }
 

@@ -18,7 +18,7 @@ use zendo_core::launch_options::LaunchOptions;
 use zendo_core::proton::{self, Proton};
 
 use super::settings::{download_bar, section};
-use super::style::{self, BOLD, colors};
+use super::style::{self, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -343,7 +343,7 @@ impl Zendo {
             .find(|choice| choice.name == self.config.default_proton)
             .cloned();
         let mut body = column![
-            text(t!("protons-default")).size(15).font(BOLD),
+            style::subheading(t!("protons-default")),
             text(t!("protons-default-about"))
                 .size(13)
                 .color(colors().dim),
@@ -351,11 +351,13 @@ impl Zendo {
                 Message::Proton(ProtonMessage::SetDefault(choice))
             })
             .text_size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu)
             .width(Length::Fill),
-            text(t!("protons-here")).size(15).font(BOLD),
+            style::subheading(t!("protons-here")),
         ]
-        .spacing(10);
+        .spacing(style::SPACE_M);
         if protons.installed.is_empty() {
             body = body.push(text(t!("protons-none")).size(14).color(colors().dim));
         }
@@ -365,10 +367,10 @@ impl Zendo {
 
         let chips = Build::ALL
             .into_iter()
-            .fold(row![].spacing(6), |chips, build| {
+            .fold(row![].spacing(style::SPACE_S), |chips, build| {
                 chips.push(
                     button(text(build.label()).size(13))
-                        .padding([4, 10])
+                        .padding(style::BUTTON_SMALL)
                         .style(if build == protons.build {
                             style::primary
                         } else {
@@ -380,18 +382,16 @@ impl Zendo {
         let list = protons.list();
         body = body.push(
             row![
-                text(t!("protons-releases", build = protons.build.label()))
-                    .size(15)
-                    .font(BOLD),
+                style::subheading(t!("protons-releases", build = protons.build.label())),
                 chips,
-                button(text(t!("protons-check-again")).size(13))
-                    .padding([4, 10])
+                button(style::button_text(t!("protons-check-again")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(
                         (!list.asking).then_some(Message::Proton(ProtonMessage::Refresh))
                     ),
             ]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center),
         );
         for release in list.releases.iter().take(list.shown) {
@@ -403,8 +403,8 @@ impl Zendo {
             body = body.push(text(err).size(13).color(colors().bad));
         } else if list.releases.len() > list.shown || list.more {
             body = body.push(
-                button(text(t!("protons-show-older")).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("protons-show-older")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press(Message::Proton(ProtonMessage::ShowOlder)),
             );
@@ -434,7 +434,7 @@ impl Zendo {
             Some((chosen, users)) if chosen == &found.name => (true, *users),
             _ => (false, 0),
         };
-        let mut label = column![text(&found.name).size(14)].spacing(2);
+        let mut label = column![text(&found.name).size(14)].spacing(style::SPACE_XS);
         label = label.push(
             text(found.path.display().to_string())
                 .size(12)
@@ -449,19 +449,16 @@ impl Zendo {
             );
         }
         let mut line = row![label.width(Length::Fill)]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center);
         if removable {
             line = line.push(
-                button(
-                    text(if confirming {
-                        t!("really-remove")
-                    } else {
-                        t!("remove")
-                    })
-                    .size(13),
-                )
-                .padding([6, 12])
+                button(style::button_text(if confirming {
+                    t!("really-remove")
+                } else {
+                    t!("remove")
+                }))
+                .padding(style::BUTTON_SMALL)
                 .style(if confirming {
                     style::danger
                 } else {
@@ -482,8 +479,8 @@ impl Zendo {
         let action: Element<'a, Message> = if installed {
             text(t!("installed")).size(13).color(colors().good).into()
         } else {
-            button(text(t!("download")).size(13))
-                .padding([6, 12])
+            button(style::button_text(t!("download")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press_maybe(
                     self.protons
@@ -503,7 +500,7 @@ impl Zendo {
                 .color(colors().dim),
             action,
         ]
-        .spacing(12)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .wrap()
         .into()

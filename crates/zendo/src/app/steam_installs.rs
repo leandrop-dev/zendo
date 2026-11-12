@@ -16,7 +16,7 @@ use iced::{Alignment, Element, Length, Task};
 use zendo_core::Size;
 use zendo_core::steam::{self, AppState, Progress, Request, VerifyEvent};
 
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, button_text, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -363,10 +363,12 @@ impl Zendo {
         }
         let mut card = column![
             row![
-                text(t!("steam-downloads-title")).size(18).font(BOLD),
+                text(t!("steam-downloads-title").to_uppercase())
+                    .size(14)
+                    .font(BOLD),
                 space::horizontal(),
-                button(text(t!("steam-open-downloads")).size(13))
-                    .padding([6, 12])
+                button(button_text(t!("steam-open-downloads")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press(Message::Open("steam://open/downloads".to_owned())),
             ]
@@ -385,8 +387,8 @@ impl Zendo {
                     text(t!("steam-waiting-dialog"))
                         .size(13)
                         .color(colors().dim),
-                    button(text(t!("steam-stop-waiting")).size(13))
-                        .padding([6, 12])
+                    button(button_text(t!("steam-stop-waiting")))
+                        .padding(style::BUTTON_SMALL)
                         .style(style::secondary)
                         .on_press(Message::SteamInstall(SteamInstallMessage::Forget(
                             app.clone()

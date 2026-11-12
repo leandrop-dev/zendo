@@ -150,24 +150,21 @@ impl Zendo {
                 Message::SetView(view),
             ));
         }
-        let refresh = button(
-            text(
-                if self.scanning {
-                    t!("library-scanning")
-                } else {
-                    t!("library-refresh")
-                }
-                .to_uppercase(),
-            )
-            .size(13),
-        )
+        let refresh = button(style::button_text(
+            if self.scanning {
+                t!("library-scanning")
+            } else {
+                t!("library-refresh")
+            }
+            .to_uppercase(),
+        ))
         .padding([4, 12])
         .style(style::secondary)
         .on_press_maybe((!self.scanning).then_some(Message::Refresh));
         row![
             row(chips).spacing(SPACE_S).wrap().vertical_spacing(SPACE_S),
             space::horizontal(),
-            button(text(t!("library-add-game").to_uppercase()).size(13))
+            button(style::button_text(t!("library-add-game").to_uppercase()))
                 .padding([4, 12])
                 .style(style::secondary)
                 .on_press(Message::Local(super::local::LocalMessage::Add)),

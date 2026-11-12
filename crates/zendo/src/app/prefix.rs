@@ -221,8 +221,8 @@ impl Zendo {
         let free = self.tools_free(id);
         let message = |message: PrefixMessage| free.then_some(Message::Prefix(message));
         let tool = |label: String, on: Option<Message>| {
-            button(text(label).size(14))
-                .padding([8, 14])
+            button(style::button_text(label))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press_maybe(on)
         };
@@ -241,7 +241,7 @@ impl Zendo {
                 message(PrefixMessage::Pick(id.clone()))
             ),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center);
         if gog_setup::applies(game) {
             tools = tools.push(tool(
@@ -260,7 +260,7 @@ impl Zendo {
             text_input(&t!("prefix-components-placeholder"), components)
                 .on_input(|typed| { Message::Prefix(PrefixMessage::Components(id.clone(), typed)) })
                 .on_submit_maybe(message(PrefixMessage::Install(id.clone())))
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .size(14)
                 .style(style::input)
                 .width(Length::Fill),
@@ -269,14 +269,14 @@ impl Zendo {
                 message(PrefixMessage::Install(id.clone()))
             ),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center);
         let mut body = column![
             text(t!("prefix-about")).size(13).color(colors().dim),
             tools.wrap(),
             install,
         ]
-        .spacing(12);
+        .spacing(style::SPACE_M);
         if let Some(Some(fixes)) = self.prefix.fixes.get(id) {
             body = body.push(fixes_list(
                 fixes,
@@ -302,7 +302,7 @@ impl Zendo {
 /// The game's known fixes with why each is there, and a button to apply
 /// them again.
 fn fixes_list(fixes: &Fixes, apply: Option<Message>) -> Element<'_, Message> {
-    let mut list = column![text(t!("prefix-known-fixes-title")).size(14)].spacing(4);
+    let mut list = column![text(t!("prefix-known-fixes-title")).size(14)].spacing(style::SPACE_XS);
     let paths = fixes.run_in_prefix.iter();
     for fix in fixes.winetricks.iter().chain(paths) {
         let line = match fixes.notes.get(fix) {
@@ -313,12 +313,12 @@ fn fixes_list(fixes: &Fixes, apply: Option<Message>) -> Element<'_, Message> {
     }
     row![
         list.width(Length::Fill),
-        button(text(t!("prefix-known-fixes")).size(14))
-            .padding([8, 14])
+        button(style::button_text(t!("prefix-known-fixes")))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe(apply),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .into()
 }

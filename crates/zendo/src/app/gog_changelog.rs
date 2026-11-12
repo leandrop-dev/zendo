@@ -74,8 +74,8 @@ impl Zendo {
         let left = entries.len() - shown;
         if left > 0 {
             body = body.push(
-                button(text(t!("changelog-earlier", count = left)).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("changelog-earlier", count = left)))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press(Message::GameView(GameViewMessage::MoreChangelog)),
             );
@@ -86,7 +86,7 @@ impl Zendo {
 
 /// One update: its title, then its parts.
 fn entry(entry: &Entry) -> Element<'_, Message> {
-    let mut lines = column![].spacing(8);
+    let mut lines = column![].spacing(style::SPACE_S);
     if let Some(title) = &entry.title {
         lines = lines.push(text(title).size(15).font(BOLD));
     }
@@ -100,7 +100,7 @@ fn entry(entry: &Entry) -> Element<'_, Message> {
                 text("\u{2022}").size(14).color(colors().dim),
                 text(item).size(14).line_height(1.5).width(Length::Fill),
             ]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .into(),
         });
     }

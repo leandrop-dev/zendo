@@ -4,11 +4,11 @@
 
 use std::collections::BTreeSet;
 
-use iced::widget::{button, checkbox, column, container, row, scrollable, space, text, text_input};
+use iced::widget::{button, checkbox, column, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::{Category, State};
 
-use super::launch_options::overlay;
+use super::launch_options::{frame, overlay};
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo};
 use crate::i18n::t;
@@ -336,12 +336,11 @@ fn member(sheet: &Categories, category: &Category) -> bool {
 
 fn categories_card<'a>(sheet: &'a Categories, categories: &'a [Category]) -> Element<'a, Message> {
     let mut body = column![
-        text(t!("categories-title")).size(20).font(BOLD),
         text(t!("categories-count", count = categories.len()))
             .size(13)
             .color(colors().dim),
     ]
-    .spacing(14);
+    .spacing(style::SPACE_L);
     if categories.is_empty() {
         body = body.push(text(t!("categories-empty")).size(13).color(colors().dim));
     }
@@ -354,14 +353,14 @@ fn categories_card<'a>(sheet: &'a Categories, categories: &'a [Category]) -> Ele
                 .on_input(|text| Message::Categories(CategoriesMessage::Typed(text)))
                 .on_submit(Message::Categories(CategoriesMessage::Create))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
-            button(text(t!("categories-new")).size(14).font(BOLD))
-                .padding([10, 20])
+            button(style::button_text(t!("categories-new")).font(BOLD))
+                .padding(style::BUTTON_LARGE)
                 .style(style::primary)
                 .on_press(Message::Categories(CategoriesMessage::Create)),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center),
     );
     if let Some((note, worked)) = &sheet.note {
@@ -371,20 +370,14 @@ fn categories_card<'a>(sheet: &'a Categories, categories: &'a [Category]) -> Ele
             colors().accent
         }));
     }
-    body = body.push(
-        row![
-            space::horizontal(),
-            button(text(t!("categories-cancel")).size(14))
-                .padding([10, 18])
-                .style(style::secondary)
-                .on_press(Message::Categories(CategoriesMessage::Close)),
-        ]
-        .spacing(10),
-    );
-    container(scrollable(body.padding(24)))
-        .max_width(620)
-        .style(style::card)
-        .into()
+    let footer = row![
+        space::horizontal(),
+        button(style::button_text(t!("categories-cancel")))
+            .padding(style::BUTTON)
+            .style(style::secondary)
+            .on_press(Message::Categories(CategoriesMessage::Close)),
+    ];
+    frame(&t!("categories-title"), body, footer, 620.0, false)
 }
 
 /// One category in the sheet: its name, its games, and what may be done to
@@ -415,13 +408,13 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
                 .on_input(|text| Message::Categories(CategoriesMessage::RenameTyped(text)))
                 .on_submit(Message::Categories(CategoriesMessage::RenameDone))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input)
                 .width(Length::Fill)
                 .into(),
         );
         items.push(
-            button(text(t!("categories-ok")).size(13))
+            button(style::button_text(t!("categories-ok")))
                 .padding([6, 14])
                 .style(style::primary)
                 .on_press(Message::Categories(CategoriesMessage::RenameDone))
@@ -436,7 +429,7 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
                 .into(),
         );
         items.push(
-            button(text(t!("categories-rename")).size(13))
+            button(style::button_text(t!("categories-rename")))
                 .padding([6, 14])
                 .style(style::secondary)
                 .on_press(Message::Categories(CategoriesMessage::Rename(name.clone())))
@@ -445,14 +438,11 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
     }
     let confirming = sheet.confirm_delete.as_deref() == Some(name.as_str());
     items.push(
-        button(
-            text(if confirming {
-                t!("categories-really-delete")
-            } else {
-                t!("categories-delete")
-            })
-            .size(13),
-        )
+        button(style::button_text(if confirming {
+            t!("categories-really-delete")
+        } else {
+            t!("categories-delete")
+        }))
         .padding([6, 14])
         .style(if confirming {
             style::danger
@@ -462,7 +452,10 @@ fn category_row<'a>(sheet: &'a Categories, category: &'a Category) -> Element<'a
         .on_press(Message::Categories(CategoriesMessage::Delete(name)))
         .into(),
     );
-    row(items).spacing(10).align_y(Alignment::Center).into()
+    row(items)
+        .spacing(style::SPACE_M)
+        .align_y(Alignment::Center)
+        .into()
 }
 
 #[cfg(test)]

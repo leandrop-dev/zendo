@@ -10,16 +10,14 @@ use std::thread;
 
 use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
-use iced::widget::{
-    button, column, container, progress_bar, row, scrollable, space, text, text_input,
-};
+use iced::widget::{button, column, container, progress_bar, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
 use zendo_core::mods::{self, Added, Overview};
 use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
 use zendo_core::secrets::Key;
 
-use super::launch_options::overlay;
+use super::launch_options::{frame, overlay};
 use super::settings::{NexusThen, kept_note, section};
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
@@ -620,13 +618,18 @@ impl Zendo {
         if self.nexus.downloads.is_empty() {
             return None;
         }
-        let mut card = column![text(t!("nexus-downloads-title")).size(18).font(BOLD)].spacing(12);
+        let mut card = column![
+            text(t!("nexus-downloads-title").to_uppercase())
+                .size(14)
+                .font(BOLD)
+        ]
+        .spacing(style::SPACE_M);
         for download in &self.nexus.downloads {
             card = card.push(download_row(download));
         }
         Some(
             container(card)
-                .padding(20)
+                .padding(style::SPACE_L)
                 .width(Length::Fill)
                 .style(style::card)
                 .into(),
@@ -687,15 +690,15 @@ impl Zendo {
                     colors().dim
                 })
                 .width(Length::Fill),
-            button(text(t!("nexus-become-handler")).size(13))
-                .padding([6, 12])
+            button(style::button_text(t!("nexus-become-handler")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press_maybe(
                     (!is_zendo && self.nexus.handler.is_some())
                         .then_some(Message::Nexus(NexusMessage::BecomeHandler)),
                 ),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
         .into()
     }
@@ -709,43 +712,37 @@ impl Zendo {
                 .secure(!key.shown)
                 .on_input(|value| Message::Nexus(NexusMessage::KeyInput(value)))
                 .on_submit(Message::Nexus(NexusMessage::SaveKey))
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .size(14)
                 .style(style::input),
-            button(
-                text(if key.shown {
-                    t!("key-hide")
-                } else {
-                    t!("key-show")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(style::button_text(if key.shown {
+                t!("key-hide")
+            } else {
+                t!("key-show")
+            }))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press(Message::Nexus(NexusMessage::ToggleShown)),
-            button(
-                text(if key.checking.is_some() {
-                    t!("key-checking")
-                } else {
-                    t!("key-check")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(style::button_text(if key.checking.is_some() {
+                t!("key-checking")
+            } else {
+                t!("key-check")
+            }))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe(
                 (key.checking.is_none() && !key.value.trim().is_empty())
                     .then_some(Message::Nexus(NexusMessage::CheckKey))
             ),
-            button(text(t!("key-save")).size(14).font(BOLD))
-                .padding([8, 18])
+            button(style::button_text(t!("key-save")).font(BOLD))
+                .padding(style::BUTTON)
                 .style(style::primary)
                 .on_press_maybe(changed.then_some(Message::Nexus(NexusMessage::SaveKey))),
         ]
-        .spacing(8)
+        .spacing(style::SPACE_S)
         .align_y(Alignment::Center);
 
-        let mut body = column![field].spacing(10);
+        let mut body = column![field].spacing(style::SPACE_M);
         match (&key.note, &self.nexus.user) {
             (Some((note, good)), _) => {
                 body = body.push(text(note).size(13).color(if *good {
@@ -764,7 +761,7 @@ impl Zendo {
         }
         body = body.push(kept_note(self.config.kept(Key::Nexus)));
         body = body.push(
-            button(text(t!("nexus-get-key")).size(13))
+            button(style::button_text(t!("nexus-get-key")))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Open(nexus::KEY_PAGE.to_owned())),
@@ -816,21 +813,18 @@ pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
             progress_bar(0.0..=1.0, bar).girth(6).style(style::progress),
             text(words).size(12).color(colors().dim),
         ]
-        .spacing(4)
+        .spacing(style::SPACE_XS)
         .width(Length::Fill),
-        button(
-            text(if stopping {
-                t!("nexus-stopping")
-            } else {
-                t!("nexus-stop")
-            })
-            .size(13)
-        )
-        .padding([4, 10])
+        button(style::button_text(if stopping {
+            t!("nexus-stopping")
+        } else {
+            t!("nexus-stop")
+        }))
+        .padding(style::BUTTON_SMALL)
         .style(style::secondary)
         .on_press_maybe((!stopping).then_some(Message::Nexus(NexusMessage::Stop(download.id)))),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .into()
 }
@@ -841,36 +835,24 @@ fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
     } else {
         t!("nexus-choose-several", name = choosing.name.as_str())
     };
-    let mut games = column![].spacing(4);
+    let mut games = column![text(about).size(13).color(colors().dim)].spacing(style::SPACE_XS);
     for (id, title) in &choosing.games {
         games = games.push(
-            button(text(title).size(14))
+            button(style::button_text(title))
                 .width(Length::Fill)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::secondary)
                 .on_press(Message::Nexus(NexusMessage::Choose(id.clone()))),
         );
     }
-    container(
-        column![
-            text(t!("nexus-choose-title")).size(20).font(BOLD),
-            text(about).size(13).color(colors().dim),
-            scrollable(games).height(Length::Shrink),
-            row![
-                space::horizontal(),
-                button(text(t!("cancel")).size(14))
-                    .padding([8, 16])
-                    .style(style::secondary)
-                    .on_press(Message::Nexus(NexusMessage::CancelChoose)),
-            ],
-        ]
-        .spacing(14),
-    )
-    .padding(24)
-    .max_width(560)
-    .max_height(620)
-    .style(style::card)
-    .into()
+    let footer = row![
+        space::horizontal(),
+        button(style::button_text(t!("cancel")))
+            .padding(style::BUTTON)
+            .style(style::secondary)
+            .on_press(Message::Nexus(NexusMessage::CancelChoose)),
+    ];
+    frame(&t!("nexus-choose-title"), games, footer, 560.0, false)
 }
 
 /// Downloads a file from Nexus and adds it to the game's mods, on a thread,

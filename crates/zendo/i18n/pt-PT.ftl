@@ -62,7 +62,6 @@ library-refresh = Atualizar
 library-search = Pesquisar na biblioteca
 library-add-game = Adicionar jogo
 library-all = Todos
-library-sort = Ordenar
 library-selected = { $count } marcados
 library-clear-selection = Limpar
 categories-assign = Juntar a uma categoria…
@@ -156,7 +155,12 @@ card-failed = Não foi possível perguntar: { $error }
 
 ## Definições
 
-settings-subtitle = O idioma, as capas, o Nexus Mods, o Proton, as origens que o Zendo lê e os seus próprios ficheiros
+settings-group-general = Geral
+settings-group-keys = Chaves
+settings-group-library = Biblioteca
+settings-group-engines = Motores
+settings-group-proton = Proton
+settings-group-diagnostics = Diagnóstico
 language-title = Idioma
 language-about = O idioma da janela. Sistema segue o do seu ambiente de trabalho; a linha de comandos fica em inglês.
 language-system = Sistema ({ $language })
@@ -473,7 +477,6 @@ game-unhide = Mostrar
 game-more = Mais
 game-less = Menos
 game-technical = Técnico
-game-change-art = Mudar imagens
 game-about = Sobre
 game-details = Detalhes do jogo
 game-launch-options = Opções de lançamento
@@ -856,14 +859,6 @@ see-downloads = Ver transferências
 badge-installed = INSTALADO
 fact-platforms = Plataformas
 fact-developer = Programador
-store-owned = { $count ->
-    [one] 1 jogo seu
-   *[other] { $count } jogos seus
-}
-store-installed = { $count ->
-    [one] 1 instalado
-   *[other] { $count } instalados
-}
 store-asking-stores = A perguntar a { $stores } pelos seus jogos…
 store-search = Pesquisar os seus jogos
 store-asking = A perguntar…
@@ -964,14 +959,11 @@ downloads-up-to-date = Atualizado
 downloads-update-version = Atualização disponível: { $version }
 downloads-update-available = Atualização disponível
 downloads-update-failed = Não foi possível procurar atualizações: { $error }
-downloads-nothing = Nada para transferir
-downloads-in-queue = { $count } na fila
-downloads-in-queue-paused = { $count } na fila, { $paused } em pausa
 downloads-empty = Instale jogos a partir da Loja e eles aparecem aqui
 downloads-go-store = Ir para a Loja
-downloads-up-next = A SEGUIR
-downloads-paused = EM PAUSA
-downloads-finished = CONCLUÍDAS
+downloads-up-next = A seguir
+downloads-paused = Em pausa
+downloads-finished = Concluídas
 downloads-clear = Limpar
 downloads-running-title = Há uma transferência a decorrer
 downloads-running-about = Fechar põe-na em pausa, com o que já tem; retome-a daqui da próxima vez

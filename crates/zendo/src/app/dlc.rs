@@ -95,13 +95,13 @@ impl Zendo {
         .align_y(Alignment::Center);
         if manage && to_install.len() > 1 {
             top = top.push(
-                button(text(t!("dlc-install-all")).size(13))
-                    .padding([6, 12])
+                button(style::button_text(t!("dlc-install-all")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(dlc_job(game, Action::AddDlc, to_install).filter(|_| free)),
             );
         }
-        let mut body = column![top].spacing(12);
+        let mut body = column![top].spacing(style::SPACE_M);
         for line in lines {
             body = body.push(self.dlc_line(game, &line, manage, free));
         }
@@ -133,7 +133,7 @@ impl Zendo {
         } else {
             Some(t!("dlc-comes-with"))
         };
-        let mut words = column![text(line.title.to_owned()).size(14)].spacing(2);
+        let mut words = column![text(line.title.to_owned()).size(14)].spacing(style::SPACE_XS);
         if let Some(about) = about {
             words = words.push(text(about).size(12).color(colors().dim));
         }
@@ -142,8 +142,8 @@ impl Zendo {
             (true, true, true) => {
                 let confirming = self.game_view.confirm_dlc.as_deref() == Some(line.id);
                 if confirming {
-                    button(text(t!("downloads-press-again")).size(13).font(BOLD))
-                        .padding([6, 12])
+                    button(style::button_text(t!("downloads-press-again")).font(BOLD))
+                        .padding(style::BUTTON_SMALL)
                         .style(style::danger)
                         .on_press_maybe(
                             dlc_job(game, Action::RemoveDlc, vec![line.id.to_owned()])
@@ -151,8 +151,8 @@ impl Zendo {
                         )
                         .into()
                 } else {
-                    button(text(t!("action-label", action = "uninstall")).size(13))
-                        .padding([6, 12])
+                    button(style::button_text(t!("action-label", action = "uninstall")))
+                        .padding(style::BUTTON_SMALL)
                         .style(style::secondary)
                         .on_press_maybe(free.then(|| {
                             Message::GameView(GameViewMessage::AskRemoveDlc(line.id.to_owned()))
@@ -160,8 +160,8 @@ impl Zendo {
                         .into()
                 }
             }
-            (true, false, true) => button(text(t!("install")).size(13))
-                .padding([6, 12])
+            (true, false, true) => button(style::button_text(t!("install")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press_maybe(
                     dlc_job(game, Action::AddDlc, vec![line.id.to_owned()]).filter(|_| free),
@@ -174,7 +174,7 @@ impl Zendo {
                 .into(),
         };
         row![words.width(Length::Fill), action]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center)
             .into()
     }

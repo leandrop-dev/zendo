@@ -62,7 +62,29 @@ Favorites are Zendo's pins, renamed, and still lead every sort. Recent is
 played in the last 30 days; Hidden shows only hidden games. The card's line is
 the achievements share, known once a game's page was opened. The wide art is a
 faint backdrop behind the game page's header. The insights block waits for
-item 36, and "Manage in the launcher" is Steam's only until item 33.
+item 36, and "Manage in the launcher" is Steam's only: Heroic's protocol has
+no route to a game's page (item 33).
+
+## Decided in item 33
+
+- No page titles: the tabs and the chip rows name the page, and a size-28
+  title over a dim line is gone from Store, Downloads, Accounts and Settings.
+  Counts live on chips and in stat tiles (Downloads: up next, paused,
+  finished; a store game: play time).
+- Settings shows one group at a time under a chip row (General, Keys, Library,
+  Engines, Proton, Diagnostics); the art picker's Settings button opens Keys.
+- One card heading everywhere: uppercase, bold, size 14 (`game::card`,
+  `settings::section`); sub-headings are `style::subheading`; button text is
+  `style::button_text` (uppercase) on `BUTTON_SMALL`, `BUTTON` or
+  `BUTTON_LARGE`.
+- A store game's page uses the installed game's header (`game::header`); the
+  old hero with its gradients is gone.
+- Sheets share `launch_options::frame` (title, scrolling body, footer) where
+  they have a footer: launch options, Categories and the Nexus chooser. The
+  rest (Add game, the installer, the art picker, Nexus search) keep their own
+  layout with `style::sheet_title` and tokens.
+- Pick lists and switches are flat (`style::pick_list`, `menu`, `toggler`).
+- Mods stay a card on the game page.
 
 ## Not taken
 

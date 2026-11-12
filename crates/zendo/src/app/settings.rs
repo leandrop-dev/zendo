@@ -15,7 +15,8 @@ use zendo_core::secrets::Key;
 use zendo_core::{Size, Source, State, launch, report};
 
 use super::downloads::UpdateState;
-use super::style::{self, BOLD, colors};
+use super::library::chip;
+use super::style::{self, BOLD, SPACE_L, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::themes::Choice;
 use super::{Message, Zendo, blocking, key_id};
 use crate::i18n::{self, Language, t};
@@ -27,6 +28,42 @@ const KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
 /// The download workers Settings offers besides the engine's own choice,
 /// which is the computer's processors (legendary at most 16).
 const WORKERS: [u32; 4] = [2, 4, 8, 16];
+
+/// The groups Settings shows one at a time. Not saved: the page opens on
+/// General.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(super) enum Group {
+    #[default]
+    General,
+    /// The `SteamGridDB` and Nexus keys.
+    Keys,
+    Library,
+    Engines,
+    Proton,
+    Diagnostics,
+}
+
+impl Group {
+    pub(super) const ALL: [Self; 6] = [
+        Self::General,
+        Self::Keys,
+        Self::Library,
+        Self::Engines,
+        Self::Proton,
+        Self::Diagnostics,
+    ];
+
+    fn label(self) -> String {
+        match self {
+            Self::General => t!("settings-group-general"),
+            Self::Keys => t!("settings-group-keys"),
+            Self::Library => t!("settings-group-library"),
+            Self::Engines => t!("settings-group-engines"),
+            Self::Proton => t!("settings-group-proton"),
+            Self::Diagnostics => t!("settings-group-diagnostics"),
+        }
+    }
+}
 
 /// A change to the settings, written on a thread: asking the keyring can
 /// wait for the user, and the window must not.
@@ -168,6 +205,10 @@ impl Zendo {
             Message::SetMinimizeToTray(on) => self.save_setting(Setting::MinimizeToTray(on)),
             Message::SetDiscordPresence(on) => self.save_setting(Setting::DiscordPresence(on)),
             Message::SetOpaque(on) => self.save_setting(Setting::Opaque(on)),
+            Message::SettingsGroup(group) => {
+                self.settings_group = group;
+                Task::none()
+            }
             Message::CopyReport => {
                 if self.diagnostics.gathering {
                     return Task::none();
@@ -223,7 +264,8 @@ impl Zendo {
     /// Text typed on the page with no field focused: it starts the key, as
     /// typing in the library starts a search.
     pub(super) fn type_key(&mut self, typed: &str) -> Task<Message> {
-        if !self.key.value.is_empty() {
+        // The field is on screen only under Keys.
+        if self.settings_group != Group::Keys || !self.key.value.is_empty() {
             return Task::none();
         }
         self.key.value.push_str(typed);
@@ -408,38 +450,55 @@ impl Zendo {
     }
 
     pub(super) fn settings_page(&self) -> Element<'_, Message> {
-        let header = column![
-            text(t!("page-settings")).size(28).font(BOLD),
-            text(t!("settings-subtitle")).size(13).color(colors().dim),
-        ]
-        .spacing(2);
-        scrollable(
-            container(
-                column![
-                    header,
-                    self.language_section(),
-                    self.theme_section(),
-                    self.window_section(),
-                    self.discord_section(),
-                    self.key_section(),
-                    self.nexus_section(),
-                    self.covers_section(),
-                    self.downloads_section(),
-                    self.engines_section(),
-                    self.protons_section(),
-                    self.runtimes_section(),
-                    self.overlay_section(),
-                    self.sources_section(),
-                    files_section(self.config.install_dir(), &self.diagnostics.folders),
-                    self.diagnostics_section(),
-                ]
-                .spacing(20)
-                .padding(24)
-                .max_width(960),
+        let groups = row(Group::ALL.map(|group| {
+            chip(
+                group.label(),
+                None,
+                self.settings_group == group,
+                Message::SettingsGroup(group),
             )
-            .center_x(Length::Fill),
-        )
-        .height(Length::Fill)
+        }))
+        .spacing(SPACE_S)
+        .padding([SPACE_XS, SPACE_XL])
+        .wrap()
+        .vertical_spacing(SPACE_S);
+        let sections: Vec<Element<'_, Message>> = match self.settings_group {
+            Group::General => vec![
+                self.language_section(),
+                self.theme_section(),
+                self.window_section(),
+                self.discord_section(),
+            ],
+            Group::Keys => vec![self.key_section(), self.nexus_section()],
+            Group::Library => vec![
+                self.covers_section(),
+                self.downloads_section(),
+                self.sources_section(),
+            ],
+            Group::Engines => vec![
+                self.engines_section(),
+                self.runtimes_section(),
+                self.overlay_section(),
+            ],
+            Group::Proton => vec![self.protons_section()],
+            Group::Diagnostics => vec![
+                files_section(self.config.install_dir(), &self.diagnostics.folders),
+                self.diagnostics_section(),
+            ],
+        };
+        column![
+            groups,
+            scrollable(
+                container(
+                    column(sections)
+                        .spacing(SPACE_L)
+                        .padding(SPACE_XL)
+                        .max_width(960),
+                )
+                .center_x(Length::Fill),
+            )
+            .height(Length::Fill)
+        ]
         .into()
     }
 
@@ -452,43 +511,37 @@ impl Zendo {
                 .secure(!self.key.shown)
                 .on_input(Message::KeyInput)
                 .on_submit(Message::SaveKey)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .size(14)
                 .style(style::input),
-            button(
-                text(if self.key.shown {
-                    t!("key-hide")
-                } else {
-                    t!("key-show")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(style::button_text(if self.key.shown {
+                t!("key-hide")
+            } else {
+                t!("key-show")
+            }))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press(Message::ToggleKeyShown),
-            button(
-                text(if self.key.checking.is_some() {
-                    t!("key-checking")
-                } else {
-                    t!("key-check")
-                })
-                .size(14)
-            )
-            .padding([8, 14])
+            button(style::button_text(if self.key.checking.is_some() {
+                t!("key-checking")
+            } else {
+                t!("key-check")
+            }))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe(
                 (self.key.checking.is_none() && !self.key.value.trim().is_empty())
                     .then_some(Message::CheckKey)
             ),
-            button(text(t!("key-save")).size(14).font(BOLD))
-                .padding([8, 18])
+            button(style::button_text(t!("key-save")).font(BOLD))
+                .padding(style::BUTTON)
                 .style(style::primary)
                 .on_press_maybe(changed.then_some(Message::SaveKey)),
         ]
-        .spacing(8)
+        .spacing(style::SPACE_S)
         .align_y(Alignment::Center);
 
-        let mut body = column![field].spacing(10);
+        let mut body = column![field].spacing(style::SPACE_M);
         match &self.key.note {
             Some((note, good)) => {
                 body = body.push(text(note).size(13).color(if *good {
@@ -504,7 +557,7 @@ impl Zendo {
         }
         body = body.push(kept_note(self.config.kept(Key::SteamGridDb)));
         body = body.push(
-            button(text(t!("steamgriddb-get-key")).size(13))
+            button(style::button_text(t!("steamgriddb-get-key")))
                 .padding(0)
                 .style(style::link)
                 .on_press(Message::Open(KEY_PAGE.to_owned())),
@@ -518,28 +571,27 @@ impl Zendo {
         let mut body = column![
             row![
                 button(
-                    text(if self.diagnostics.gathering {
+                    style::button_text(if self.diagnostics.gathering {
                         t!("report-gathering")
                     } else {
                         t!("report-copy")
                     })
-                    .size(14)
                     .font(BOLD)
                 )
-                .padding([8, 18])
+                .padding(style::BUTTON)
                 .style(style::primary)
                 .on_press_maybe((!self.diagnostics.gathering).then_some(Message::CopyReport)),
-                button(text(t!("report-open-logs")).size(14))
-                    .padding([8, 14])
+                button(style::button_text(t!("report-open-logs")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press_maybe(
                         logs.map(|dir| Message::Open(dir.to_string_lossy().into_owned()))
                     ),
             ]
-            .spacing(8)
+            .spacing(style::SPACE_S)
             .align_y(Alignment::Center)
         ]
-        .spacing(10);
+        .spacing(style::SPACE_M);
         if let Some((note, good)) = &self.diagnostics.note {
             body = body.push(text(note).size(13).color(if *good {
                 colors().good
@@ -562,7 +614,7 @@ impl Zendo {
             t!("language-system", language = Language::system().name()),
             None
         )]
-        .spacing(8);
+        .spacing(style::SPACE_S);
         for language in Language::ALL {
             choices = choices.push(choice(language.name().to_owned(), Some(language)));
         }
@@ -575,6 +627,7 @@ impl Zendo {
         let body = toggler(self.config.minimize_to_tray)
             .label(t!("minimize-to-tray"))
             .text_size(14)
+            .style(style::toggler)
             .on_toggle(Message::SetMinimizeToTray);
         section(t!("window-title"), t!("window-about"), body)
     }
@@ -584,6 +637,7 @@ impl Zendo {
         let body = toggler(self.config.discord_presence)
             .label(t!("discord-presence"))
             .text_size(14)
+            .style(style::toggler)
             .on_toggle(Message::SetDiscordPresence);
         section(t!("discord-title"), t!("discord-about"), body)
     }
@@ -599,20 +653,21 @@ impl Zendo {
             toggler(self.config.download_covers)
                 .label(t!("covers-download"))
                 .text_size(14)
+                .style(style::toggler)
                 .on_toggle(Message::SetDownloadCovers),
             row![
-                button(text(t!("covers-download-now")).size(14))
-                    .padding([8, 14])
+                button(style::button_text(t!("covers-download-now")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press_maybe(
                         (self.config.download_covers && !busy).then_some(Message::DownloadNow)
                     ),
                 text(progress).size(13).color(colors().dim),
             ]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center),
         ]
-        .spacing(14);
+        .spacing(style::SPACE_L);
         section(t!("covers-title"), t!("covers-about"), body)
     }
 
@@ -626,7 +681,7 @@ impl Zendo {
                 .on_press(Message::SetWorkers(workers))
         };
         let mut choices = row![choice(t!("workers-engine"), None)]
-            .spacing(8)
+            .spacing(style::SPACE_S)
             .align_y(Alignment::Center);
         for workers in WORKERS {
             choices = choices.push(choice(workers.to_string(), Some(workers)));
@@ -635,15 +690,16 @@ impl Zendo {
             toggler(self.config.auto_update)
                 .label(t!("auto-update"))
                 .text_size(14)
+                .style(style::toggler)
                 .on_toggle(Message::SetAutoUpdate),
             column![
                 text(t!("workers-title")).size(14),
                 choices,
                 text(t!("workers-about")).size(13).color(colors().dim),
             ]
-            .spacing(8),
+            .spacing(style::SPACE_S),
         ]
-        .spacing(14);
+        .spacing(style::SPACE_L);
         section(
             t!("downloads-settings-title"),
             t!("downloads-settings-about"),
@@ -677,7 +733,7 @@ impl Zendo {
                     text(t!("count-games", count = count)).size(14)
                 },
             ]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center)
             .wrap()
             .into()
@@ -694,7 +750,7 @@ impl Zendo {
         section(
             t!("sources-title"),
             t!("sources-about"),
-            column(rows).spacing(8),
+            column(rows).spacing(style::SPACE_S),
         )
     }
 }
@@ -714,14 +770,14 @@ fn files_section<'a>(
                     .size(13)
                     .font(Font::MONOSPACE)
                     .width(Length::Fill),
-                button(text(t!("files-open-folder")).size(13))
-                    .padding([4, 10])
+                button(style::button_text(t!("files-open-folder")))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(
                         folder.map(|folder| Message::Open(folder.to_string_lossy().into_owned()))
                     ),
             ]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center)
             .into()
         };
@@ -748,7 +804,7 @@ fn files_section<'a>(
     section(
         t!("files-title"),
         t!("files-about"),
-        column(rows).spacing(10),
+        column(rows).spacing(style::SPACE_M),
     )
 }
 
@@ -810,18 +866,22 @@ pub(super) fn download_bar<'a>(
             ))
             .size(13)
             .color(colors().dim),
-            button(text(if stopping { t!("stopping") } else { t!("stop") }).size(13))
-                .padding([6, 12])
-                .style(style::secondary)
-                .on_press_maybe((!stopping).then_some(on_stop)),
+            button(style::button_text(if stopping {
+                t!("stopping")
+            } else {
+                t!("stop")
+            }))
+            .padding(style::BUTTON_SMALL)
+            .style(style::secondary)
+            .on_press_maybe((!stopping).then_some(on_stop)),
         ]
-        .spacing(12)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center),
         progress_bar(0.0..=100.0, percent)
             .girth(8)
             .style(style::progress),
     ]
-    .spacing(8)
+    .spacing(style::SPACE_S)
     .into()
 }
 
@@ -832,13 +892,15 @@ pub(super) fn section<'a>(
 ) -> Element<'a, Message> {
     container(
         column![
-            text(title).size(18).font(BOLD),
+            text(title.into_fragment().to_uppercase())
+                .size(14)
+                .font(BOLD),
             text(about).size(13).color(colors().dim),
             body.into(),
         ]
-        .spacing(10),
+        .spacing(style::SPACE_M),
     )
-    .padding(20)
+    .padding(style::SPACE_L)
     .width(Length::Fill)
     .style(style::card)
     .into()
@@ -847,6 +909,24 @@ pub(super) fn section<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typing_on_settings_starts_the_key_only_under_keys() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        assert_eq!(
+            zendo.settings_group,
+            Group::General,
+            "the page opens on General"
+        );
+        let _ = zendo.update(Message::Navigate(super::super::Page::Settings));
+        let _ = zendo.update(Message::Type("sgdb".into()));
+        assert_eq!(zendo.key.value, "", "no field is on screen under General");
+
+        let _ = zendo.update(Message::SettingsGroup(Group::Keys));
+        let _ = zendo.update(Message::Type("sgdb".into()));
+        assert_eq!(zendo.key.value, "sgdb");
+    }
 
     #[test]
     fn an_answer_for_a_key_no_longer_checked_saves_nothing() {

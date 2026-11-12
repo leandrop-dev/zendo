@@ -23,7 +23,9 @@ use zendo_core::steam_runtime::{self, Runtime};
 use zendo_core::store_tasks::{self, StoreTask};
 use zendo_core::{Game, Launch, Source, launch, proton};
 
-use super::style::{self, BOLD, colors};
+use super::style::{
+    self, BOLD, BUTTON, BUTTON_LARGE, SPACE_L, SPACE_M, SPACE_XL, button_text, colors,
+};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
@@ -788,19 +790,38 @@ fn overlay_dismiss<'a>(
     iced::widget::stack![page, opaque(shade), center(opaque(card)).padding(32)].into()
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one section per part of the form, in reading order"
-)]
+/// What every sheet looks like: an uppercase title, a scrolling body and a
+/// fixed footer of buttons, in one card. `tall` gives it the window's height,
+/// so the footer is inside the card's hit region.
+pub(super) fn frame<'a>(
+    title: &str,
+    body: impl Into<Element<'a, Message>>,
+    footer: impl Into<Element<'a, Message>>,
+    max_width: f32,
+    tall: bool,
+) -> Element<'a, Message> {
+    let card = container(column![
+        container(style::sheet_title(title)).padding([SPACE_L, SPACE_XL]),
+        scrollable(container(body.into()).padding([0.0, SPACE_XL])).height(if tall {
+            Length::Fill
+        } else {
+            Length::Shrink
+        }),
+        container(footer.into()).padding([SPACE_L, SPACE_XL]),
+    ])
+    .max_width(max_width)
+    .style(style::card);
+    if tall {
+        card.height(Length::Fill).into()
+    } else {
+        card.max_height(620).into()
+    }
+}
+
 fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
     let tools = sheet.tools;
-    let mut body = column![
-        text(t!("options-title", title = sheet.title.as_str()))
-            .size(20)
-            .font(BOLD),
-    ]
-    .spacing(18);
+    let mut body = column![].spacing(SPACE_L);
 
     if sheet.windows {
         let selected = sheet
@@ -815,7 +836,9 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
                 Message::Sheet(SheetMessage::Proton(choice))
             })
             .text_size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu)
             .width(Length::Fill),
         ));
     }
@@ -838,7 +861,9 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
                 |pick| Message::Sheet(SheetMessage::SteamRuntime(pick)),
             )
             .text_size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
+            .style(style::pick_list)
+            .menu_style(style::menu)
             .width(Length::Fill),
         ));
     }
@@ -856,20 +881,20 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
     body = body.push(scripts(options));
     // The error stays beside Save, where the user is looking when it
     // appears, rather than at the bottom of the scroll.
-    let mut footer = row![].spacing(10).align_y(Alignment::Center);
+    let mut footer = row![].spacing(SPACE_M).align_y(Alignment::Center);
     if sheet.confirm_close {
         footer = footer
             .push(text(t!("options-discard-ask")).size(13).color(colors().bad))
             .push(space::horizontal())
             .push(
-                button(text(t!("options-keep-editing")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("options-keep-editing")))
+                    .padding(BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Sheet(SheetMessage::KeepEditing)),
             )
             .push(
-                button(text(t!("options-discard")).size(14).font(BOLD))
-                    .padding([10, 24])
+                button(button_text(t!("options-discard")).font(BOLD))
+                    .padding(BUTTON_LARGE)
                     .style(style::danger)
                     .on_press(Message::Sheet(SheetMessage::Discard)),
             );
@@ -880,29 +905,28 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
         }
         footer = footer
             .push(
-                button(text(t!("cancel")).size(14))
-                    .padding([10, 18])
+                button(button_text(t!("cancel")))
+                    .padding(BUTTON)
                     .style(style::secondary)
                     .on_press(Message::Sheet(SheetMessage::Close)),
             )
             .push(
-                button(text(t!("save")).size(14).font(BOLD))
-                    .padding([10, 24])
+                button(button_text(t!("save")).font(BOLD))
+                    .padding(BUTTON_LARGE)
                     .style(style::primary)
                     .on_press(Message::Sheet(SheetMessage::Save)),
             );
     }
 
-    container(column![
-        scrollable(body.padding(24)).height(Length::Fill),
-        container(footer).padding([16, 24]),
-    ])
-    .max_width(620)
     // A definite height, so the footer is inside the card's hit region,
     // not drawn past it.
-    .height(Length::Fill)
-    .style(style::card)
-    .into()
+    frame(
+        &t!("options-title", title = sheet.title.as_str()),
+        body,
+        footer,
+        620.0,
+        true,
+    )
 }
 
 /// The switches Proton, Wine and DXVK read, for a Windows game.
@@ -929,7 +953,7 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
         None => about,
     };
     let mut switches = column![
-        text(t!("options-proton-switches")).size(15).font(BOLD),
+        style::subheading(t!("options-proton-switches")),
         switch(
             t!("options-xbox"),
             note(t!("options-xbox-about"), &["PROTON_PREFER_SDL"]),
@@ -959,7 +983,7 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
             SheetMessage::Fsr,
         ),
     ]
-    .spacing(18);
+    .spacing(style::SPACE_L);
     if options.fsr {
         switches = switches.push(fsr_sharpening(options));
     }
@@ -978,7 +1002,7 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
                 .on_input(|value| Message::Sheet(SheetMessage::FrameCap(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .width(160)
                 .style(style::input),
         ))
@@ -1006,7 +1030,7 @@ fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
 /// Epic's overlay for an Epic game, and Proton without umu.
 fn runner_switches(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
-    let mut switches = column![].spacing(18);
+    let mut switches = column![].spacing(style::SPACE_L);
     if sheet.store == Some(StoreKind::Epic) {
         switches = switches.push(switch(
             t!("options-eos-overlay"),
@@ -1036,8 +1060,8 @@ fn cloud_saves_part(sheet: &Sheet) -> Element<'_, Message> {
         } else {
             label
         };
-        button(text(label).size(14))
-            .padding([8, 14])
+        button(style::button_text(label))
+            .padding(style::BUTTON)
             .style(style::secondary)
             .on_press_maybe(
                 (!saves.syncing).then_some(Message::Sheet(SheetMessage::SyncSaves(how))),
@@ -1056,9 +1080,9 @@ fn cloud_saves_part(sheet: &Sheet) -> Element<'_, Message> {
             action(t!("saves-upload"), How::ForceUpload),
             action(t!("saves-download"), How::ForceDownload),
         ]
-        .spacing(10),
+        .spacing(style::SPACE_M),
     ]
-    .spacing(12);
+    .spacing(style::SPACE_M);
     if saves.syncing {
         part = part.push(text(t!("saves-syncing")).size(13).color(colors().dim));
     } else if let Some((note, good)) = &saves.note {
@@ -1105,7 +1129,7 @@ fn tool_switches(sheet: &Sheet) -> Element<'_, Message> {
             SheetMessage::Gamescope,
         ),
     ]
-    .spacing(18);
+    .spacing(style::SPACE_L);
     if options.gamescope {
         switches = switches.push(gamescope::view(sheet));
     }
@@ -1125,7 +1149,9 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
             Message::Sheet(SheetMessage::StoreTask(choice))
         })
         .text_size(14)
-        .padding([8, 12])
+        .padding([style::SPACE_S, style::SPACE_M])
+        .style(style::pick_list)
+        .menu_style(style::menu)
         .width(Length::Fill)
         .into()
     } else {
@@ -1134,8 +1160,8 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
             .color(colors().dim)
             .into()
     };
-    let browse = button(text(t!("options-executable-browse")).size(14))
-        .padding([8, 14])
+    let browse = button(style::button_text(t!("options-executable-browse")))
+        .padding(style::BUTTON)
         .style(style::secondary)
         .on_press_maybe((!sheet.picking).then_some(Message::Sheet(SheetMessage::BrowseExecutable)));
     let mut starting = column![
@@ -1148,15 +1174,15 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
                     .on_input(|value| Message::Sheet(SheetMessage::Executable(value)))
                     .on_submit(Message::Sheet(SheetMessage::Save))
                     .size(14)
-                    .padding([8, 12])
+                    .padding([style::SPACE_S, style::SPACE_M])
                     .style(style::input),
                 browse,
             ]
-            .spacing(10)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center),
         ),
     ]
-    .spacing(18);
+    .spacing(style::SPACE_L);
     if sheet.store == Some(StoreKind::Epic) {
         starting = starting.push(field(
             t!("options-language"),
@@ -1165,7 +1191,7 @@ fn starting(sheet: &Sheet) -> Element<'_, Message> {
                 .on_input(|value| Message::Sheet(SheetMessage::Language(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .width(200)
                 .style(style::input),
         ));
@@ -1206,7 +1232,7 @@ fn scripts(options: &LaunchOptions) -> Element<'_, Message> {
                 .on_input(|value| Message::Sheet(SheetMessage::Before(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
         ),
         field(
@@ -1216,11 +1242,11 @@ fn scripts(options: &LaunchOptions) -> Element<'_, Message> {
                 .on_input(|value| Message::Sheet(SheetMessage::After(value)))
                 .on_submit(Message::Sheet(SheetMessage::Save))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
         ),
     ]
-    .spacing(18)
+    .spacing(style::SPACE_L)
     .into()
 }
 
@@ -1239,9 +1265,11 @@ fn fsr_sharpening(options: &LaunchOptions) -> Element<'_, Message> {
             Message::Sheet(SheetMessage::FsrSharpening(chosen))
         })
         .text_size(14)
-        .padding([8, 12]),
+        .padding([style::SPACE_S, style::SPACE_M])
+        .style(style::pick_list)
+        .menu_style(style::menu),
     ]
-    .spacing(10)
+    .spacing(style::SPACE_M)
     .align_y(Alignment::Center)
     .padding([0, 20])
     .into()
@@ -1257,7 +1285,7 @@ fn text_fields<'a>(
             .filter(|(field, _)| *field == which)
             .map(|(_, text)| text.as_str())
     };
-    let mut fields = column![].spacing(18);
+    let mut fields = column![].spacing(style::SPACE_L);
     let mut arguments = column![field(
         t!("local-arguments"),
         t!("options-arguments-about"),
@@ -1265,10 +1293,10 @@ fn text_fields<'a>(
             .on_input(|value| Message::Sheet(SheetMessage::Arguments(value)))
             .on_submit(Message::Sheet(SheetMessage::Save))
             .size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
             .style(style::input),
     )]
-    .spacing(4);
+    .spacing(style::SPACE_XS);
     if let Some(error) = at(Field::Arguments) {
         arguments = arguments.push(text(error).size(13).color(colors().bad));
     }
@@ -1280,10 +1308,10 @@ fn text_fields<'a>(
             .on_input(|value| Message::Sheet(SheetMessage::Environment(value)))
             .on_submit(Message::Sheet(SheetMessage::Save))
             .size(14)
-            .padding([8, 12])
+            .padding([style::SPACE_S, style::SPACE_M])
             .style(style::input),
     )]
-    .spacing(4);
+    .spacing(style::SPACE_XS);
     if let Some(error) = at(Field::Environment) {
         environment = environment.push(text(error).size(13).color(colors().bad));
     }
@@ -1297,11 +1325,11 @@ fn field<'a>(
     input: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     column![
-        text(label).size(15).font(BOLD),
+        style::subheading(label),
         text(about).size(13).color(colors().dim),
         input.into(),
     ]
-    .spacing(6)
+    .spacing(style::SPACE_S)
     .into()
 }
 
@@ -1321,14 +1349,14 @@ fn switch<'a>(
         about.push(' ');
         about.push_str(&why);
     }
-    let toggle = toggler(on).label(label).text_size(15);
+    let toggle = toggler(on).label(label).text_size(15).style(style::toggler);
     let toggle = if usable || on {
         toggle.on_toggle(move |on| Message::Sheet(message(on)))
     } else {
         toggle
     };
     column![toggle, text(about).size(13).color(colors().dim)]
-        .spacing(4)
+        .spacing(style::SPACE_XS)
         .into()
 }
 
@@ -1341,7 +1369,7 @@ fn size_input<'a>(
         .on_input(move |value| Message::Sheet(message(value)))
         .on_submit(Message::Sheet(SheetMessage::Save))
         .size(14)
-        .padding([8, 12])
+        .padding([style::SPACE_S, style::SPACE_M])
         .width(90)
         .style(style::input)
         .into()

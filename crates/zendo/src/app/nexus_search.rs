@@ -492,43 +492,41 @@ impl<'a> Sheet<'a> {
                 .on_input(|words| Message::NexusSearch(SearchMessage::Words(words)))
                 .on_submit(Message::NexusSearch(SearchMessage::Search))
                 .size(14)
-                .padding([8, 12])
+                .padding([style::SPACE_S, style::SPACE_M])
                 .style(style::input),
-            button(text(t!("art-search")).size(14))
-                .padding([8, 14])
+            button(style::button_text(t!("art-search")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(Message::NexusSearch(SearchMessage::Search)),
         ]
-        .spacing(10)
+        .spacing(style::SPACE_M)
         .align_y(Alignment::Center);
-        let mut chips = row![].spacing(8).align_y(Alignment::Center);
+        let mut chips = row![].spacing(style::SPACE_S).align_y(Alignment::Center);
         for order in Order::ALL {
             chips = chips.push(
-                button(text(order_name(order)).size(13))
-                    .padding([5, 12])
+                button(style::button_text(order_name(order)))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::chip(search.order == order))
                     .on_press(Message::NexusSearch(SearchMessage::Order(order))),
             );
         }
         chips = chips.push(space::horizontal().width(16)).push(
-            button(text(t!("search-adult")).size(13))
-                .padding([5, 12])
+            button(style::button_text(t!("search-adult")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::chip(self.adult))
                 .on_press(Message::NexusSearch(SearchMessage::ToggleAdult)),
         );
 
         let mut body = column![
             row![
-                text(t!("search-title", title = search.title.as_str()))
-                    .size(20)
-                    .font(BOLD),
+                style::sheet_title(t!("search-title", title = search.title.as_str())),
                 space::horizontal(),
             ]
             .align_y(Alignment::Center),
             input,
             chips.wrap(),
         ]
-        .spacing(16);
+        .spacing(style::SPACE_L);
         if !self.has_key {
             body = body.push(text(t!("search-needs-key")).size(13).color(colors().dim));
         } else if !self.premium {
@@ -539,8 +537,8 @@ impl<'a> Sheet<'a> {
         }
         if (search.hits.len() as u64) < search.total {
             body = body.push(
-                button(text(t!("art-show-more")).size(14))
-                    .padding([8, 14])
+                button(style::button_text(t!("art-show-more")))
+                    .padding(style::BUTTON)
                     .style(style::secondary)
                     .on_press_maybe(
                         (!search.asking).then_some(Message::NexusSearch(SearchMessage::More)),
@@ -551,7 +549,7 @@ impl<'a> Sheet<'a> {
         // Window-tall from the start, so it stays put as results come.
         container(
             column![
-                scrollable(body.padding(24)).height(Length::Fill),
+                scrollable(body.padding(style::SPACE_XL)).height(Length::Fill),
                 container(self.footer()).padding([16, 24]),
             ]
             .spacing(0),
@@ -569,7 +567,7 @@ impl<'a> Sheet<'a> {
                 .width(160)
                 .height(90)
                 .content_fit(iced::ContentFit::Cover)
-                .border_radius(6.0)
+                .border_radius(style::RADIUS_PANEL)
                 .into(),
             None => container(space::horizontal())
                 .width(160)
@@ -578,7 +576,7 @@ impl<'a> Sheet<'a> {
                 .into(),
         };
         let mut name = row![text(&hit.name).size(16).font(BOLD)]
-            .spacing(8)
+            .spacing(style::SPACE_S)
             .align_y(Alignment::Center);
         if !hit.version.is_empty() {
             name = name.push(text(hit.version.clone()).size(13).color(colors().dim));
@@ -609,25 +607,22 @@ impl<'a> Sheet<'a> {
             .as_ref()
             .filter(|(id, _)| *id == hit.mod_id)
             .map(|(_, state)| state);
-        let mut actions = column![].spacing(6).align_x(Alignment::End);
+        let mut actions = column![].spacing(style::SPACE_S).align_x(Alignment::End);
         if self.has_key {
             actions = actions.push(
-                button(
-                    text(if open.is_some() {
-                        t!("search-hide-files")
-                    } else {
-                        t!("search-files")
-                    })
-                    .size(13),
-                )
-                .padding([6, 12])
+                button(style::button_text(if open.is_some() {
+                    t!("search-hide-files")
+                } else {
+                    t!("search-files")
+                }))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::NexusSearch(SearchMessage::Files(hit.mod_id))),
             );
         }
         actions = actions.push(
-            button(text(t!("search-page")).size(13))
-                .padding([6, 12])
+            button(style::button_text(t!("search-page")))
+                .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
                 .on_press(Message::NexusSearch(SearchMessage::Page(hit.mod_id))),
         );
@@ -637,19 +632,19 @@ impl<'a> Sheet<'a> {
             text(&hit.summary).size(13),
             text(numbers.join(" · ")).size(12).color(colors().dim),
         ]
-        .spacing(4)
+        .spacing(style::SPACE_XS)
         .width(Length::Fill);
         let mut block = column![
             row![picture, facts, actions]
-                .spacing(16)
+                .spacing(style::SPACE_L)
                 .align_y(Alignment::Start)
         ]
-        .spacing(10);
+        .spacing(style::SPACE_M);
         if let Some(state) = open {
             block = block.push(self.files(hit.mod_id, state));
         }
         container(block)
-            .padding(12)
+            .padding(style::SPACE_M)
             .width(Length::Fill)
             .style(style::card)
             .into()
@@ -667,7 +662,7 @@ impl<'a> Sheet<'a> {
                 .color(colors().dim)
                 .into(),
             FilesState::Got(files) => {
-                let mut list = column![].spacing(8);
+                let mut list = column![].spacing(style::SPACE_S);
                 for file in files {
                     let mut facts = Vec::new();
                     if let Some(version) = file.version.as_deref().filter(|v| !v.is_empty()) {
@@ -691,8 +686,8 @@ impl<'a> Sheet<'a> {
                                 .color(colors().good)
                                 .into()
                         } else {
-                            button(text(label.clone()).size(13))
-                                .padding([6, 12])
+                            button(style::button_text(label.clone()))
+                                .padding(style::BUTTON_SMALL)
                                 .style(style::primary)
                                 .on_press(Message::NexusSearch(SearchMessage::Download(
                                     mod_id,
@@ -706,7 +701,7 @@ impl<'a> Sheet<'a> {
                             text(facts.join(" · ")).size(12).color(colors().dim),
                             action,
                         ]
-                        .spacing(12)
+                        .spacing(style::SPACE_M)
                         .align_y(Alignment::Center),
                     );
                 }
@@ -718,7 +713,7 @@ impl<'a> Sheet<'a> {
 
     fn footer(&self) -> Element<'a, Message> {
         let search = self.search;
-        let mut footer = row![].spacing(10).align_y(Alignment::Center);
+        let mut footer = row![].spacing(style::SPACE_M).align_y(Alignment::Center);
         let line = if search.asking {
             Some((t!("search-asking"), colors().dim))
         } else if let Some(err) = &search.error {
@@ -739,8 +734,8 @@ impl<'a> Sheet<'a> {
             footer = footer.push(text(line).size(13).color(color));
         }
         footer = footer.push(space::horizontal()).push(
-            button(text(t!("close")).size(14))
-                .padding([10, 18])
+            button(style::button_text(t!("close")))
+                .padding(style::BUTTON)
                 .style(style::secondary)
                 .on_press(Message::NexusSearch(SearchMessage::Close)),
         );

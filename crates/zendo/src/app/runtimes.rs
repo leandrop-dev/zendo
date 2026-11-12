@@ -168,7 +168,7 @@ impl Zendo {
 
     pub(super) fn runtimes_section(&self) -> Element<'_, Message> {
         let state = &self.runtimes;
-        let mut body = column![].spacing(12);
+        let mut body = column![].spacing(style::SPACE_M);
         for (runtime, found) in &state.found {
             body = body.push(self.runtime_row(*runtime, found.as_ref()));
         }
@@ -207,7 +207,7 @@ impl Zendo {
             text(runtime.label()).size(14),
             text(status).size(13).color(colors().dim),
         ]
-        .spacing(2);
+        .spacing(style::SPACE_XS);
         if let Some(found) = found {
             label = label.push(
                 text(found.path().display().to_string())
@@ -217,7 +217,7 @@ impl Zendo {
             );
         }
         let mut line = row![label.width(Length::Fill)]
-            .spacing(12)
+            .spacing(style::SPACE_M)
             .align_y(Alignment::Center);
 
         // Download when Zendo has no copy, Update when Lutris has a newer
@@ -237,8 +237,8 @@ impl Zendo {
             );
         } else if let Some(offer) = offer {
             line = line.push(
-                button(text(offer).size(13))
-                    .padding([6, 12])
+                button(style::button_text(offer))
+                    .padding(style::BUTTON_SMALL)
                     .style(style::secondary)
                     .on_press_maybe(
                         state
@@ -251,15 +251,12 @@ impl Zendo {
         if own && state.downloading != Some(runtime) {
             let confirming = state.confirm_remove == Some(runtime);
             line = line.push(
-                button(
-                    text(if confirming {
-                        t!("really-remove")
-                    } else {
-                        t!("remove")
-                    })
-                    .size(13),
-                )
-                .padding([6, 12])
+                button(style::button_text(if confirming {
+                    t!("really-remove")
+                } else {
+                    t!("remove")
+                }))
+                .padding(style::BUTTON_SMALL)
                 .style(if confirming {
                     style::danger
                 } else {

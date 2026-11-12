@@ -10,7 +10,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::stores::{self, AmazonLogin, Store};
 
-use super::style::{self, BOLD, colors};
+use super::style::{self, BOLD, BUTTON, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, button_text, colors};
 use super::{Message, Zendo, blocking, code_id, open};
 use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
@@ -445,18 +445,17 @@ impl Zendo {
     }
 
     pub(super) fn accounts_page(&self) -> Element<'_, Message> {
-        let header = column![
-            text(t!("page-accounts")).size(28).font(BOLD),
-            text(t!("accounts-about")).size(13).color(colors().dim),
-        ]
-        .spacing(2);
+        let header = container(text(t!("accounts-about")).size(13).color(colors().dim))
+            .padding(SPACE_L)
+            .width(Length::Fill)
+            .style(style::card);
         scrollable(
             container(
                 column![header]
                     .push(self.steam_card())
                     .extend(Store::ALL.map(|store| self.account_card(store)))
-                    .spacing(20)
-                    .padding(24)
+                    .spacing(SPACE_L)
+                    .padding(SPACE_XL)
                     .max_width(960),
             )
             .center_x(Length::Fill),
@@ -482,21 +481,21 @@ impl Zendo {
             Account::Failed(err) => (err.clone(), colors().bad),
         };
         let action: Element<'_, Message> = match self.accounts.get(store) {
-            Account::SignedIn(_) => button(text(t!("accounts-sign-out")).size(14))
-                .padding([8, 14])
+            Account::SignedIn(_) => button(button_text(t!("accounts-sign-out")))
+                .padding(BUTTON)
                 .style(style::secondary)
                 .on_press(Message::Account(AccountMessage::SignOut(store)))
                 .into(),
             // The slot stays where the button will be, disabled until the
             // engines have answered.
-            Account::Checking => button(text(t!("accounts-sign-in")).size(14).font(BOLD))
-                .padding([8, 18])
+            Account::Checking => button(button_text(t!("accounts-sign-in")).font(BOLD))
+                .padding(BUTTON)
                 .style(style::primary)
                 .on_press_maybe(None)
                 .into(),
             Account::SignedOut | Account::Failed(_) => {
-                button(text(t!("accounts-sign-in")).size(14).font(BOLD))
-                    .padding([8, 18])
+                button(button_text(t!("accounts-sign-in")).font(BOLD))
+                    .padding(BUTTON)
                     .style(style::primary)
                     .on_press_maybe(
                         (engine.is_some() && signing_in.is_none())
@@ -508,11 +507,11 @@ impl Zendo {
 
         let title = row![
             style::badge(store.source().label(), style::source_color(store.source())),
-            text(store.label()).size(18).font(BOLD),
+            text(store.label().to_uppercase()).size(16).font(BOLD),
             space::horizontal(),
             action,
         ]
-        .spacing(10)
+        .spacing(SPACE_M)
         .align_y(Alignment::Center);
 
         let engine_line = match &engine {
@@ -525,18 +524,21 @@ impl Zendo {
                 .color(colors().bad),
         };
 
-        let mut body = column![title, text(status).size(14).color(color), engine_line].spacing(8);
+        let mut body =
+            column![title, text(status).size(14).color(color), engine_line].spacing(SPACE_S);
         if store == Store::Gog && matches!(self.accounts.get(store), Account::SignedIn(_)) {
             body = body.push(
                 toggler(self.config.gog_playtime)
                     .label(t!("accounts-gog-playtime"))
                     .text_size(14)
+                    .style(style::toggler)
                     .on_toggle(|on| Message::Account(AccountMessage::SetGogPlaytime(on))),
             );
             body = body.push(
                 toggler(self.config.gog_galaxy)
                     .label(t!("accounts-gog-galaxy"))
                     .text_size(14)
+                    .style(style::toggler)
                     .on_toggle(|on| Message::Account(AccountMessage::SetGogGalaxy(on))),
             );
         }
@@ -548,7 +550,7 @@ impl Zendo {
             });
         }
         container(body)
-            .padding(20)
+            .padding(SPACE_L)
             .width(Length::Fill)
             .style(style::card)
             .into()
@@ -568,38 +570,40 @@ fn window_steps(sign_in: &SignIn) -> Element<'_, Message> {
         (None, false, Some(_)) => (String::new(), true),
         (None, false, None) => (t!("accounts-opening-window"), false),
     };
-    let mut buttons = row![].spacing(8).align_y(Alignment::Center);
+    let mut buttons = row![].spacing(SPACE_S).align_y(Alignment::Center);
     if retry {
         buttons = buttons.push(
-            button(text(t!("try-again")).size(14).font(BOLD))
-                .padding([8, 18])
+            button(button_text(t!("try-again")).font(BOLD))
+                .padding(BUTTON)
                 .style(style::primary)
                 .on_press(Message::Account(AccountMessage::Start(store))),
         );
     }
     buttons = buttons
         .push(
-            button(text(t!("accounts-use-browser")).size(14))
-                .padding([8, 14])
+            button(button_text(t!("accounts-use-browser")))
+                .padding(BUTTON)
                 .style(style::secondary)
                 .on_press_maybe(
                     (!sign_in.busy).then_some(Message::Account(AccountMessage::UseBrowser)),
                 ),
         )
         .push(
-            button(text(t!("cancel")).size(14))
-                .padding([8, 14])
+            button(button_text(t!("cancel")))
+                .padding(BUTTON)
                 .style(style::secondary)
                 .on_press(Message::Account(AccountMessage::Cancel)),
         );
-    let mut steps = column![].spacing(10);
+    let mut steps = column![].spacing(SPACE_M);
     if !line.is_empty() {
         steps = steps.push(text(line).size(14));
     }
     if let Some(note) = &sign_in.note {
         steps = steps.push(text(note).size(13).color(colors().bad));
     }
-    container(steps.push(buttons)).padding([12, 0]).into()
+    container(steps.push(buttons))
+        .padding([SPACE_M, 0.0])
+        .into()
 }
 
 /// The sign-in in the user's browser, finished by pasting.
@@ -617,55 +621,51 @@ fn sign_in_steps(sign_in: &SignIn) -> Element<'_, Message> {
             .id(code_id())
             .on_input(|pasted| Message::Account(AccountMessage::Paste(pasted)))
             .on_submit(Message::Account(AccountMessage::Finish))
-            .padding([8, 12])
+            .padding([SPACE_S, SPACE_M])
             .size(14)
             .style(style::input),
         button(
-            text(if sign_in.busy && ready {
+            button_text(if sign_in.busy && ready {
                 t!("accounts-signing-in")
             } else {
                 t!("accounts-finish")
             })
-            .size(14)
             .font(BOLD)
         )
-        .padding([8, 18])
+        .padding(BUTTON)
         .style(style::primary)
         .on_press_maybe(can_finish.then_some(Message::Account(AccountMessage::Finish))),
-        button(text(t!("cancel")).size(14))
-            .padding([8, 14])
+        button(button_text(t!("cancel")))
+            .padding(BUTTON)
             .style(style::secondary)
             .on_press(Message::Account(AccountMessage::Cancel)),
     ]
-    .spacing(8)
+    .spacing(SPACE_S)
     .align_y(Alignment::Center);
 
     let mut steps = column![
         row![
             text(t!("accounts-step-one")).size(14),
-            button(
-                text(if ready {
-                    t!("accounts-open-again")
-                } else {
-                    t!("accounts-preparing")
-                })
-                .size(13)
-            )
-            .padding([4, 10])
+            button(button_text(if ready {
+                t!("accounts-open-again")
+            } else {
+                t!("accounts-preparing")
+            }))
+            .padding(style::BUTTON_SMALL)
             .style(style::secondary)
             .on_press_maybe(ready.then_some(Message::Account(AccountMessage::OpenPage))),
         ]
-        .spacing(12)
+        .spacing(SPACE_M)
         .align_y(Alignment::Center),
         text(second).size(14),
         text(t!("accounts-step-three")).size(14),
         field,
     ]
-    .spacing(10);
+    .spacing(SPACE_M);
     if let Some(note) = &sign_in.note {
         steps = steps.push(text(note).size(13).color(colors().bad));
     }
-    container(steps).padding([12, 0]).into()
+    container(steps).padding([SPACE_M, 0.0]).into()
 }
 
 #[cfg(test)]

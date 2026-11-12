@@ -278,6 +278,8 @@ enum Message {
     SetDiscordPresence(bool),
     /// Settings' Theme section: no translucency behind the window.
     SetOpaque(bool),
+    /// Settings: show another group of sections.
+    SettingsGroup(settings::Group),
     /// The tray icon was clicked, or one of its menu items was chosen.
     Tray(TrayMessage),
     /// The window's close button was pressed: hide to the tray, or quit.
@@ -457,6 +459,8 @@ struct Zendo {
     /// The window's colours and where they come from.
     themes: Themes,
     key: KeyForm,
+    /// The group of sections Settings shows.
+    settings_group: settings::Group,
     /// Settings' Diagnostics section.
     diagnostics: Diagnostics,
     accounts: Accounts,
@@ -526,6 +530,7 @@ impl Zendo {
             config: Config::default(),
             themes: Themes::default(),
             key: KeyForm::default(),
+            settings_group: settings::Group::default(),
             diagnostics: Diagnostics::default(),
             accounts: Accounts::default(),
             store: StoreState::default(),
@@ -767,6 +772,7 @@ impl Zendo {
             | Message::SetMinimizeToTray(_)
             | Message::SetDiscordPresence(_)
             | Message::SetOpaque(_)
+            | Message::SettingsGroup(_)
             | Message::DownloadNow
             | Message::CopyReport
             | Message::ReportReady(_)
@@ -909,13 +915,15 @@ impl Zendo {
         let pasted = pasted.trim();
         match self.page {
             Page::Library | Page::Store => self.edit_search(|search| search.push_str(pasted)),
-            Page::Settings => {
+            Page::Settings if self.settings_group == settings::Group::Keys => {
                 pasted.clone_into(&mut self.key.value);
                 self.key.note = None;
                 Task::none()
             }
             Page::Accounts => self.update_account(AccountMessage::Paste(pasted.to_owned())),
-            Page::Game(_) | Page::Owned(_) | Page::Downloads | Page::About => Task::none(),
+            Page::Settings | Page::Game(_) | Page::Owned(_) | Page::Downloads | Page::About => {
+                Task::none()
+            }
         }
     }
 

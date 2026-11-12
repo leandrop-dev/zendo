@@ -68,7 +68,7 @@ impl Zendo {
             ),
             space::horizontal(),
             self.search_box(),
-            button(text(t!("page-settings").to_uppercase()).size(13).font(BOLD))
+            button(style::button_text(t!("page-settings").to_uppercase()).font(BOLD))
                 .padding([SPACE_S, SPACE_M])
                 .style(style::chip(self.in_settings()))
                 .on_press(Message::Navigate(Page::Settings)),
