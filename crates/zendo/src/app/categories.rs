@@ -253,12 +253,17 @@ impl Zendo {
                 state.set_category(&category.name, id, true);
             }
         }
+        // A rename or delete of a category reaches the filters naming it.
+        for saved in &self.filters {
+            state.save_filter(&saved.name, saved.filter.clone());
+        }
         state
     }
 
     /// Puts a state's categories on the sheet's list and on every game.
     fn reload_categories(&mut self, state: &State) {
         self.categories = state.categories();
+        self.filters = state.filters();
         let ids: Vec<String> = self
             .library
             .iter()

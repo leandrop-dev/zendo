@@ -34,6 +34,8 @@ Usage:
                                put a game in a category, made if new
   zendo uncategorize <id> <category>
                                take it out of one
+  zendo status <id> <backlog|playing|completed|abandoned|none>
+                               say where you are with a game
   zendo covers                 download the covers and wide images missing
   zendo logs                   list the games' last launch logs, latest first
   zendo logs <id>              print a game's last launch log
@@ -89,6 +91,7 @@ fn main() -> ExitCode {
         ["unpin", id] => set_pinned(id, false),
         ["categorize", id, name] => set_category(id, name, true),
         ["uncategorize", id, name] => set_category(id, name, false),
+        ["status", id, word] => set_status(id, word),
         ["covers"] => covers(),
         ["logs"] => {
             list_logs();
@@ -237,6 +240,24 @@ fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
         }
     } else {
         println!("took {:?} out of {category:?}", game.title);
+    }
+    Ok(())
+}
+
+/// Sets a game's play status, or clears it with `none`.
+fn set_status(id: &str, word: &str) -> anyhow::Result<()> {
+    let status = if word.trim().eq_ignore_ascii_case("none") {
+        None
+    } else {
+        Some(zendo_core::Status::parse(word).with_context(|| {
+            format!("{word:?} is not a status: backlog, playing, completed, abandoned or none")
+        })?)
+    };
+    let game = find(id)?;
+    State::update(|state| state.set_status(&game.id, status))?;
+    match status {
+        Some(status) => println!("{:?} is now {}", game.title, status.name()),
+        None => println!("{:?} has no status", game.title),
     }
     Ok(())
 }

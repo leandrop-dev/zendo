@@ -71,8 +71,11 @@ Numbering continues from 27 so it never collides with the built items 1 to
     the user present except the controller. Game Mode, replacing today's F11
     full screen. The Home page of design.md was built and removed at the
     user's wish.
-35. Organize: play status (backlog, playing, completed, abandoned), tags,
-    saved filters, bulk edits and a random pick. Builds on item 19.
+35. Built on 2026-11-12 (docs/history.md, item 35), tests green, checked
+    on screen with the user present (history.md lists what was not). Organize: play status (backlog, playing, completed,
+    abandoned), saved filters and bulk edits. Tags are item 19's categories
+    (no second label system) and the random pick was dropped, both at the
+    user's choice.
 36. Play sessions and stats: a session history, a stats screen and a yearly
     summary.
 37. Emulation (was 26, moved up): emulator profiles, ROM folders and

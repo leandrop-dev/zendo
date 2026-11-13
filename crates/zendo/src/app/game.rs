@@ -10,7 +10,7 @@ use iced::{Alignment, ContentFit, Element, Font, Length, Task};
 use zendo_core::downloads::{Action, Job};
 use zendo_core::launch;
 use zendo_core::owned::Owned;
-use zendo_core::{Game, Size, Source};
+use zendo_core::{Game, Size, Source, Status};
 
 use super::artwork::ArtMessage;
 use super::categories::CategoriesMessage;
@@ -197,15 +197,32 @@ impl Zendo {
         for name in &game.categories {
             bar = bar.push(style::badge(name.to_uppercase(), colors().text));
         }
-        bar.push(
-            button(text(t!("game-edit-categories").to_uppercase()).size(12))
-                .padding([SPACE_XS, SPACE_S])
-                .style(style::secondary)
-                .on_press(change_categories(game)),
-        )
-        .wrap()
-        .vertical_spacing(SPACE_S)
-        .into()
+        let categories = bar
+            .push(
+                button(text(t!("game-edit-categories").to_uppercase()).size(12))
+                    .padding([SPACE_XS, SPACE_S])
+                    .style(style::secondary)
+                    .on_press(change_categories(game)),
+            )
+            .wrap()
+            .vertical_spacing(SPACE_S);
+        // The status chips: the chosen one is pressed again to clear it.
+        let mut status =
+            row![container(style::label(&t!("game-status"))).padding([SPACE_XS, 0.0]),]
+                .spacing(SPACE_S)
+                .align_y(Alignment::Center);
+        for choice in Status::ALL {
+            let chosen = game.status == Some(choice);
+            status = status.push(super::library::chip(
+                super::format::play_status(choice),
+                None,
+                chosen,
+                Message::SetGameStatus(game.id.clone(), if chosen { None } else { Some(choice) }),
+            ));
+        }
+        column![categories, status.wrap().vertical_spacing(SPACE_S)]
+            .spacing(SPACE_S)
+            .into()
     }
 
     /// Play, Update when one waits, Favorite, Launch options, Hide, Manage

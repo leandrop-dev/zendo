@@ -1,8 +1,28 @@
 //! Numbers and times as people read them, in the window's language.
 
-use zendo_core::{Sort, Source};
+use zendo_core::{Sort, Source, Status};
 
 use crate::i18n::t;
+
+/// A library view chip's name.
+pub fn view(view: zendo_core::View) -> String {
+    match view {
+        zendo_core::View::All => t!("library-all"),
+        zendo_core::View::Favorites => t!("library-favorites"),
+        zendo_core::View::Recent => t!("library-recent"),
+        zendo_core::View::Hidden => t!("library-hidden"),
+    }
+}
+
+/// A play status's name.
+pub fn play_status(status: Status) -> String {
+    match status {
+        Status::Backlog => t!("play-backlog"),
+        Status::Playing => t!("play-playing"),
+        Status::Completed => t!("play-completed"),
+        Status::Abandoned => t!("play-abandoned"),
+    }
+}
 
 /// Where a game came from, as the window names it: the stores by their
 /// names, the rest in the window's language.

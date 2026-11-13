@@ -109,6 +109,26 @@ no route to a game's page (item 33).
   (Show, Source, Sort, View, Search, Filters, Stats) are not built: Filters and
   Stats depend on items 35 and 36.
 
+## Decided in item 35
+
+- Tags are the categories; the UI keeps the word "Categories". Play status is
+  Backlog, Playing, Completed or Abandoned, one per game, set by the user only
+  (nothing sets Playing on a launch).
+- The Library's Organize row: status chips (a status nobody has is hidden
+  until chosen), the categories, the saved filters' chips, then CATEGORIES and
+  FILTERS. The game page has a STATUS row under the categories; pressing the
+  chosen status clears it. A card's line leads with the status when there is
+  one.
+- A saved filter holds view, store, category, status, search and sort. Its
+  chip is chosen when the window shows exactly that; applying one sets the
+  sort for good, as the sort chips do. Renaming or deleting a category updates
+  the filters naming it (a delete leaves the filter without the category).
+- Bulk edits on the marked games: FAVORITE, UNFAVORITE, HIDE, UNHIDE, each
+  shown only when it would change a marked game, setting all alike. Hiding
+  clears the marks; favoriting keeps them.
+- Left out: the random pick, bulk status, bulk Up next, Ctrl+A, Home (the
+  user rejected it) and Game Mode's Filters chip.
+
 ## Not taken
 
 Console libraries and native ports (item 37 covers emulation its own way),

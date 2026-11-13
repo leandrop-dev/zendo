@@ -1126,3 +1126,50 @@ achievements-more = { $count ->
     [one] Mostrar mais 1
    *[other] Mostrar mais ({ $count } em falta)
 }
+
+## Estado de jogo e filtros guardados
+
+play-backlog = Por jogar
+play-playing = A jogar
+play-completed = Terminado
+play-abandoned = Abandonado
+game-status = Estado
+status-is = { $title } está agora: { $status }
+status-cleared = { $title } ficou sem estado
+library-bulk-pin = Favorito
+library-bulk-unpin = Tirar favorito
+library-bulk-hide = Ocultar
+library-bulk-unhide = Mostrar
+status-bulk-pinned = { $count ->
+    [one] { $count } jogo é agora um favorito
+   *[other] { $count } jogos são agora favoritos
+}
+status-bulk-unpinned = { $count ->
+    [one] { $count } jogo deixou de ser um favorito
+   *[other] { $count } jogos deixaram de ser favoritos
+}
+status-bulk-hid = { $count ->
+    [one] { $count } jogo ocultado · Ctrl+H mostra os ocultos
+   *[other] { $count } jogos ocultados · Ctrl+H mostra os ocultos
+}
+status-bulk-unhid = { $count ->
+    [one] { $count } jogo voltou à biblioteca
+   *[other] { $count } jogos voltaram à biblioteca
+}
+filters-open = Filtros
+filters-title = Filtros guardados
+filters-count = { $count ->
+    [one] { $count } filtro guardado
+   *[other] { $count } filtros guardados
+}
+filters-empty = Ainda não há filtros guardados · deixe a biblioteca como quer e dê-lhe um nome abaixo
+filters-now = No ecrã agora: { $summary }
+filters-new-placeholder = Nome para o que está no ecrã
+filters-save = Guardar
+filters-apply = Aplicar
+filters-saved = { $name } guardado
+filters-updated = { $name } atualizado
+filters-renamed = Mudou para { $name }
+filters-deleted = { $name } apagado
+filters-blank = Um filtro precisa de um nome
+filters-taken = { $name } já é um filtro guardado

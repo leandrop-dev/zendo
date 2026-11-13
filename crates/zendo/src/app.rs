@@ -15,6 +15,7 @@ mod dlc;
 mod downloads;
 mod engines;
 mod eos_overlay;
+mod filters;
 mod format;
 mod game;
 mod game_mode;
@@ -58,7 +59,7 @@ use iced::{Element, Event, Length, Size, Subscription, Task, event, window};
 use zendo_core::config::Config;
 use zendo_core::covers::{Artwork, Fetcher, KeyCheck, Kind};
 use zendo_core::owned::Owned;
-use zendo_core::{Category, Game, Library, Sort, Source, State};
+use zendo_core::{Category, Game, Library, SavedFilter, Sort, Source, State, Status};
 
 use crate::gamepad::{self, Pad};
 use crate::i18n::{self, Language, t};
@@ -70,6 +71,7 @@ use categories::CategoriesMessage;
 use downloads::{DownloadMessage, DownloadsState};
 use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
+use filters::{Filters, FiltersMessage};
 use game::{GameView, GameViewMessage};
 use game_mode::{GameMode, GameModeMessage};
 use installer::{InstallerMessage, InstallerState};
@@ -213,13 +215,14 @@ enum Move {
 }
 
 /// The library read in a thread: the games, the saved sort, the user's
-/// categories, the settings and the up-next queue.
+/// categories, the settings, the up-next queue and the saved filters.
 type Scanned = (
     Library,
     Sort,
     Vec<Category>,
     Result<Config, String>,
     Vec<String>,
+    Vec<SavedFilter>,
 );
 
 #[derive(Debug, Clone)]
@@ -254,8 +257,19 @@ enum Message {
     SetSource(Option<Source>),
     /// A category chip; the one already chosen is left.
     SetCategory(Option<String>),
-    /// Back to every game: no store, no category.
+    /// A status chip; the one already chosen is left.
+    SetStatus(Option<Status>),
+    /// Back to every game: no store, no category, no status.
     ClearFilters,
+    /// Puts a game's play status on it, or clears it.
+    SetGameStatus(String, Option<Status>),
+    /// A saved filter's chip: everything it holds is put on the window.
+    ApplyFilter(String),
+    Filters(FiltersMessage),
+    /// Every marked game becomes a favorite, or stops being one.
+    BulkPinned(bool),
+    /// Every marked game is hidden, or brought back.
+    BulkHidden(bool),
     /// Marks the card under the cursor, or leaves it.
     ToggleSelected,
     /// Marks the card at this place in the grid, or leaves it.
@@ -405,6 +419,8 @@ struct Zendo {
     source: Option<Source>,
     /// The category chip chosen; `None` is every category.
     category: Option<String>,
+    /// The status chip chosen; `None` is every status.
+    play_status: Option<Status>,
     /// Index into the games the filters let through.
     selected: usize,
     /// The games marked in the grid, for assigning all at once.
@@ -438,6 +454,10 @@ struct Zendo {
     categories_sheet: Option<categories::Categories>,
     /// The user's categories as last read or written, with their games.
     categories: Vec<Category>,
+    /// The Saved filters sheet, open over a page.
+    filters_sheet: Option<Filters>,
+    /// The user's saved filters as last read or written.
+    filters: Vec<SavedFilter>,
     /// The user's own queue of games to play next, by id.
     up_next: Vec<String>,
     /// The art picker, open over a game's page.
@@ -505,6 +525,7 @@ impl Zendo {
             search: String::new(),
             source: None,
             category: None,
+            play_status: None,
             selected: 0,
             selected_games: BTreeSet::new(),
             columns: library::columns_for(START_SIZE.width),
@@ -527,6 +548,8 @@ impl Zendo {
             local: LocalState::default(),
             categories_sheet: None,
             categories: Vec::new(),
+            filters_sheet: None,
+            filters: Vec::new(),
             up_next: Vec::new(),
             picker: None,
             mod_search: None,
@@ -610,6 +633,10 @@ impl Zendo {
                     .as_ref()
                     .is_none_or(|name| game.categories.contains(name))
             })
+            .filter(|game| {
+                self.play_status
+                    .is_none_or(|status| game.status == Some(status))
+            })
             .map(|game| (game, game.title.to_lowercase()))
             .filter(|(_, title)| words.iter().all(|word| title.contains(word.as_str())))
             .collect();
@@ -675,6 +702,7 @@ impl Zendo {
             .or_else(|| self.chooser_takes(message))
             .or_else(|| self.search_takes(message))
             .or_else(|| self.picker_takes(message))
+            .or_else(|| self.filters_takes(message))
             .or_else(|| self.categories_takes(message))
             .or_else(|| self.form_takes(message))
             .or_else(|| self.sheet_takes(message))
@@ -753,10 +781,23 @@ impl Zendo {
                     category
                 };
             }),
+            Message::SetStatus(status) => self.filter(|zendo| {
+                zendo.play_status = if zendo.play_status == status {
+                    None
+                } else {
+                    status
+                };
+            }),
             Message::ClearFilters => self.filter(|zendo| {
                 zendo.source = None;
                 zendo.category = None;
+                zendo.play_status = None;
             }),
+            Message::SetGameStatus(id, status) => self.set_game_status(&id, status),
+            Message::ApplyFilter(name) => self.apply_filter(&name),
+            Message::Filters(message) => self.update_filters(message),
+            Message::BulkPinned(pinned) => self.bulk_pinned(pinned),
+            Message::BulkHidden(hidden) => self.bulk_hidden(hidden),
             Message::ToggleSelected | Message::ToggleSelectedAt(_) | Message::ClearSelection => {
                 self.selecting(&message)
             }
@@ -859,12 +900,16 @@ impl Zendo {
         scan()
     }
 
-    fn loaded(&mut self, (library, sort, categories, config, up_next): Scanned) -> Task<Message> {
+    fn loaded(
+        &mut self,
+        (library, sort, categories, config, up_next, filters): Scanned,
+    ) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
         let after = self.local.after_scan.take();
         self.library = Some(library);
         self.categories = categories;
+        self.filters = filters;
         self.up_next = up_next;
         if let Some(library) = &self.library {
             let present: HashSet<&str> =
@@ -1357,6 +1402,91 @@ impl Zendo {
         self.select(Some(&id))
     }
 
+    fn set_game_status(&mut self, id: &str, status: Option<Status>) -> Task<Message> {
+        let Some(game) = self.game_mut(id) else {
+            return Task::none();
+        };
+        game.status = status;
+        let title = game.title.clone();
+        self.save(|state| state.set_status(id, status));
+        self.status = Some(if let Some(status) = status {
+            t!(
+                "status-is",
+                title = title,
+                status = format::play_status(status)
+            )
+        } else {
+            t!("status-cleared", title = title)
+        });
+        // A game that leaves the chosen status leaves the grid.
+        if self.page == Page::Library {
+            self.select(Some(id))
+        } else {
+            Task::none()
+        }
+    }
+
+    /// Makes every marked game a favorite, or not one: the same for all, so
+    /// a mixed selection ends alike. The marks stay.
+    fn bulk_pinned(&mut self, pinned: bool) -> Task<Message> {
+        let ids: Vec<String> = self.selected_games.iter().cloned().collect();
+        self.filter(|zendo| {
+            let mut changed = 0;
+            for id in &ids {
+                if let Some(game) = zendo.game_mut(id)
+                    && game.pinned != pinned
+                {
+                    game.pinned = pinned;
+                    changed += 1;
+                }
+            }
+            if changed == 0 {
+                return;
+            }
+            zendo.save(|state| {
+                for id in &ids {
+                    state.set_pinned(id, pinned);
+                }
+            });
+            zendo.status = Some(if pinned {
+                t!("status-bulk-pinned", count = changed)
+            } else {
+                t!("status-bulk-unpinned", count = changed)
+            });
+        })
+    }
+
+    /// Hides every marked game, or brings it back. They leave the grid, so
+    /// the marks go too.
+    fn bulk_hidden(&mut self, hidden: bool) -> Task<Message> {
+        let ids: Vec<String> = self.selected_games.iter().cloned().collect();
+        self.filter(|zendo| {
+            let mut changed = 0;
+            for id in &ids {
+                if let Some(game) = zendo.game_mut(id)
+                    && game.hidden != hidden
+                {
+                    game.hidden = hidden;
+                    changed += 1;
+                }
+            }
+            if changed == 0 {
+                return;
+            }
+            zendo.save(|state| {
+                for id in &ids {
+                    state.set_hidden(id, hidden);
+                }
+            });
+            zendo.selected_games.clear();
+            zendo.status = Some(if hidden {
+                t!("status-bulk-hid", count = changed)
+            } else {
+                t!("status-bulk-unhid", count = changed)
+            });
+        })
+    }
+
     fn filter_changed(&mut self) -> Task<Message> {
         self.selected = 0;
         self.status = None;
@@ -1574,7 +1704,7 @@ impl Zendo {
                 .width(Length::Fill)
                 .into(),
         );
-        let page = self.with_categories(self.with_form(page));
+        let page = self.with_filters(self.with_categories(self.with_form(page)));
         self.with_installer(self.with_chooser(self.with_search(self.with_picker(page))))
     }
 
@@ -1632,6 +1762,7 @@ fn scan() -> Task<Message> {
                 state.categories(),
                 config,
                 state.up_next().to_vec(),
+                state.filters(),
             )
         }),
         |loaded| Message::Loaded(Box::new(loaded)),
@@ -1745,7 +1876,14 @@ impl Fallback for Scanned {
             problems: vec![note.clone()],
             ..Library::default()
         };
-        (library, Sort::default(), Vec::new(), Err(note), Vec::new())
+        (
+            library,
+            Sort::default(),
+            Vec::new(),
+            Err(note),
+            Vec::new(),
+            Vec::new(),
+        )
     }
 }
 
@@ -2068,6 +2206,7 @@ mod tests {
             Sort::default(),
             Vec::new(),
             Ok(Config::default()),
+            Vec::new(),
             Vec::new(),
         ))));
         assert_eq!(
@@ -2685,5 +2824,153 @@ mod tests {
         // Outside Game Mode, Start still shows the hidden games.
         let _ = zendo.pad(Pad::ShowHidden);
         assert_eq!(zendo.view, library::View::Hidden);
+    }
+    /// Sets a play status on a game of the test library.
+    fn with_status(zendo: &mut Zendo, id: &str, status: Status) {
+        let _ = zendo.update(Message::SetGameStatus(id.to_owned(), Some(status)));
+    }
+
+    #[test]
+    fn a_status_narrows_with_the_store_and_the_search() {
+        let mut zendo = zendo_with(4, 4);
+        with_status(&mut zendo, "desktop:0", Status::Backlog);
+        with_status(&mut zendo, "desktop:1", Status::Backlog);
+        with_status(&mut zendo, "desktop:2", Status::Playing);
+
+        let _ = zendo.update(Message::SetStatus(Some(Status::Backlog)));
+        assert_eq!(titles(&zendo), ["Game 00", "Game 01"]);
+        let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
+        assert_eq!(titles(&zendo), ["Game 01"]);
+        let _ = zendo.update(Message::SetSource(None));
+        let _ = zendo.update(Message::Search("00".into()));
+        assert_eq!(titles(&zendo), ["Game 00"]);
+        let _ = zendo.update(Message::Search(String::new()));
+
+        let _ = zendo.update(Message::SetStatus(Some(Status::Backlog)));
+        assert_eq!(zendo.play_status, None, "pressed twice, it is left");
+        let _ = zendo.update(Message::SetStatus(Some(Status::Playing)));
+        let _ = zendo.update(Message::ClearFilters);
+        assert_eq!(zendo.play_status, None);
+        assert_eq!(titles(&zendo).len(), 4);
+    }
+
+    #[test]
+    fn a_game_gets_a_status_and_loses_it() {
+        let mut zendo = zendo_with(2, 2);
+        with_status(&mut zendo, "desktop:0", Status::Completed);
+        assert_eq!(
+            zendo.game("desktop:0").unwrap().status,
+            Some(Status::Completed)
+        );
+        let _ = zendo.update(Message::SetGameStatus("desktop:0".into(), None));
+        assert_eq!(zendo.game("desktop:0").unwrap().status, None);
+        let _ = zendo.update(Message::SetGameStatus("nope".into(), Some(Status::Playing)));
+    }
+
+    #[test]
+    fn a_saved_filter_puts_everything_back_and_reads_as_chosen() {
+        let mut zendo = zendo_with(4, 4);
+        in_category(&mut zendo, "Co-op", &["desktop:1", "desktop:3"]);
+        with_status(&mut zendo, "desktop:1", Status::Playing);
+        let _ = zendo.update(Message::SetView(library::View::Favorites));
+        let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
+        let _ = zendo.update(Message::SetCategory(Some("Co-op".into())));
+        let _ = zendo.update(Message::SetStatus(Some(Status::Playing)));
+        let _ = zendo.update(Message::Search("game".into()));
+        let _ = zendo.update(Message::SetSort(Sort::MostPlayed));
+        let saved = zendo.current_filter();
+        zendo.filters = vec![SavedFilter {
+            name: "Evening".into(),
+            filter: saved.clone(),
+        }];
+
+        let _ = zendo.update(Message::ClearFilters);
+        let _ = zendo.update(Message::SetView(library::View::All));
+        let _ = zendo.update(Message::Search(String::new()));
+        let _ = zendo.update(Message::SetSort(Sort::Title));
+        assert_ne!(zendo.current_filter(), saved);
+
+        let _ = zendo.update(Message::ApplyFilter("Evening".into()));
+        assert_eq!(zendo.current_filter(), saved);
+    }
+
+    #[test]
+    fn a_saved_filter_leaves_off_a_category_that_is_gone() {
+        let mut zendo = zendo_with(2, 2);
+        zendo.filters = vec![SavedFilter {
+            name: "Old".into(),
+            filter: zendo_core::Filter {
+                category: Some("Deleted".into()),
+                status: Some(Status::Backlog),
+                ..zendo_core::Filter::default()
+            },
+        }];
+        let _ = zendo.update(Message::ApplyFilter("Old".into()));
+        assert_eq!(zendo.category, None);
+        assert_eq!(zendo.play_status, Some(Status::Backlog));
+    }
+
+    #[test]
+    fn the_filters_sheet_saves_updates_renames_and_deletes() {
+        let mut zendo = zendo_with(2, 2);
+        let _ = zendo.update(Message::SetSort(Sort::MostPlayed));
+        let _ = zendo.update(Message::Filters(FiltersMessage::Open));
+        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        assert_eq!(zendo.filters.len(), 0, "a blank name saves nothing");
+        let _ = zendo.update(Message::Filters(FiltersMessage::Typed("Evening".into())));
+        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        assert_eq!(zendo.filters.len(), 1);
+        assert_eq!(zendo.filters[0].filter.sort, Sort::MostPlayed);
+
+        let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
+        let _ = zendo.update(Message::Filters(FiltersMessage::Typed("evening".into())));
+        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        assert_eq!(zendo.filters.len(), 1, "the same name is updated");
+        assert_eq!(zendo.filters[0].filter.source, Some(Source::Steam));
+
+        let _ = zendo.update(Message::Filters(FiltersMessage::Rename("Evening".into())));
+        let _ = zendo.update(Message::Filters(FiltersMessage::RenameTyped(
+            "Night".into(),
+        )));
+        let _ = zendo.update(Message::Filters(FiltersMessage::RenameDone));
+        assert_eq!(zendo.filters[0].name, "Night");
+
+        let _ = zendo.update(Message::Filters(FiltersMessage::Delete("Night".into())));
+        assert_eq!(zendo.filters.len(), 1, "the first press only asks");
+        let _ = zendo.update(Message::Filters(FiltersMessage::Delete("Night".into())));
+        assert_eq!(zendo.filters.len(), 0);
+    }
+
+    #[test]
+    fn a_bulk_favorite_and_hide_set_every_marked_game_alike() {
+        let mut zendo = zendo_with(4, 4);
+        if let Some(game) = zendo.game_mut("desktop:1") {
+            game.pinned = true;
+        }
+        for id in ["desktop:0", "desktop:1", "desktop:2"] {
+            zendo.selected_games.insert(id.to_owned());
+        }
+        let _ = zendo.update(Message::BulkPinned(true));
+        for id in ["desktop:0", "desktop:1", "desktop:2"] {
+            assert!(zendo.game(id).unwrap().pinned, "{id}");
+        }
+        assert!(!zendo.game("desktop:3").unwrap().pinned);
+        assert_eq!(zendo.selected_games.len(), 3, "a favorite keeps the marks");
+        let _ = zendo.update(Message::BulkPinned(false));
+        assert!(!zendo.game("desktop:1").unwrap().pinned);
+
+        let _ = zendo.update(Message::BulkHidden(true));
+        assert_eq!(titles(&zendo), ["Game 03"]);
+        assert!(
+            zendo.selected_games.is_empty(),
+            "hidden games leave the marks"
+        );
+        let _ = zendo.update(Message::SetView(library::View::Hidden));
+        for id in ["desktop:0", "desktop:1", "desktop:2"] {
+            zendo.selected_games.insert(id.to_owned());
+        }
+        let _ = zendo.update(Message::BulkHidden(false));
+        let _ = zendo.update(Message::SetView(library::View::All));
+        assert_eq!(titles(&zendo).len(), 4);
     }
 }

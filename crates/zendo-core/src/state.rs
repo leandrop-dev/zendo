@@ -73,6 +73,105 @@ impl Sort {
     }
 }
 
+/// How many days back a game counts as recently played.
+pub const RECENT_DAYS: u64 = 30;
+
+/// Which of the games the library's view chips show.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum View {
+    /// Every game not hidden.
+    #[default]
+    All,
+    Favorites,
+    /// Played in the last [`RECENT_DAYS`].
+    Recent,
+    /// Only the games hidden by the user.
+    Hidden,
+}
+
+impl View {
+    pub const ALL: [Self; 4] = [Self::All, Self::Favorites, Self::Recent, Self::Hidden];
+
+    /// Whether the view shows `game`, `now` being Unix seconds.
+    #[must_use]
+    pub fn shows(self, game: &Game, now: u64) -> bool {
+        match self {
+            Self::Hidden => game.hidden,
+            Self::All => !game.hidden,
+            Self::Favorites => !game.hidden && game.pinned,
+            Self::Recent => {
+                !game.hidden
+                    && game
+                        .played
+                        .last
+                        .is_some_and(|last| now.saturating_sub(last) <= RECENT_DAYS * 86_400)
+            }
+        }
+    }
+}
+
+/// Where the user is with a game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Status {
+    Backlog,
+    Playing,
+    Completed,
+    Abandoned,
+}
+
+impl Status {
+    pub const ALL: [Self; 4] = [
+        Self::Backlog,
+        Self::Playing,
+        Self::Completed,
+        Self::Abandoned,
+    ];
+
+    /// The word the `zendo status` command takes.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::Playing => "playing",
+            Self::Completed => "completed",
+            Self::Abandoned => "abandoned",
+        }
+    }
+
+    /// The status a command's word names, whatever its case.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        let word = word.trim().to_lowercase();
+        Self::ALL.into_iter().find(|status| status.name() == word)
+    }
+}
+
+/// What the library shows: a saved filter is one of these under a name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Filter {
+    #[serde(default)]
+    pub view: View,
+    #[serde(default)]
+    pub source: Option<crate::Source>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub status: Option<Status>,
+    #[serde(default)]
+    pub search: String,
+    #[serde(default)]
+    pub sort: Sort,
+}
+
+/// A saved filter, as the window shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedFilter {
+    pub name: String,
+    pub filter: Filter,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Record {
     #[serde(default)]
@@ -112,6 +211,12 @@ pub struct State {
     /// The user's own queue of games to play next, in order.
     #[serde(default)]
     up_next: Vec<String>,
+    /// Each game's play status; a game with none is not in the map.
+    #[serde(default)]
+    status: BTreeMap<String, Status>,
+    /// The user's saved filters, by the name they were given.
+    #[serde(default)]
+    filters: BTreeMap<String, Filter>,
     #[serde(default)]
     pub sort: Sort,
 }
@@ -321,13 +426,110 @@ impl State {
             return false;
         };
         self.categories.insert(to.to_owned(), games);
+        // A saved filter names its category: it follows the rename.
+        let lowered = from.to_lowercase();
+        for filter in self.filters.values_mut() {
+            if filter
+                .category
+                .as_ref()
+                .is_some_and(|name| name.to_lowercase() == lowered)
+            {
+                filter.category = Some(to.to_owned());
+            }
+        }
         true
     }
 
-    /// Drops a category and which games were in it.
+    /// Drops a category and which games were in it. A saved filter that
+    /// named it stays, without it.
     pub fn delete_category(&mut self, name: &str) -> bool {
-        self.category_key(name)
-            .and_then(|name| self.categories.remove(&name))
+        let Some(key) = self.category_key(name) else {
+            return false;
+        };
+        let lowered = key.to_lowercase();
+        for filter in self.filters.values_mut() {
+            if filter
+                .category
+                .as_ref()
+                .is_some_and(|name| name.to_lowercase() == lowered)
+            {
+                filter.category = None;
+            }
+        }
+        self.categories.remove(&key).is_some()
+    }
+
+    /// Sets a game's play status, or clears it with `None`.
+    pub fn set_status(&mut self, id: &str, status: Option<Status>) {
+        match status {
+            Some(status) => {
+                self.status.insert(id.to_owned(), status);
+            }
+            None => {
+                self.status.remove(id);
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn status_of(&self, id: &str) -> Option<Status> {
+        self.status.get(id).copied()
+    }
+
+    /// Every saved filter, by name.
+    #[must_use]
+    pub fn filters(&self) -> Vec<SavedFilter> {
+        let mut filters: Vec<SavedFilter> = self
+            .filters
+            .iter()
+            .map(|(name, filter)| SavedFilter {
+                name: name.clone(),
+                filter: filter.clone(),
+            })
+            .collect();
+        filters.sort_by_cached_key(|saved| (saved.name.to_lowercase(), saved.name.clone()));
+        filters
+    }
+
+    /// Saves a filter under a name; a name already taken, whatever its
+    /// case, is overwritten and keeps its spelling. False when the name is
+    /// blank.
+    pub fn save_filter(&mut self, name: &str, filter: Filter) -> bool {
+        let name = name.trim();
+        if name.is_empty() {
+            return false;
+        }
+        let key = key_in(&self.filters, name).unwrap_or_else(|| name.to_owned());
+        self.filters.insert(key, filter);
+        true
+    }
+
+    /// Gives a saved filter another name. False when it is unknown, the new
+    /// name is blank, or it names another filter; a change of case only is
+    /// allowed.
+    pub fn rename_filter(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        let Some(from) = key_in(&self.filters, from) else {
+            return false;
+        };
+        if to.is_empty() {
+            return false;
+        }
+        if let Some(taken) = key_in(&self.filters, to)
+            && taken != from
+        {
+            return false;
+        }
+        let Some(filter) = self.filters.remove(&from) else {
+            return false;
+        };
+        self.filters.insert(to.to_owned(), filter);
+        true
+    }
+
+    pub fn delete_filter(&mut self, name: &str) -> bool {
+        key_in(&self.filters, name)
+            .and_then(|key| self.filters.remove(&key))
             .is_some()
     }
 
@@ -354,12 +556,15 @@ impl State {
         // The same lowering as `categories()` and `categories_of()`, so
         // the name two categories are told apart by is the one they are
         // ordered by.
-        let name = name.trim().to_lowercase();
-        self.categories
-            .keys()
-            .find(|key| key.to_lowercase() == name)
-            .cloned()
+        key_in(&self.categories, name)
     }
+}
+
+/// A key of `map` as it is stored, found whatever the case or the spaces
+/// around the name.
+fn key_in<V>(map: &BTreeMap<String, V>, name: &str) -> Option<String> {
+    let name = name.trim().to_lowercase();
+    map.keys().find(|key| key.to_lowercase() == name).cloned()
 }
 
 #[cfg(test)]
@@ -584,6 +789,95 @@ mod tests {
         assert_eq!(state.categories_of("steam:730"), ["Co-op"]);
         assert!(state.set_category(" Co-op ", "steam:740", true));
         assert_eq!(state.categories_of("steam:740"), ["Co-op"]);
+    }
+
+    #[test]
+    fn keeps_a_status_and_clears_it() {
+        let mut state = State::default();
+        assert_eq!(state.status_of("steam:1"), None);
+        state.set_status("steam:1", Some(Status::Backlog));
+        state.set_status("steam:1", Some(Status::Playing));
+        assert_eq!(state.status_of("steam:1"), Some(Status::Playing));
+        let state: State = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state.status_of("steam:1"), Some(Status::Playing));
+        let mut state = state;
+        state.set_status("steam:1", None);
+        assert_eq!(state.status_of("steam:1"), None);
+        assert_eq!(Status::parse(" Completed "), Some(Status::Completed));
+        assert_eq!(Status::parse("none"), None);
+    }
+
+    #[test]
+    fn an_older_file_has_no_status_and_no_filters() {
+        let state: State = serde_json::from_str(r#"{"hidden":["a"]}"#).unwrap();
+        assert_eq!(state.status_of("a"), None);
+        assert_eq!(state.filters(), [] as [SavedFilter; 0]);
+    }
+
+    fn a_filter() -> Filter {
+        Filter {
+            view: View::Favorites,
+            source: Some(crate::Source::Gog),
+            category: Some("Co-op".into()),
+            status: Some(Status::Backlog),
+            search: "doom".into(),
+            sort: Sort::Title,
+        }
+    }
+
+    #[test]
+    fn keeps_saved_filters_through_a_round_trip() {
+        let mut state = State::default();
+        assert!(state.save_filter(" Evening ", a_filter()));
+        assert!(!state.save_filter("  ", a_filter()));
+        let state: State = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        let filters = state.filters();
+        assert_eq!(filters.len(), 1);
+        assert_eq!(filters[0].name, "Evening");
+        assert_eq!(filters[0].filter, a_filter());
+        // A filter written with only some fields reads with defaults.
+        let state: State = serde_json::from_str(r#"{"filters":{"x":{"search":"a"}}}"#).unwrap();
+        assert_eq!(state.filters()[0].filter.view, View::All);
+    }
+
+    #[test]
+    fn saving_over_a_name_in_another_case_replaces_it() {
+        let mut state = State::default();
+        assert!(state.save_filter("Evening", Filter::default()));
+        assert!(state.save_filter("evening", a_filter()));
+        let filters = state.filters();
+        assert_eq!(filters.len(), 1);
+        assert_eq!(filters[0].name, "Evening", "it keeps its spelling");
+        assert_eq!(filters[0].filter, a_filter());
+    }
+
+    #[test]
+    fn renames_and_deletes_a_saved_filter() {
+        let mut state = State::default();
+        assert!(state.save_filter("One", Filter::default()));
+        assert!(state.save_filter("Two", a_filter()));
+        assert!(!state.rename_filter("One", "two"), "a clash");
+        assert!(!state.rename_filter("One", " "));
+        assert!(!state.rename_filter("missing", "Three"));
+        assert!(state.rename_filter("One", "one"), "a change of case");
+        assert!(state.rename_filter("Two", "Three"));
+        assert_eq!(state.filters()[1].filter, a_filter());
+        assert!(state.delete_filter("THREE"));
+        assert!(!state.delete_filter("Three"));
+        assert_eq!(state.filters().len(), 1);
+    }
+
+    #[test]
+    fn a_category_rename_and_delete_reach_the_saved_filters() {
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(state.save_filter("Nights", a_filter()));
+        assert!(state.rename_category("Co-op", "Couch"));
+        assert_eq!(state.filters()[0].filter.category.as_deref(), Some("Couch"));
+        assert!(state.delete_category("couch"));
+        let saved = &state.filters()[0];
+        assert_eq!(saved.filter.category, None);
+        assert_eq!(saved.filter.search, "doom", "the rest is kept");
     }
 
     #[test]

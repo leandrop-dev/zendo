@@ -6,9 +6,10 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use iced::{Alignment, Color, ContentFit, Element, Length};
-use zendo_core::{Game, Sort, Source};
+use zendo_core::{Game, Sort, Source, Status};
 
 use super::categories::CategoriesMessage;
+use super::filters::FiltersMessage;
 use super::style::{self, BOLD, SPACE_L, SPACE_S, SPACE_XL, colors};
 use super::top_bar;
 use super::{Message, Zendo, centered, format, grid_id, now};
@@ -16,8 +17,9 @@ use crate::i18n::t;
 
 pub const COVER_WIDTH: f32 = 180.0;
 pub const COVER_HEIGHT: f32 = 270.0;
-/// Two lines of the title and one of the line under it.
-const CAPTION_HEIGHT: f32 = 60.0;
+/// Two lines of the title and up to three of the line under it (a long
+/// store name, a status and the play time can wrap to three in Portuguese).
+const CAPTION_HEIGHT: f32 = 84.0;
 const CARD_PADDING: f32 = 6.0;
 pub const CARD_WIDTH: f32 = COVER_WIDTH + 2.0 * CARD_PADDING;
 pub const CARD_HEIGHT: f32 = COVER_HEIGHT + CAPTION_HEIGHT + 4.0 + 2.0 * CARD_PADDING;
@@ -29,41 +31,7 @@ pub const GRID_PADDING: f32 = 24.0;
 /// Room kept for the scrollbar beside the grid.
 const SCROLLBAR: f32 = 12.0;
 
-/// How many days back a game counts as recently played.
-pub const RECENT_DAYS: u64 = 30;
-
-/// Which of the games the view chips show.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum View {
-    /// Every game not hidden.
-    #[default]
-    All,
-    Favorites,
-    /// Played in the last [`RECENT_DAYS`].
-    Recent,
-    /// Only the games hidden by the user.
-    Hidden,
-}
-
-impl View {
-    pub const ALL: [Self; 4] = [Self::All, Self::Favorites, Self::Recent, Self::Hidden];
-
-    /// Whether the view shows `game`, `now` being Unix seconds.
-    pub fn shows(self, game: &Game, now: u64) -> bool {
-        match self {
-            Self::Hidden => game.hidden,
-            Self::All => !game.hidden,
-            Self::Favorites => !game.hidden && game.pinned,
-            Self::Recent => {
-                !game.hidden
-                    && game
-                        .played
-                        .last
-                        .is_some_and(|last| now.saturating_sub(last) <= RECENT_DAYS * 86_400)
-            }
-        }
-    }
-}
+pub use zendo_core::View;
 
 /// How many cards fit across a window this wide.
 pub fn columns_for(window_width: f32) -> usize {
@@ -98,7 +66,12 @@ impl Zendo {
             Some(_) if visible.is_empty() && !self.search.is_empty() => centered(
                 text(t!("library-no-match", search = self.search.as_str())).color(colors().dim),
             ),
-            Some(_) if visible.is_empty() && (self.source.is_some() || self.category.is_some()) => {
+            Some(_)
+                if visible.is_empty()
+                    && (self.source.is_some()
+                        || self.category.is_some()
+                        || self.play_status.is_some()) =>
+            {
                 centered(text(t!("library-none-here")).color(colors().dim))
             }
             Some(_) if visible.is_empty() => centered(
@@ -139,12 +112,7 @@ impl Zendo {
             }
             let count = games.iter().filter(|game| view.shows(game, now)).count();
             chips.push(chip(
-                match view {
-                    View::All => t!("library-all"),
-                    View::Favorites => t!("library-favorites"),
-                    View::Recent => t!("library-recent"),
-                    View::Hidden => t!("library-hidden"),
-                },
+                format::view(view),
                 Some(count),
                 self.view == view,
                 Message::SetView(view),
@@ -198,7 +166,7 @@ impl Zendo {
         let mut sources: Vec<Element<'_, Message>> = vec![chip(
             t!("library-all"),
             Some(games.len()),
-            self.source.is_none() && self.category.is_none(),
+            self.source.is_none() && self.category.is_none() && self.play_status.is_none(),
             Message::ClearFilters,
         )];
         for source in Source::ALL {
@@ -245,6 +213,22 @@ impl Zendo {
                 .padding([6, 0])
                 .into(),
         ];
+        for status in Status::ALL {
+            let count = games
+                .iter()
+                .filter(|game| game.status == Some(status))
+                .count();
+            // A status nobody has is offered only while it is chosen.
+            if count == 0 && self.play_status != Some(status) {
+                continue;
+            }
+            chips.push(chip(
+                format::play_status(status),
+                Some(count),
+                self.play_status == Some(status),
+                Message::SetStatus(Some(status)),
+            ));
+        }
         for category in &self.categories {
             let count = games
                 .iter()
@@ -257,11 +241,26 @@ impl Zendo {
                 Message::SetCategory(Some(category.name.clone())),
             ));
         }
+        let current = self.current_filter();
+        for saved in &self.filters {
+            chips.push(chip(
+                saved.name.clone(),
+                None,
+                saved.filter == current,
+                Message::ApplyFilter(saved.name.clone()),
+            ));
+        }
         chips.push(chip(
             t!("categories-open"),
             (!self.categories.is_empty()).then_some(self.categories.len()),
             false,
             Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
+        ));
+        chips.push(chip(
+            t!("filters-open"),
+            (!self.filters.is_empty()).then_some(self.filters.len()),
+            false,
+            Message::Filters(FiltersMessage::Open),
         ));
         self.selection_chips(&mut chips);
         row(chips)
@@ -294,6 +293,46 @@ impl Zendo {
             false,
             Message::Categories(CategoriesMessage::Open(self.selected_games.clone())),
         ));
+        // A bulk chip is offered only when it would change a marked game.
+        let marked: Vec<&Game> = self
+            .library
+            .iter()
+            .flat_map(|library| &library.games)
+            .filter(|game| self.selected_games.contains(&game.id))
+            .collect();
+        let any = |test: fn(&Game) -> bool| marked.iter().any(|game| test(game));
+        if any(|game| !game.pinned) {
+            chips.push(chip(
+                t!("library-bulk-pin"),
+                None,
+                false,
+                Message::BulkPinned(true),
+            ));
+        }
+        if any(|game| game.pinned) {
+            chips.push(chip(
+                t!("library-bulk-unpin"),
+                None,
+                false,
+                Message::BulkPinned(false),
+            ));
+        }
+        if any(|game| !game.hidden) {
+            chips.push(chip(
+                t!("library-bulk-hide"),
+                None,
+                false,
+                Message::BulkHidden(true),
+            ));
+        }
+        if any(|game| game.hidden) {
+            chips.push(chip(
+                t!("library-bulk-unhide"),
+                None,
+                false,
+                Message::BulkHidden(false),
+            ));
+        }
         chips.push(chip(
             t!("library-clear-selection"),
             None,
@@ -308,6 +347,15 @@ impl Zendo {
         let cards = visible.iter().enumerate().map(|(index, game)| {
             let (line, line_color) = if game.hidden {
                 (t!("library-hidden"), colors().accent)
+            } else if let Some(status) = game.status {
+                (
+                    format!(
+                        "{} · {}",
+                        format::play_status(status).to_uppercase(),
+                        played_line(game, now)
+                    ),
+                    colors().dim,
+                )
             } else {
                 (played_line(game, now), colors().dim)
             };

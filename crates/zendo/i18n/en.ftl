@@ -1118,3 +1118,50 @@ achievements-more = { $count ->
     [one] Show 1 more
    *[other] Show more ({ $count } left)
 }
+
+## Play status and saved filters
+
+play-backlog = Backlog
+play-playing = Playing
+play-completed = Completed
+play-abandoned = Abandoned
+game-status = Status
+status-is = { $title } is now { $status }
+status-cleared = { $title } has no status
+library-bulk-pin = Favorite
+library-bulk-unpin = Unfavorite
+library-bulk-hide = Hide
+library-bulk-unhide = Unhide
+status-bulk-pinned = { $count ->
+    [one] { $count } game is now a favorite
+   *[other] { $count } games are now favorites
+}
+status-bulk-unpinned = { $count ->
+    [one] { $count } game is no longer a favorite
+   *[other] { $count } games are no longer favorites
+}
+status-bulk-hid = { $count ->
+    [one] Hid { $count } game · Ctrl+H shows the hidden ones
+   *[other] Hid { $count } games · Ctrl+H shows the hidden ones
+}
+status-bulk-unhid = { $count ->
+    [one] { $count } game is back in the library
+   *[other] { $count } games are back in the library
+}
+filters-open = Filters
+filters-title = Saved filters
+filters-count = { $count ->
+    [one] { $count } saved filter
+   *[other] { $count } saved filters
+}
+filters-empty = No saved filters yet · set the library the way you want it, then name it below
+filters-now = On screen now: { $summary }
+filters-new-placeholder = Name for what is on screen
+filters-save = Save
+filters-apply = Apply
+filters-saved = Saved { $name }
+filters-updated = Updated { $name }
+filters-renamed = Renamed to { $name }
+filters-deleted = Deleted { $name }
+filters-blank = A filter needs a name
+filters-taken = { $name } is already a saved filter

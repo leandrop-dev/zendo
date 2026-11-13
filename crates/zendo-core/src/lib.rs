@@ -66,13 +66,13 @@ mod windows;
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub use launch::launch;
-pub use state::{Category, Sort, State};
+pub use state::{Category, Filter, RECENT_DAYS, SavedFilter, Sort, State, Status, View};
 
 /// Where a game was found.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
     Steam,
@@ -247,6 +247,8 @@ pub struct Game {
     pub categories: Vec<String>,
     /// Achievements unlocked and in all, once its store has been asked.
     pub achievements: Option<(u32, u32)>,
+    /// Where the user is with it, when they said.
+    pub status: Option<Status>,
 }
 
 impl Game {
@@ -268,6 +270,7 @@ impl Game {
             pinned: false,
             categories: Vec::new(),
             achievements: None,
+            status: None,
         }
     }
 
@@ -423,6 +426,7 @@ impl Library {
             game.pinned = state.is_pinned(&game.id);
             game.categories = state.categories_of(&game.id);
             game.achievements = state.achievements_of(&game.id);
+            game.status = state.status_of(&game.id);
         }
     }
 

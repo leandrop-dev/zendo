@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 35 to 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 36 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -66,7 +66,10 @@ and Nexus) is built with its tests green and checked on screen in part
 (docs/history.md lists what was not). Item 34 (a lean Game Mode replacing F11, with an up-next queue) is built and
 checked on screen except the controller (docs/history.md); a Home page was
 built with it and removed at the user's wish, so the tabs stay Library, Store
-and Downloads. Next is item 35.
+and Downloads. Item 35 (play status, saved filters and bulk favorite/hide in
+the Library's Organize row, `zendo status`; tags are the categories, no random
+pick) is built with its tests green and checked on screen, not yet tried by
+the user (docs/history.md). Next is item 36.
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -174,7 +177,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Items 35 to 40: docs/backlog.md. Each item is planned in detail
+Items 36 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side

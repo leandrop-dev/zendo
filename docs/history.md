@@ -3118,3 +3118,67 @@ and its 960 px minimum are as before item 34.
 Not checked: a real controller (no device here; the mapping is unit tested
 only), PLAY from Game Mode (it would start a real game), the hero's description
 for a store game, and the game page's "+ Up next" button.
+
+## Item 35: Organize, 2026-11-12
+
+Planned with the user the same day: tags are the categories, saved filters
+hold everything on screen, no random pick, bulk edits are Favorite and Hide.
+
+- **Core** (`state.rs`, `lib.rs`): `Status`, `View` (moved from the window,
+  with `RECENT_DAYS`) and `Filter` with serde; `State` gets `status` and
+  `filters` (both `#[serde(default)]`, so an older `state.json` reads);
+  `set_status`, `status_of`, `filters`, `save_filter` (an existing name in
+  any case is overwritten and keeps its spelling), `rename_filter`,
+  `delete_filter`. `category_key` and the filters share `key_in`. A category
+  rename moves the name inside the saved filters and a delete clears it.
+  `Source` derives `Deserialize`; `Game.status` is set by `Library::apply`.
+- **Command**: `zendo status <id> <backlog|playing|completed|abandoned|none>`.
+- **Window**: `Zendo.play_status` (not `status`, the status line) and
+  `filters`; `Message::SetStatus`, `SetGameStatus`, `ApplyFilter`, `Filters`,
+  `BulkPinned`, `BulkHidden`; the scan result gained the saved filters
+  (`Scanned` is a six-tuple). New `app/filters.rs`, the Saved filters sheet
+  modelled on the Categories sheet (name field, Save, Apply, Rename, a delete
+  that asks once). Library: status chips, filter chips, FILTERS, the four bulk
+  chips and the status on a card's line; game page: the STATUS row.
+  `format::view` and `format::play_status`. Strings in en and pt-PT.
+- A saved filter's store with no games, or its deleted category, is applied
+  as none.
+
+Checked: `cargo fmt --check`, clippy with no warning, tests green (156 in the
+window, 256 in the core). New tests: status and filter round trips and an
+older file, saving over a name in another case, rename with a clash, delete,
+a category rename and delete reaching the filters (core); the status filter
+with the store and the search, SetStatus pressed twice, ClearFilters, a game's
+status set and cleared, ApplyFilter restoring all six fields and reading as
+chosen, a filter naming a deleted category, the sheet's save, update, rename
+and two-press delete, and bulk favorite and hide over a mixed selection
+(window). `zendo status` by hand in a throwaway home: set, change, `none`, a
+bad word and an unknown id (the last two refuse, `state.json` read with `jq`).
+
+On screen on KDE (2026-11-12, with the user present, throwaway home with eight
+`.desktop` games, no session bus, `ydotoold` on `/run/user/1000/ydt.sock`, a
+click helper that fires only when Zendo is the active window and the one under
+the pointer). Clicked once each: a status chip (BACKLOG: two games), a saved
+filter chip (put category and status back, its chip lit), FILTERS (the sheet
+opened), Save with a typed name, Rename (field, OK), Delete (first press asked,
+second removed), Cancel, the ALL chip, a card's mark box, the bulk chips
+FAVORITE, UNFAVORITE, HIDE and UNHIDE (each only when it would change a marked
+game; the status line counted; hiding cleared the marks, favoriting kept them),
+a card, and on the game page a status chip twice (set, then cleared, as
+`state.json` showed). In pt-PT at 960 px wide the Organize row wrapped to two
+lines with nothing outside the window.
+- The grid moves down when the Organize row wraps onto a second line (bulk
+  chips appearing), so a click aimed from an earlier still can miss.
+- A card's line with a status can be three lines in pt-PT (`AMBIENTE DE
+  TRABALHO · ABANDONADO · Ainda não jogado`) and the caption's fixed height
+  clipped the last word. Fixed the same day: `CAPTION_HEIGHT` 60 to 84 (a
+  two-line title and a three-line detail line; cards are 24 px taller, and the
+  row maths and tests read the constant). Looked at in pt-PT at 960 px: Bomber's
+  three lines show whole. Tests, clippy and fmt unchanged.
+- The first Zendo process had gone when I went to stop it, after the last
+  click (the window was alive in the last still); its log was empty and there
+  was no coredump, so the cause is not known.
+
+Not checked: the Saved filters sheet in pt-PT, a rename or delete of a
+category reaching a saved filter on screen (covered by tests only), and the
+`zendo status` verb against the running window.
