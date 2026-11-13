@@ -239,8 +239,11 @@ impl State {
             return Ok(Self::default());
         };
         match fs::read_to_string(&path) {
-            Ok(text) => match serde_json::from_str(&text) {
-                Ok(state) => Ok(state),
+            Ok(text) => match serde_json::from_str::<Self>(&text) {
+                Ok(mut state) => {
+                    state.separate_names();
+                    Ok(state)
+                }
                 Err(err) => {
                     // A corrupt file must not lock the window out of every
                     // change: it is kept as `.bad` and the next start is
@@ -372,11 +375,42 @@ impl State {
         names
     }
 
+    /// Categories and saved filters are both collections to the user, so
+    /// they share one set of names. A saved filter named like a category (a
+    /// file from before they were one list) becomes "Name (filter)", or
+    /// "Name (filter 2)" and on, when that is taken too.
+    fn separate_names(&mut self) {
+        let clashing: Vec<String> = self
+            .filters
+            .keys()
+            .filter(|name| key_in(&self.categories, name).is_some())
+            .cloned()
+            .collect();
+        for name in clashing {
+            let Some(filter) = self.filters.remove(&name) else {
+                continue;
+            };
+            let mut candidate = format!("{name} (filter)");
+            let mut n = 2;
+            while key_in(&self.categories, &candidate).is_some()
+                || key_in(&self.filters, &candidate).is_some()
+            {
+                candidate = format!("{name} (filter {n})");
+                n += 1;
+            }
+            self.filters.insert(candidate, filter);
+        }
+    }
+
     /// Makes a category, empty. False when the name is blank or already
-    /// taken, whatever its case. The name is kept as the user typed it.
+    /// taken, by a category or a saved filter, whatever its case. The name
+    /// is kept as the user typed it.
     pub fn add_category(&mut self, name: &str) -> bool {
         let name = name.trim();
-        if name.is_empty() || self.category_key(name).is_some() {
+        if name.is_empty()
+            || self.category_key(name).is_some()
+            || key_in(&self.filters, name).is_some()
+        {
             return false;
         }
         self.categories.insert(name.to_owned(), BTreeSet::new());
@@ -397,6 +431,9 @@ impl State {
         if let Some(taken) = self.category_key(to)
             && taken != from
         {
+            return false;
+        }
+        if key_in(&self.filters, to).is_some() {
             return false;
         }
         let Some(games) = self.categories.remove(&from) else {
@@ -492,12 +529,12 @@ impl State {
         filters
     }
 
-    /// Saves a filter under a name; a name already taken, whatever its
-    /// case, is overwritten and keeps its spelling. False when the name is
-    /// blank.
+    /// Saves a filter under a name; a name already taken by a filter,
+    /// whatever its case, is overwritten and keeps its spelling. False when
+    /// the name is blank or a category has it.
     pub fn save_filter(&mut self, name: &str, filter: Filter) -> bool {
         let name = name.trim();
-        if name.is_empty() {
+        if name.is_empty() || self.category_key(name).is_some() {
             return false;
         }
         let key = key_in(&self.filters, name).unwrap_or_else(|| name.to_owned());
@@ -519,6 +556,9 @@ impl State {
         if let Some(taken) = key_in(&self.filters, to)
             && taken != from
         {
+            return false;
+        }
+        if self.category_key(to).is_some() {
             return false;
         }
         let Some(filter) = self.filters.remove(&from) else {
@@ -874,6 +914,43 @@ mod tests {
         let saved = &state.filters()[0];
         assert_eq!(saved.filter.category, None);
         assert_eq!(saved.filter.search, "doom", "the rest is kept");
+    }
+
+    #[test]
+    fn a_category_and_a_saved_filter_cannot_share_a_name() {
+        let mut state = State::default();
+        assert!(state.add_category("Co-op"));
+        assert!(!state.save_filter("co-op", a_filter()), "a category has it");
+        assert!(state.save_filter("Nights", a_filter()));
+        assert!(!state.add_category("NIGHTS"), "a filter has it");
+        assert!(state.add_category("Backlog"));
+        assert!(!state.rename_category("Backlog", "nights"));
+        assert!(state.save_filter("Evening", a_filter()));
+        assert!(!state.rename_filter("Evening", "backlog"));
+        assert!(state.rename_filter("Evening", "Late"));
+        assert_eq!(state.categories().len(), 2);
+        assert_eq!(state.filters().len(), 2);
+    }
+
+    #[test]
+    fn an_older_file_with_a_shared_name_keeps_both() {
+        let mut state: State = serde_json::from_str(
+            r#"{"categories":{"Co-op":["a"],"Co-op (filter)":[]},
+                "filters":{"co-op":{"search":"x"},"Co-op (filter)":{"search":"y"},"Plain":{}}}"#,
+        )
+        .unwrap();
+        state.separate_names();
+        let names: Vec<String> = state.filters().into_iter().map(|saved| saved.name).collect();
+        assert_eq!(
+            names,
+            ["co-op (filter 2)", "Co-op (filter) (filter)", "Plain"],
+            "both clashing filters were renamed, none lost"
+        );
+        assert_eq!(state.categories().len(), 2);
+        assert!(!state.filters().iter().any(|saved| state
+            .categories()
+            .iter()
+            .any(|category| category.name.to_lowercase() == saved.name.to_lowercase())));
     }
 
     #[test]

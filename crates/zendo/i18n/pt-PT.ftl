@@ -64,7 +64,7 @@ library-add-game = Adicionar jogo
 library-all = Todos
 library-selected = { $count } marcados
 library-clear-selection = Limpar
-categories-assign = Juntar a uma categoria…
+collections-assign = Juntar a uma coleção…
 library-hidden = Oculto
 badge-running = A CORRER
 badge-favorite = FAVORITO
@@ -72,34 +72,34 @@ played-never = Ainda não jogado
 played-when = Jogado { $when }
 played-time = { $time } jogados
 
-categories-none = Nenhuma
+collections-none = Nenhuma
 
-## Categorias
+## Coleções
 
-categories-title = Categorias
-categories-open = Categorias
-categories-count = { $count ->
-    [one] { $count } categoria
-   *[other] { $count } categorias
+collections-title = Coleções
+collections-open = Coleções
+collections-count = { $count ->
+    [one] { $count } coleção
+   *[other] { $count } coleções
 }
-categories-empty = Ainda não há categorias · dê um nome a uma abaixo
-categories-new = Criar
-categories-new-placeholder = Nova categoria
-categories-rename = Mudar nome
-categories-delete = Apagar
-categories-really-delete = Apagar mesmo
-categories-ok = OK
-categories-cancel = Cancelar
-categories-created = { $name } criada
-categories-renamed = { $name } é o novo nome
-categories-deleted = { $name } apagada
-categories-blank = Uma categoria precisa de um nome
-categories-taken = { $name } já é uma categoria
-categories-assigned = { $count ->
+collections-empty = Ainda não há coleções · dê um nome a uma abaixo, ou guarde o que está no ecrã
+collections-new = Criar
+collections-new-placeholder = Nome para uma coleção
+collections-rename = Mudar nome
+collections-delete = Apagar
+collections-really-delete = Apagar mesmo
+collections-ok = OK
+collections-cancel = Cancelar
+collections-created = { $name } criada
+collections-renamed = { $name } é o novo nome
+collections-deleted = { $name } apagada
+collections-blank = Uma coleção precisa de um nome
+collections-taken = { $name } já é uma coleção
+collections-assigned = { $count ->
     [one] Adicionada a { $count } jogo
    *[other] Adicionada a { $count } jogos
 }
-categories-unassigned = { $count ->
+collections-unassigned = { $count ->
     [one] Retirada de { $count } jogo
    *[other] Retirada de { $count } jogos
 }
@@ -482,7 +482,7 @@ game-unfavorite = Tirar dos favoritos
 game-manage-steam = Gerir no Steam
 game-change-cover = Mudar capa
 game-change-backdrop = Mudar fundo
-game-edit-categories = Editar categorias
+game-edit-categories = Editar coleções
 stat-completion = Conclusão
 game-hide = Ocultar
 game-unhide = Mostrar
@@ -1151,23 +1151,11 @@ status-bulk-unhid = { $count ->
     [one] { $count } jogo voltou à biblioteca
    *[other] { $count } jogos voltaram à biblioteca
 }
-filters-open = Filtros
-filters-title = Filtros guardados
-filters-count = { $count ->
-    [one] { $count } filtro guardado
-   *[other] { $count } filtros guardados
-}
-filters-empty = Ainda não há filtros guardados · deixe a biblioteca como quer e dê-lhe um nome abaixo
-filters-now = No ecrã agora: { $summary }
-filters-new-placeholder = Nome para o que está no ecrã
-filters-save = Guardar
-filters-apply = Aplicar
-filters-saved = { $name } guardado
-filters-updated = { $name } atualizado
-filters-renamed = Mudou para { $name }
-filters-deleted = { $name } apagado
-filters-blank = Um filtro precisa de um nome
-filters-taken = { $name } já é um filtro guardado
+collections-now = Guardar vista guarda o que está no ecrã: { $summary }
+collections-save-view = Guardar vista
+collections-apply = Abrir
+collections-saved = Vista { $name } guardada
+collections-updated = Vista { $name } atualizada
 
 ## Estatísticas
 

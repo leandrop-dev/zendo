@@ -9,13 +9,12 @@ mod accounts;
 mod achievements;
 mod anti_cheat;
 mod artwork;
-mod categories;
+mod collections;
 mod cloud_saves;
 mod dlc;
 mod downloads;
 mod engines;
 mod eos_overlay;
-mod filters;
 mod format;
 mod game;
 mod game_mode;
@@ -70,11 +69,10 @@ use crate::presence::PresenceHandle;
 use crate::tray::{self, Tray, TrayMessage};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
-use categories::CategoriesMessage;
+use collections::CollectionsMessage;
 use downloads::{DownloadMessage, DownloadsState};
 use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
-use filters::{Filters, FiltersMessage};
 use game::{GameView, GameViewMessage};
 use hero::HeroMessage;
 use game_mode::{GameMode, GameModeMessage};
@@ -271,7 +269,6 @@ enum Message {
     SetGameStatus(String, Option<Status>),
     /// A saved filter's chip: everything it holds is put on the window.
     ApplyFilter(String),
-    Filters(FiltersMessage),
     Stats(StatsMessage),
     /// Every marked game becomes a favorite, or stops being one.
     BulkPinned(bool),
@@ -342,7 +339,7 @@ enum Message {
     Run(RunMessage),
     Sheet(SheetMessage),
     Local(LocalMessage),
-    Categories(CategoriesMessage),
+    Collections(CollectionsMessage),
     Art(ArtMessage),
     Mods(ModsMessage),
     Nexus(NexusMessage),
@@ -462,12 +459,11 @@ struct Zendo {
     sheet: Option<Sheet>,
     /// Games added by hand: the Add game sheet and Remove.
     local: LocalState,
-    /// The Categories sheet, open over a page.
-    categories_sheet: Option<categories::Categories>,
+    /// The Collections sheet, open over a page.
+    collections_sheet: Option<collections::Collections>,
     /// The user's categories as last read or written, with their games.
     categories: Vec<Category>,
     /// The Saved filters sheet, open over a page.
-    filters_sheet: Option<Filters>,
     /// The user's saved filters as last read or written.
     filters: Vec<SavedFilter>,
     /// Every play session kept, oldest first; the window is the only writer,
@@ -564,9 +560,8 @@ impl Zendo {
             running: Running::default(),
             sheet: None,
             local: LocalState::default(),
-            categories_sheet: None,
+            collections_sheet: None,
             categories: Vec::new(),
-            filters_sheet: None,
             filters: Vec::new(),
             sessions: Vec::new(),
             stats: StatsState::default(),
@@ -724,8 +719,7 @@ impl Zendo {
             .or_else(|| self.chooser_takes(message))
             .or_else(|| self.search_takes(message))
             .or_else(|| self.picker_takes(message))
-            .or_else(|| self.filters_takes(message))
-            .or_else(|| self.categories_takes(message))
+            .or_else(|| self.collections_takes(message))
             .or_else(|| self.form_takes(message))
             .or_else(|| self.sheet_takes(message))
             .or_else(|| self.game_mode_takes(message))
@@ -829,7 +823,6 @@ impl Zendo {
             }),
             Message::SetGameStatus(id, status) => self.set_game_status(&id, status),
             Message::ApplyFilter(name) => self.apply_filter(&name),
-            Message::Filters(message) => self.update_filters(message),
             Message::BulkPinned(pinned) => self.bulk_pinned(pinned),
             Message::BulkHidden(hidden) => self.bulk_hidden(hidden),
             Message::ToggleSelected | Message::ToggleSelectedAt(_) | Message::ClearSelection => {
@@ -884,7 +877,7 @@ impl Zendo {
             Message::Run(message) => self.update_running(message),
             Message::Sheet(message) => self.update_sheet(message),
             Message::Local(message) => self.update_local(message),
-            Message::Categories(message) => self.update_categories(message),
+            Message::Collections(message) => self.update_collections(message),
             Message::Art(message) => self.update_art(message),
             Message::NexusSearch(message) => self.update_search(message),
             Message::Mods(message) => self.update_mods(message),
@@ -1743,7 +1736,7 @@ impl Zendo {
                 .width(Length::Fill)
                 .into(),
         );
-        let page = self.with_filters(self.with_categories(self.with_form(page)));
+        let page = self.with_collections(self.with_form(page));
         self.with_installer(self.with_chooser(self.with_search(self.with_picker(page))))
     }
 
@@ -2259,9 +2252,9 @@ mod tests {
         let _ = zendo.update(Message::ToggleSelectedAt("desktop:0".into()));
         let _ = zendo.update(Message::ToggleSelectedAt("desktop:1".into()));
         let marked = zendo.selected_games.clone();
-        press(&mut zendo, CategoriesMessage::Open(marked));
-        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Open(marked));
+        press(&mut zendo, CollectionsMessage::Typed("Book".into()));
+        press(&mut zendo, CollectionsMessage::Create);
         for id in ["desktop:0", "desktop:1"] {
             assert_eq!(zendo.game(id).unwrap().categories, ["Book"], "{id}");
         }
@@ -2272,7 +2265,7 @@ mod tests {
         let zendo = zendo_with(2, 3);
         let game = zendo.game("desktop:1").unwrap();
         match game::change_categories(game) {
-            Message::Categories(CategoriesMessage::Open(targets)) => {
+            Message::Collections(CollectionsMessage::Open(targets)) => {
                 assert_eq!(targets.iter().collect::<Vec<_>>(), ["desktop:1"]);
             }
             other => panic!("not the categories sheet: {other:?}"),
@@ -2284,11 +2277,11 @@ mod tests {
         let mut zendo = zendo_with(2, 3);
         press(
             &mut zendo,
-            CategoriesMessage::Open(BTreeSet::from(["desktop:1".to_owned()])),
+            CollectionsMessage::Open(BTreeSet::from(["desktop:1".to_owned()])),
         );
         assert_eq!(
             zendo
-                .categories_sheet
+                .collections_sheet
                 .as_ref()
                 .unwrap()
                 .targets
@@ -2296,8 +2289,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["desktop:1"]
         );
-        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Typed("Book".into()));
+        press(&mut zendo, CollectionsMessage::Create);
         assert_eq!(zendo.game("desktop:1").unwrap().categories, ["Book"]);
         assert_eq!(
             zendo.game("desktop:0").unwrap().categories,
@@ -2306,8 +2299,8 @@ mod tests {
         );
     }
 
-    fn press(zendo: &mut Zendo, message: CategoriesMessage) {
-        let _ = zendo.update(Message::Categories(message));
+    fn press(zendo: &mut Zendo, message: CollectionsMessage) {
+        let _ = zendo.update(Message::Collections(message));
     }
 
     fn category_names(zendo: &Zendo) -> Vec<&str> {
@@ -2320,7 +2313,7 @@ mod tests {
 
     fn note(zendo: &Zendo) -> Option<(String, bool)> {
         zendo
-            .categories_sheet
+            .collections_sheet
             .as_ref()
             .and_then(|sheet| sheet.note.clone())
     }
@@ -2328,38 +2321,38 @@ mod tests {
     #[test]
     fn the_sheet_creates_renames_and_deletes_a_category() {
         let mut zendo = zendo_with(1, 3);
-        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CollectionsMessage::Create);
         assert_eq!(category_names(&zendo), [] as [&str; 0], "nothing typed");
         assert_eq!(
             note(&zendo),
-            Some(("A category needs a name".to_owned(), false))
+            Some(("A collection needs a name".to_owned(), false))
         );
-        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Typed("Co-op".into()));
+        press(&mut zendo, CollectionsMessage::Create);
         assert_eq!(category_names(&zendo), ["Co-op"]);
         assert_eq!(note(&zendo), Some(("Made Co-op".to_owned(), true)));
 
-        press(&mut zendo, CategoriesMessage::Rename("Co-op".into()));
+        press(&mut zendo, CollectionsMessage::Rename("Co-op".into()));
         press(
             &mut zendo,
-            CategoriesMessage::RenameTyped("Co-op nights".into()),
+            CollectionsMessage::RenameTyped("Co-op nights".into()),
         );
-        press(&mut zendo, CategoriesMessage::RenameDone);
+        press(&mut zendo, CollectionsMessage::RenameDone);
         assert_eq!(category_names(&zendo), ["Co-op nights"]);
         assert_eq!(
             note(&zendo),
             Some(("Renamed to Co-op nights".to_owned(), true))
         );
 
-        press(&mut zendo, CategoriesMessage::Delete("Co-op nights".into()));
+        press(&mut zendo, CollectionsMessage::Delete("Co-op nights".into()));
         assert_eq!(
             category_names(&zendo),
             ["Co-op nights"],
             "a delete asks first"
         );
         assert_eq!(note(&zendo), None);
-        press(&mut zendo, CategoriesMessage::Delete("Co-op nights".into()));
+        press(&mut zendo, CollectionsMessage::Delete("Co-op nights".into()));
         assert_eq!(category_names(&zendo), [] as [&str; 0]);
         assert_eq!(
             note(&zendo),
@@ -2370,57 +2363,57 @@ mod tests {
     #[test]
     fn a_delete_asks_first_and_another_press_takes_it_back() {
         let mut zendo = zendo_with(1, 3);
-        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
-        press(&mut zendo, CategoriesMessage::Typed("Book".into()));
-        press(&mut zendo, CategoriesMessage::Create);
-        press(&mut zendo, CategoriesMessage::Delete("Book".into()));
+        press(&mut zendo, CollectionsMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CollectionsMessage::Typed("Book".into()));
+        press(&mut zendo, CollectionsMessage::Create);
+        press(&mut zendo, CollectionsMessage::Delete("Book".into()));
         assert_eq!(category_names(&zendo), ["Book"], "it only asked");
-        press(&mut zendo, CategoriesMessage::Typed("Other".into()));
+        press(&mut zendo, CollectionsMessage::Typed("Other".into()));
         assert_eq!(
-            zendo.categories_sheet.as_ref().unwrap().confirm_delete,
+            zendo.collections_sheet.as_ref().unwrap().confirm_delete,
             None,
             "typing elsewhere takes the ask back"
         );
-        press(&mut zendo, CategoriesMessage::Delete("Book".into()));
+        press(&mut zendo, CollectionsMessage::Delete("Book".into()));
         assert_eq!(category_names(&zendo), ["Book"], "it asks again");
     }
 
     #[test]
     fn the_sheet_refuses_a_name_taken_in_another_case() {
         let mut zendo = zendo_with(1, 3);
-        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CollectionsMessage::Create);
         assert_eq!(category_names(&zendo), [] as [&str; 0], "nothing typed");
         assert_eq!(
             note(&zendo),
-            Some(("A category needs a name".to_owned(), false))
+            Some(("A collection needs a name".to_owned(), false))
         );
-        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
-        press(&mut zendo, CategoriesMessage::Create);
-        press(&mut zendo, CategoriesMessage::Typed("co-op".into()));
-        press(&mut zendo, CategoriesMessage::Create);
+        press(&mut zendo, CollectionsMessage::Typed("Co-op".into()));
+        press(&mut zendo, CollectionsMessage::Create);
+        press(&mut zendo, CollectionsMessage::Typed("co-op".into()));
+        press(&mut zendo, CollectionsMessage::Create);
         assert_eq!(category_names(&zendo), ["Co-op"], "one category, not two");
         assert_eq!(
             note(&zendo),
-            Some(("co-op is already a category".to_owned(), false))
+            Some(("co-op is already a collection".to_owned(), false))
         );
     }
 
     #[test]
     fn the_sheet_assigns_every_target() {
         let mut zendo = zendo_with(2, 3);
-        press(&mut zendo, CategoriesMessage::Open(BTreeSet::new()));
-        press(&mut zendo, CategoriesMessage::Typed("Co-op".into()));
-        press(&mut zendo, CategoriesMessage::Create);
-        press(&mut zendo, CategoriesMessage::Close);
+        press(&mut zendo, CollectionsMessage::Open(BTreeSet::new()));
+        press(&mut zendo, CollectionsMessage::Typed("Co-op".into()));
+        press(&mut zendo, CollectionsMessage::Create);
+        press(&mut zendo, CollectionsMessage::Close);
         let both = ["desktop:0".to_owned(), "desktop:1".to_owned()]
             .into_iter()
             .collect();
-        press(&mut zendo, CategoriesMessage::Open(both));
+        press(&mut zendo, CollectionsMessage::Open(both));
 
         press(
             &mut zendo,
-            CategoriesMessage::SetMembership {
+            CollectionsMessage::SetMembership {
                 name: "Co-op".into(),
                 member: true,
             },
@@ -2432,7 +2425,7 @@ mod tests {
 
         press(
             &mut zendo,
-            CategoriesMessage::SetMembership {
+            CollectionsMessage::SetMembership {
                 name: "Co-op".into(),
                 member: false,
             },
@@ -2919,33 +2912,33 @@ mod tests {
     }
 
     #[test]
-    fn the_filters_sheet_saves_updates_renames_and_deletes() {
+    fn the_collections_sheet_saves_updates_renames_and_deletes_a_view() {
         let mut zendo = zendo_with(2, 2);
         let _ = zendo.update(Message::SetSort(Sort::MostPlayed));
-        let _ = zendo.update(Message::Filters(FiltersMessage::Open));
-        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Open(BTreeSet::new())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 0, "a blank name saves nothing");
-        let _ = zendo.update(Message::Filters(FiltersMessage::Typed("Evening".into())));
-        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed("Evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 1);
         assert_eq!(zendo.filters[0].filter.sort, Sort::MostPlayed);
 
         let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
-        let _ = zendo.update(Message::Filters(FiltersMessage::Typed("evening".into())));
-        let _ = zendo.update(Message::Filters(FiltersMessage::Save));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed("evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 1, "the same name is updated");
         assert_eq!(zendo.filters[0].filter.source, Some(Source::Steam));
 
-        let _ = zendo.update(Message::Filters(FiltersMessage::Rename("Evening".into())));
-        let _ = zendo.update(Message::Filters(FiltersMessage::RenameTyped(
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Rename("Evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::RenameTyped(
             "Night".into(),
         )));
-        let _ = zendo.update(Message::Filters(FiltersMessage::RenameDone));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::RenameDone));
         assert_eq!(zendo.filters[0].name, "Night");
 
-        let _ = zendo.update(Message::Filters(FiltersMessage::Delete("Night".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete("Night".into())));
         assert_eq!(zendo.filters.len(), 1, "the first press only asks");
-        let _ = zendo.update(Message::Filters(FiltersMessage::Delete("Night".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete("Night".into())));
         assert_eq!(zendo.filters.len(), 0);
     }
 

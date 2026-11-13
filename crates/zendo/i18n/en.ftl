@@ -65,7 +65,7 @@ library-add-game = Add game
 library-all = All
 library-selected = { $count } marked
 library-clear-selection = Clear
-categories-assign = Add to category…
+collections-assign = Add to collection…
 library-hidden = Hidden
 badge-running = RUNNING
 badge-favorite = FAVORITE
@@ -73,34 +73,34 @@ played-never = Not played yet
 played-when = Played { $when }
 played-time = { $time } played
 
-categories-none = None
+collections-none = None
 
-## Categories
+## Collections
 
-categories-title = Categories
-categories-open = Categories
-categories-count = { $count ->
-    [one] { $count } category
-   *[other] { $count } categories
+collections-title = Collections
+collections-open = Collections
+collections-count = { $count ->
+    [one] { $count } collection
+   *[other] { $count } collections
 }
-categories-empty = No categories yet · name one below
-categories-new = Create
-categories-new-placeholder = New category
-categories-rename = Rename
-categories-delete = Delete
-categories-really-delete = Really delete
-categories-ok = OK
-categories-cancel = Cancel
-categories-created = Made { $name }
-categories-renamed = Renamed to { $name }
-categories-deleted = Deleted { $name }
-categories-blank = A category needs a name
-categories-taken = { $name } is already a category
-categories-assigned = { $count ->
+collections-empty = No collections yet · name one below, or save what is on screen
+collections-new = Create
+collections-new-placeholder = Name for a collection
+collections-rename = Rename
+collections-delete = Delete
+collections-really-delete = Really delete
+collections-ok = OK
+collections-cancel = Cancel
+collections-created = Made { $name }
+collections-renamed = Renamed to { $name }
+collections-deleted = Deleted { $name }
+collections-blank = A collection needs a name
+collections-taken = { $name } is already a collection
+collections-assigned = { $count ->
     [one] Added to { $count } game
    *[other] Added to { $count } games
 }
-categories-unassigned = { $count ->
+collections-unassigned = { $count ->
     [one] Taken out of { $count } game
    *[other] Taken out of { $count } games
 }
@@ -474,7 +474,7 @@ game-unfavorite = Unfavorite
 game-manage-steam = Manage in Steam
 game-change-cover = Change cover
 game-change-backdrop = Change backdrop
-game-edit-categories = Edit categories
+game-edit-categories = Edit collections
 stat-completion = Completion
 game-hide = Hide
 game-unhide = Unhide
@@ -1143,23 +1143,11 @@ status-bulk-unhid = { $count ->
     [one] { $count } game is back in the library
    *[other] { $count } games are back in the library
 }
-filters-open = Filters
-filters-title = Saved filters
-filters-count = { $count ->
-    [one] { $count } saved filter
-   *[other] { $count } saved filters
-}
-filters-empty = No saved filters yet · set the library the way you want it, then name it below
-filters-now = On screen now: { $summary }
-filters-new-placeholder = Name for what is on screen
-filters-save = Save
-filters-apply = Apply
-filters-saved = Saved { $name }
-filters-updated = Updated { $name }
-filters-renamed = Renamed to { $name }
-filters-deleted = Deleted { $name }
-filters-blank = A filter needs a name
-filters-taken = { $name } is already a saved filter
+collections-now = Save view keeps what is on screen: { $summary }
+collections-save-view = Save view
+collections-apply = Open
+collections-saved = Saved view { $name }
+collections-updated = Updated view { $name }
 
 ## Stats
 

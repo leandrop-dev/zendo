@@ -214,6 +214,7 @@ fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
     }
     let mut made = false;
     let mut had = false;
+    let mut blocked = false;
     State::update(|state| {
         if let Some(found) = state
             .categories()
@@ -225,11 +226,16 @@ fn set_category(id: &str, name: &str, member: bool) -> anyhow::Result<()> {
         }
         if member && !had {
             made = state.add_category(name);
-            state.set_category(name, &game.id, true);
+            // Refused when a saved view has the name: the two kinds of
+            // collection share their names.
+            blocked = !state.set_category(name, &game.id, true);
         } else if !member {
             state.set_category(name, &game.id, false);
         }
     })?;
+    if blocked {
+        anyhow::bail!("{name:?} is the name of a saved view; pick another name for the category");
+    }
     if member {
         if had {
             println!("already in {category:?}");

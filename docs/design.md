@@ -82,7 +82,7 @@ no route to a game's page (item 33).
 - A store game's page uses the installed game's header (`game::header`); the
   old hero with its gradients is gone.
 - Sheets share `launch_options::frame` (title, scrolling body, footer) where
-  they have a footer: launch options, Categories and the Nexus chooser. The
+  they have a footer: launch options, Collections and the Nexus chooser. The
   rest (Add game, the installer, the art picker, Nexus search) keep their own
   layout with `style::sheet_title` and tokens.
 - Pick lists and switches are flat (`style::pick_list`, `menu`, `toggler`).
@@ -177,3 +177,21 @@ no route to a game's page (item 33).
 Console libraries and native ports (emulation is on hold, docs/backlog.md),
 Sunshine/Moonlight export, Year in Review imagery (item 36 may do a plain
 summary), and omakade's Omarchy-specific parts.
+
+## Decided in item 43 (2026-11-13)
+
+- Categories and saved filters are one thing to the user, a collection, from
+  the user's notes ("they seem very similar"). A collection is hand-picked (a
+  category: the games ticked) or a saved view (a saved filter: what the
+  Library shows, kept under a name). One sheet (COLLECTIONS) lists both by
+  name and makes, renames and deletes either; CREATE makes a hand-picked one,
+  SAVE VIEW keeps the screen. The Organize row shows both kinds' chips in one
+  list by name, then one COLLECTIONS chip with the total.
+- One set of names: a category and a saved view cannot share a name (any
+  case). A `state.json` from before is read as it was; a saved view named like
+  a category is renamed "Name (filter)" on load, and "Name (filter 2)" on, so
+  none is lost. This keeps the old two maps in `state.json`: planned as a
+  migration to one `collections` field, it was not needed, and the file stays
+  readable by older builds.
+- `zendo categorize` still makes hand-picked collections; it refuses a name a
+  saved view has.

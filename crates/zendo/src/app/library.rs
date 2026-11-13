@@ -8,8 +8,7 @@ use std::path::Path;
 use iced::{Alignment, Color, ContentFit, Element, Length};
 use zendo_core::{Game, Sort, Source, Status};
 
-use super::categories::CategoriesMessage;
-use super::filters::FiltersMessage;
+use super::collections::CollectionsMessage;
 use super::icons::{self, Icon};
 use super::style::{self, SPACE_L, SPACE_S, SPACE_XL, colors};
 use super::top_bar;
@@ -223,8 +222,8 @@ impl Zendo {
         .into()
     }
 
-    /// Organize: the user's categories, the way to change them, and what
-    /// is marked in the grid.
+    /// Organize: the play statuses, the user's collections, the way to
+    /// change them, and what is marked in the grid.
     fn organize_row(&self) -> Element<'_, Message> {
         let games = self.in_view();
         let mut chips: Vec<Element<'_, Message>> = vec![
@@ -248,38 +247,43 @@ impl Zendo {
                 Message::SetStatus(Some(status)),
             ));
         }
+        // The collections, hand-picked and saved views in one list by name.
+        let current = self.current_filter();
+        let mut collections: Vec<(String, Element<'_, Message>)> = Vec::new();
         for category in &self.categories {
             let count = games
                 .iter()
                 .filter(|game| game.categories.contains(&category.name))
                 .count();
-            chips.push(chip(
+            collections.push((
                 category.name.clone(),
-                Some(count),
-                self.category.as_deref() == Some(category.name.as_str()),
-                Message::SetCategory(Some(category.name.clone())),
+                chip(
+                    category.name.clone(),
+                    Some(count),
+                    self.category.as_deref() == Some(category.name.as_str()),
+                    Message::SetCategory(Some(category.name.clone())),
+                ),
             ));
         }
-        let current = self.current_filter();
         for saved in &self.filters {
-            chips.push(chip(
+            collections.push((
                 saved.name.clone(),
-                None,
-                saved.filter == current,
-                Message::ApplyFilter(saved.name.clone()),
+                chip(
+                    saved.name.clone(),
+                    None,
+                    saved.filter == current,
+                    Message::ApplyFilter(saved.name.clone()),
+                ),
             ));
         }
+        collections.sort_by_cached_key(|(name, _)| (name.to_lowercase(), name.clone()));
+        chips.extend(collections.into_iter().map(|(_, chip)| chip));
+        let total = self.categories.len() + self.filters.len();
         chips.push(chip(
-            t!("categories-open"),
-            (!self.categories.is_empty()).then_some(self.categories.len()),
+            t!("collections-open"),
+            (total > 0).then_some(total),
             false,
-            Message::Categories(CategoriesMessage::Open(BTreeSet::new())),
-        ));
-        chips.push(chip(
-            t!("filters-open"),
-            (!self.filters.is_empty()).then_some(self.filters.len()),
-            false,
-            Message::Filters(FiltersMessage::Open),
+            Message::Collections(CollectionsMessage::Open(BTreeSet::new())),
         ));
         self.selection_chips(&mut chips);
         row(chips)
@@ -307,10 +311,10 @@ impl Zendo {
             .into(),
         );
         chips.push(chip(
-            t!("categories-assign"),
+            t!("collections-assign"),
             None,
             false,
-            Message::Categories(CategoriesMessage::Open(self.selected_games.clone())),
+            Message::Collections(CollectionsMessage::Open(self.selected_games.clone())),
         ));
         // A bulk chip is offered only when it would change a marked game.
         let marked: Vec<&Game> = self

@@ -13,7 +13,7 @@ use zendo_core::owned::Owned;
 use zendo_core::{Game, Size, Source, Status};
 
 use super::artwork::ArtMessage;
-use super::categories::CategoriesMessage;
+use super::collections::CollectionsMessage;
 use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alone, update_line};
 use super::protondb::RatingState;
 use super::steam_installs::SteamInstallMessage;
@@ -217,7 +217,7 @@ impl Zendo {
                 .spacing(SPACE_S)
                 .align_y(Alignment::Center);
         if game.categories.is_empty() {
-            bar = bar.push(text(t!("categories-none")).size(13).color(colors().dim));
+            bar = bar.push(text(t!("collections-none")).size(13).color(colors().dim));
         }
         for name in &game.categories {
             bar = bar.push(style::badge(name.to_uppercase(), colors().text));
@@ -681,7 +681,7 @@ pub(super) fn label_row(label: String, value: Element<'_, Message>) -> Element<'
 
 /// The Categories sheet, opened for one game: the details card's button.
 pub(super) fn change_categories(game: &Game) -> Message {
-    Message::Categories(CategoriesMessage::Open(BTreeSet::from([game.id.clone()])))
+    Message::Collections(CollectionsMessage::Open(BTreeSet::from([game.id.clone()])))
 }
 
 pub(super) fn plain<'a>(value: String) -> Element<'a, Message> {
