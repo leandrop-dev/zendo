@@ -940,17 +940,23 @@ mod tests {
         )
         .unwrap();
         state.separate_names();
-        let names: Vec<String> = state.filters().into_iter().map(|saved| saved.name).collect();
+        let names: Vec<String> = state
+            .filters()
+            .into_iter()
+            .map(|saved| saved.name)
+            .collect();
         assert_eq!(
             names,
             ["co-op (filter 2)", "Co-op (filter) (filter)", "Plain"],
             "both clashing filters were renamed, none lost"
         );
         assert_eq!(state.categories().len(), 2);
-        assert!(!state.filters().iter().any(|saved| state
-            .categories()
-            .iter()
-            .any(|category| category.name.to_lowercase() == saved.name.to_lowercase())));
+        assert!(!state.filters().iter().any(|saved| {
+            state
+                .categories()
+                .iter()
+                .any(|category| category.name.to_lowercase() == saved.name.to_lowercase())
+        }));
     }
 
     #[test]

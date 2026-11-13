@@ -444,7 +444,12 @@ impl Zendo {
         match &self.collections_sheet {
             Some(sheet) => overlay(
                 page,
-                collections_card(sheet, &self.categories, &self.filters, &self.current_filter()),
+                collections_card(
+                    sheet,
+                    &self.categories,
+                    &self.filters,
+                    &self.current_filter(),
+                ),
             ),
             None => page,
         }
@@ -761,7 +766,10 @@ mod tests {
         let _ = zendo.update_collections(CollectionsMessage::SaveView);
         assert!(zendo.filters.is_empty(), "the name is a collection's");
         assert_eq!(
-            zendo.collections_sheet.as_ref().and_then(|s| s.note.clone()),
+            zendo
+                .collections_sheet
+                .as_ref()
+                .and_then(|s| s.note.clone()),
             Some((t!("collections-taken", name = "co-op"), false))
         );
         typed(&mut zendo, "Evening");

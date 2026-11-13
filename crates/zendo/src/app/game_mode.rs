@@ -7,8 +7,8 @@ use iced::widget::{button, column, container, image, row, space, text};
 use iced::{Alignment, Background, ContentFit, Element, Length, Task, window};
 use zendo_core::Game;
 
-use super::launch_options::{frame, overlay};
 use super::hero::{HeroMessage, meta_line, played_games};
+use super::launch_options::{frame, overlay};
 use super::style::{self, BOLD, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::{Message, Move, Page, Zendo, now};
 use crate::i18n::t;

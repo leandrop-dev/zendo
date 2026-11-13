@@ -10,8 +10,8 @@ mod achievements;
 mod anti_cheat;
 mod artwork;
 mod backdrops;
-mod collections;
 mod cloud_saves;
+mod collections;
 mod dlc;
 mod downloads;
 mod engines;
@@ -21,11 +21,11 @@ mod game;
 mod game_mode;
 mod gog_changelog;
 mod gog_playtime;
+mod hero;
 mod icons;
 mod installer;
 mod launch_options;
 mod library;
-mod hero;
 mod local;
 mod mods;
 mod nexus;
@@ -39,8 +39,8 @@ mod runtimes;
 mod settings;
 mod stats;
 mod steam;
-mod steam_facts;
 mod steam_deck;
+mod steam_facts;
 mod steam_installs;
 mod store;
 mod store_game;
@@ -75,8 +75,8 @@ use downloads::{DownloadMessage, DownloadsState};
 use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
-use hero::HeroMessage;
 use game_mode::{GameMode, GameModeMessage};
+use hero::HeroMessage;
 use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
 use local::{LocalMessage, LocalState};
@@ -940,10 +940,7 @@ impl Zendo {
         scan()
     }
 
-    fn loaded(
-        &mut self,
-        (library, sort, categories, config, filters): Scanned,
-    ) -> Task<Message> {
+    fn loaded(&mut self, (library, sort, categories, config, filters): Scanned) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
         let after = self.local.after_scan.take();
@@ -1920,13 +1917,7 @@ impl Fallback for Scanned {
             problems: vec![note.clone()],
             ..Library::default()
         };
-        (
-            library,
-            Sort::default(),
-            Vec::new(),
-            Err(note),
-            Vec::new(),
-        )
+        (library, Sort::default(), Vec::new(), Err(note), Vec::new())
     }
 }
 
@@ -2357,14 +2348,20 @@ mod tests {
             Some(("Renamed to Co-op nights".to_owned(), true))
         );
 
-        press(&mut zendo, CollectionsMessage::Delete("Co-op nights".into()));
+        press(
+            &mut zendo,
+            CollectionsMessage::Delete("Co-op nights".into()),
+        );
         assert_eq!(
             category_names(&zendo),
             ["Co-op nights"],
             "a delete asks first"
         );
         assert_eq!(note(&zendo), None);
-        press(&mut zendo, CollectionsMessage::Delete("Co-op nights".into()));
+        press(
+            &mut zendo,
+            CollectionsMessage::Delete("Co-op nights".into()),
+        );
         assert_eq!(category_names(&zendo), [] as [&str; 0]);
         assert_eq!(
             note(&zendo),
@@ -2927,30 +2924,42 @@ mod tests {
     fn the_collections_sheet_saves_updates_renames_and_deletes_a_view() {
         let mut zendo = zendo_with(2, 2);
         let _ = zendo.update(Message::SetSort(Sort::MostPlayed));
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Open(BTreeSet::new())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Open(
+            BTreeSet::new(),
+        )));
         let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 0, "a blank name saves nothing");
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed("Evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed(
+            "Evening".into(),
+        )));
         let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 1);
         assert_eq!(zendo.filters[0].filter.sort, Sort::MostPlayed);
 
         let _ = zendo.update(Message::SetSource(Some(Source::Steam)));
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed("evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Typed(
+            "evening".into(),
+        )));
         let _ = zendo.update(Message::Collections(CollectionsMessage::SaveView));
         assert_eq!(zendo.filters.len(), 1, "the same name is updated");
         assert_eq!(zendo.filters[0].filter.source, Some(Source::Steam));
 
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Rename("Evening".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Rename(
+            "Evening".into(),
+        )));
         let _ = zendo.update(Message::Collections(CollectionsMessage::RenameTyped(
             "Night".into(),
         )));
         let _ = zendo.update(Message::Collections(CollectionsMessage::RenameDone));
         assert_eq!(zendo.filters[0].name, "Night");
 
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete("Night".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete(
+            "Night".into(),
+        )));
         assert_eq!(zendo.filters.len(), 1, "the first press only asks");
-        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete("Night".into())));
+        let _ = zendo.update(Message::Collections(CollectionsMessage::Delete(
+            "Night".into(),
+        )));
         assert_eq!(zendo.filters.len(), 0);
     }
 

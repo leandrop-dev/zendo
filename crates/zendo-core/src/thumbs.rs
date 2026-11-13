@@ -68,7 +68,8 @@ fn make_backdrop_in(dir: &Path, source: &Path) -> anyhow::Result<PathBuf> {
         return Ok(done);
     }
     let stem = stem(source).with_context(|| format!("could not read {}", source.display()))?;
-    let image = image::open(source).with_context(|| format!("could not decode {}", source.display()))?;
+    let image =
+        image::open(source).with_context(|| format!("could not decode {}", source.display()))?;
     // Already small: nothing to gain, so the source is drawn as it is.
     if image.width() <= BACKDROP_WIDTH {
         return Ok(source.to_path_buf());

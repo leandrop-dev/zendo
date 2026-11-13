@@ -85,13 +85,9 @@ impl Zendo {
             ),
             Some(_) => self.grid(&visible),
         };
-        column![
-            self.source_row(),
-            self.organize_row(),
-            body
-        ]
-        .spacing(4)
-        .into()
+        column![self.source_row(), self.organize_row(), body]
+            .spacing(4)
+            .into()
     }
 
     /// The view chips with their counts, in the top bar beside the search;
@@ -121,7 +117,10 @@ impl Zendo {
                 Message::SetView(view),
             ));
         }
-        row(chips).spacing(SPACE_S).align_y(Alignment::Center).into()
+        row(chips)
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center)
+            .into()
     }
 
     /// Add game and Refresh, at the right of the store row.
@@ -207,19 +206,16 @@ impl Zendo {
         .spacing(SPACE_L)
         .wrap()
         .vertical_spacing(SPACE_S);
-        row![
-            container(chips).width(Length::Fill),
-            self.library_actions()
-        ]
-        .spacing(SPACE_L)
-        .align_y(Alignment::Start)
-        .padding(iced::Padding {
-            top: SPACE_XL,
-            right: GRID_PADDING,
-            bottom: 4.0,
-            left: GRID_PADDING,
-        })
-        .into()
+        row![container(chips).width(Length::Fill), self.library_actions()]
+            .spacing(SPACE_L)
+            .align_y(Alignment::Start)
+            .padding(iced::Padding {
+                top: SPACE_XL,
+                right: GRID_PADDING,
+                bottom: 4.0,
+                left: GRID_PADDING,
+            })
+            .into()
     }
 
     /// Organize: the play statuses, the user's collections, the way to
