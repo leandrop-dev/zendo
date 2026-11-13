@@ -14,10 +14,12 @@ screenshots and both demo videos. Built in Iced (backlog items 31 to 34).
 - Monospace type throughout (JetBrains Mono, OFL-1.1, bundled), small
   uppercase letter-spaced labels, flat rectangular chips with 1px borders,
   the selection shown as an accent outline.
-- No sidebar. The header holds the name, view chips (All, Favorites,
-  Recent, Hidden), search and Settings; a second row holds the source
-  chips and the count; a third holds Organize (Status, Collection, Tag).
-  Sort sits on the right with key hints.
+- No sidebar. The header holds the name, the tabs (Library, Store, Stats),
+  on Library the view chips (All, Favorites, Recent, Hidden) beside the
+  search, and two square icon buttons, Downloads and Settings (Lucide
+  icons, item 41); a row under it holds the source chips, Sort, Add game
+  and Refresh; the next holds Organize (Status, Collection, Tag). A card
+  shows its title once, under the cover.
 - Colours: the active KDE scheme (item 28). plasmonk keeps surfaces as
   fixed dark greys (`[Colors:Window]` BackgroundNormal 37,39,47) and tints
   only accent, links and selection, so Zendo is accent-tinted, with the
@@ -131,7 +133,7 @@ no route to a game's page (item 33).
 
 ## Decided in item 36
 
-- Stats is a fourth top-bar tab (Library, Store, Downloads, Stats), the user's
+- Stats is a top-bar tab (Library, Store, Stats), the user's
   choice over a Settings entry or a Library chip; Ctrl+7. The yearly summary
   is a section of that page, not a separate screen or command: year chips
   (latest first) and ALL TIME, Left and Right moving along them, four stat

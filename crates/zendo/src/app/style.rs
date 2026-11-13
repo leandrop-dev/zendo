@@ -196,26 +196,6 @@ pub fn label<'a>(value: &str) -> text::Text<'a> {
     text(value.to_uppercase()).size(11).color(colors().dim)
 }
 
-/// A fade from clear to the window's colour toward the bottom, under a
-/// title drawn over a cover.
-pub fn cover_fade(_: &Theme) -> container::Style {
-    container::Style {
-        background: Some(Background::Gradient(
-            iced::gradient::Linear::new(iced::Radians(std::f32::consts::PI))
-                .add_stop(0.0, Color::TRANSPARENT)
-                .add_stop(
-                    1.0,
-                    Color {
-                        a: 0.9,
-                        ..colors().background
-                    },
-                )
-                .into(),
-        )),
-        ..container::Style::default()
-    }
-}
-
 impl Default for Colors {
     fn default() -> Self {
         Self::ZENDO
@@ -517,6 +497,22 @@ pub fn tab(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
             },
             ..button::Style::default()
         }
+    }
+}
+
+/// A square button in the top bar that holds an icon: Downloads, Settings.
+/// The same look as a tab; the icon's colour is `icon_color`.
+pub fn icon_button(current: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    tab(current)
+}
+
+/// The colour an icon in a top-bar button is drawn in. A view cannot know
+/// the hover, so the resting one is the text colour, not the tabs' dim.
+pub fn icon_color(current: bool) -> Color {
+    if current {
+        colors().accent
+    } else {
+        colors().text
     }
 }
 

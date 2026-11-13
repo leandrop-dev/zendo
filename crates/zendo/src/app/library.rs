@@ -10,7 +10,8 @@ use zendo_core::{Game, Sort, Source, Status};
 
 use super::categories::CategoriesMessage;
 use super::filters::FiltersMessage;
-use super::style::{self, BOLD, SPACE_L, SPACE_S, SPACE_XL, colors};
+use super::icons::{self, Icon};
+use super::style::{self, SPACE_L, SPACE_S, SPACE_XL, colors};
 use super::top_bar;
 use super::{Message, Zendo, centered, format, grid_id, now};
 use crate::i18n::t;
@@ -86,7 +87,6 @@ impl Zendo {
             Some(_) => self.grid(&visible),
         };
         column![
-            self.view_row(),
             self.source_row(),
             self.organize_row(),
             body
@@ -95,8 +95,12 @@ impl Zendo {
         .into()
     }
 
-    /// The view chips with their counts, then Add game and Refresh.
-    fn view_row(&self) -> Element<'_, Message> {
+    /// The view chips with their counts, in the top bar beside the search;
+    /// nothing on any other page.
+    pub(super) fn view_chips(&self) -> Element<'_, Message> {
+        if self.page != super::Page::Library {
+            return space::horizontal().width(0).into();
+        }
         let games: Vec<&Game> = self
             .library
             .iter()
@@ -118,34 +122,38 @@ impl Zendo {
                 Message::SetView(view),
             ));
         }
-        let refresh = button(style::button_text(
+        row(chips).spacing(SPACE_S).align_y(Alignment::Center).into()
+    }
+
+    /// Add game and Refresh, at the right of the store row.
+    fn library_actions(&self) -> Element<'_, Message> {
+        let with_icon = |icon: Icon, label: String| {
+            row![
+                icons::icon(icon, 14.0, colors().text),
+                style::button_text(label)
+            ]
+            .spacing(6)
+            .align_y(Alignment::Center)
+        };
+        let refresh = button(with_icon(
+            Icon::Refresh,
             if self.scanning {
                 t!("library-scanning")
             } else {
                 t!("library-refresh")
-            }
-            .to_uppercase(),
+            },
         ))
         .padding([4, 12])
         .style(style::secondary)
         .on_press_maybe((!self.scanning).then_some(Message::Refresh));
         row![
-            row(chips).spacing(SPACE_S).wrap().vertical_spacing(SPACE_S),
-            space::horizontal(),
-            button(style::button_text(t!("library-add-game").to_uppercase()))
+            button(with_icon(Icon::Plus, t!("library-add-game")))
                 .padding([4, 12])
                 .style(style::secondary)
                 .on_press(Message::Local(super::local::LocalMessage::Add)),
             refresh,
         ]
         .spacing(SPACE_S)
-        .align_y(Alignment::Center)
-        .padding(iced::Padding {
-            top: SPACE_XL,
-            right: GRID_PADDING,
-            bottom: SPACE_S,
-            left: GRID_PADDING,
-        })
         .into()
     }
 
@@ -193,14 +201,25 @@ impl Zendo {
                 Message::SetSort(sort),
             ));
         }
-        row![
+        let chips = row![
             row(sources).spacing(SPACE_S),
             row(sorts).spacing(SPACE_S).align_y(Alignment::Center),
         ]
         .spacing(SPACE_L)
-        .padding([4.0, GRID_PADDING])
         .wrap()
-        .vertical_spacing(SPACE_S)
+        .vertical_spacing(SPACE_S);
+        row![
+            container(chips).width(Length::Fill),
+            self.library_actions()
+        ]
+        .spacing(SPACE_L)
+        .align_y(Alignment::Start)
+        .padding(iced::Padding {
+            top: SPACE_XL,
+            right: GRID_PADDING,
+            bottom: 4.0,
+            left: GRID_PADDING,
+        })
         .into()
     }
 
@@ -529,28 +548,10 @@ pub(super) fn played_line(game: &Game, now: u64) -> String {
     }
 }
 
-/// The foot of a cover: the title over a fade (a cover with none shows it
-/// in the middle already), then the progress line.
-fn cover_foot(title: &str, has_cover: bool, progress: Option<f32>) -> Element<'_, Message> {
+/// The foot of a cover: the progress line, when there is one. The title is
+/// in the caption under the cover, not over it.
+fn cover_foot<'a>(progress: Option<f32>) -> Element<'a, Message> {
     let mut foot = column![].width(Length::Fill);
-    if has_cover {
-        foot = foot.push(
-            container(
-                text(title.to_uppercase())
-                    .size(12)
-                    .font(BOLD)
-                    .wrapping(text::Wrapping::WordOrGlyph),
-            )
-            .padding(iced::Padding {
-                top: SPACE_L,
-                ..iced::Padding::new(SPACE_S)
-            })
-            .width(Length::Fill)
-            .max_height(COVER_HEIGHT / 2.0)
-            .clip(true)
-            .style(style::cover_fade),
-        );
-    }
     if let Some(share) = progress {
         foot = foot.push(
             container(
@@ -605,7 +606,6 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
         on_press,
     } = card;
     let ticked = check.as_ref().is_some_and(|(ticked, _)| *ticked);
-    let has_cover = cover.is_some();
     let cover: Element<'_, Message> = match cover {
         Some(path) => image(image::Handle::from_path(path))
             .width(COVER_WIDTH)
@@ -631,7 +631,7 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
     if let Some((label, color)) = badge {
         corners = corners.push(style::badge(label, color));
     }
-    let foot = cover_foot(title, has_cover, progress);
+    let foot = cover_foot(progress);
     let art = stack![
         cover,
         container(column![

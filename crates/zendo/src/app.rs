@@ -21,6 +21,7 @@ mod game;
 mod game_mode;
 mod gog_changelog;
 mod gog_playtime;
+mod icons;
 mod installer;
 mod launch_options;
 mod library;

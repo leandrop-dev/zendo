@@ -1,23 +1,29 @@
-//! The top bar: the name, the tabs (Library, Store, Downloads, Stats), the search
-//! and the Settings button, and under Settings the row that switches
-//! between Settings, Accounts and About.
+//! The top bar: the name, the tabs (Library, Store, Stats), on Library the
+//! view chips, the search, and the Downloads and Settings icon buttons; under
+//! Settings, the row that switches between Settings, Accounts and About.
 
-use iced::widget::{button, container, row, space, text, text_input};
+use iced::widget::{button, container, row, space, text, text_input, tooltip};
 use iced::{Alignment, Background, Element, Length};
 
 use super::game_mode::GameModeMessage;
+use super::icons::{self, Icon};
 use super::store::StoreMessage;
-use super::style::{self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, colors};
+use super::style::{self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::{Message, Page, Zendo, search_id, store_search_id};
 use crate::i18n::t;
 use zendo_core::owned::Shop;
 
 /// The search box's width.
-const SEARCH_WIDTH: f32 = 280.0;
+const SEARCH_WIDTH: f32 = 220.0;
 
-/// The narrowest window the bar fits in: the name, four tabs, the search
-/// and Settings.
-pub const MIN_WIDTH: f32 = 1040.0;
+/// An icon button's icon, and the button's height (the width is the
+/// height when there is no count).
+const ICON_SIZE: f32 = 18.0;
+const ICON_BUTTON: f32 = 34.0;
+
+/// The narrowest window the bar fits in: the name, three tabs, the view
+/// chips, the search and the two icon buttons.
+pub const MIN_WIDTH: f32 = 1100.0;
 
 impl Zendo {
     pub(super) fn top_bar(&self) -> Element<'_, Message> {
@@ -62,24 +68,29 @@ impl Zendo {
                 matches!(self.page, Page::Store | Page::Owned(_)),
             ),
             tab(
-                t!("page-downloads"),
-                count(self.downloads.queue.len() + self.steam_installs.count()),
-                Page::Downloads,
-                self.page == Page::Downloads,
-            ),
-            tab(
                 t!("page-stats"),
                 String::new(),
                 Page::Stats,
                 self.page == Page::Stats,
             ),
             space::horizontal(),
+            self.view_chips(),
             self.search_box(),
             self.game_mode_chip(),
-            button(style::button_text(t!("page-settings").to_uppercase()).font(BOLD))
-                .padding([SPACE_S, SPACE_M])
-                .style(style::chip(self.in_settings()))
-                .on_press(Message::Navigate(Page::Settings)),
+            icon_button(
+                Icon::Download,
+                &t!("page-downloads"),
+                count(self.downloads.queue.len() + self.steam_installs.count()),
+                self.page == Page::Downloads,
+                Message::Navigate(Page::Downloads),
+            ),
+            icon_button(
+                Icon::Settings,
+                &t!("page-settings"),
+                String::new(),
+                self.in_settings(),
+                Message::Navigate(Page::Settings),
+            ),
         ]
         .spacing(SPACE_S)
         .align_y(Alignment::Center)
@@ -173,6 +184,37 @@ impl Zendo {
         .padding([SPACE_M, SPACE_XL])
         .into()
     }
+}
+
+/// A button in the top bar that is an icon, with a count beside it when
+/// there is one. Its name is in the tooltip.
+fn icon_button(
+    icon: Icon,
+    label: &str,
+    count: String,
+    current: bool,
+    message: Message,
+) -> Element<'static, Message> {
+    let mut content = row![icons::icon(icon, ICON_SIZE, style::icon_color(current))]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center);
+    if !count.is_empty() {
+        content = content.push(text(count).size(12).color(colors().dim));
+    }
+    let button = button(container(content).center_y(Length::Fill))
+        .padding([0.0, SPACE_S])
+        .height(ICON_BUTTON)
+        .style(style::icon_button(current))
+        .on_press(message);
+    tooltip(
+        button,
+        container(text(label.to_uppercase()).size(12))
+            .padding([SPACE_XS, SPACE_S])
+            .style(style::card),
+        tooltip::Position::Bottom,
+    )
+    .gap(SPACE_XS)
+    .into()
 }
 
 /// A count for a tab, nothing when there is none.
