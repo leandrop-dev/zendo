@@ -5,15 +5,6 @@ a full-screen mode for the couch, launched with the right tools, and mods
 later. MIT. Developed on Fedora with KDE Plasma next to
 [plasmonk-kde](../plasmonk-kde); it began as a sister project of hyprmonk.
 
-Status: planned on 2026-11-04 from a hyprmonk session; the whole of phases 1
-to 7 built by 2026-11-07, then items 1 to 19 of the list after them, the last
-of those (the library's categories) on 2026-11-10, the 25 must-fix faults of
-that day's review closed the same day, and item 20 (the window) built and
-tried by the user on 2026-11-11.
-
-Reformulated on 2026-11-12, after the move to a fresh Fedora 45 + KDE
-machine (see "Direction"): the backlog now runs from item 27.
-
 ## Documents
 
 Read this file first. The rest is read on demand, not up front.
@@ -21,66 +12,38 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 39 and 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | what is next, what is on hold, and a table of items 27 to 44 | starting new work |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
-| `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
+| `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
-## Where it stands
+## Where it stands (2026-11-13)
 
-Phases 1 to 7 are built and checked, mods (phase 7) last on 2026-11-07 and
-tried on Fallout 3 GOTY. Of the list after phase 7, items 1 to 20 are built,
-most of them tried by the user. Item 19, the library's categories, was built
-on 2026-11-10 and tried by the user the same day: it works [firm]. A
-whole-workspace review the same day (Rust and Iced) found 25 must-fix
-faults, all of them since fixed, the last one (the settings save) after the
-user's first tries the same day, which also fixed the category tick boxes'
-colour and Cat Quest II's cloud saves; its reports are in
-`.mallet/reviews/2026-11-10/`. The review's non-blocking findings were then
-cleared in passes on 2026-11-11, the last one built and looked at on screen
-(docs/history.md). The review is closed but for one note (`rust-facts` 11).
+Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
+whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
+moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
+to 36, 38 and 41 to 44 are built, with tests green (`docs/backlog.md` has the table,
+`docs/history.md` the detail and what was checked). Item 37 (emulation), the
+list and details views, OptiScaler and recompiled games are on hold.
 
-Item 20, the window (minimise to the tray, Discord presence, rescanning when
-a launcher's files change), was built and tried by the user on 2026-11-11
-(docs/history.md, item 20): the tray icon, the hide and restore, and the
-pointer staying put all work [firm]. On Wayland an app can minimise but not
-unminimise its own window, so since item 27 hiding closes the window and the
-tray opens a new one (`iced::daemon`). The Discord presence is off by default and needs Discord's Activity
-Status on. Item 27 (the tray restore without `hyprctl`, GOG Galaxy without
-Heroic) was built on 2026-11-12; tried by the user the same day: the tray,
-Steam and GOG sign-ins, a GOG install and its start all work [firm]
-(docs/history.md). Item 28 (the KDE colour scheme as a theme, no hyprmonk tone)
-was built on 2026-11-12 and checked on screen in a throwaway home; not yet tried by the user. Item 29 (Settings → Engines downloads
-legendary, gogdl, nile, comet and umu-launcher; Proton-CachyOS next to GE-Proton) was
-built the same day, checked against the real GitHub and on screen in a
-throwaway home (docs/history.md); not yet tried by the user. Item 30 (the Fedora RPM, `packaging/fedora/`
-and `.copr/`) builds offline in a Fedora 45 mock chroot with its tests passing;
-the COPR project `leandrop/zendo` builds for Fedora 45 and Rawhide and the
-RPM was installed and started on 2026-11-12. Item 31 (the top bar, the
-translucent window, JetBrains Mono, the new icons) was built and checked on
-screen the same day, not yet tried by the user. Item 32 (the Library's views
-and cards, the game page) is built with its tests green and checked on screen on 2026-11-12, not yet
-tried by the user (docs/history.md). Item 33 (the remaining pages: Store and
-its game page, Downloads, Accounts, Settings in groups, About, the sheets, mods
-and Nexus) is built with its tests green and checked on screen in part
-(docs/history.md lists what was not). Item 34 (a lean Game Mode replacing F11, with an up-next queue) is built and
-checked on screen except the controller (docs/history.md); a Home page was
-built with it and removed at the user's wish, so the tabs stay Library, Store
-and Downloads. Item 35 (play status, saved filters and bulk favorite/hide in
-the Library's Organize row, `zendo status`; tags are the categories, no random
-pick) is built with its tests green and checked on screen, not yet tried by
-the user (docs/history.md). Item 36 (play sessions and a Stats tab, a fourth
-tab by the user's choice) is built with its tests green and checked on
-screen, not yet tried by the user (docs/history.md). Item 38 (Steam's
-description and facts for every game, and a Steam app id the user can give a
-game) is built on 2026-11-13 with its tests green and checked on screen with
-the user present, and tried by the user: it works [firm] (docs/history.md).
-Next is item 39 (item 37, emulation,
-is on hold).
+- Tray: hiding closes the window and the tray opens a new one
+  (`iced::daemon`), because on Wayland an app cannot unminimise itself.
+- The Fedora RPM builds on COPR `leandrop/zendo`; the user resubmits `main`
+  after the redesign is done.
+- Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44 (41 to 44 were
+  checked together on screen with the user at the PC; `docs/history.md` says
+  what was not).
+- The user is weighing a move from Iced to Slint [tentative]. They asked for
+  an evaluation (item 45, a spike); a port is not decided. Keep logic in
+  `zendo-core` and the window thin.
 
-The phase 5a gap is closed: an Epic game was installed and played through
-legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
-notes sit with the work they belong to in docs/history.md.
+## Next
+
+From the user's notes of 2026-11-13, items 41 to 44 are built. Left:
+
+- 45: a Slint spike of the Library grid (evaluation only, no port).
+
+`docs/backlog.md` has the detail and lists what is on hold.
 
 ## Direction [firm]
 
@@ -91,7 +54,8 @@ Chosen on 2026-11-06:
   copies Heroic bundles when they are not installed alone), with a Store
   page of owned games and a Downloads page. Steam's and Heroic's installed
   games keep being imported read-only.
-- Hikari's layout, hyprmonk's colours: a sidebar (Library, Store,
+- (Superseded on 2026-11-12 by the top bar and KDE colours below.) Hikari's
+  layout, hyprmonk's colours: a sidebar (Library, Store,
   Downloads; Accounts, Settings, About), a top bar with search, store chips
   and sort chips, a game page with a wide hero image, an action bar and a
   details card, and a Settings page (keys, engines, Wine/Proton,
@@ -182,11 +146,6 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 | legendary, gogdl, nile, comet | Epic, GOG and Amazon accounts, owned games and installs, and GOG Galaxy. Settings → Engines downloads each from its GitHub release; a copy on `PATH` or Heroic's also works. |
 | umu-launcher | Windows games; the zipapp release, also from Settings → Engines (needs `python3`). |
 | MangoHud, GameMode, gamescope | Only games where they are switched on. |
-
-## Next
-
-Items 39 and 40: docs/backlog.md. Each item is planned in detail
-when it starts.
 
 ## On plasmonk's side
 

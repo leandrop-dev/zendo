@@ -1,100 +1,44 @@
 # Zendo: the backlog
 
-The remaining work. Read only the item you are starting. Items 1 to 20 are
-built; their detail is in history.md.
+The work left. Items 1 to 20, 27 to 38 and 41 to 44 are built; the detail of each is in
+`docs/history.md` under its item number, and the look in `docs/design.md`.
 
-## Reformulated 2026-11-12 [tentative until the user confirms the order]
+## Next
 
-Zendo moved to a Fedora 45 + KDE Plasma machine, and the user changed the
-direction the same day:
+From the user's notes of 2026-11-13: items 41 to 44 are built (Iced first),
+and one is left. Keep logic in `zendo-core` and the window layer thin. Ask
+before building any other page `docs/design.md` lists (a Home page was built
+and removed at the user's wish).
 
-- Generic platform: no Hyprland-specific code; Fedora first.
-- The theme follows the active KDE colour scheme.
-- A complete redesign in the style of omakade, built in Iced (ideas and
-  look only; omakade is GPL-3.0-or-later, so no code). The analysis is in
-  `docs/design.md`.
-- Recompiled games are on hold.
+- **45** Slint spike: a throwaway crate on `zendo-core` showing the Library
+  grid, with a written yes/no on translucency, blur, fonts, KDE colours,
+  scrolling, SVG, size and the licence; then the user decides. The icons
+  (`crates/zendo/icons/`), the hero copies (`zendo_core::thumbs`) and the
+  layout decided in items 41 to 44 carry over.
 
-Numbering continues from 27 so it never collides with the built items 1 to
-20 cited in history.md and the commits.
+Steam games have no "Launch options" button by design: Steam starts them and
+applies its own options ("Manage in Steam" opens its page). `docs/history.md`
+item 32.
 
-27. Generic platform. Built on 2026-11-12 (docs/history.md, item 27): the
-    tray restore without `hyprctl`, and no Heroic needed for GOG Galaxy.
-    The hyprmonk tone went in 28. The engines' own
-    downloader is item 29.
-28. The KDE colour scheme as a theme. Built on 2026-11-12 (docs/history.md,
-    item 28): "System" reads `~/.config/kdeglobals`; the hyprmonk tone is
-    gone, and a saved `theme = "hyprmonk"` falls back to Zendo's own.
-29. Built on 2026-11-12 (docs/history.md, item 29): Settings → Engines and
-    Proton-CachyOS; the text below is the original plan, with the questions
-    settled in history. Engines and Protons downloaded by Zendo, decided
-    2026-11-12 [tentative until the user confirms]. Fedora 45 packages none of gogdl, nile, comet
-    or umu-launcher and has legendary 0.20.34 (checked with `dnf repoquery`),
-    so neither `Requires` nor a bundled copy in the RPM works well. Settings →
-    Engines downloads and updates, from each project's GitHub release, as
-    `ge_proton.rs` already does for GE-Proton: legendary, gogdl, nile, comet
-    and umu-launcher, into a folder of Zendo's own, found before `PATH` or
-    after it as the user chooses (`stores.rs` `bundled` looks on `PATH`
-    first today). Settings → Protons gets, next to GE-Proton, CachyOS's
-    (`CachyOS/proton-cachyos`; checked 2026-11-12: a release per build,
-    `proton-cachyos-<version>-slr-x86_64.tar.xz` of about 340 MB, an
-    `x86_64_v3` variant, an arm64 one, and a `.sha512sum` for each, so the
-    download is checked as GE-Proton's is). The `x86_64_v3` build only when
-    the CPU has it. The same downloader fetches comet's
-    `dummy-service.zip` (already done in `galaxy.rs`, item 27). To settle
-    when it starts: where the engines go, how updates are noticed, and how a
-    Proton CachyOS names the unpacked folder (`proton.rs` already knows the
-    `proton-cachyos-slr` name).
-30. Built on 2026-11-12 (docs/history.md, item 30), COPR project still to
-    be made by the user. Fedora package: an RPM spec and COPR (was 22), with the README's Fedora
-    install path. The Arch package stays. The RPM bundles no engines
-    (decided 2026-11-12 [tentative], see item 29): Zendo downloads them, so
-    the package needs only Zendo and what it links. Item 29 comes first, or the
-    package reaches other users as a Zendo with no engines. Item 29 adds run-time
-    needs the spec must list: `python3` (umu-run), `tar` with xz support,
-    `sha256sum` and `sha512sum`.
-31. Built on 2026-11-12 (docs/history.md, item 31), not yet tried by the
-    user. Redesign, the shell. First a throwaway spike: a transparent Iced 0.14
-    window on KWin, checking whether the blur shows through; if it does not,
-    the fallback is an opaque themed window, written down before going on.
-    Then design tokens in `app/style.rs`, a bundled monospace font
-    (JetBrains Mono, OFL-1.1), uppercase labels and flat bordered chips, and
-    a top bar with Library, Store and Downloads tabs, search and a Settings
-    button for Accounts, Settings and About. Replaces `sidebar.rs`.
-32. Built on 2026-11-12 (docs/history.md, item 32), checked on screen with the user
-    present, not yet tried by the user. Redesign, the Library and the game page, as in design.md, with Zendo's
-    pins, hiding, categories, play time, achievements and ProtonDB.
-33. Built on 2026-11-12 (docs/history.md, item 33), tests green, checked on
-    screen in part (history.md lists what was not). Redesign, the remaining pages: Store, Downloads,
-    Accounts, Settings, the launch options sheet, mods and Nexus.
-34. Built on 2026-11-12 (docs/history.md, item 34), checked on screen with
-    the user present except the controller. Game Mode, replacing today's F11
-    full screen. The Home page of design.md was built and removed at the
-    user's wish.
-35. Built on 2026-11-12 (docs/history.md, item 35), tests green, checked
-    on screen with the user present (history.md lists what was not). Organize: play status (backlog, playing, completed,
-    abandoned), saved filters and bulk edits. Tags are item 19's categories
-    (no second label system) and the random pick was dropped, both at the
-    user's choice.
-36. Built on 2026-11-13 (docs/history.md, item 36), tests green, checked
-    on screen with the user present (history.md lists what was not). Play
-    sessions and stats: a session history, a Stats tab
-    with a summary per year and for all time, and a Sessions card on the game
-    page. Sessions are the runs Zendo watched; there is no backfill.
-37. On hold since 2026-11-13: emulation (see "On hold"). The number stays
-    reserved.
-38. Built on 2026-11-13 (docs/history.md, item 38), tests green, checked on
-    screen with the user present and tried by the user. Descriptions and facts for every
-    game, local ones too: Steam's store for any game matched to a Steam app
-    id (was 24), with a Steam app id the user can give a game.
-39. Library views beyond the grid: a list and a details view (was 25),
-    unless 32 and 34 already cover them.
-40. OptiScaler, last: niche (was 23).
+Built but not yet tried by the user with `cargo build`: items 33 to 36, and
+items 28 and 29. Not looked at on screen: a light KDE colour scheme (item
+31), pt-PT for item 38, the Store grid, signed-in Accounts, mods and Nexus
+(item 33), and a real controller (item 34).
+
+Waiting on the user: the COPR resubmit of `main` (item 30). They run
+`copr-cli buildscm zendo --clone-url https://github.com/leandrop-dev/zendo.git
+--commit main --method make_srpm --nowait` once the redesign is done; the
+installed RPM still ships the old ensō icon until then.
 
 ## On hold
 
-- Emulation (was 37, and 26 before that), put on hold by the user on
-  2026-11-13 after planning it. Decided in that planning [tentative]:
+All decided by the user on 2026-11-13.
+
+- Library views beyond the grid: a list and a details view (was 25, then
+  39). Only wanted if items 32 and 34 do not already cover it.
+- OptiScaler (was 23, then 40): the user's GPUs (GTX 1070 Ti and 1060) gain
+  nothing from it.
+- Emulation (was 26, then 37). Decided in that planning [tentative]:
   presets for common emulators plus custom profiles (a program and an
   argument template with `{rom}`); ROMs from folders the user adds, one
   console and one emulator per folder; a fifth tab, Emulation, with a card
@@ -109,3 +53,28 @@ Numbering continues from 27 so it never collides with the built items 1 to
   ideas from Quiver Launcher (checked 2026-11-07: it installs apps from
   GitHub and GitLab releases with community catalogs; Business Source
   License 1.1 from version 4, so ideas only, no code).
+
+## Built since the reformulation of 2026-11-12
+
+Numbers 27 onwards, so they never collide with items 1 to 20 cited in
+history.md and the commits.
+
+| # | What | Built |
+|---|---|---|
+| 27 | Generic platform: tray restore without `hyprctl`, GOG Galaxy without Heroic | 2026-11-12 |
+| 28 | The KDE colour scheme as a theme ("System" reads `~/.config/kdeglobals`) | 2026-11-12 |
+| 29 | Settings → Engines downloads legendary, gogdl, nile, comet, umu-launcher; Proton-CachyOS beside GE-Proton | 2026-11-12 |
+| 30 | Fedora RPM and COPR project `leandrop/zendo` (the RPM bundles no engines) | 2026-11-12 |
+| 31 | Redesign shell: top bar, translucent window, JetBrains Mono, icons | 2026-11-12 |
+| 32 | Library and game page | 2026-11-12 |
+| 33 | Remaining pages: Store, Downloads, Accounts, Settings, sheets, mods, Nexus | 2026-11-12 |
+| 34 | Game Mode on F11 / Select | 2026-11-12 |
+| 35 | Play status, saved filters, bulk edits | 2026-11-12 |
+| 36 | Play sessions and a Stats tab | 2026-11-13 |
+| 38 | Steam's description and facts for every game, and a user-given Steam app id | 2026-11-13 |
+| 41 | Lucide icons, Downloads and Settings as icon buttons, view chips in the top bar, one title per card | 2026-11-13 |
+| 42 | Up Next removed | 2026-11-13 |
+| 43 | Collections: categories and saved filters as one list with one set of names | 2026-11-13 |
+| 44 | Dependencies optimised in debug builds; 960-pixel copies of heroes | 2026-11-13 |
+
+Item 37 (emulation) is on hold above.

@@ -3319,3 +3319,105 @@ ProtonDB knows, and the Store page's Steam details through the shared cache.
   ProtonDB lookup). Carousel browsing never triggers a lookup for games not
   yet known.
 - What was and was not checked on screen is above.
+
+## Items 41 to 44: the user's notes of 2026-11-13
+
+Planned from ten notes; 41 to 44 built and 45 (the Slint spike) not yet.
+Checked together on screen in a throwaway home (24 `.desktop` games with
+covers and heroes copied from the real cache, an old `state.json` holding a
+category and a saved filter of the same name, an `up_next` list and two
+favourites), with the user at the PC: `spectacle` stills and `ydotool`
+clicks guarded by the window's pid.
+
+### Item 41: icons, top bar and cards
+
+- Iced's `svg` feature is on. Lucide icons (ISC, `crates/zendo/icons/` with
+  its `LICENSE`) are built in; `app/icons.rs` draws one in a given colour.
+  Only the four in use are kept (download, settings, plus, refresh-cw); add
+  one by putting its SVG there and a variant in `Icon`.
+- Downloads and Settings are square icon buttons on the right of the top bar
+  with a tooltip each (they use the `page-downloads` and `page-settings`
+  strings); Downloads shows its count beside the icon when there is one. The
+  tabs are Library, Store, Stats.
+- All, Favorites, Recent (and Hidden) are in the top bar beside the search,
+  on the Library page only. Add game and Refresh moved to the right of the
+  store/sort row, with icons. `MIN_WIDTH` 1040 to 1100 and the search box
+  280 to 220 px to fit; not tried at the minimum width.
+- A card's title is drawn once, under the cover; the overlay and its
+  `cover_fade` style are gone. A cover-less card still shows its title in the
+  placeholder.
+- Checked: every new control clicked once (Favorites chip filters to the two
+  favourites; Downloads and Settings open their pages, highlight, show the
+  tooltip; Library tab returns). Not checked: Recent, Add game and Refresh
+  clicked; a Downloads count; the minimum width.
+- The store row's "All" and the top bar's "All 24" look alike but are not the
+  same chip (the store row's clears the store, status and collection filters).
+
+### Item 42: Up Next removed
+
+- Game page button, Game Mode's shelf, hero button, Space and Y, `up_next` in
+  `zendo-core` (`UP_NEXT_MAX`, `queue_next`, `unqueue`), the `queue-*` and
+  `shelf-up-next` strings and their tests. `app/queue.rs` became `app/hero.rs`
+  (the played-games list, the meta line and the hero's Play and Details,
+  `HeroMessage`). `queue-details` became `game-mode-details`. An old
+  `state.json` with `up_next` loads and the field is gone at the next save
+  (tested, and seen in the throwaway state file).
+- Checked: F11 shows Continue playing and All games, Play and Details only.
+  The footer hint still said "Space / Y up next"; fixed afterwards (en and
+  pt-PT) and not looked at again.
+
+### Item 43: Collections
+
+- Not the planned migration to one `collections` field: categories and saved
+  filters stay as two maps in `state.json`, but are one list to the user and
+  share one set of names (`State::separate_names`, and `add_category`,
+  `save_filter` and both renames refuse a name the other kind has). A file
+  with a clash is read with the filter renamed "Name (filter)", then
+  "(filter 2)" and on; none is lost (tested).
+- `app/categories.rs` is `app/collections.rs`; `filters.rs` is gone. One
+  sheet lists both by name: hand-picked ones with a count, ticked per game
+  when opened from a game or the marked games; saved views with their
+  summary and an Open button. CREATE makes a hand-picked one, SAVE VIEW keeps
+  the screen. The Organize row shows both kinds in one list by name, then one
+  COLLECTIONS chip with the total. Strings say collection / coleção.
+- `zendo categorize` refuses a name a saved view has instead of reporting
+  success.
+- Checked: the migrated "co-op (filter)" beside "Co-op", the sheet, and
+  SAVE VIEW ("Saved view Mine", `state.json` rewritten without `up_next`).
+  Not checked: Create, Rename, Delete and Open clicked on screen (tests cover
+  them), the tick boxes from a game's page, pt-PT.
+
+### Item 44: faster images
+
+- Measured first, with a throwaway benchmark on the user's 1,186 cached
+  images (read only): covers are small (467 of 598 are 300 by 450, 99 are 342
+  by 482; Steam's own `library_600x900.jpg` files are 300 by 450 too), heroes
+  are large (484 of 596 are 1920 by 620, then 2560, 3840 and one 7184 by 3512;
+  median 299 KB, largest 5.9 MB). Decoding with the `image` crate:
+
+  | | cover | hero (mean) | hero (worst) |
+  |---|---|---|---|
+  | release | 1.8 ms | 11 ms | 145 ms |
+  | debug, as built | 52 ms | 465 ms | 5.6 s |
+  | debug, dependencies at `opt-level = 2` | 1.8 ms | 12 ms | 153 ms |
+
+  Iced decodes on the thread that draws, so a screen of covers cost over a
+  second in the debug build the user runs and a game page a hero decode.
+- Main fix: `[profile.dev.package."*"] opt-level = 2` in the workspace
+  `Cargo.toml` (about 30 times faster; the first rebuild compiles every
+  dependency again). Release is unchanged.
+- Hero copies: `zendo_core::thumbs` makes a 960-pixel-wide copy (JPEG at 85,
+  or PNG when it has transparency; the source itself when it is already that
+  small) in `$XDG_CACHE_HOME/zendo/thumbs/`, named from the source's path,
+  size and modification time. `app/backdrops.rs` asks for the page on screen
+  after every message, on a thread, and the header draws the copy when it is
+  ready, so no big file is decoded on the thread that draws. A decode of the
+  copy takes 0.6 ms in the benchmark (at 640 wide; 960 was not timed).
+  Covers get no copy: they would save nothing.
+- Not built from the plan: an in-memory cache of the copies' bytes (not
+  needed once the decode is cheap) and clearing `thumbs/` (nothing clears
+  `covers/` either; the README says it is safe to delete).
+- Checked: opening a game page made one 960 by 310 copy (54 KB from a
+  226 KB source) and the backdrop showed. Not measured: page-open time in the
+  window itself (only the decode); the library's scroll speed after the
+  profile change; a PNG hero.

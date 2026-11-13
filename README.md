@@ -13,17 +13,16 @@ right tools.
 
 Zendo gathers the games on this machine into one library: Steam's, the ones
 Heroic installed from Epic, GOG and Amazon, and the ones with a `.desktop`
-file. A sidebar leads to the Library, Settings and About; each game has a
-page with its art, Play, and what its store records about the install. It
-opens in a normal window and goes full-screen for the couch, and it is
+file. A top bar leads to the Library, Store, Downloads and Stats, with
+Settings, Accounts and About behind a button; each game has a page with its
+art, Play, and what its store records about the install. It opens in a
+normal translucent window and has a Game Mode for the couch, and it is
 driven as well by a controller as by the keyboard.
 
-It is early: phases 1 to 3 of the [Roadmap](#roadmap), a library that reads
-the launchers' files without changing them and starts games through the
-launcher that owns them. Its layout follows
-[Hikari](https://github.com/dodo986/hikari)'s. A sister
-project of [hyprmonk](https://github.com/leandrop-dev/hyprmonk), which will
-install it and give it its colours, but it runs on any Linux desktop.
+It is developed on Fedora with KDE Plasma and follows the KDE colour scheme
+when asked, but it runs on any Linux desktop. Its look follows
+[omakade](https://github.com/btsouth/omakade)'s and its pages follow
+[Hikari](https://github.com/dodo986/hikari)'s (ideas only, no code).
 
 ## Contents
 
@@ -544,8 +543,8 @@ What Zendo keeps itself:
 | Path | What |
 |------|------|
 | `~/.local/state/zendo/state.json` | The games it started and when, the hidden and pinned games, the sort, the categories and their games |
-| `~/.cache/zendo/thumbs/` | Smaller copies (960 pixels wide) of the wide images, made on first opening a game page so the window never decodes the big file; safe to delete, they are made again |
 | `~/.cache/zendo/covers/` | Downloaded covers (`<id>.jpg`) and wide images (`<id>.hero.jpg`); `misses.json` lists games with none, asked about again after a week; `chosen/cover/` and `chosen/hero/` hold the ones picked with Change art, which come first |
+| `~/.cache/zendo/thumbs/` | Smaller copies (960 pixels wide) of the wide images, made on first opening a game page so the window never decodes the big file; safe to delete, they are made again |
 | `~/.local/share/zendo/stores/` | Zendo's sign-ins, one folder per store engine (`epic`, `gog`, `amazon`), readable by you only, with each engine's record of what Zendo installed (`installed.json`; for GOG, Zendo writes it) |
 | `~/.local/state/zendo/downloads.json` | What is left in the download queue, there only while something is |
 | `~/.cache/zendo/store/` | Each store's list of your games (`<store>.json`), shown at once on the next start; `gogdb/` keeps GOG's answers about each game |
@@ -574,7 +573,7 @@ count their own.
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`icons/zendo-<size>.png`) |
 | `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
 | `PLAN.md` | What Zendo is for, the direction, the stack and where it stands |
-| `docs/backlog.md` | The work left, in order |
+| `docs/backlog.md` | What is next, what is on hold, and the built items 27 to 38 |
 | `docs/history.md` | What was built, when, and what was checked |
 | `docs/reference.md` | Verified facts about the stores, the engines and their files |
 
@@ -584,9 +583,8 @@ count their own.
    cover grid and launching.
 2. **Covers and order** (done): covers from the stores and SteamGridDB,
    sorting by recent and most played, hiding.
-3. **The shell** (done): Hikari's layout in hyprmonk's colours: the
-   sidebar, the Library with store and sort chips and pins, a page per
-   game, Settings with the SteamGridDB key, About.
+3. **The shell** (done): the Library with store and sort chips and pins, a
+   page per game, Settings with the SteamGridDB key, About.
 4. **Accounts, Store and Downloads** (built, tried with real GOG and Amazon
    accounts): sign in to Epic, GOG and Amazon, the games owned but not
    installed, and install, update, repair and uninstall through legendary,
@@ -601,6 +599,12 @@ count their own.
 7. **Mods** (built): mods from archives with
    Apply and Back to vanilla, from Nexus Mods links with updates,
    profiles, FOMOD installers and Bethesda plugin order.
+8. **Redesign** (built, 2026-11-12 to 13): a Fedora and KDE Plasma
+   machine, the KDE colour scheme as a theme, a top bar and translucent
+   window, Game Mode, play status, saved filters, play sessions with a Stats
+   tab, Steam's descriptions and facts, engine downloads from Settings and a
+   Fedora RPM through COPR. On hold: emulation, list and details views,
+   OptiScaler, recompiled games.
 
 See [PLAN.md](PLAN.md) for the details.
 

@@ -5,8 +5,8 @@ where it stands. It is short, and it is the only file to read up front.
 
 The rest is read on demand, never all at once:
 
-- `docs/backlog.md`: the work left, items 39 and 40 in order. Read the item
-  you are starting.
+- `docs/backlog.md`: what is next (nothing queued), what is on hold, and a
+  table of the built items 27 to 38. Read it when starting new work.
 - `docs/design.md`: the redesign (omakade's ideas, no code). Read it before
   working on the window's look or pages.
 - `docs/history.md`: what was built, when, and what was checked. Read it when
