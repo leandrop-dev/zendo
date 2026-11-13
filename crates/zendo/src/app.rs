@@ -25,6 +25,7 @@ mod icons;
 mod installer;
 mod launch_options;
 mod library;
+mod hero;
 mod local;
 mod mods;
 mod nexus;
@@ -32,7 +33,6 @@ mod nexus_search;
 mod prefix;
 mod protondb;
 mod protons;
-mod queue;
 mod requirements;
 mod running;
 mod runtimes;
@@ -76,6 +76,7 @@ use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
 use filters::{Filters, FiltersMessage};
 use game::{GameView, GameViewMessage};
+use hero::HeroMessage;
 use game_mode::{GameMode, GameModeMessage};
 use installer::{InstallerMessage, InstallerState};
 use launch_options::{Sheet, SheetMessage};
@@ -85,7 +86,6 @@ use nexus::{NexusMessage, NexusState};
 use nexus_search::{Search, SearchMessage};
 use protondb::RatingState;
 use protons::{ProtonMessage, Protons};
-use queue::QueueMessage;
 use running::{RunMessage, Running};
 use runtimes::{RuntimeMessage, RuntimesState};
 use settings::Diagnostics;
@@ -221,13 +221,12 @@ enum Move {
 }
 
 /// The library read in a thread: the games, the saved sort, the user's
-/// categories, the settings, the up-next queue and the saved filters.
+/// categories, the settings and the saved filters.
 type Scanned = (
     Library,
     Sort,
     Vec<Category>,
     Result<Config, String>,
-    Vec<String>,
     Vec<SavedFilter>,
 );
 
@@ -235,7 +234,8 @@ type Scanned = (
 enum Message {
     /// Boxed: the settings and the library are large.
     Loaded(Box<Scanned>),
-    Queue(QueueMessage),
+    /// Play or details, from the game in Game Mode's hero.
+    Hero(HeroMessage),
     Refresh,
     /// An image download finished: the file, none found, or what went wrong.
     Image(String, Kind, Result<Option<PathBuf>, String>),
@@ -470,8 +470,6 @@ struct Zendo {
     filters_sheet: Option<Filters>,
     /// The user's saved filters as last read or written.
     filters: Vec<SavedFilter>,
-    /// The user's own queue of games to play next, by id.
-    up_next: Vec<String>,
     /// Every play session kept, oldest first; the window is the only writer,
     /// so this stays the file's content.
     sessions: Vec<zendo_core::sessions::Session>,
@@ -570,7 +568,6 @@ impl Zendo {
             categories: Vec::new(),
             filters_sheet: None,
             filters: Vec::new(),
-            up_next: Vec::new(),
             sessions: Vec::new(),
             stats: StatsState::default(),
             picker: None,
@@ -774,7 +771,7 @@ impl Zendo {
         }
         match message {
             Message::Loaded(loaded) => self.loaded(*loaded),
-            Message::Queue(message) => self.update_queue(message),
+            Message::Hero(message) => self.update_hero(message),
             Message::Refresh => self.refresh(),
             Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),
@@ -940,7 +937,7 @@ impl Zendo {
 
     fn loaded(
         &mut self,
-        (library, sort, categories, config, up_next, filters): Scanned,
+        (library, sort, categories, config, filters): Scanned,
     ) -> Task<Message> {
         let first = self.library.is_none();
         let mut id = self.selected_id();
@@ -948,7 +945,6 @@ impl Zendo {
         self.library = Some(library);
         self.categories = categories;
         self.filters = filters;
-        self.up_next = up_next;
         if let Some(library) = &self.library {
             let present: HashSet<&str> =
                 library.games.iter().map(|game| game.id.as_str()).collect();
@@ -1340,9 +1336,8 @@ impl Zendo {
         let on_game = matches!(self.page, Page::Game(_));
         let in_game_mode = self.game_mode_screen();
         self.update(match pad {
-            // On the Game Mode screen: Y queues, Start opens the menu, and
-            // the shoulder buttons change the shelf.
-            Pad::Sort if in_game_mode => Message::GameMode(GameModeMessage::ToggleQueued),
+            // On the Game Mode screen: Start opens the menu, and the
+            // shoulder buttons change the shelf.
             Pad::ShowHidden if in_game_mode => Message::GameMode(GameModeMessage::OpenMenu),
             Pad::PrevShelf => Message::GameMode(GameModeMessage::CycleShelf(-1)),
             Pad::NextShelf => Message::GameMode(GameModeMessage::CycleShelf(1)),
@@ -1806,7 +1801,6 @@ fn scan() -> Task<Message> {
                 state.sort,
                 state.categories(),
                 config,
-                state.up_next().to_vec(),
                 state.filters(),
             )
         }),
@@ -1926,7 +1920,6 @@ impl Fallback for Scanned {
             Sort::default(),
             Vec::new(),
             Err(note),
-            Vec::new(),
             Vec::new(),
         )
     }
@@ -2252,7 +2245,6 @@ mod tests {
             Sort::default(),
             Vec::new(),
             Ok(Config::default()),
-            Vec::new(),
             Vec::new(),
         ))));
         assert_eq!(
@@ -2733,23 +2725,6 @@ mod tests {
     }
 
     #[test]
-    fn the_up_next_queue_adds_and_removes() {
-        let mut zendo = played_zendo();
-        for id in ["desktop:2", "desktop:0", "desktop:1"] {
-            let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(id.into())));
-        }
-        assert_eq!(zendo.up_next, ["desktop:2", "desktop:0", "desktop:1"]);
-        let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(
-            "desktop:0".into(),
-        )));
-        assert_eq!(
-            zendo.up_next,
-            ["desktop:2", "desktop:1"],
-            "again takes it out"
-        );
-    }
-
-    #[test]
     fn game_mode_takes_over_the_library_and_hands_the_page_back() {
         let mut zendo = played_zendo();
         zendo.page = Page::Store;
@@ -2818,21 +2793,10 @@ mod tests {
         let mut zendo = played_zendo();
         let _ = zendo.update(Message::ToggleGameMode);
         assert_eq!(zendo.shown_shelf(), game_mode::Shelf::Continue);
-        // Nothing queued: Up next is skipped.
         let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
         assert_eq!(zendo.shown_shelf(), game_mode::Shelf::All);
         let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
         assert_eq!(zendo.shown_shelf(), game_mode::Shelf::Continue);
-
-        let _ = zendo.update(Message::Queue(QueueMessage::ToggleQueued(
-            "desktop:2".into(),
-        )));
-        let _ = zendo.update(Message::GameMode(GameModeMessage::CycleShelf(1)));
-        assert_eq!(zendo.shown_shelf(), game_mode::Shelf::UpNext);
-        assert_eq!(
-            zendo.hero_game().map(|game| game.id.as_str()),
-            Some("desktop:2")
-        );
     }
 
     #[test]
@@ -2848,9 +2812,7 @@ mod tests {
     fn the_controller_means_new_things_only_in_game_mode() {
         let mut zendo = played_zendo();
         let _ = zendo.update(Message::ToggleGameMode);
-        // Y queues the game in the hero; Start opens the menu; B closes it.
-        let _ = zendo.pad(Pad::Sort);
-        assert_eq!(zendo.up_next, ["desktop:1"]);
+        // Start opens the menu; B closes it.
         let _ = zendo.pad(Pad::ShowHidden);
         assert_eq!(zendo.game_mode.as_ref().and_then(|mode| mode.menu), Some(0));
         let _ = zendo.pad(Pad::Back);

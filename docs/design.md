@@ -96,16 +96,16 @@ no route to a game's page (item 33).
   Mode does not need it. Its pieces may come back with item 35 (play status).
 - Game Mode is F11 and Select (`--game-mode`, with `--fullscreen` the same). It
   puts the window full screen and shows its own screen over the Library page: a
-  hero (meta line, title, description, PLAY, DETAILS, + UP NEXT, a large cover)
+  hero (meta line, title, description, PLAY, DETAILS, a large cover)
   over a carousel of as many covers as fit, centred on the chosen one. A shelf
-  (Continue playing, Up next, All games) is chosen with LB and RB or Tab; empty
-  shelves are skipped. Y or Space queues the game; Start or Esc/B opens a menu
+  (Continue playing, All games) is chosen with LB and RB or Tab; empty
+  shelves are skipped. Start or Esc/B opens a menu
   (Back to Game Mode, Library, Leave Game Mode). The menu's Library shows the
   normal grid, and every other page keeps its normal chrome; while Game Mode is
   on the top bar has a GAME MODE chip that returns to the screen.
-- The up-next queue is the user's own, in `state.json` as `up_next`, up to 100;
-  it is added to from the game page's "+ Up next", the hero, and Y or Space. No
-  page lists or reorders it yet.
+- There was an up-next queue (item 36's neighbour); the user took it out on
+  2026-11-13 (item 42). An old `up_next` in `state.json` is ignored and
+  dropped on the next save.
 - The hero's description is a store game's summary, else who made it and for
   what; descriptions for every game are item 38. The header's filter chips
   (Show, Source, Sort, View, Search, Filters, Stats) are not built: Filters and
@@ -128,7 +128,7 @@ no route to a game's page (item 33).
 - Bulk edits on the marked games: FAVORITE, UNFAVORITE, HIDE, UNHIDE, each
   shown only when it would change a marked game, setting all alike. Hiding
   clears the marks; favoriting keeps them.
-- Left out: the random pick, bulk status, bulk Up next, Ctrl+A, Home (the
+- Left out: the random pick, bulk status, Ctrl+A, Home (the
   user rejected it) and Game Mode's Filters chip.
 
 ## Decided in item 36

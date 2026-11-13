@@ -1,14 +1,14 @@
 //! Game Mode: the full-screen, controller-first way in. It replaces the old
 //! F11 and opens on a screen of one game large (its hero) over a row of
-//! covers (a carousel) taken from a shelf: what was played lately, the
-//! up-next queue, or every game. The other pages keep their normal look.
+//! covers (a carousel) taken from a shelf: what was played lately, or every
+//! game. The other pages keep their normal look.
 
 use iced::widget::{button, column, container, image, row, space, text};
 use iced::{Alignment, Background, ContentFit, Element, Length, Task, window};
 use zendo_core::Game;
 
 use super::launch_options::{frame, overlay};
-use super::queue::{QueueMessage, meta_line, played_games, queued_games};
+use super::hero::{HeroMessage, meta_line, played_games};
 use super::style::{self, BOLD, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::{Message, Move, Page, Zendo, now};
 use crate::i18n::t;
@@ -26,19 +26,16 @@ const DESCRIPTION_LINES: usize = 4;
 pub(super) enum Shelf {
     /// The games played lately, the latest first.
     Continue,
-    /// The user's own queue.
-    UpNext,
     /// Every game the library shows.
     All,
 }
 
 impl Shelf {
-    const ALL: [Self; 3] = [Self::Continue, Self::UpNext, Self::All];
+    const ALL: [Self; 2] = [Self::Continue, Self::All];
 
     fn label(self) -> String {
         match self {
             Self::Continue => t!("shelf-continue"),
-            Self::UpNext => t!("shelf-up-next"),
             Self::All => t!("gm-all-games"),
         }
     }
@@ -101,8 +98,6 @@ pub(super) enum GameModeMessage {
     SetShelf(Shelf),
     /// The carousel's tile at this place.
     Pick(usize),
-    /// Puts the game in the hero in the up-next queue, or takes it out.
-    ToggleQueued,
     OpenMenu,
     MenuChoose(MenuChoice),
     /// Back to the Game Mode screen, from the grid or another page.
@@ -144,7 +139,6 @@ impl Zendo {
         };
         match which {
             Shelf::Continue => played_games(&library.games),
-            Shelf::UpNext => queued_games(&library.games, &self.up_next),
             Shelf::All => library.games.iter().filter(|game| !game.hidden).collect(),
         }
     }
@@ -241,8 +235,6 @@ impl Zendo {
                 Some(Task::none())
             }
             Message::CycleSort => Some(self.cycle_shelf(1)),
-            // Space: the up-next queue, as the controller's Y.
-            Message::Type(typed) if typed == " " => Some(self.queue_hero()),
             Message::Move(_)
             | Message::Type(_)
             | Message::Backspace
@@ -272,7 +264,6 @@ impl Zendo {
                 }
                 Task::none()
             }
-            GameModeMessage::ToggleQueued => self.queue_hero(),
             GameModeMessage::OpenMenu => {
                 self.set_menu(Some(0));
                 Task::none()
@@ -375,13 +366,6 @@ impl Zendo {
         }
     }
 
-    fn queue_hero(&mut self) -> Task<Message> {
-        if let Some(id) = self.hero_game().map(|game| game.id.clone()) {
-            self.toggle_queued(&id);
-        }
-        Task::none()
-    }
-
     /// The whole screen: the shelves, the hero, the carousel and the keys.
     pub(super) fn game_mode_view(&self) -> Element<'_, Message> {
         let shown = self.shown_shelf();
@@ -468,24 +452,15 @@ impl Zendo {
                 .into(),
         };
         let id = game.id.clone();
-        let queued = self.is_queued(&game.id);
         let actions = row![
             button(style::button_text(t!("run-play")).size(18).font(BOLD))
                 .padding(style::BUTTON_LARGE)
                 .style(style::primary)
-                .on_press(Message::Queue(QueueMessage::Play(id.clone()))),
-            button(style::button_text(t!("queue-details")))
+                .on_press(Message::Hero(HeroMessage::Play(id.clone()))),
+            button(style::button_text(t!("game-mode-details")))
                 .padding(style::BUTTON)
                 .style(style::secondary)
-                .on_press(Message::Queue(QueueMessage::Details(id.clone()))),
-            button(style::button_text(if queued {
-                t!("queue-remove")
-            } else {
-                t!("queue-add")
-            }))
-            .padding(style::BUTTON)
-            .style(style::secondary)
-            .on_press(Message::GameMode(GameModeMessage::ToggleQueued)),
+                .on_press(Message::Hero(HeroMessage::Details(id.clone()))),
         ]
         .spacing(SPACE_S)
         .align_y(Alignment::Center);
