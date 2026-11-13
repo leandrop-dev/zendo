@@ -28,25 +28,31 @@ fn tier_color(tier: &str) -> Color {
 }
 
 impl Zendo {
-    /// Asks `ProtonDB` about the game, on a thread, once a session.
+    /// Asks `ProtonDB` about the game, on a thread, once a session. Steam's
+    /// store is asked for the game's facts on the way when its app id is
+    /// known already, without waiting on `ProtonDB`.
     pub(super) fn want_rating(&mut self, id: &str) -> Task<Message> {
+        let facts = self.want_known_facts(id);
         if !self.persist || self.ratings.contains_key(id) {
-            return Task::none();
+            return facts;
         }
-        let title = match (self.game(id), self.store.owned(id)) {
-            (Some(game), _) => game.title.clone(),
-            (None, Some(owned)) => owned.title.clone(),
-            (None, None) => return Task::none(),
+        let (title, chosen) = match (self.game(id), self.store.owned(id)) {
+            (Some(game), _) => (game.title.clone(), game.steam_app),
+            (None, Some(owned)) => (owned.title.clone(), None),
+            (None, None) => return facts,
         };
         self.ratings.insert(id.to_owned(), RatingState::Asking);
         let id = id.to_owned();
-        Task::perform(
+        let rating = Task::perform(
             {
                 let id = id.clone();
-                blocking(move || protondb::rating(&id, &title).map_err(|err| format!("{err:#}")))
+                blocking(move || {
+                    protondb::rating(&id, &title, chosen).map_err(|err| format!("{err:#}"))
+                })
             },
             move |result| Message::Rating(id.clone(), result),
-        )
+        );
+        Task::batch([facts, rating])
     }
 
     /// Keeps the answer, then looks the game up on `AreWeAntiCheatYet` and
@@ -70,6 +76,7 @@ impl Zendo {
         ];
         if let Some(app) = app {
             tasks.push(self.want_deck(&id, app));
+            tasks.push(self.want_facts(&id, app));
         }
         self.ratings.insert(id, RatingState::Got(rating));
         Task::batch(tasks)
@@ -89,6 +96,7 @@ impl Zendo {
         ];
         if let Some(app) = app {
             tasks.push(self.want_deck(id, app));
+            tasks.push(self.want_facts(id, app));
         }
         Task::batch(tasks)
     }

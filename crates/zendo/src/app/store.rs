@@ -227,7 +227,15 @@ impl Zendo {
         let id = id.to_owned();
         let app = app.to_owned();
         Task::perform(
-            blocking(move || owned::steam_details(&app).map_err(|err| format!("{err:#}"))),
+            blocking(move || {
+                // Through the shared cache, so the game page's facts and
+                // this are asked once between them.
+                match app.parse::<u32>() {
+                    Ok(number) => zendo_core::steam_facts::details(number),
+                    Err(_) => owned::steam_details(&app),
+                }
+                .map_err(|err| format!("{err:#}"))
+            }),
             move |result| Message::Store(StoreMessage::SteamDetails(id.clone(), result)),
         )
     }

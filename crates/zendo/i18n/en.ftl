@@ -1210,3 +1210,23 @@ weekday-4 = Thu
 weekday-5 = Fri
 weekday-6 = Sat
 weekday-7 = Sun
+
+fact-features = Features
+fact-metacritic = Metacritic
+fact-controller-full = Full controller support
+fact-controller-partial = Partial controller support
+screenshots-title = Screenshots
+steam-app-label = Steam app id
+steam-app-by-you = { $app } (set by you)
+steam-app-found = { $app } (found by Zendo)
+steam-app-none = None found
+steam-app-placeholder = e.g. 620
+steam-app-save = Save
+steam-app-clear = Clear
+steam-app-invalid = That is not a Steam app id
+steam-app-saved = { $title } now uses Steam app { $app }
+steam-app-cleared = { $title } no longer has a Steam app id of its own
+steam-app-no-match = No Steam game was found for this one. Give its Steam app id to get a description and facts.
+steam-app-set = Set Steam app id
+
+fact-features-more = , +{ $count } more

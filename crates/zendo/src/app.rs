@@ -38,6 +38,7 @@ mod runtimes;
 mod settings;
 mod stats;
 mod steam;
+mod steam_facts;
 mod steam_deck;
 mod steam_installs;
 mod store;
@@ -369,6 +370,11 @@ enum Message {
         String,
         Result<Option<zendo_core::requirements::Requirements>, String>,
     ),
+    /// What Steam's store says about a game.
+    Facts(
+        String,
+        Result<Option<zendo_core::steam_facts::Facts>, String>,
+    ),
     /// Valve's Steam Deck review of a game.
     Deck(
         String,
@@ -496,6 +502,9 @@ struct Zendo {
     decks: std::collections::HashMap<String, steam_deck::DeckState>,
     /// The system requirements of each game whose page was opened.
     requirements: std::collections::HashMap<String, requirements::RequirementsState>,
+    /// What Steam's store says about each game whose page was opened or that
+    /// was in Game Mode's hero.
+    facts: std::collections::HashMap<String, steam_facts::FactsState>,
     /// The achievements of each game whose page was opened.
     achievements: std::collections::HashMap<String, achievements::AchievementsState>,
     /// The tools run in the Windows games' prefixes.
@@ -579,6 +588,7 @@ impl Zendo {
             anti_cheat: std::collections::HashMap::new(),
             decks: std::collections::HashMap::new(),
             requirements: std::collections::HashMap::new(),
+            facts: std::collections::HashMap::new(),
             achievements: std::collections::HashMap::new(),
             prefix: prefix::PrefixState::default(),
             gog_totals: std::collections::HashSet::new(),
@@ -743,11 +753,21 @@ impl Zendo {
         Task::none()
     }
 
+    /// Routes the message, then asks for the facts of the game that now
+    /// has Game Mode's hero, whatever moved it.
+    fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.route(message);
+        if self.game_mode.is_none() {
+            return task;
+        }
+        Task::batch([task, self.want_hero_facts()])
+    }
+
     #[expect(
         clippy::too_many_lines,
         reason = "one arm per message, which the router keeps together"
     )]
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn route(&mut self, message: Message) -> Task<Message> {
         if let Some(task) = self.overlay_takes(&message) {
             return task;
         }
@@ -884,6 +904,7 @@ impl Zendo {
             Message::AntiCheat(id, result) => self.anti_cheat_arrived(id, result),
             Message::Deck(id, result) => self.deck_arrived(id, result),
             Message::Requirements(id, result) => self.requirements_arrived(id, result),
+            Message::Facts(id, result) => self.facts_arrived(id, result),
             Message::Achievements(id, result) => self.achievements_arrived(id, result),
             Message::GogChangelog(id, result) => self.changelog_arrived(id, result),
             Message::PasteClipboard => iced::clipboard::read().map(Message::Pasted),

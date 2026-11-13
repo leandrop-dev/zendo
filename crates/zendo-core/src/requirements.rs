@@ -99,7 +99,13 @@ pub fn for_game(
     system: System,
 ) -> anyhow::Result<Option<Requirements>> {
     let file = paths::cache_home().map(|dir| dir.join("zendo/requirements.json"));
-    let key = format!("{id}/{system:?}");
+    // The Steam app id is in the key, so one the user gives (or changes)
+    // asks again; Epic's and GOG's own pages do not depend on it, which
+    // costs a repeat request at most.
+    let key = match steam_app {
+        Some(app) => format!("{id}/{system:?}/{app}"),
+        None => format!("{id}/{system:?}"),
+    };
     let kept: HashMap<String, Kept> = file
         .as_ref()
         .and_then(|file| fs::read(file).ok())

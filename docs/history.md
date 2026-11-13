@@ -3248,3 +3248,71 @@ was not run, as neither is in the throwaway home. A Zendo of the user's own
 (their real home) was running during the first check and was not touched.
 Known limit, unchanged from the totals: quit Zendo while a game runs and that
 session is lost.
+
+## Item 38: Steam's facts for every game, 2026-11-13
+
+Built, tests green (166 in the window, 271 in core), clippy clean; checked on
+screen the same day with the user present (below); not yet tried by the user.
+
+Checked on screen (throwaway home, no session bus, two `.desktop` games:
+"Portal 2" and "Zzyzx Unmatched Test", the user present, a pid check before
+every key and click): Portal 2's page found app 620 by title (the ProtonDB
+Native and Deck Verified pills came with it) and showed the About card from
+Steam, Developer/Publisher/Released/Genres, Features (the controller line not
+repeated), Metacritic 95 / 100, a sideways-scrolling Screenshots card and the
+System requirements card. The Technical card's row read "620 (found by
+Zendo)". Typing 400 and Save changed the page to Portal (released Oct 10,
+2007, Metacritic 90, other screenshots and requirements) with "400 (set by
+you)" and a Clear button; Clear brought Portal 2 back. The unmatched game had
+no pills, the "No Steam game was found" card in the About place, and its Set
+Steam app id button opened the Technical card. After a restart, Game Mode's
+hero showed Portal 2's Steam description from the cache, and "No description
+yet." for the unmatched game. The Metacritic link opened Firefox on Portal 2's
+reviews page.
+Found in that check and fixed the same day, then looked at again: the Set
+Steam app id button opened the Technical card below the visible part of the
+page, so it now snaps the page to its end (the card is the last); the
+Features row listed every Steam category (about 30 for Portal 2), so it now
+names the first 6 and counts the rest ("+26 more"). The About text is
+Steam's `about_the_game`, marketing included, left as it is.
+Not checked: a screenshot's click (the second `xdg-open` made Firefox say it
+was already running; it is the same `Message::Open` path as Metacritic's, so
+this is Firefox's start-up and not Zendo's, but the full-size image was not
+seen), pt-PT, the failed-facts row, a hero for a game never opened that
+ProtonDB knows, and the Store page's Steam details through the shared cache.
+
+- `owned.rs` reads, besides what it did, Steam's `categories` (features),
+  `controller_support`, `metacritic` and `screenshots` from `appdetails`.
+  Real replies were checked first (2026-11-13): an unknown or removed app
+  answers `{"success":false}` with no `data`; `metacritic` is absent for
+  Palworld and Black Myth: Wukong; `controller_support` can be absent;
+  `screenshots` items have `path_thumbnail` and `path_full`.
+  `StoreDetails` is now `Serialize` and `Deserialize`.
+- `steam_facts.rs` (core): `details(app)` is cached in
+  `$XDG_CACHE_HOME/zendo/steam_facts.json` for a week (the Store page's
+  Steam details go through it too); `for_app(app)` adds the first 8
+  screenshot thumbnails as files in `.../zendo/screenshots/`; `app_for(id,
+  chosen)` finds the app id with no network: the user's, a Steam game's own,
+  else the one the ProtonDB cache holds. It skips umu's id, which can touch
+  the network.
+- `http::cached_image` is achievements' icon downloader, moved so both use
+  it.
+- A Steam app id the user gives a game is in `state.json` (`steam_apps`),
+  never for a `steam:` id, and on `Game.steam_app`. `protondb::rating` takes
+  it first and records it in its cache entry (`chosen`; version 3), so
+  setting, changing or clearing it asks again. The requirements cache key
+  holds the resolved app id. AreWeAntiCheatYet keeps no per-game cache and
+  needed nothing.
+- The game page: the About card falls back to Steam's description; the
+  details card gains Developer, Publisher, Released and Genres only where
+  the game's own store left them out, plus Features (with controller
+  support) and Metacritic (opens its page); a Screenshots card scrolls
+  sideways and each opens its full size in the browser. A game with no Steam
+  match gets a card saying so, which opens the Technical card, whose Steam
+  app id row shows the id in use, where it came from, and a field with Save
+  and Clear.
+- Game Mode's hero shows the description once the game's app id is known
+  without the network (a Steam game, a user's id, or an earlier page open or
+  ProtonDB lookup). Carousel browsing never triggers a lookup for games not
+  yet known.
+- What was and was not checked on screen is above.

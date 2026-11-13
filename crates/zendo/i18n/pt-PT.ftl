@@ -1218,3 +1218,23 @@ weekday-4 = Qui
 weekday-5 = Sex
 weekday-6 = Sáb
 weekday-7 = Dom
+
+fact-features = Funcionalidades
+fact-metacritic = Metacritic
+fact-controller-full = Suporte completo para comando
+fact-controller-partial = Suporte parcial para comando
+screenshots-title = Capturas de ecrã
+steam-app-label = ID da app Steam
+steam-app-by-you = { $app } (definido por si)
+steam-app-found = { $app } (encontrado pelo Zendo)
+steam-app-none = Nenhum encontrado
+steam-app-placeholder = ex.: 620
+steam-app-save = Guardar
+steam-app-clear = Limpar
+steam-app-invalid = Isso não é um ID de app Steam
+steam-app-saved = { $title } passa a usar a app Steam { $app }
+steam-app-cleared = { $title } deixou de ter um ID Steam próprio
+steam-app-no-match = Não foi encontrado nenhum jogo Steam para este. Indique o ID da app Steam para obter descrição e dados.
+steam-app-set = Indicar ID da app Steam
+
+fact-features-more = , +{ $count } mais

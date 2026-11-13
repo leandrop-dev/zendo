@@ -185,6 +185,26 @@ few dozen games; for large libraries, scale them down when saving [re-evaluate
 once someone has a few hundred games].
 
 
+## Steam's `appdetails`, as Zendo reads it (checked 2026-11-13)
+
+`https://store.steampowered.com/api/appdetails?appids=<id>&l=english`, no
+key. The reply is `{"<id>": {"success": bool, "data": {...}}}`.
+
+- An unknown, removed or tool app: `{"<id>":{"success":false}}`, no `data`
+  (checked: 480, 1, 999999999).
+- Read: `about_the_game` (else `short_description`; HTML, made plain),
+  `developers`, `publishers`, `release_date.date`, `genres[].description`,
+  `platforms`, `pc_requirements` (`[]` when none), `categories[].description`
+  (features: "Single-player", "Co-op"), `controller_support` (`"full"`; absent
+  on some games), `metacritic` (`score`, `url`; absent for Palworld and Black
+  Myth: Wukong) and `screenshots[]` (`path_thumbnail`, a 600x338 image, and
+  `path_full`, 1920x1080; addresses carry a `?t=` query).
+- Kept in `$XDG_CACHE_HOME/zendo/steam_facts.json` (`{app: {version, asked,
+  details}}`, a week) and `.../zendo/screenshots/` (the first 8 thumbnails,
+  named after the address). `protondb.json` entries also carry `chosen`, the
+  app id the user gave the game. The user's ids are in `state.json` as
+  `steam_apps`.
+
 ## Ideas from other projects (ideas only, no code copied)
 
 - [Hikari](https://github.com/dodo986/hikari) (GPL-3.0, Go daemon + React

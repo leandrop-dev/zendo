@@ -56,6 +56,9 @@ pub(super) struct GameMode {
     pub browsing: bool,
     /// The page to go back to when Game Mode ends.
     pub came_from: Page,
+    /// The game whose Steam facts were last asked for as the hero's, so a
+    /// game is asked for once each time it takes the hero.
+    pub facts_for: Option<String>,
 }
 
 impl GameMode {
@@ -66,6 +69,7 @@ impl GameMode {
             menu: None,
             browsing: false,
             came_from,
+            facts_for: None,
         }
     }
 }
@@ -566,14 +570,11 @@ impl Zendo {
     }
 }
 
-/// What the hero says about a game: the store's summary when there is one,
-/// else who made it and for what. (A description for every game is item 38.)
+/// What the hero says about a game: its store's summary when there is one,
+/// else Steam's (asked when the game took the hero), else who made it and
+/// for what.
 fn describe(zendo: &Zendo, game: &Game) -> String {
-    if let Some(summary) = zendo
-        .store
-        .owned(&game.id)
-        .and_then(|owned| owned.summary.as_deref())
-    {
+    if let Some(summary) = zendo.description_of(&game.id, zendo.store.owned(&game.id)) {
         let lines: Vec<&str> = summary
             .lines()
             .filter(|line| !line.trim().is_empty())

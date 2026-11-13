@@ -53,6 +53,7 @@ pub mod sessions;
 pub mod state;
 pub mod steam;
 pub mod steam_deck;
+pub mod steam_facts;
 pub mod steam_runtime;
 pub mod steam_web;
 pub mod steamgriddb;
@@ -250,6 +251,9 @@ pub struct Game {
     pub achievements: Option<(u32, u32)>,
     /// Where the user is with it, when they said.
     pub status: Option<Status>,
+    /// The Steam app id the user gave it, for a game Zendo could not match
+    /// to one or matched wrongly.
+    pub steam_app: Option<u32>,
 }
 
 impl Game {
@@ -272,6 +276,7 @@ impl Game {
             categories: Vec::new(),
             achievements: None,
             status: None,
+            steam_app: None,
         }
     }
 
@@ -428,6 +433,7 @@ impl Library {
             game.categories = state.categories_of(&game.id);
             game.achievements = state.achievements_of(&game.id);
             game.status = state.status_of(&game.id);
+            game.steam_app = state.steam_app_of(&game.id);
         }
     }
 

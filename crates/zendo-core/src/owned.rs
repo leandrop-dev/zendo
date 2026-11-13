@@ -432,7 +432,7 @@ pub(crate) fn ask_owned(token: &str, steamid: &str) -> anyhow::Result<SteamAnswe
 }
 
 /// What Steam's store says about a game, for its page.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoreDetails {
     pub summary: Option<String>,
     pub developer: Option<String>,
@@ -442,6 +442,31 @@ pub struct StoreDetails {
     pub platforms: Vec<String>,
     /// The space the requirements ask for, in bytes.
     pub space: Option<u64>,
+    /// Steam's categories: "Single-player", "Co-op", "Steam Cloud", …
+    #[serde(default)]
+    pub features: Vec<String>,
+    /// `full` or `partial`, when Steam says.
+    #[serde(default)]
+    pub controller: Option<String>,
+    #[serde(default)]
+    pub metacritic: Option<Metacritic>,
+    #[serde(default)]
+    pub screenshots: Vec<Screenshot>,
+}
+
+/// A game's Metacritic score as Steam lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Metacritic {
+    pub score: u8,
+    pub url: String,
+}
+
+/// One of a game's screenshots on Steam's store: a small image for the page
+/// and the full-size one's address.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Screenshot {
+    pub thumb: String,
+    pub full: String,
 }
 
 impl StoreDetails {
@@ -479,6 +504,10 @@ pub fn steam_details(app: &str) -> anyhow::Result<Option<StoreDetails>> {
     parse_steam_details(&text, app)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the reply's shape and its reading, kept together"
+)]
 fn parse_steam_details(text: &str, app: &str) -> anyhow::Result<Option<StoreDetails>> {
     #[derive(Deserialize)]
     struct Entry {
@@ -500,6 +529,22 @@ fn parse_steam_details(text: &str, app: &str) -> anyhow::Result<Option<StoreDeta
         /// An object with `minimum` and `recommended`, or `[]` when the
         /// store lists none.
         pc_requirements: Option<serde_json::Value>,
+        #[serde(default)]
+        categories: Vec<Genre>,
+        controller_support: Option<String>,
+        metacritic: Option<MetacriticData>,
+        #[serde(default)]
+        screenshots: Vec<ShotData>,
+    }
+    #[derive(Deserialize)]
+    struct MetacriticData {
+        score: Option<u8>,
+        url: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct ShotData {
+        path_thumbnail: Option<String>,
+        path_full: Option<String>,
     }
     #[derive(Deserialize)]
     struct Released {
@@ -548,6 +593,28 @@ fn parse_steam_details(text: &str, app: &str) -> anyhow::Result<Option<StoreDeta
                 .filter_map(|level| wanted.get(level)?.as_str())
                 .find_map(space_wanted)
         }),
+        features: data
+            .categories
+            .into_iter()
+            .map(|category| category.description)
+            .collect(),
+        controller: data.controller_support.filter(|kind| !kind.is_empty()),
+        metacritic: data.metacritic.and_then(|found| {
+            Some(Metacritic {
+                score: found.score?,
+                url: found.url?,
+            })
+        }),
+        screenshots: data
+            .screenshots
+            .into_iter()
+            .filter_map(|shot| {
+                Some(Screenshot {
+                    thumb: shot.path_thumbnail?,
+                    full: shot.path_full?,
+                })
+            })
+            .collect(),
     }))
 }
 
@@ -1207,6 +1274,11 @@ mod tests {
         assert_eq!(details.developer.as_deref(), Some("Valve"));
         assert_eq!(details.released.as_deref(), Some("18 Apr, 2011"));
         assert_eq!(details.platforms, ["Windows", "Linux"]);
+        // Absent keys: no features, no score, no screenshots.
+        assert_eq!(details.features, Vec::<String>::new());
+        assert_eq!(details.controller, None);
+        assert_eq!(details.metacritic, None);
+        assert_eq!(details.screenshots, Vec::<Screenshot>::new());
         assert_eq!(
             parse_steam_details(r#"{"1": {"success": false}}"#, "1").unwrap(),
             None
@@ -1216,6 +1288,42 @@ mod tests {
         details.fill(&mut game);
         assert_eq!(game.developer.as_deref(), Some("Kept"));
         assert_eq!(game.genres, ["Action"]);
+    }
+
+    #[test]
+    fn reads_steams_features_score_and_screenshots() {
+        // Shapes checked against the real store on 2026-11-13: Portal 2
+        // (620) has all of them; Palworld (1623730) has no `metacritic`.
+        let json = r#"{"620": {"success": true, "data": {
+            "controller_support": "full",
+            "categories": [{"id": 2, "description": "Single-player"},
+                           {"id": 9, "description": "Co-op"}],
+            "metacritic": {"score": 95, "url": "https://www.metacritic.com/game/pc/portal-2"},
+            "screenshots": [
+                {"id": 0, "path_thumbnail": "https://x/0.600x338.jpg", "path_full": "https://x/0.1920x1080.jpg"},
+                {"id": 1, "path_thumbnail": "https://x/1.600x338.jpg"}]}}}"#;
+        let details = parse_steam_details(json, "620").unwrap().unwrap();
+        assert_eq!(details.features, ["Single-player", "Co-op"]);
+        assert_eq!(details.controller.as_deref(), Some("full"));
+        assert_eq!(
+            details.metacritic,
+            Some(Metacritic {
+                score: 95,
+                url: "https://www.metacritic.com/game/pc/portal-2".into()
+            })
+        );
+        // A screenshot without a full-size address is left out.
+        assert_eq!(
+            details.screenshots,
+            [Screenshot {
+                thumb: "https://x/0.600x338.jpg".into(),
+                full: "https://x/0.1920x1080.jpg".into()
+            }]
+        );
+        // What the cache keeps comes back the same.
+        let kept: StoreDetails =
+            serde_json::from_str(&serde_json::to_string(&details).unwrap()).unwrap();
+        assert_eq!(kept, details);
     }
 
     #[test]

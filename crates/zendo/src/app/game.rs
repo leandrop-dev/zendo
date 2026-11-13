@@ -45,12 +45,22 @@ pub struct GameView {
     pub(super) changelog_more: usize,
     /// How many achievements are shown beyond the first ones.
     pub(super) achievements_more: usize,
+    /// What was typed in the Steam app id field; `None` shows the id the
+    /// user gave the game.
+    pub(super) steam_app_input: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum GameViewMessage {
     ToggleMore,
     ToggleTechnical,
+    /// Opens the Technical section, where the Steam app id is given.
+    ShowSteamApp,
+    SteamAppInput(String),
+    /// Saves what was typed as the game's Steam app id.
+    SteamAppSave(String),
+    /// Takes back the Steam app id the user gave the game.
+    SteamAppClear(String),
     /// Uninstall pressed once on a DLC: pressed again, it goes.
     AskRemoveDlc(String),
     /// Show earlier updates, on the changelog card.
@@ -65,6 +75,17 @@ impl Zendo {
         match message {
             GameViewMessage::ToggleMore => view.more = !view.more,
             GameViewMessage::ToggleTechnical => view.technical = !view.technical,
+            GameViewMessage::ShowSteamApp => {
+                view.technical = true;
+                // The Technical card is the page's last: show it.
+                return iced::widget::operation::snap_to(
+                    game_scroll_id(),
+                    scrollable::RelativeOffset::END,
+                );
+            }
+            GameViewMessage::SteamAppInput(text) => view.steam_app_input = Some(text),
+            GameViewMessage::SteamAppSave(id) => return self.save_steam_app(&id),
+            GameViewMessage::SteamAppClear(id) => return self.give_steam_app(&id, None),
             GameViewMessage::AskRemoveDlc(id) => view.confirm_dlc = Some(id),
             GameViewMessage::MoreChangelog => view.changelog_more += super::gog_changelog::MORE,
             GameViewMessage::MoreAchievements => {
@@ -99,9 +120,12 @@ impl Zendo {
 
         let owned = self.store.owned(&game.id);
         let mut main: Vec<Element<'a, Message>> = Vec::new();
-        if let Some(summary) = owned.and_then(|owned| owned.summary.as_deref()) {
+        if let Some(summary) = self.description_of(&game.id, owned) {
             main.push(about_card(summary));
+        } else {
+            main.extend(self.no_match_card(game));
         }
+        main.extend(self.screenshots_card(&game.id));
         self.add_anti_cheat_card(&game.id, &mut main);
         if let Some(dlc) = self.dlc_card(game) {
             main.push(dlc);
@@ -452,6 +476,9 @@ impl Zendo {
         for (label, value) in facts {
             add(label, plain(value));
         }
+        for (label, value) in self.steam_fact_rows(game, self.store.owned(&game.id)) {
+            add(label, value);
+        }
         if let Some(path) = &game.details.install_path {
             add(
                 t!("fact-install-path"),
@@ -504,6 +531,9 @@ impl Zendo {
                 label_row(t!("fact-zendo-id"), code(game.id.clone())),
             ]
             .spacing(style::SPACE_M);
+            if let Some(steam_app) = self.steam_app_row(game) {
+                rows = rows.push(steam_app);
+            }
             let starts_itself = game.installed_by_zendo() || game.source == Source::Local;
             if starts_itself
                 && launch::needs_proton(game)

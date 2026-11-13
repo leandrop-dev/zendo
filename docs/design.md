@@ -155,6 +155,21 @@ no route to a game's page (item 33).
 - Left out: Game Mode's Stats chip, a `zendo stats` command, imagery or
   sharing for the summary.
 
+## Decided in item 38
+
+- Descriptions and facts come from Steam's store for any game a Steam app id
+  is known for, on the game page and in Game Mode's hero only; no library
+  pass, so the Library cannot filter or sort by them.
+- Facts: description, developer, publisher, release date, genres, features
+  with controller support, the Metacritic score and up to 8 screenshots
+  (small images on the page, the full size in the browser) [tentative: the
+  browser and the 8].
+- The user can give a game a Steam app id (Technical card), used for
+  ProtonDB, requirements, the Deck review and the facts. A game with no match
+  says so where its description would be.
+- The hero asks when a game takes it, but only for a game whose app id is
+  known without the network.
+
 ## Not taken
 
 Console libraries and native ports (emulation is on hold, docs/backlog.md),

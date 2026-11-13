@@ -3,6 +3,8 @@
 //! answered with `{"tier": "gold", "total": 37, …}`, a 404 when it has
 //! none). `ProtonDB` knows games by Steam app id:
 //!
+//! - one the user gave the game (Zendo's state, `steam_app_of`), before any
+//!   other way;
 //! - a Steam game has its own;
 //! - a store game takes umu's id for it when that is a Steam app id
 //!   (`umu-435790`);
@@ -29,7 +31,7 @@ const SUMMARY: &str = "https://www.protondb.com/api/v1/reports/summaries";
 const SEARCH: &str = "https://store.steampowered.com/api/storesearch/";
 const DETAILS: &str = "https://store.steampowered.com/api/appdetails";
 /// What the cache's entries hold; older entries are asked again.
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const WEEK: u64 = 7 * 24 * 60 * 60;
 
 /// A game's standing on `ProtonDB`.
@@ -60,18 +62,45 @@ struct Kept {
     version: u32,
     /// Unix seconds.
     asked: u64,
+    /// The Steam app id the user gave the game when this was asked; an
+    /// answer asked with another (or none) is stale.
+    #[serde(default)]
+    chosen: Option<u32>,
     rating: Option<Rating>,
 }
 
+impl Kept {
+    /// Whether the answer was asked in this format and with this `chosen`:
+    /// setting, changing or clearing the user's app id makes it stale.
+    fn asked_with(&self, chosen: Option<u32>) -> bool {
+        self.version == VERSION && self.chosen == chosen
+    }
+}
+
+/// The Steam app id this game's answer was found with, from the cache and
+/// whatever its age: no network. `None` when the game was not looked up
+/// yet, or only with a different `chosen`.
+#[must_use]
+pub fn cached_app(id: &str, chosen: Option<u32>) -> Option<u32> {
+    let file = paths::cache_home()?.join("zendo/protondb.json");
+    let kept: HashMap<String, Kept> = serde_json::from_slice(&fs::read(file).ok()?).ok()?;
+    let entry = kept.get(id)?;
+    entry
+        .asked_with(chosen)
+        .then(|| entry.rating.as_ref().map(|rating| rating.app))
+        .flatten()
+}
+
 /// The game's rating, from the cache or asked anew: `None` when no Steam
-/// app id could be found for it. It blocks on the network; the window
-/// calls it on a thread.
+/// app id could be found for it. `chosen` is the Steam app id the user gave
+/// the game, which is used before any other way of finding one. It blocks
+/// on the network; the window calls it on a thread.
 ///
 /// # Errors
 ///
 /// When `ProtonDB` or Steam cannot be reached or answer oddly; nothing is
 /// kept then, so the next look asks again.
-pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
+pub fn rating(id: &str, title: &str, chosen: Option<u32>) -> anyhow::Result<Option<Rating>> {
     let file = paths::cache_home().map(|dir| dir.join("zendo/protondb.json"));
     let kept: HashMap<String, Kept> = file
         .as_ref()
@@ -80,14 +109,18 @@ pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
         .unwrap_or_default();
     let now = time::now();
     if let Some(entry) = kept.get(id)
-        && entry.version == VERSION
+        && entry.asked_with(chosen)
         && now.saturating_sub(entry.asked) < WEEK
     {
         return Ok(entry.rating.clone());
     }
     // ProtonDB answers a missing game with a 404, not an error.
     let agent = crate::http::answering_agent(Duration::from_secs(10));
-    let rating = match steam_app(&agent, id, title)? {
+    let app = match chosen {
+        Some(app) => Some(app),
+        None => steam_app(&agent, id, title)?,
+    };
+    let rating = match app {
         Some(app) => Some(Rating {
             native: on_linux(&agent, app)?,
             ..summary(&agent, app)?
@@ -107,6 +140,7 @@ pub fn rating(id: &str, title: &str) -> anyhow::Result<Option<Rating>> {
                 Kept {
                     version: VERSION,
                     asked: now,
+                    chosen,
                     rating: rating.clone(),
                 },
             );
@@ -244,6 +278,28 @@ mod tests {
             plain("Gunslugs : Rogue Tactics")
         );
         assert_ne!(plain("10 Second Ninja X"), plain("10 Second Ninja X Demo"));
+    }
+
+    #[test]
+    fn an_answer_asked_with_another_app_id_is_stale() {
+        let kept = |chosen| Kept {
+            version: VERSION,
+            asked: 0,
+            chosen,
+            rating: None,
+        };
+        assert!(kept(None).asked_with(None));
+        assert!(kept(Some(620)).asked_with(Some(620)));
+        // Set, changed and cleared.
+        assert!(!kept(None).asked_with(Some(620)));
+        assert!(!kept(Some(620)).asked_with(Some(70)));
+        assert!(!kept(Some(620)).asked_with(None));
+        // An older format is asked again whatever the id.
+        let old = Kept {
+            version: VERSION - 1,
+            ..kept(None)
+        };
+        assert!(!old.asked_with(None));
     }
 
     #[test]

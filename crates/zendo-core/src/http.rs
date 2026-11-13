@@ -137,9 +137,60 @@ pub(crate) fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// The image kinds Zendo keeps, by extension and first bytes.
+const IMAGE_KINDS: [(&str, &[u8]); 4] = [
+    ("jpg", b"\xFF\xD8\xFF"),
+    ("png", b"\x89PNG"),
+    ("gif", b"GIF8"),
+    ("webp", b"RIFF"),
+];
+
+/// The extension for an image's bytes; `None` for anything else (an error
+/// page, say).
+fn image_kind(bytes: &[u8]) -> Option<&'static str> {
+    IMAGE_KINDS
+        .iter()
+        .find(|(_, magic)| bytes.starts_with(magic))
+        .map(|(extension, _)| *extension)
+}
+
+/// A small image's file in `dir`, downloaded when not there yet. Named
+/// after its address, with the extension its bytes call for, as the window
+/// reads an image's kind from its name (Epic's addresses have none).
+/// `None` when it cannot be downloaded or is not an image.
+pub(crate) fn cached_image(dir: &Path, url: &str) -> Option<std::path::PathBuf> {
+    let name = crate::paths::safe_name(url.split_once("://").map_or(url, |(_, rest)| rest));
+    let kept = IMAGE_KINDS
+        .iter()
+        .map(|(extension, _)| dir.join(format!("{name}.{extension}")))
+        .find(|file| file.is_file());
+    if kept.is_some() {
+        return kept;
+    }
+    let bytes = agent(Duration::from_secs(20))
+        .get(url)
+        .call()
+        .ok()?
+        .body_mut()
+        .with_config()
+        .limit(2 * 1024 * 1024)
+        .read_to_vec()
+        .ok()?;
+    let file = dir.join(format!("{name}.{}", image_kind(&bytes)?));
+    crate::paths::write_atomic(&file, &bytes).ok()?;
+    Some(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_an_image_by_its_bytes() {
+        assert_eq!(image_kind(b"\xFF\xD8\xFF\xE0rest"), Some("jpg"));
+        assert_eq!(image_kind(b"\x89PNG\r\n"), Some("png"));
+        assert_eq!(image_kind(b"<html>"), None);
+    }
 
     #[test]
     fn decodes_query_values() {

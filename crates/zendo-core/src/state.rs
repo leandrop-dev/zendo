@@ -217,6 +217,10 @@ pub struct State {
     /// The user's saved filters, by the name they were given.
     #[serde(default)]
     filters: BTreeMap<String, Filter>,
+    /// The Steam app id the user gave a game that Zendo could not match, or
+    /// matched wrongly. Never for a Steam game, which has its own.
+    #[serde(default)]
+    steam_apps: BTreeMap<String, u32>,
     #[serde(default)]
     pub sort: Sort,
 }
@@ -476,6 +480,30 @@ impl State {
         self.status.get(id).copied()
     }
 
+    /// Sets the Steam app id for a game, or clears it with `None`. Returns
+    /// false, changing nothing, for a Steam game (it has its own id) and
+    /// for app id 0.
+    pub fn set_steam_app(&mut self, id: &str, app: Option<u32>) -> bool {
+        if id.starts_with("steam:") || app == Some(0) {
+            return false;
+        }
+        match app {
+            Some(app) => {
+                self.steam_apps.insert(id.to_owned(), app);
+            }
+            None => {
+                self.steam_apps.remove(id);
+            }
+        }
+        true
+    }
+
+    /// The Steam app id the user gave the game.
+    #[must_use]
+    pub fn steam_app_of(&self, id: &str) -> Option<u32> {
+        self.steam_apps.get(id).copied()
+    }
+
     /// Every saved filter, by name.
     #[must_use]
     pub fn filters(&self) -> Vec<SavedFilter> {
@@ -587,6 +615,24 @@ mod tests {
         assert!(state.is_hidden("desktop:tool"));
         assert_eq!(state.sort, Sort::MostPlayed);
         assert_eq!(state.played("steam:1"), Played::default());
+    }
+
+    #[test]
+    fn keeps_a_steam_app_id_the_user_gave() {
+        let mut state = State::default();
+        assert!(state.set_steam_app("local:portal", Some(620)));
+        // A Steam game has its own id; 0 is no app.
+        assert!(!state.set_steam_app("steam:70", Some(620)));
+        assert!(!state.set_steam_app("local:portal", Some(0)));
+        let mut state: State =
+            serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state.steam_app_of("local:portal"), Some(620));
+        assert_eq!(state.steam_app_of("steam:70"), None);
+        assert!(state.set_steam_app("local:portal", None));
+        assert_eq!(state.steam_app_of("local:portal"), None);
+        // A file from before the field has none.
+        let old: State = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.steam_app_of("local:portal"), None);
     }
 
     #[test]
