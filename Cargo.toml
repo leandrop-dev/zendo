@@ -65,3 +65,10 @@ allow_attributes_without_reason = "warn"
 [profile.release]
 strip = true
 lto = "thin"
+
+# Dependencies are built with optimisations in a debug build too: `image`
+# decoded a cover in 52 ms and a hero in 465 ms unoptimised, against 1.8 ms
+# and 12 ms optimised (checked 2026-11-13), and Iced decodes on the thread that
+# draws. Zendo's own code stays unoptimised, so rebuilds stay quick.
+[profile.dev.package."*"]
+opt-level = 2

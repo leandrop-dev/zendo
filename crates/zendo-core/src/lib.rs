@@ -59,6 +59,7 @@ pub mod steam_web;
 pub mod steamgriddb;
 pub mod store_tasks;
 pub mod stores;
+pub mod thumbs;
 pub mod theme;
 mod time;
 mod umu;

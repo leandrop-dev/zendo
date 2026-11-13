@@ -46,7 +46,7 @@ impl Zendo {
             title: &game.title,
             source: source.join(" · "),
             cover: game.cover.as_deref(),
-            backdrop: game.hero.as_deref(),
+            backdrop: self.backdrop_of(game.hero.as_deref()),
             badges,
         });
 

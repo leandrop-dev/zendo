@@ -9,6 +9,7 @@ mod accounts;
 mod achievements;
 mod anti_cheat;
 mod artwork;
+mod backdrops;
 mod collections;
 mod cloud_saves;
 mod dlc;
@@ -234,6 +235,8 @@ enum Message {
     Loaded(Box<Scanned>),
     /// Play or details, from the game in Game Mode's hero.
     Hero(HeroMessage),
+    /// The copy of a hero for a page header was made, or could not be.
+    Backdrop(PathBuf, Option<PathBuf>),
     Refresh,
     /// An image download finished: the file, none found, or what went wrong.
     Image(String, Kind, Result<Option<PathBuf>, String>),
@@ -453,6 +456,8 @@ struct Zendo {
     sort: Sort,
     view: library::View,
     images: ImageDownloads,
+    /// The smaller copies of heroes drawn behind game pages.
+    backdrops: backdrops::Backdrops,
     downloads: DownloadsState,
     running: Running,
     /// A game's launch options, open over its page.
@@ -556,6 +561,7 @@ impl Zendo {
             sort: Sort::default(),
             view: library::View::default(),
             images: ImageDownloads::default(),
+            backdrops: backdrops::Backdrops::default(),
             downloads: DownloadsState::default(),
             running: Running::default(),
             sheet: None,
@@ -749,10 +755,12 @@ impl Zendo {
     /// has Game Mode's hero, whatever moved it.
     fn update(&mut self, message: Message) -> Task<Message> {
         let task = self.route(message);
+        // After any message: a game page may have opened, or its hero changed.
+        let backdrop = self.want_backdrop();
         if self.game_mode.is_none() {
-            return task;
+            return Task::batch([task, backdrop]);
         }
-        Task::batch([task, self.want_hero_facts()])
+        Task::batch([task, backdrop, self.want_hero_facts()])
     }
 
     #[expect(
@@ -766,6 +774,10 @@ impl Zendo {
         match message {
             Message::Loaded(loaded) => self.loaded(*loaded),
             Message::Hero(message) => self.update_hero(message),
+            Message::Backdrop(hero, copy) => {
+                self.backdrops.made(hero, copy);
+                Task::none()
+            }
             Message::Refresh => self.refresh(),
             Message::Image(id, kind, result) => self.image_arrived(&id, kind, result),
             Message::ImagesDone => self.images_done(),

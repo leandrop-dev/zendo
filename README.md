@@ -544,6 +544,7 @@ What Zendo keeps itself:
 | Path | What |
 |------|------|
 | `~/.local/state/zendo/state.json` | The games it started and when, the hidden and pinned games, the sort, the categories and their games |
+| `~/.cache/zendo/thumbs/` | Smaller copies (960 pixels wide) of the wide images, made on first opening a game page so the window never decodes the big file; safe to delete, they are made again |
 | `~/.cache/zendo/covers/` | Downloaded covers (`<id>.jpg`) and wide images (`<id>.hero.jpg`); `misses.json` lists games with none, asked about again after a week; `chosen/cover/` and `chosen/hero/` hold the ones picked with Change art, which come first |
 | `~/.local/share/zendo/stores/` | Zendo's sign-ins, one folder per store engine (`epic`, `gog`, `amazon`), readable by you only, with each engine's record of what Zendo installed (`installed.json`; for GOG, Zendo writes it) |
 | `~/.local/state/zendo/downloads.json` | What is left in the download queue, there only while something is |
