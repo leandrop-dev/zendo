@@ -49,6 +49,7 @@ pub mod report;
 pub mod requirements;
 pub mod runtimes;
 pub mod secrets;
+pub mod sessions;
 pub mod state;
 pub mod steam;
 pub mod steam_deck;

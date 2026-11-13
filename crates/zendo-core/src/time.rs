@@ -62,9 +62,15 @@ pub fn utc(seconds: u64) -> String {
     )
 }
 
+/// The weekday of a day counted from 1970-01-01 (a Thursday), Monday first:
+/// 0 is Monday and 6 is Sunday.
+pub(crate) fn weekday_of(days: i64) -> usize {
+    usize::try_from((days + 3).rem_euclid(7)).unwrap_or(0)
+}
+
 /// The date of a day counted from 1970-01-01, in the proleptic Gregorian
 /// calendar (Howard Hinnant's `civil_from_days`).
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
+pub(crate) fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let days = days + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days - era * 146_097;
@@ -83,7 +89,7 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
 
 /// Days since 1970-01-01 in the proleptic Gregorian calendar (Howard
 /// Hinnant's `days_from_civil`).
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+pub(crate) fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = year.div_euclid(400);
     let year_of_era = year - era * 400;
@@ -123,6 +129,16 @@ mod tests {
         assert_eq!(year_of(915_148_800), 1999);
         assert_eq!(year_of(946_684_799), 1999);
         assert_eq!(year_of(-1), 1969);
+    }
+
+    #[test]
+    fn gives_the_weekday_monday_first() {
+        // 1970-01-01 was a Thursday, 2026-11-13 a Friday, 2000-01-01 a Saturday.
+        assert_eq!(weekday_of(0), 3);
+        assert_eq!(weekday_of(days_from_civil(2026, 11, 13)), 4);
+        assert_eq!(weekday_of(days_from_civil(2000, 1, 1)), 5);
+        assert_eq!(weekday_of(-1), 2, "the Wednesday before the epoch");
+        assert_eq!(weekday_of(days_from_civil(2026, 11, 15)), 6);
     }
 
     #[test]

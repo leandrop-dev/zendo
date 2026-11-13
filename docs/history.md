@@ -3182,3 +3182,69 @@ lines with nothing outside the window.
 Not checked: the Saved filters sheet in pt-PT, a rename or delete of a
 category reaching a saved filter on screen (covered by tests only), and the
 `zendo status` verb against the running window.
+
+## Item 36: play sessions and stats, 2026-11-13
+
+Planned with the user the same day: Stats is a fourth tab, the yearly summary
+a section of its page (no command).
+
+- **Core**: new `sessions.rs`. `Session` (id, title, start, minutes, local
+  offset), `record` appends one JSON line to `$XDG_STATE_HOME/zendo/sessions.jsonl`
+  under `paths::locked`, with a newline first when the last line was cut short;
+  `load` skips a line that does not read. `local_offset` runs `date -d @T +%z`
+  (`unsafe_code` is forbidden, there is no date crate); `Summary::of(sessions,
+  Period)` (minutes, sessions, games, active days, longest, top ten, by month,
+  by weekday Monday first, games started, longest streak), `years`, `of_game`.
+  `time.rs` gained `weekday_of` and made `civil_from_days` and
+  `days_from_civil` crate-visible.
+- **Recording**: `RunMessage::Ended` (`running.rs`) keeps a session for every
+  game that was seen running and lasted a minute or more, in `Zendo.sessions`
+  and, outside tests, in the file. The list is read at boot.
+- **Window**: `Page::Stats`, the tab, Ctrl+7, `app/stats.rs` (chips, tiles,
+  bars, column charts, highlights, library by status, the empty text); Left,
+  Right, Home and End change the period on that page only; the game page's
+  Sessions card; month and weekday names, `stats-*` strings in en and pt-PT.
+
+Checked: `cargo fmt --check`, clippy with no warning, tests green (162 in the
+window, 266 in the core). New tests: sessions append and read, a cut-short line
+skipped and the next kept, `parse_offset`, a year against all, the local day
+and year across midnight and New Year, the streak over a month end, the top
+list and its cap, `years`, `of_game`, the weekday of known dates; a watched
+game that ran two minutes is one session, one under a minute and one never seen
+are none; Ctrl+7 and the arrows changing the period on Stats only.
+
+On screen on KDE (2026-11-13, with the user present, throwaway home in pt-PT
+with nine `.desktop` games, no session bus, `ydotoold` on
+`/run/user/1000/ydt.sock`, a pid check before every key and click). Seeded
+`sessions.jsonl` with 13 sessions over 2025 and 2026, one line that is not
+JSON and a last line cut short. Looked at: the empty page, Ctrl+7, the year
+chips by key (Right to 2025 and ALL TIME, stopping at the last, Left back) and
+by click (2025), the tiles, Most played, By month, By weekday, Highlights and
+Library by status (every total checked by hand: 2026 is 9 sessions and 12 h
+55 min, 2025 is 4 and 3 h 50 min, all time 13 and 16 h 45 min), and the game
+page's Sessions card (KPat: 5, 1 h 24 min average, 2 h 30 min longest, latest
+first). Then a real game: a `.desktop` file running `sleep 70`, found with
+F5, opened and played with Enter; its session was written as
+`{"id":"desktop:sleeper","title":"Sleeper","minutes":1,...}` on its own line
+after the cut-short one, and Stats showed it (10 sessions, 12 h 56 min) with no
+restart.
+Found and fixed in the check:
+- At 960 px in pt-PT the fourth tab pushed the Settings button off the bar
+  (DEFINIÇÕES clipped). `top_bar::MIN_WIDTH` is now 1040, so the window cannot
+  be narrower; looked at again at 1040 with nothing clipped.
+- The empty page's text ran edge to edge; it is now a 520 px centred block.
+- The month and weekday labels of the tallest and of empty columns sat 4 px
+  higher than the others. Each bar now stands at the foot of an area as tall
+  for every column. A value under an hour read "0" under an "hours" heading;
+  values are now `55m` or `3h` and the headings say only By month and By
+  weekday.
+Checked afterwards the same day (English, 1040 px wide, same throwaway home,
+pid check before every key): the Stats page (2026: 10 sessions, 12 h 56 min),
+and Ctrl+2, Ctrl+3 and Ctrl+5 for the Store, Downloads and Settings pages, with
+all four tabs in the bar and nothing clipped. A game a launcher runs: a test
+drives the folder-watch path (Seen, then Ended after ten minutes) and finds
+one session and no minutes added to Zendo's own total; a real Steam or Heroic
+was not run, as neither is in the throwaway home. A Zendo of the user's own
+(their real home) was running during the first check and was not touched.
+Known limit, unchanged from the totals: quit Zendo while a game runs and that
+session is lost.

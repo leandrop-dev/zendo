@@ -1165,3 +1165,48 @@ filters-renamed = Renamed to { $name }
 filters-deleted = Deleted { $name }
 filters-blank = A filter needs a name
 filters-taken = { $name } is already a saved filter
+
+## Stats
+
+page-stats = Stats
+hints-stats = ← → period · Esc back · F11 Game Mode
+stats-none = No play sessions yet
+stats-none-about = Zendo records the games it starts and watches until they end. Play one for a minute or more and it shows here.
+stats-none-period = No sessions in this period
+stats-all-time = All time
+stats-sessions = Sessions
+stats-days = Days played
+stats-games = Games
+stats-top = Most played
+stats-by-month = By month
+stats-by-weekday = By weekday
+stats-facts = Highlights
+stats-new-games = Games started
+stats-streak = Longest streak
+stats-days-count = { $count ->
+    [one] { $count } day
+   *[other] { $count } days
+}
+stats-longest = Longest session
+stats-average = Average session
+stats-by-status = Library by status
+stats-game-title = Sessions
+month-1 = Jan
+month-2 = Feb
+month-3 = Mar
+month-4 = Apr
+month-5 = May
+month-6 = Jun
+month-7 = Jul
+month-8 = Aug
+month-9 = Sep
+month-10 = Oct
+month-11 = Nov
+month-12 = Dec
+weekday-1 = Mon
+weekday-2 = Tue
+weekday-3 = Wed
+weekday-4 = Thu
+weekday-5 = Fri
+weekday-6 = Sat
+weekday-7 = Sun

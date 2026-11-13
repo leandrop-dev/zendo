@@ -1,4 +1,4 @@
-//! The top bar: the name, the tabs (Library, Store, Downloads), the search
+//! The top bar: the name, the tabs (Library, Store, Downloads, Stats), the search
 //! and the Settings button, and under Settings the row that switches
 //! between Settings, Accounts and About.
 
@@ -15,9 +15,9 @@ use zendo_core::owned::Shop;
 /// The search box's width.
 const SEARCH_WIDTH: f32 = 280.0;
 
-/// The narrowest window the bar fits in: the name, three tabs, the search
+/// The narrowest window the bar fits in: the name, four tabs, the search
 /// and Settings.
-pub const MIN_WIDTH: f32 = 960.0;
+pub const MIN_WIDTH: f32 = 1040.0;
 
 impl Zendo {
     pub(super) fn top_bar(&self) -> Element<'_, Message> {
@@ -66,6 +66,12 @@ impl Zendo {
                 count(self.downloads.queue.len() + self.steam_installs.count()),
                 Page::Downloads,
                 self.page == Page::Downloads,
+            ),
+            tab(
+                t!("page-stats"),
+                String::new(),
+                Page::Stats,
+                self.page == Page::Stats,
             ),
             space::horizontal(),
             self.search_box(),

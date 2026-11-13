@@ -36,6 +36,7 @@ mod requirements;
 mod running;
 mod runtimes;
 mod settings;
+mod stats;
 mod steam;
 mod steam_deck;
 mod steam_installs;
@@ -86,6 +87,7 @@ use queue::QueueMessage;
 use running::{RunMessage, Running};
 use runtimes::{RuntimeMessage, RuntimesState};
 use settings::Diagnostics;
+use stats::{StatsMessage, StatsState};
 use steam::{SteamMessage, SteamState};
 use steam_installs::{SteamInstallMessage, SteamInstalls};
 use store::{StoreMessage, StoreState};
@@ -190,6 +192,8 @@ enum Page {
     /// The owned game with this id.
     Owned(String),
     Downloads,
+    /// The play sessions and what they add up to.
+    Stats,
     Settings,
     Accounts,
     About,
@@ -266,6 +270,7 @@ enum Message {
     /// A saved filter's chip: everything it holds is put on the window.
     ApplyFilter(String),
     Filters(FiltersMessage),
+    Stats(StatsMessage),
     /// Every marked game becomes a favorite, or stops being one.
     BulkPinned(bool),
     /// Every marked game is hidden, or brought back.
@@ -460,6 +465,11 @@ struct Zendo {
     filters: Vec<SavedFilter>,
     /// The user's own queue of games to play next, by id.
     up_next: Vec<String>,
+    /// Every play session kept, oldest first; the window is the only writer,
+    /// so this stays the file's content.
+    sessions: Vec<zendo_core::sessions::Session>,
+    /// The Stats page: the period it shows.
+    stats: StatsState,
     /// The art picker, open over a game's page.
     picker: Option<Picker>,
     /// The Nexus search, open over a game's page.
@@ -551,6 +561,8 @@ impl Zendo {
             filters_sheet: None,
             filters: Vec::new(),
             up_next: Vec::new(),
+            sessions: Vec::new(),
+            stats: StatsState::default(),
             picker: None,
             mod_search: None,
             mods: ModsState::default(),
@@ -589,6 +601,7 @@ impl Zendo {
             accounts::check_all(),
             store::load_cached(),
             downloads::load(),
+            stats::load(),
         ];
         (zendo, Task::batch(tasks))
     }
@@ -658,6 +671,7 @@ impl Zendo {
             Page::Store
             | Page::Owned(_)
             | Page::Downloads
+            | Page::Stats
             | Page::Accounts
             | Page::Settings
             | Page::About => None,
@@ -754,6 +768,8 @@ impl Zendo {
             Message::Move(step) if matches!(self.page, Page::Library | Page::Store) => {
                 self.step(step)
             }
+            Message::Move(step) if self.page == Page::Stats => self.stats_step(step),
+            Message::Stats(message) => self.update_stats(message),
             Message::Search(search) => {
                 self.search = search;
                 self.filter_changed()
@@ -991,9 +1007,12 @@ impl Zendo {
                 Task::none()
             }
             Page::Accounts => self.update_account(AccountMessage::Paste(pasted.to_owned())),
-            Page::Settings | Page::Game(_) | Page::Owned(_) | Page::Downloads | Page::About => {
-                Task::none()
-            }
+            Page::Settings
+            | Page::Game(_)
+            | Page::Owned(_)
+            | Page::Downloads
+            | Page::Stats
+            | Page::About => Task::none(),
         }
     }
 
@@ -1019,7 +1038,9 @@ impl Zendo {
             Page::Downloads if self.downloads.confirm_close => {
                 self.update_download(DownloadMessage::CloseAnyway)
             }
-            Page::Downloads | Page::Accounts | Page::Settings | Page::About => Task::none(),
+            Page::Downloads | Page::Stats | Page::Accounts | Page::Settings | Page::About => {
+                Task::none()
+            }
         }
     }
 
@@ -1081,7 +1102,7 @@ impl Zendo {
                     self.want_runtimes(),
                 ])
             }
-            Page::Accounts | Page::Downloads | Page::About => Task::none(),
+            Page::Accounts | Page::Downloads | Page::Stats | Page::About => Task::none(),
         }
     }
 
@@ -1688,6 +1709,7 @@ impl Zendo {
             Page::About => about::page(),
             Page::Accounts => self.accounts_page(),
             Page::Downloads => self.downloads_page(),
+            Page::Stats => self.stats_page(),
             Page::Store => self.store_page(),
             Page::Owned(id) => match self.store.owned(id) {
                 Some(game) => self.owned_page(game),
@@ -1735,6 +1757,7 @@ impl Zendo {
             Page::Store => t!("hints-store"),
             Page::Owned(_) => t!("hints-owned"),
             Page::Downloads if self.downloads.confirm_close => t!("hints-closing"),
+            Page::Stats => t!("hints-stats"),
             Page::Accounts | Page::Downloads | Page::Settings | Page::About => t!("hints-other"),
         };
         row![
@@ -2009,6 +2032,7 @@ fn key_message(key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) ->
             "4" => Some(Message::Navigate(Page::Accounts)),
             "5" | "," => Some(Message::Navigate(Page::Settings)),
             "6" => Some(Message::Navigate(Page::About)),
+            "7" => Some(Message::Navigate(Page::Stats)),
             _ => None,
         };
     }
@@ -2972,5 +2996,35 @@ mod tests {
         let _ = zendo.update(Message::BulkHidden(false));
         let _ = zendo.update(Message::SetView(library::View::All));
         assert_eq!(titles(&zendo).len(), 4);
+    }
+
+    #[test]
+    fn ctrl_7_opens_stats_and_the_arrows_change_its_period_there_only() {
+        let message = key_message(
+            &Key::Character("7".into()),
+            keyboard::Modifiers::CTRL,
+            Some("7"),
+        );
+        assert!(matches!(message, Some(Message::Navigate(Page::Stats))));
+
+        let mut zendo = zendo_with(2, 2);
+        zendo.sessions = vec![zendo_core::sessions::Session {
+            id: "desktop:0".into(),
+            title: "Game 00".into(),
+            start: 1_717_000_000,
+            minutes: 30,
+            offset: 0,
+        }];
+        let _ = zendo.update(Message::Navigate(Page::Stats));
+        assert_eq!(zendo.page, Page::Stats);
+        let before = zendo.stats.period;
+        let _ = zendo.update(Message::Move(Move::Right));
+        assert_ne!(zendo.stats.period, before);
+        // On the Library the same key moves the cursor and leaves the period.
+        let _ = zendo.update(Message::Navigate(Page::Library));
+        let period = zendo.stats.period;
+        let _ = zendo.update(Message::Move(Move::Right));
+        assert_eq!(zendo.stats.period, period);
+        assert_eq!(zendo.selected, 1);
     }
 }

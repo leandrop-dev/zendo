@@ -1173,3 +1173,48 @@ filters-renamed = Mudou para { $name }
 filters-deleted = { $name } apagado
 filters-blank = Um filtro precisa de um nome
 filters-taken = { $name } já é um filtro guardado
+
+## Estatísticas
+
+page-stats = Estatísticas
+hints-stats = ← → período · Esc voltar · F11 Modo de Jogo
+stats-none = Ainda não há sessões de jogo
+stats-none-about = O Zendo regista os jogos que inicia e acompanha até terminarem. Jogue um durante um minuto ou mais e aparece aqui.
+stats-none-period = Sem sessões neste período
+stats-all-time = Sempre
+stats-sessions = Sessões
+stats-days = Dias jogados
+stats-games = Jogos
+stats-top = Mais jogados
+stats-by-month = Por mês
+stats-by-weekday = Por dia da semana
+stats-facts = Destaques
+stats-new-games = Jogos começados
+stats-streak = Maior sequência
+stats-days-count = { $count ->
+    [one] { $count } dia
+   *[other] { $count } dias
+}
+stats-longest = Sessão mais longa
+stats-average = Sessão média
+stats-by-status = Biblioteca por estado
+stats-game-title = Sessões
+month-1 = Jan
+month-2 = Fev
+month-3 = Mar
+month-4 = Abr
+month-5 = Mai
+month-6 = Jun
+month-7 = Jul
+month-8 = Ago
+month-9 = Set
+month-10 = Out
+month-11 = Nov
+month-12 = Dez
+weekday-1 = Seg
+weekday-2 = Ter
+weekday-3 = Qua
+weekday-4 = Qui
+weekday-5 = Sex
+weekday-6 = Sáb
+weekday-7 = Dom

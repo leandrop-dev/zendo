@@ -115,6 +115,7 @@ impl Zendo {
         if let Some(changelog) = self.changelog_card(game) {
             main.push(changelog);
         }
+        main.extend(self.sessions_card(&game.id));
         main.extend(self.achievements_card(&game.id));
         main.extend(self.requirements_card(&game.id));
         let side =
@@ -839,6 +840,41 @@ fn stat_tiles(game: &Game) -> Element<'_, Message> {
     ]
     .spacing(SPACE_M)
     .into()
+}
+
+impl Zendo {
+    /// The sessions Zendo watched of a game: how many, the average and the
+    /// longest, and the latest ones; nothing until it has one.
+    fn sessions_card(&self, id: &str) -> Option<Element<'_, Message>> {
+        let game = zendo_core::sessions::of_game(&self.sessions, id)?;
+        let fact = |label: String, value: String| -> Element<'_, Message> {
+            column![style::label(&label), text(value).size(18).font(BOLD)]
+                .spacing(SPACE_XS)
+                .into()
+        };
+        let facts = row![
+            fact(t!("stats-sessions"), game.count.to_string()),
+            fact(t!("stats-average"), format::play_time(game.average)),
+            fact(t!("stats-longest"), format::play_time(game.longest)),
+        ]
+        .spacing(SPACE_XL);
+        let recent = column(game.recent.iter().map(|session| {
+            row![
+                text(zendo_core::sessions::date_of(session))
+                    .size(13)
+                    .color(colors().dim)
+                    .width(110),
+                text(format::play_time(session.minutes)).size(13),
+            ]
+            .spacing(SPACE_L)
+            .into()
+        }))
+        .spacing(SPACE_XS);
+        Some(card(
+            t!("stats-game-title"),
+            column![facts, recent].spacing(SPACE_L).into(),
+        ))
+    }
 }
 
 /// A game Steam installed, by its app id.

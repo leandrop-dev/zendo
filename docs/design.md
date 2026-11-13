@@ -129,6 +129,32 @@ no route to a game's page (item 33).
 - Left out: the random pick, bulk status, bulk Up next, Ctrl+A, Home (the
   user rejected it) and Game Mode's Filters chip.
 
+## Decided in item 36
+
+- Stats is a fourth top-bar tab (Library, Store, Downloads, Stats), the user's
+  choice over a Settings entry or a Library chip; Ctrl+7. The yearly summary
+  is a section of that page, not a separate screen or command: year chips
+  (latest first) and ALL TIME, Left and Right moving along them, four stat
+  tiles, Most played with bars, By month and By weekday columns (hours),
+  Highlights (games started, longest streak, longest session) and the library
+  by play status.
+- A session is a run Zendo started and watched until it ended, however its
+  time is counted for the totals (`own` only decides `add_minutes`). Not
+  sessions: games started elsewhere, `zendo launch` (nobody watches it), and
+  anything before item 36. No backfill; the empty page says what counts.
+- Sessions live in `sessions.jsonl` (state folder), appended one line each,
+  not in `state.json`. Each keeps the title and the local UTC offset when it
+  ended, so a late session counts on its local day, month and weekday and an
+  old year still names a game that left. A session is attributed to its start
+  day.
+- The game page's Sessions card (design.md's insights block) shows how many,
+  the average, the longest and the last ten.
+- The fourth tab does not fit the bar at 960 px in pt-PT, so the window's
+  minimum width is 1040. Column charts label a value as `55m` under an hour
+  and `3h` above.
+- Left out: Game Mode's Stats chip, a `zendo stats` command, imagery or
+  sharing for the summary.
+
 ## Not taken
 
 Console libraries and native ports (item 37 covers emulation its own way),

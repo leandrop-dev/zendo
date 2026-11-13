@@ -76,8 +76,11 @@ Numbering continues from 27 so it never collides with the built items 1 to
     abandoned), saved filters and bulk edits. Tags are item 19's categories
     (no second label system) and the random pick was dropped, both at the
     user's choice.
-36. Play sessions and stats: a session history, a stats screen and a yearly
-    summary.
+36. Built on 2026-11-13 (docs/history.md, item 36), tests green, checked
+    on screen with the user present (history.md lists what was not). Play
+    sessions and stats: a session history, a Stats tab
+    with a summary per year and for all time, and a Sessions card on the game
+    page. Sessions are the runs Zendo watched; there is no backfill.
 37. Emulation (was 26, moved up): emulator profiles, ROM folders and
     console libraries in the library.
 38. Descriptions and facts for every game, local ones too: Steam's store for

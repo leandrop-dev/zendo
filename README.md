@@ -380,7 +380,8 @@ On a game's page:
 | Delete | X | Hide or bring back |
 
 Anywhere: Ctrl+1 opens the Library, Ctrl+2 the Store, Ctrl+3 Downloads,
-Ctrl+4 Accounts, Ctrl+5 or Ctrl+, Settings, Ctrl+6 or F1 About, and F11 or Select switches
+Ctrl+4 Accounts, Ctrl+5 or Ctrl+, Settings, Ctrl+6 or F1 About, Ctrl+7 Stats
+(Left and Right change its period), and F11 or Select switches
 between full-screen and windowed. On Settings, typing starts the
 SteamGridDB key; on Accounts, while signing in, typing or Ctrl+V fills in
 the code. On a Steam game's Store page, Enter opens Steam's install

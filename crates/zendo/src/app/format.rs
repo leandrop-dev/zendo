@@ -4,6 +4,37 @@ use zendo_core::{Sort, Source, Status};
 
 use crate::i18n::t;
 
+/// A month's short name, 1 to 12.
+pub fn month_short(month: u32) -> String {
+    match month {
+        1 => t!("month-1"),
+        2 => t!("month-2"),
+        3 => t!("month-3"),
+        4 => t!("month-4"),
+        5 => t!("month-5"),
+        6 => t!("month-6"),
+        7 => t!("month-7"),
+        8 => t!("month-8"),
+        9 => t!("month-9"),
+        10 => t!("month-10"),
+        11 => t!("month-11"),
+        _ => t!("month-12"),
+    }
+}
+
+/// A weekday's short name, 0 (Monday) to 6 (Sunday).
+pub fn weekday_short(day: u32) -> String {
+    match day {
+        0 => t!("weekday-1"),
+        1 => t!("weekday-2"),
+        2 => t!("weekday-3"),
+        3 => t!("weekday-4"),
+        4 => t!("weekday-5"),
+        5 => t!("weekday-6"),
+        _ => t!("weekday-7"),
+    }
+}
+
 /// A library view chip's name.
 pub fn view(view: zendo_core::View) -> String {
     match view {

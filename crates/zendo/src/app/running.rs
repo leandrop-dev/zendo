@@ -13,7 +13,7 @@ use iced::widget::{button, row};
 use iced::{Alignment, Element, Task};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Launch};
-use zendo_core::{cloud_saves, galaxy, gog_playtime, gog_setup, known_fixes};
+use zendo_core::{cloud_saves, galaxy, gog_playtime, gog_setup, known_fixes, sessions};
 
 use super::style::{self, BOLD};
 use super::{Message, Zendo};
@@ -194,6 +194,11 @@ impl Zendo {
                     return Task::none();
                 };
                 let minutes = session.started.elapsed().as_secs() / 60;
+                // A game seen running and watched to its end is a session,
+                // whoever times it for the totals.
+                if session.seen && minutes > 0 {
+                    self.record_session(&id, session.since, minutes);
+                }
                 // Steam and Heroic count the time of the games they run.
                 let own = matches!(session.watch, Some(Watch::Group(_)));
                 if own && minutes > 0 {
@@ -243,6 +248,28 @@ impl Zendo {
                 Task::none()
             }
         }
+    }
+
+    /// Keeps a session in the window's list and, outside tests, in the
+    /// sessions file; a failure is said in the status line.
+    fn record_session(&mut self, id: &str, start: u64, minutes: u64) {
+        let session = sessions::Session {
+            id: id.to_owned(),
+            title: self.title_of(id),
+            start,
+            minutes,
+            offset: if self.persist {
+                sessions::local_offset(start)
+            } else {
+                0
+            },
+        };
+        if self.persist
+            && let Err(err) = sessions::record(&session)
+        {
+            self.status = Some(format!("{err:#}"));
+        }
+        self.sessions.push(session);
     }
 
     /// What happens before the game starts: the anti-cheat runtimes'
@@ -580,6 +607,115 @@ mod tests {
         let _ = zendo.update(Message::Run(RunMessage::Ended("gog:1".into())));
         assert!(!zendo.running.is_running("gog:1"));
         assert_eq!(zendo.status.as_deref(), Some("Sugar closed"));
+        assert!(zendo.sessions.is_empty(), "under a minute is no session");
+    }
+
+    fn sugar() -> Zendo {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let game = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        zendo.library = Some(zendo_core::Library {
+            games: vec![game],
+            problems: Vec::new(),
+        });
+        zendo
+    }
+
+    #[test]
+    fn a_watched_game_that_ran_a_minute_is_a_session() {
+        let mut zendo = sugar();
+        zendo
+            .running
+            .games
+            .insert("gog:1".into(), Session::starting());
+        let started = Started {
+            watch: Watch::Group(launch::Group::new(4_000_000, None)),
+            log: None,
+            warning: None,
+        };
+        let _ = zendo.update(Message::Run(RunMessage::Started(
+            "gog:1".into(),
+            Ok(started),
+        )));
+        // As if it had run for two minutes.
+        let session = zendo.running.games.get_mut("gog:1").unwrap();
+        session.started = Instant::now()
+            .checked_sub(Duration::from_secs(125))
+            .unwrap();
+        let since = session.since;
+        let _ = zendo.update(Message::Run(RunMessage::Ended("gog:1".into())));
+        assert_eq!(zendo.sessions.len(), 1);
+        let kept = &zendo.sessions[0];
+        assert_eq!(
+            (kept.id.as_str(), kept.title.as_str(), kept.minutes),
+            ("gog:1", "Sugar", 2)
+        );
+        assert_eq!(kept.start, since);
+    }
+
+    #[test]
+    fn a_launcher_run_game_is_a_session_but_adds_no_minutes_of_its_own() {
+        let (mut zendo, _) = Zendo::boot();
+        zendo.persist = false;
+        let game = Game::new(
+            "steam:620".into(),
+            "Portal 2".into(),
+            Source::Steam,
+            Launch::Uri {
+                uri: "steam://rungameid/620".into(),
+            },
+        );
+        zendo.library = Some(zendo_core::Library {
+            games: vec![game],
+            problems: Vec::new(),
+        });
+        zendo
+            .running
+            .games
+            .insert("steam:620".into(), Session::starting());
+        let started = Started {
+            watch: Watch::Folder("/games/Portal 2".into()),
+            log: None,
+            warning: None,
+        };
+        let _ = zendo.update(Message::Run(RunMessage::Started(
+            "steam:620".into(),
+            Ok(started),
+        )));
+        let _ = zendo.update(Message::Run(RunMessage::Seen("steam:620".into())));
+        // As if its processes had been found for ten minutes.
+        zendo.running.games.get_mut("steam:620").unwrap().started = Instant::now()
+            .checked_sub(Duration::from_secs(605))
+            .unwrap();
+        let _ = zendo.update(Message::Run(RunMessage::Ended("steam:620".into())));
+        assert_eq!(zendo.sessions.len(), 1);
+        assert_eq!(zendo.sessions[0].id, "steam:620");
+        assert_eq!(zendo.sessions[0].minutes, 10);
+        // Steam counts its own time: Zendo's total does not move.
+        assert_eq!(
+            zendo.game("steam:620").map(|game| game.played.minutes),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn a_game_never_seen_running_is_no_session() {
+        let mut zendo = sugar();
+        let mut waiting = Session::starting();
+        waiting.started = Instant::now()
+            .checked_sub(Duration::from_secs(600))
+            .unwrap();
+        zendo.running.games.insert("gog:1".into(), waiting);
+        let _ = zendo.update(Message::Run(RunMessage::Ended("gog:1".into())));
+        assert_eq!(zendo.sessions.len(), 0);
     }
 
     #[test]
