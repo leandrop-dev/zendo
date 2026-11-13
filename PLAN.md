@@ -74,7 +74,8 @@ tab by the user's choice) is built with its tests green and checked on
 screen, not yet tried by the user (docs/history.md). Item 38 (Steam's
 description and facts for every game, and a Steam app id the user can give a
 game) is built on 2026-11-13 with its tests green and checked on screen with
-the user present, not yet tried by the user (docs/history.md). Next is item 39 (item 37, emulation,
+the user present, and tried by the user: it works [firm] (docs/history.md).
+Next is item 39 (item 37, emulation,
 is on hold).
 
 The phase 5a gap is closed: an Epic game was installed and played through

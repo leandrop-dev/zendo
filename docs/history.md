@@ -3252,7 +3252,10 @@ session is lost.
 ## Item 38: Steam's facts for every game, 2026-11-13
 
 Built, tests green (166 in the window, 271 in core), clippy clean; checked on
-screen the same day with the user present (below); not yet tried by the user.
+screen the same day with the user present (below), and tried by the user
+afterwards: the Technical button's scroll, the Features row, and the
+screenshot click (it opened the full image in the user's browser, Zen) all
+work [firm].
 
 Checked on screen (throwaway home, no session bus, two `.desktop` games:
 "Portal 2" and "Zzyzx Unmatched Test", the user present, a pid check before

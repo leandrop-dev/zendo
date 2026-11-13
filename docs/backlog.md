@@ -83,8 +83,8 @@ Numbering continues from 27 so it never collides with the built items 1 to
     page. Sessions are the runs Zendo watched; there is no backfill.
 37. On hold since 2026-11-13: emulation (see "On hold"). The number stays
     reserved.
-38. Built on 2026-11-13 (docs/history.md, item 38), tests green, not yet
-    tried by the user; checked on screen with the user present. Descriptions and facts for every
+38. Built on 2026-11-13 (docs/history.md, item 38), tests green, checked on
+    screen with the user present and tried by the user. Descriptions and facts for every
     game, local ones too: Steam's store for any game matched to a Steam app
     id (was 24), with a Steam app id the user can give a game.
 39. Library views beyond the grid: a list and a details view (was 25),
