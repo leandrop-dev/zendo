@@ -21,7 +21,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | items 37 to 40, the work left, in order, and what is on hold | starting one of them |
+| `docs/backlog.md` | items 38 to 40, the work left, in order, and what is on hold | starting one of them |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -71,7 +71,7 @@ the Library's Organize row, `zendo status`; tags are the categories, no random
 pick) is built with its tests green and checked on screen, not yet tried by
 the user (docs/history.md). Item 36 (play sessions and a Stats tab, a fourth
 tab by the user's choice) is built with its tests green and checked on
-screen, not yet tried by the user (docs/history.md). Next is item 37.
+screen, not yet tried by the user (docs/history.md). Next is item 38 (item 37, emulation, is on hold).
 
 The phase 5a gap is closed: an Epic game was installed and played through
 legendary on 2026-11-10 (docs/history.md, phase 5a). The other "not checked"
@@ -113,7 +113,8 @@ docs/backlog.md]:
   stays rejected.
 - The store engines (legendary, gogdl, nile, comet) and umu-launcher are
   used from their own releases, with no need for Heroic.
-- Recompiled games are on hold. Emulation moves up.
+- Recompiled games are on hold. Emulation moved up, then went on hold too
+  on 2026-11-13.
 
 ## What it should do
 
@@ -179,7 +180,7 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 
 ## Next
 
-Items 37 to 40: docs/backlog.md. Each item is planned in detail
+Items 38 to 40: docs/backlog.md. Each item is planned in detail
 when it starts.
 
 ## On plasmonk's side

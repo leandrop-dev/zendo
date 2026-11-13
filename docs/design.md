@@ -157,6 +157,6 @@ no route to a game's page (item 33).
 
 ## Not taken
 
-Console libraries and native ports (item 37 covers emulation its own way),
+Console libraries and native ports (emulation is on hold, docs/backlog.md),
 Sunshine/Moonlight export, Year in Review imagery (item 36 may do a plain
 summary), and omakade's Omarchy-specific parts.

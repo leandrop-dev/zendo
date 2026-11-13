@@ -81,8 +81,8 @@ Numbering continues from 27 so it never collides with the built items 1 to
     sessions and stats: a session history, a Stats tab
     with a summary per year and for all time, and a Sessions card on the game
     page. Sessions are the runs Zendo watched; there is no backfill.
-37. Emulation (was 26, moved up): emulator profiles, ROM folders and
-    console libraries in the library.
+37. On hold since 2026-11-13: emulation (see "On hold"). The number stays
+    reserved.
 38. Descriptions and facts for every game, local ones too: Steam's store for
     any game matched to a Steam app id (was 24).
 39. Library views beyond the grid: a list and a details view (was 25),
@@ -91,6 +91,18 @@ Numbering continues from 27 so it never collides with the built items 1 to
 
 ## On hold
 
+- Emulation (was 37, and 26 before that), put on hold by the user on
+  2026-11-13 after planning it. Decided in that planning [tentative]:
+  presets for common emulators plus custom profiles (a program and an
+  argument template with `{rom}`); ROMs from folders the user adds, one
+  console and one emulator per folder; a fifth tab, Emulation, with a card
+  per console, then that console's ROM grid, then the normal game page, with
+  the setup (emulators and ROM folders) on the tab; ROMs also under an
+  Emulation chip in the Library; the user installs the emulators, as in
+  omakade; checked with the RetroArch Flatpak. Ideas from omakade, not yet
+  chosen (ideas only, it is GPL): RetroArch playlists as a source, a scan of
+  the EmuDeck `~/Emulation/roms/<system>` layout, and covers from Libretro's
+  thumbnails.
 - Recompiled games (N64 recomps and the like) and their mods (was 21), with
   ideas from Quiver Launcher (checked 2026-11-07: it installs apps from
   GitHub and GitLab releases with community catalogs; Business Source
