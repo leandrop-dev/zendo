@@ -3959,3 +3959,83 @@ Diagnostics, as chips; Engines and Proton come with 50b.
   key's Save, removing a key, Download now with a real key, the keyring (the
   throwaway run has none: the page said so in red), the switches surviving a
   restart, a narrower window.
+
+## Item 50b, Engines, Proton, Theme and Discord in Slint (2026-11-14)
+
+The second slice of item 50. Settings now has Iced's six groups in its order
+(General, Keys, Library, Engines, Proton, Diagnostics; Diagnostics is group 5
+now) and the cards Iced had on them, except the Nexus key (52). New modules,
+child modules of `library_ui` by `#[path]` like the others: `engines_ui.rs`,
+`runtimes_ui.rs`, `overlay_ui.rs`, `protons_ui.rs`; the page is `ui/settings.slint`
+(a `SetRow` struct, a `SetList` and a `DownloadBar` component, a `RowButton`).
+All logic is `zendo_core`'s (`engines`, `ge_proton`, `proton`, `runtimes`,
+`eos_overlay`, `theme`, `kde`); the ported part is the glue and the rules.
+
+- **Engines group**: the engines card (PATH first, Check again, a row for each
+  of legendary, gogdl, nile, comet and umu-launcher: whose copy and where, the
+  latest on GitHub, Download, Update, Up to date, Remove asked twice, one
+  download at a time with a live bar and Stop); the Anti-cheat card (Easy
+  Anti-Cheat and BattlEye from Lutris, Download, Update, Remove asked twice);
+  the Epic overlay card (Install or Update, Remove asked twice, through
+  legendary; it follows legendary being installed or removed, which Iced only
+  looked at when Settings opened).
+- **Proton group**: the default Proton as chips (Automatic, each Proton found,
+  and the chosen one even when gone), the Protons found with Remove asked twice
+  (only in the user's own tools folder, and "chosen by N games"), GE-Proton and
+  Proton-CachyOS releases (five, then ten more a click, reading GitHub's next
+  page when needed), Download with the live bar, and the notes. A removed
+  default goes back to Automatic and the removal note stays (Iced's generic
+  "default set" note arrived later and replaced it).
+- **General group**: the Theme card (a chip for Zendo's own, each user theme
+  file and, where there is a `kdeglobals`, System; the note for a missing
+  theme or the scheme followed; a line for each file that is not a theme; the
+  Opaque switch moved here, as in Iced) and the Discord card. Choosing a theme
+  repaints the whole window at once and writes `theme`. `Themes` moved into
+  `Glue` (shared with the watcher), gained the problems, the note, `reload`
+  (as Settings opens) and the sort. The watcher of `kdeglobals` now always runs
+  (it only started when System was chosen at launch, so choosing System in
+  Settings would not have followed) and tells Settings after a repaint.
+- **Discord**: the switch spawns or drops the presence thread; the Presence
+  effect of a running game (`Effect::Presence`, dropped until now) tells it.
+  It starts at launch when the setting is on.
+- **Busy rule**: replacing or removing an engine waits while a game runs;
+  Iced also waited for a store job, which comes with the Downloads page (51).
+- **Tests** (clippy clean; 66 `zendo-slint` tests, 16 new, most ported from Iced's):
+  a download at a time and how it ended (engines, Protons, runtimes), Remove
+  asks once first (engines, Protons, runtimes, the overlay), older releases a
+  few at a time, each build keeps its releases, the latest release of each
+  engine, a row's offers, the default choices, removing the default, and the
+  theme and Discord choices. Nothing in them reads or writes the user's files
+  or the network (`persist`), and the launch-options rewrite on removing a
+  Proton, which Iced did even in tests, is gated.
+- **Checked on screen** (2026-11-14, throwaway home, no session bus, the user at
+  the PC): the General cards (Dusk repainted everything and wrote `theme`; the
+  broken theme file's parse error showed in red; Zendo's chip put it back;
+  Opaque and Discord switched and persisted); a seeded `kdeglobals` made the
+  System chip appear, its note named the scheme, and editing the file changed
+  the whole window within seconds and the note's name; Engines: GitHub's five
+  latest tags, a real download of legendary 0.21.1 (checked, installed,
+  "Up to date", the overlay card then offered Install), Remove asked, then
+  deleted it; PATH first wrote and unwrote `engines_on_path_first`; Check again;
+  Anti-cheat: Lutris' list gave Download on both; Proton: the default chips,
+  two seeded Protons, choosing one as the default and removing it (back to
+  Automatic with the removal note), GitHub's GE-Proton list, Show older
+  versions, Proton-CachyOS and back, and two real downloads of about 500 MB
+  that installed (the bar showed "536.51 MiB of 540.60 MiB") and were
+  removed again.
+- **Found and fixed on screen**: a button with no label still added its gap,
+  so the buttons of different rows did not line up and the status words sat
+  below the button line (the gap now lives inside the button); the overlay
+  card kept saying "legendary is needed" after legendary was installed; the
+  removed-default note was replaced by the generic one; the scheme's name in
+  the note went stale after a live change.
+- **Mistake of the check**: after a download finished the page re-laid out,
+  and a click aimed at Stop landed on the last release's Download and started
+  a second 500 MB download. Aim at a moving page from a fresh still.
+- **Not checked.** Stop on a download (the link is too fast to catch one: 540
+  MB in seconds; covered by the glue tests only), the Update button (needs an
+  older copy), Anti-cheat Download, Update and Remove (nothing was
+  downloaded), the overlay's Install and Remove (through legendary, a large
+  download; the button was enabled and not pressed), Discord presence itself
+  (no session bus, no Discord), pt-PT on the new cards, a light KDE scheme,
+  the Engines buttons while a game runs, a window narrower than the page.

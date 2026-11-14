@@ -18,6 +18,7 @@ use zendo_core::covers::{self, KeyCheck};
 use zendo_core::secrets::Key;
 use zendo_core::{Source, State, launch, report};
 use zendo_shell::i18n::Language;
+use zendo_shell::presence::PresenceHandle;
 use zendo_shell::t;
 
 use super::{Glue, with_glue};
@@ -34,7 +35,9 @@ const WORKERS: [u32; 4] = [2, 4, 8, 16];
 const GENERAL: i32 = 0;
 const KEYS: i32 = 1;
 const LIBRARY: i32 = 2;
-const DIAGNOSTICS: i32 = 3;
+const ENGINES: i32 = 3;
+const PROTON: i32 = 4;
+const DIAGNOSTICS: i32 = 5;
 
 /// A change to the settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,8 +46,12 @@ pub(super) enum Setting {
     Workers(Option<u32>),
     Language(Option<String>),
     AutoUpdate(bool),
+    Theme(Option<String>),
     SteamGridDbKey { key: Option<String>, then: KeyThen },
+    DefaultProton(Option<String>),
     MinimizeToTray(bool),
+    DiscordPresence(bool),
+    EnginesPathFirst(bool),
     Opaque(bool),
 }
 
@@ -65,8 +72,12 @@ impl Setting {
             Self::Workers(workers) => config.download_workers = *workers,
             Self::Language(language) => config.language.clone_from(language),
             Self::AutoUpdate(on) => config.auto_update = *on,
+            Self::Theme(theme) => config.theme.clone_from(theme),
             Self::SteamGridDbKey { key, .. } => config.steamgriddb_key.clone_from(key),
+            Self::DefaultProton(name) => config.default_proton.clone_from(name),
             Self::MinimizeToTray(on) => config.minimize_to_tray = *on,
+            Self::DiscordPresence(on) => config.discord_presence = *on,
+            Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
             Self::Opaque(on) => config.opaque = *on,
         }
     }
@@ -102,6 +113,10 @@ pub(super) struct SettingsState {
     folders: RefCell<Vec<Option<PathBuf>>>,
     groups: Rc<VecModel<ChipData>>,
     languages: Rc<VecModel<ChipData>>,
+    themes: Rc<VecModel<ChipData>>,
+    /// What `config.toml`'s `theme` says for each theme chip, by its id.
+    theme_tags: RefCell<Vec<String>>,
+    theme_problems: Rc<VecModel<slint::SharedString>>,
     workers: Rc<VecModel<ChipData>>,
     sources: Rc<VecModel<Fact>>,
     files: Rc<VecModel<Fact>>,
@@ -117,6 +132,9 @@ impl SettingsState {
             folders: RefCell::default(),
             groups: Rc::new(VecModel::default()),
             languages: Rc::new(VecModel::default()),
+            themes: Rc::new(VecModel::default()),
+            theme_tags: RefCell::default(),
+            theme_problems: Rc::new(VecModel::default()),
             workers: Rc::new(VecModel::default()),
             sources: Rc::new(VecModel::default()),
             files: Rc::new(VecModel::default()),
@@ -124,7 +142,33 @@ impl SettingsState {
     }
 }
 
-fn chip(id: i32, label: String, chosen: bool) -> ChipData {
+/// The tone of a note a card says: 1 good, 2 bad.
+pub(super) fn note_tone(good: bool) -> i32 {
+    if good { 1 } else { 2 }
+}
+
+/// A download's bar: its name, the bytes so far and how far it is.
+#[expect(clippy::cast_precision_loss, reason = "a bar's width")]
+pub(super) fn bar_of(name: &str, done: u64, total: u64, stopping: bool) -> crate::Bar {
+    crate::Bar {
+        active: true,
+        name: name.into(),
+        size: t!(
+            "size-of",
+            done = zendo_core::Size::Bytes(done).to_string(),
+            total = zendo_core::Size::Bytes(total).to_string()
+        )
+        .into(),
+        percent: if total == 0 {
+            0.0
+        } else {
+            done as f32 * 100.0 / total as f32
+        },
+        stopping,
+    }
+}
+
+pub(super) fn chip(id: i32, label: String, chosen: bool) -> ChipData {
     ChipData {
         id,
         label: label.into(),
@@ -209,6 +253,25 @@ impl Glue {
         let glue = Rc::clone(self);
         data.on_set_opaque(move |on| glue.save_setting(Setting::Opaque(on)));
         let glue = Rc::clone(self);
+        data.on_set_discord(move |on| glue.save_setting(Setting::DiscordPresence(on)));
+        let glue = Rc::clone(self);
+        data.on_set_path_first(move |on| glue.save_setting(Setting::EnginesPathFirst(on)));
+        let glue = Rc::clone(self);
+        data.on_theme_chosen(move |index| {
+            let tag = usize::try_from(index)
+                .ok()
+                .and_then(|index| glue.settings.theme_tags.borrow().get(index).cloned());
+            if let Some(tag) = tag {
+                glue.save_setting(Setting::Theme(Some(tag)));
+            }
+        });
+        data.set_themes(ModelRc::from(Rc::clone(&self.settings.themes)));
+        data.set_theme_problems(ModelRc::from(Rc::clone(&self.settings.theme_problems)));
+        self.connect_engines(window);
+        self.connect_runtimes(window);
+        self.connect_overlay(window);
+        self.connect_protons(window);
+        let glue = Rc::clone(self);
         data.on_set_covers(move |on| glue.save_setting(Setting::DownloadCovers(on)));
         let glue = Rc::clone(self);
         data.on_set_auto_update(move |on| glue.save_setting(Setting::AutoUpdate(on)));
@@ -282,12 +345,21 @@ impl Glue {
             folder(install),
         ];
         drop(config);
+        // A theme file added since shows, and what the page lists is looked
+        // at again; GitHub and Lutris are asked once a session.
+        self.themes
+            .borrow_mut()
+            .reload(zendo_core::theme::Theme::dir().as_deref());
+        self.want_overlay();
+        self.want_engines();
+        self.want_protons();
+        self.want_runtimes();
         self.show_settings();
     }
 
     /// The config as the page shows it: the file's, or the defaults while it
     /// has not been read.
-    fn settings_config(&self) -> Config {
+    pub(super) fn settings_config(&self) -> Config {
         self.config.borrow().clone().unwrap_or_default()
     }
 
@@ -343,6 +415,16 @@ impl Glue {
         if let Some(window) = self.window.upgrade() {
             crate::tr::show(&window, Language::chosen(config.language.as_deref()));
             window.set_translucency(if config.opaque { 1.0 } else { 2.0 / 3.0 });
+            // The colours follow the file, so a write that failed puts them
+            // back too.
+            let palette = {
+                let mut themes = self.themes.borrow_mut();
+                if !themes.is_chosen(config.theme.as_deref()) {
+                    themes.set_tag(config.theme.as_deref());
+                }
+                themes.palette()
+            };
+            crate::window::paint(&window, palette);
         }
         self.show_settings();
     }
@@ -371,11 +453,18 @@ impl Glue {
                     crate::window::set_tray(&window, *on);
                 }
             }
+            Setting::DiscordPresence(on) => {
+                *self.presence.borrow_mut() = (*on && self.persist).then(PresenceHandle::spawn);
+                self.update_presence();
+            }
+            Setting::DefaultProton(_) => self.default_proton_set(),
+            Setting::EnginesPathFirst(_) => self.refresh_engines(),
             // The update by themselves come with the Downloads page (item 51).
             Setting::DownloadCovers(false)
             | Setting::Workers(_)
             | Setting::Language(_)
             | Setting::AutoUpdate(_)
+            | Setting::Theme(_)
             | Setting::Opaque(_) => {}
         }
         self.show_settings();
@@ -530,6 +619,8 @@ impl Glue {
                 (GENERAL, t!("settings-group-general")),
                 (KEYS, t!("settings-group-keys")),
                 (LIBRARY, t!("settings-group-library")),
+                (ENGINES, t!("settings-group-engines")),
+                (PROTON, t!("settings-group-proton")),
                 (DIAGNOSTICS, t!("settings-group-diagnostics")),
             ]
             .into_iter()
@@ -555,6 +646,8 @@ impl Glue {
         self.settings.languages.set_vec(languages);
         data.set_tray(config.minimize_to_tray);
         data.set_opaque(config.opaque);
+        data.set_discord(config.discord_presence);
+        self.show_themes(&data);
 
         // Keys.
         let key = self.settings.key.borrow();
@@ -583,6 +676,54 @@ impl Glue {
         data.set_key_kept_bad(bad);
         drop(key);
         self.show_library_and_files(&data, &config);
+        self.show_engines(&data, &config);
+        self.show_runtimes(&data);
+        self.show_overlay(&data);
+        self.show_protons(&data, &config);
+    }
+
+    /// The Theme card: a chip for each theme file and for the KDE scheme
+    /// where there is one, and what the window shows.
+    fn show_themes(&self, data: &SettingsData<'_>) {
+        use crate::theme::Choice;
+        let themes = self.themes.borrow();
+        let mut chips = Vec::new();
+        let mut tags = Vec::new();
+        for (id, name) in themes.files() {
+            let chosen = *themes.choice() == Choice::File(id.clone());
+            chips.push(chip(i32::try_from(tags.len()).unwrap_or(0), name, chosen));
+            tags.push(id);
+        }
+        // System's only where there is a `kdeglobals`, or when already
+        // chosen: elsewhere there is no scheme to follow.
+        let system = *themes.choice() == Choice::System;
+        if system || zendo_core::kde::Scheme::found() {
+            chips.push(chip(
+                i32::try_from(tags.len()).unwrap_or(0),
+                t!("theme-system"),
+                system,
+            ));
+            tags.push(Choice::System.tag().to_owned());
+        }
+        self.settings.themes.set_vec(chips);
+        *self.settings.theme_tags.borrow_mut() = tags;
+        let (note, tone) = match themes.note() {
+            Some((note, true)) => (note, 3),
+            Some((note, false)) => (note, 2),
+            None => (String::new(), 0),
+        };
+        data.set_theme_note(note.into());
+        data.set_theme_note_tone(tone);
+        self.settings.theme_problems.set_vec(
+            themes
+                .problems()
+                .iter()
+                .map(|problem| t!("theme-not-read", problem = problem.as_str()).into())
+                .collect::<Vec<slint::SharedString>>(),
+        );
+        let folder = zendo_core::theme::Theme::dir()
+            .map_or_else(String::new, |dir| dir.display().to_string());
+        data.set_theme_about(t!("theme-about", folder = folder).into());
     }
 
     /// The Library and Diagnostics groups' texts.

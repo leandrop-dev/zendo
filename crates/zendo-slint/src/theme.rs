@@ -6,11 +6,16 @@
 //! `crates/zendo/themes/`, the user's are read from `~/.config/zendo/themes/`
 //! (see [`zendo_core::theme`]), and one named as a built-in replaces it.
 
+#[cfg(test)]
+use std::cell::RefCell;
 use std::path::Path;
+#[cfg(test)]
+use std::rc::Rc;
 use std::time::SystemTime;
 
 use zendo_core::kde::Scheme;
 use zendo_core::theme::{Rgb, Theme};
+use zendo_shell::t;
 
 /// The themes built into Zendo: each file's name and text.
 const BUILT_IN: &[(&str, &str)] = &[("zendo", include_str!("../../zendo/themes/zendo.toml"))];
@@ -116,7 +121,7 @@ fn channel(value: f32) -> u8 {
 
 /// A theme Settings offers.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Choice {
+pub enum Choice {
     /// A theme file, by its name.
     File(String),
     /// The KDE colour scheme in use when there is one, else Zendo's own.
@@ -133,23 +138,50 @@ impl Choice {
             _ => Self::File(DEFAULT.to_owned()),
         }
     }
+
+    /// What `config.toml`'s `theme` says for it.
+    #[must_use]
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::File(id) => id,
+            Self::System => SYSTEM,
+        }
+    }
 }
 
-/// The built-in themes, with the user's from `dir` over them, by name.
-fn all_themes(dir: Option<&Path>) -> Vec<Theme> {
+/// What the window shows, beyond the theme's name.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+enum Found {
+    /// A theme file, as chosen.
+    #[default]
+    File,
+    /// The chosen theme file is not there: Zendo's own shows.
+    Gone(String),
+    /// No colours in `kdeglobals`: Zendo's own show.
+    NoScheme,
+    /// The KDE colour scheme, by its name.
+    Following(String),
+    /// Why the scheme could not be read; the colours stay as they were.
+    Failed(String),
+}
+
+/// The built-in themes, with the user's from `dir` over them, by name; and a
+/// line for each file that is not a theme.
+fn all_themes(dir: Option<&Path>) -> (Vec<Theme>, Vec<String>) {
     let mut themes: Vec<Theme> = BUILT_IN
         .iter()
         .filter_map(|(id, text)| Theme::parse(id, text).ok())
         .collect();
-    // A file that is not a theme is Settings' to say (item 50).
-    let (own, _problems) = dir.map(Theme::read_dir).unwrap_or_default();
+    let (own, problems) = dir.map(Theme::read_dir).unwrap_or_default();
     for theme in own {
         match themes.iter_mut().find(|known| known.id == theme.id) {
             Some(known) => *known = theme,
             None => themes.push(theme),
         }
     }
-    themes
+    // Zendo's own first, then by name.
+    themes.sort_by_key(|theme| (theme.id != DEFAULT, theme.name.to_lowercase()));
+    (themes, problems)
 }
 
 /// The window's colours, from the choice.
@@ -157,6 +189,8 @@ fn all_themes(dir: Option<&Path>) -> Vec<Theme> {
 pub struct Themes {
     choice: Choice,
     files: Vec<Theme>,
+    problems: Vec<String>,
+    found: Found,
     /// When `kdeglobals` last changed, as last read.
     modified: Option<SystemTime>,
     palette: Palette,
@@ -167,14 +201,24 @@ impl Themes {
     /// themes and the user's in `dir`.
     #[must_use]
     pub fn chosen(tag: Option<&str>, dir: Option<&Path>) -> Self {
+        let (files, problems) = all_themes(dir);
         let mut themes = Self {
             choice: Choice::chosen(tag),
-            files: all_themes(dir),
+            files,
+            problems,
+            found: Found::File,
             modified: None,
             palette: Palette::ZENDO,
         };
         themes.apply();
         themes
+    }
+
+    /// Zendo's own theme, with no user files read: for tests.
+    #[cfg(test)]
+    #[must_use]
+    pub fn plain() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::chosen(None, None)))
     }
 
     /// The colours as last read.
@@ -189,6 +233,48 @@ impl Themes {
         self.choice == Choice::System
     }
 
+    /// The choice now.
+    #[must_use]
+    pub fn choice(&self) -> &Choice {
+        &self.choice
+    }
+
+    /// Whether the settings' theme is the choice already.
+    #[must_use]
+    pub fn is_chosen(&self, tag: Option<&str>) -> bool {
+        self.choice == Choice::chosen(tag)
+    }
+
+    /// The themes Settings lists: each file's id and name.
+    #[must_use]
+    pub fn files(&self) -> Vec<(String, String)> {
+        self.files
+            .iter()
+            .map(|theme| (theme.id.clone(), theme.name.clone()))
+            .collect()
+    }
+
+    /// A line for each of the user's files that is not a theme.
+    #[must_use]
+    pub fn problems(&self) -> &[String] {
+        &self.problems
+    }
+
+    /// Makes the settings' theme the choice, and reads the colours again.
+    pub fn set_tag(&mut self, tag: Option<&str>) {
+        self.choice = Choice::chosen(tag);
+        self.apply();
+    }
+
+    /// Reads the user's themes again, as Settings opens: a file added since
+    /// shows. A chosen file is applied again, edits and all.
+    pub fn reload(&mut self, dir: Option<&Path>) {
+        (self.files, self.problems) = all_themes(dir);
+        if matches!(self.choice, Choice::File(_)) {
+            self.apply();
+        }
+    }
+
     /// A look at `kdeglobals`: `true` when the colours changed.
     pub fn look(&mut self) -> bool {
         if !self.watching() || Scheme::modified() == self.modified {
@@ -199,6 +285,18 @@ impl Themes {
         self.palette != before
     }
 
+    /// What the window shows, for Settings, and whether all is well.
+    #[must_use]
+    pub fn note(&self) -> Option<(String, bool)> {
+        match &self.found {
+            Found::File => None,
+            Found::Gone(id) => Some((t!("theme-gone", theme = id.as_str()), false)),
+            Found::NoScheme => Some((t!("theme-missing"), true)),
+            Found::Following(name) => Some((t!("theme-following", scheme = name.as_str()), true)),
+            Found::Failed(err) => Some((t!("theme-failed", error = err.as_str()), false)),
+        }
+    }
+
     /// Sets the colours from the choice, reading the KDE scheme again when
     /// it needs it.
     fn apply(&mut self) {
@@ -207,11 +305,13 @@ impl Themes {
             Choice::File(id) => id.clone(),
             Choice::System => return self.apply_scheme(),
         };
-        self.palette = self
-            .files
-            .iter()
-            .find(|theme| theme.id == id)
-            .map_or_else(|| self.default_palette(), Palette::from_theme);
+        if let Some(theme) = self.files.iter().find(|theme| theme.id == id) {
+            self.palette = Palette::from_theme(theme);
+            self.found = Found::File;
+        } else {
+            self.palette = self.default_palette();
+            self.found = Found::Gone(id);
+        }
     }
 
     fn apply_scheme(&mut self) {
@@ -219,11 +319,18 @@ impl Themes {
         match Scheme::read() {
             Ok(Some(scheme)) => {
                 self.palette = Palette::from_theme(&Theme::from_scheme(&scheme));
+                self.found = Found::Following(scheme.name);
             }
-            Ok(None) => self.palette = self.default_palette(),
+            Ok(None) => {
+                self.palette = self.default_palette();
+                self.found = Found::NoScheme;
+            }
             // Perhaps caught half written: looked at again next time, the
             // colours as they were.
-            Err(_) => self.modified = None,
+            Err(err) => {
+                self.modified = None;
+                self.found = Found::Failed(format!("{err:#}"));
+            }
         }
     }
 

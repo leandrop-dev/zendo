@@ -17,24 +17,34 @@ use zendo_core::config::Config;
 use zendo_core::covers::{Fetcher, Kind};
 use zendo_core::{Category, Game, Library, SavedFilter, Sort, State};
 use zendo_shell::gamepad::{self, Pad};
+use zendo_shell::presence::PresenceHandle;
 use zendo_shell::t;
 
 use crate::covers::{Cover, Covers, Decoded};
 use crate::library::{Browser, CardData, Chip, Outcome, Pick, Rows, Save, Scroll};
+use crate::theme::Themes;
 use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
 #[path = "cards_ui.rs"]
 mod cards;
 #[path = "compat_ui.rs"]
 mod compat;
+#[path = "engines_ui.rs"]
+mod engines;
 #[path = "game_ui.rs"]
 mod game;
 #[path = "gog_ui.rs"]
 mod gog;
 #[path = "local_ui.rs"]
 mod local;
+#[path = "overlay_ui.rs"]
+mod overlay;
 #[path = "prefix_ui.rs"]
 mod prefix;
+#[path = "protons_ui.rs"]
+mod protons;
+#[path = "runtimes_ui.rs"]
+mod runtimes;
 #[path = "settings_ui.rs"]
 mod settings;
 
@@ -66,6 +76,12 @@ fn with_glue(then: impl FnOnce(&Rc<Glue>)) {
     if let Some(glue) = glue {
         then(&glue);
     }
+}
+
+/// The KDE colour scheme changed and the window was painted again: Settings
+/// says which scheme it follows.
+pub fn scheme_followed() {
+    with_glue(|glue| glue.show_settings());
 }
 
 /// The grid as Slint reads it: a model of rows, each made when asked, so only
@@ -180,14 +196,26 @@ struct Glue {
     gog: gog::GogState,
     /// The Settings page (`settings_ui.rs`).
     settings: settings::SettingsState,
+    /// The Engines, Anti-cheat and Epic overlay cards (`engines_ui.rs`,
+    /// `runtimes_ui.rs`, `overlay_ui.rs`) and the Proton group
+    /// (`protons_ui.rs`).
+    engines: engines::EnginesState,
+    runtimes: runtimes::RuntimesState,
+    overlay: overlay::OverlayState,
+    protons: protons::ProtonsState,
+    /// The window's colours, shared with the watcher of the KDE scheme.
+    themes: Rc<RefCell<Themes>>,
+    /// Discord's rich presence, while the setting is on.
+    presence: RefCell<Option<PresenceHandle>>,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
 
 /// Puts the Library in the window and starts reading the games.
-pub fn install(window: &MainWindow) {
-    let glue = Glue::new(window, true);
+pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
+    let glue = Glue::new(window, true, themes);
     glue.connect(window);
+    glue.start_presence();
     GLUE.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&glue)));
     *glue.timer.borrow_mut() = Some(glue.watch());
     let weak = window.as_weak();
@@ -200,7 +228,7 @@ pub fn install(window: &MainWindow) {
 }
 
 impl Glue {
-    fn new(window: &MainWindow, persist: bool) -> Rc<Self> {
+    fn new(window: &MainWindow, persist: bool, themes: Rc<RefCell<Themes>>) -> Rc<Self> {
         let browser = Rc::new(RefCell::new(Browser::new()));
         // A worker's cover goes to the window's thread, which keeps it.
         let weak = Mutex::new(window.as_weak());
@@ -255,6 +283,12 @@ impl Glue {
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
             settings: settings::SettingsState::new(),
+            engines: engines::EnginesState::default(),
+            runtimes: runtimes::RuntimesState::default(),
+            overlay: overlay::OverlayState::default(),
+            protons: protons::ProtonsState::default(),
+            themes,
+            presence: RefCell::new(None),
             persist,
         })
     }
@@ -903,7 +937,7 @@ mod tests {
     fn page(count: usize) -> (MainWindow, Rc<Glue>) {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().expect("the window opens");
-        let glue = Glue::new(&window, false);
+        let glue = Glue::new(&window, false, crate::theme::Themes::plain());
         glue.connect(&window);
         let library = Library {
             games: (0..count).map(game).collect(),
@@ -1230,13 +1264,32 @@ mod tests {
     }
 
     #[test]
+    fn the_theme_and_discord_choices_apply_at_once() {
+        let (window, glue) = page(2);
+        let settings = window.global::<SettingsData>();
+        window.invoke_page_requested(Page::Settings);
+        assert!(settings.get_themes().row_count() >= 1);
+        assert_eq!(settings.get_theme_note(), "");
+        settings.invoke_set_discord(true);
+        assert!(settings.get_discord());
+        assert!(glue.presence.borrow().is_none(), "no thread in tests");
+        // A theme that is gone shows Zendo's own and says so.
+        glue.save_setting(settings::Setting::Theme(Some("no-such".into())));
+        assert!(settings.get_theme_note().contains("no-such"));
+        assert_eq!(settings.get_theme_note_tone(), 2);
+        // Back to a theme that is there: the note goes.
+        settings.invoke_theme_chosen(0);
+        assert_eq!(settings.get_theme_note(), "");
+    }
+
+    #[test]
     fn settings_apply_at_once_and_a_key_is_kept_only_once_checked() {
         use zendo_core::covers::KeyCheck;
         let (window, glue) = page(2);
         let settings = window.global::<SettingsData>();
         window.invoke_page_requested(Page::Settings);
         assert_eq!(window.get_page(), Page::Settings);
-        assert_eq!(settings.get_groups().row_count(), 4);
+        assert_eq!(settings.get_groups().row_count(), 6);
         assert_eq!(settings.get_group(), 0);
         // The window's paint and the switches follow a change.
         settings.invoke_set_opaque(true);
@@ -1284,7 +1337,7 @@ mod tests {
         use zendo_core::prefix_tools::Ran;
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().expect("the window opens");
-        let glue = Glue::new(&window, false);
+        let glue = Glue::new(&window, false, crate::theme::Themes::plain());
         glue.connect(&window);
         let mut sugar = Game::new(
             "gog:1".into(),

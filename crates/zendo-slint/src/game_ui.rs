@@ -12,6 +12,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Source, State, Status, sessions};
+use zendo_shell::presence::PresenceHandle;
 use zendo_shell::running::{self, Effect, Names, RunMessage, Running};
 use zendo_shell::{format, open, t};
 
@@ -603,10 +604,35 @@ impl Glue {
                 Effect::CloudReload => self.cloud_reload(),
                 Effect::CloudSyncing(id, syncing) => self.cloud_syncing(id, syncing),
                 Effect::RefreshGogTotal(id) => self.refresh_gog_total(&id),
-                Effect::Presence | Effect::NextJob => {}
+                Effect::Presence => self.update_presence(),
+                Effect::NextJob => {}
             }
         }
         self.show_game();
+    }
+
+    /// Tells Discord who is playing, when the Discord setting is on.
+    pub(super) fn update_presence(&self) {
+        let presence = self.presence.borrow();
+        let Some(presence) = presence.as_ref() else {
+            return;
+        };
+        let browser = self.browser.borrow();
+        let shown = self
+            .game
+            .running
+            .borrow()
+            .presence(|id| Names::of(id, browser.game(id)).title);
+        presence.show(shown);
+    }
+
+    /// Starts the presence at launch when the setting asks for it.
+    pub(super) fn start_presence(&self) {
+        if self.persist
+            && zendo_core::config::Config::load_file().is_ok_and(|config| config.discord_presence)
+        {
+            *self.presence.borrow_mut() = Some(PresenceHandle::spawn());
+        }
     }
 
     /// Keeps a session in the page's list and, outside tests, in the

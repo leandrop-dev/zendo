@@ -486,7 +486,7 @@ mod tests {
     fn says_how_the_last_sync_went() {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().expect("the window opens");
-        let glue = Glue::new(&window, false);
+        let glue = Glue::new(&window, false, crate::theme::Themes::plain());
         let mut game = Game::new(
             "gog:1".into(),
             "Sugar".into(),

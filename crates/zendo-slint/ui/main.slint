@@ -7,11 +7,11 @@ import { Colors, Space, Tr } from "style.slint";
 import { TopBar, Page } from "top_bar.slint";
 import { GamePage, GameData, Tile, Fact } from "game.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
-import { SettingsPage, SettingsData } from "settings.slint";
+import { SettingsPage, SettingsData, SetRow, Bar } from "settings.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, LocalData, SettingsData }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, LocalData, SettingsData, SetRow, Bar }
 
 export component MainWindow inherits Window {
     title: "Zendo";

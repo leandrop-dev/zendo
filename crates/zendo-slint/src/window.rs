@@ -43,14 +43,14 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
 
     let window = MainWindow::new().context("could not make the window")?;
     tr::install(&window);
-    library_ui::install(&window);
-    if opaque {
-        window.set_translucency(1.0);
-    }
     let themes = Rc::new(RefCell::new(Themes::chosen(
         theme.as_deref(),
         Theme::dir().as_deref(),
     )));
+    library_ui::install(&window, Rc::clone(&themes));
+    if opaque {
+        window.set_translucency(1.0);
+    }
     paint(&window, themes.borrow().palette());
     let watcher = follow_scheme(&window, &themes);
     if fullscreen {
@@ -161,24 +161,24 @@ fn handle_tray(window: &MainWindow, message: TrayMessage) {
     }
 }
 
-/// Looks at `kdeglobals` every so often while the theme is the KDE scheme,
-/// and repaints when it changed. The timer lives as long as the value.
+/// Looks at `kdeglobals` every so often, and repaints when it changed while
+/// the theme is the KDE scheme (`look` does nothing otherwise: Settings can
+/// choose System at any time). The timer lives as long as the value.
 fn follow_scheme(window: &MainWindow, themes: &Rc<RefCell<Themes>>) -> Timer {
     let timer = Timer::default();
-    if themes.borrow().watching() {
-        let (weak, themes) = (window.as_weak(), Rc::clone(themes));
-        timer.start(TimerMode::Repeated, LOOK, move || {
-            let changed = themes.borrow_mut().look();
-            if changed && let Some(window) = weak.upgrade() {
-                paint(&window, themes.borrow().palette());
-            }
-        });
-    }
+    let (weak, themes) = (window.as_weak(), Rc::clone(themes));
+    timer.start(TimerMode::Repeated, LOOK, move || {
+        let changed = themes.borrow_mut().look();
+        if changed && let Some(window) = weak.upgrade() {
+            paint(&window, themes.borrow().palette());
+            library_ui::scheme_followed();
+        }
+    });
     timer
 }
 
 /// Sets the window's colours.
-fn paint(window: &MainWindow, palette: Palette) {
+pub fn paint(window: &MainWindow, palette: Palette) {
     let colors = window.global::<Colors>();
     colors.set_background(colour(palette.background));
     colors.set_sidebar(colour(palette.sidebar));

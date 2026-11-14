@@ -57,7 +57,10 @@ list and details views, OptiScaler and recompiled games are on hold.
   ProtonDB pill, Steam's description and facts, screenshots, requirements,
   achievements, DLC installed, the Steam app id) and 49c (Anti-cheat, the Steam
   Deck pill, the cloud saves row, the Wine prefix card, GOG's changelog and
-  total time played). The other pages show their name. Run it as `zendo-slint`.
+  total time played). Item 50 is under way: 50a (the Settings page's General,
+  Keys, Library and Diagnostics groups) and 50b (the Engines and Proton groups,
+  the Theme choices and the Discord switch) are built; 50c is Accounts, About
+  and Collections. The other pages show their name. Run it as `zendo-slint`.
 
 ## Next
 

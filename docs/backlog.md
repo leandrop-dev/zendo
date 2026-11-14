@@ -31,14 +31,13 @@ to `zendo-core` when that page is ported. Ask before building any other page
   overlay was listed under 49 but is a Settings section in Iced, so it is part
   of 50. Item 54's parity checklist must go through this list.
 - **50** Sliced into **50a** (the Settings page: General, Keys, Library and
-  Diagnostics groups, built 2026-11-14), **50b** (Engines and Proton groups:
-  engines, Protons, runtimes, the Epic overlay section, the Theme choices, the
-  Discord switch with presence) and **50c** (Accounts, About, Collections).
-  Settings, engines, Protons, runtimes, themes, Accounts, About, the
-  Epic overlay section (`app/eos_overlay.rs`), Collections sheet (the
-  Library's COLLECTIONS and ADD TO COLLECTION chips come with it; the
-  collection and saved-view chips already filter). The language switch there
-  must call `tr::show`; the Library re-labels itself.
+  Diagnostics groups, built 2026-11-14), **50b** (built 2026-11-14: the Engines
+  and Proton groups with engines, Protons, runtimes and the Epic overlay, the
+  Theme choices and the Discord switch with presence) and **50c** (Accounts,
+  About, Collections: the Library's COLLECTIONS and ADD TO COLLECTION chips come
+  with the sheet; the collection and saved-view chips already filter). Left in
+  50b for 51: an engine is also busy while a store job runs (Iced's
+  `engines_busy`; now only while a game runs).
 - **51** Store, store game page, Downloads, installer, Steam installs.
 - **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
@@ -89,6 +88,18 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   it is in the keyring), removing a key with an empty field plus Save, "Get
   a key" opening the site; Download now with a key; Open folder and Open
   logs on each row; the switches surviving a restart.
+- **Settings, Engines, Proton and Theme (50b)**, same run, also writes your
+  real `config.toml` and downloads into your real folders. Claude already
+  clicked through Theme (Dusk, a broken theme file, System following a
+  `kdeglobals`), Opaque and Discord's switch, the engine list and a real
+  legendary download and Remove, Anti-cheat's list, the default Proton, a
+  seeded Proton's Remove and the release lists (`docs/history.md`, item 50b).
+  What needs you: Discord presence with Discord open (the status shows a
+  game while it runs and clears when it ends); the Update button (an older
+  engine); Anti-cheat Download, Update and Remove; the Epic overlay's Install
+  and Remove (a large download through legendary, signed in or not); Stop on a
+  download (catch one on a slower link); the Engines buttons greyed while a
+  game runs; Settings in pt-PT; your own KDE scheme as System, light and dark.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 
