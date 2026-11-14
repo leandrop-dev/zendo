@@ -89,6 +89,8 @@ export global GameData {
     in property <int> run-state;
     in property <string> line;
     in property <[ChipData]> statuses;
+    // The collections the game is in, by name.
+    in property <[string]> collections;
     in property <[Tile]> tiles;
     in property <[Fact]> sessions;
     in property <[Fact]> recent;
@@ -156,6 +158,7 @@ export global GameData {
     callback manage-steam();
     callback wiki();
     callback status(int);
+    callback edit-collections();
     callback open-path(string);
     callback toggle-technical();
     callback edit();
@@ -601,6 +604,46 @@ export component GamePage inherits Rectangle {
                         text: GameData.line;
                         font-size: 14px;
                         color: Colors.dim;
+                    }
+                }
+                // The collections the game is in, and the way to change them.
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: Space.s;
+                    Text {
+                        text: Tr.t("library-organize").to-uppercase();
+                        font-size: 12px;
+                        color: Colors.dim;
+                        vertical-alignment: center;
+                    }
+                    if GameData.collections.length == 0: Text {
+                        text: Tr.t("collections-none");
+                        font-size: 13px;
+                        color: Colors.dim;
+                        vertical-alignment: center;
+                    }
+                    for name in GameData.collections: Rectangle {
+                        background: Colors.surface;
+                        border-width: 1px;
+                        border-color: Colors.line;
+                        HorizontalLayout {
+                            padding-left: Space.s;
+                            padding-right: Space.s;
+                            padding-top: 2px;
+                            padding-bottom: 2px;
+                            Text {
+                                text: name.to-uppercase();
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: Colors.foreground;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    ActionButton {
+                        label: Tr.t("game-edit-categories");
+                        small: true;
+                        clicked => { GameData.edit-collections(); }
                     }
                 }
                 // The play status: the chosen one is pressed again to clear it.

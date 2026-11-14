@@ -4039,3 +4039,113 @@ All logic is `zendo_core`'s (`engines`, `ge_proton`, `proton`, `runtimes`,
   download; the button was enabled and not pressed), Discord presence itself
   (no session bus, no Discord), pt-PT on the new cards, a light KDE scheme,
   the Engines buttons while a game runs, a window narrower than the page.
+
+## Item 50c, Accounts, About and Collections in Slint (2026-11-14)
+
+The last slice of item 50: the two pages under the Settings button besides
+Settings, and the Collections sheet with the Library chips and the game page's
+row that open it. New files: `ui/about.slint`, `ui/accounts.slint`,
+`ui/collections.slint`; `src/accounts_ui.rs` and `src/collections_ui.rs`, child
+modules of `library_ui` by `#[path]` like the others; `zendo_shell::collections`
+(what the sheet lists, shared with Iced). The Steam card (sign-in, owned and
+family lists) was decided with the user to go whole into item 51, with the
+Store's lists; nothing in the Slint code reads a Steam session yet.
+
+- **Navigation**: `Page` gained `accounts` and `about`; a row under the top bar
+  (Settings, Accounts with "n of 4" when any store is signed in, About) shows on
+  the three pages and the settings icon is current on all of them. Ctrl+4 and
+  Ctrl+6 open Accounts and About, F1 opens About. The row needs
+  `vertical-stretch: 0` or its chips stretch to the page's height.
+- **About**: Zendo, the version, the intro, Source code and Report a problem
+  (through `SettingsData.open`), Licence and Built on. Two new messages, in
+  both languages, say it is built with Slint under the GPLv3 (`about-built-slint`,
+  `about-licence-text-slint`); Iced's stay for Iced. No `AboutSlint` widget (the
+  plan's table was out of date: item 46 chose GPLv3).
+- **Accounts**: a card per store (Epic, GOG, Amazon) with who is signed in, the
+  engine and its path or that it is missing (nothing is said while the engines
+  are still being looked for, which Iced did), Sign in or Sign out, GOG's two
+  switches while signed in (`gog_playtime`, `gog_galaxy`, new `Setting` cases),
+  and the sign-in's steps: in Zendo's window (a line for what it waits on,
+  Try again, Use my browser instead, Cancel) or in the browser (the three
+  steps, Open the page again, the field, Finish, Cancel). The window's code, the
+  window being closed and a window that cannot open (the browser takes over)
+  are all handled as in Iced, with the guards against an answer for a sign-in
+  that is gone. Typing with no field focused on the page starts the code; Ctrl+V
+  pastes into it. The engines are asked when Zendo starts and each time the page
+  opens.
+- **Collections sheet**: one list of the hand-picked collections and the saved
+  views by name (`CollRow`, one struct with every text and flag); a tick per
+  hand-picked one when the sheet was opened for games; Create, Save view (a
+  same-name view is updated), Rename in place, Delete asked twice, Open on a
+  view (closes the sheet and applies it); notes in green and orange; Enter in a
+  field creates or renames; Escape leaves a rename, then closes the sheet. It
+  opens from the COLLECTIONS chip (with the count), ADD TO COLLECTION in the
+  bulk chips (for the marked games) and Edit collections on a game page, which
+  now has Iced's collections row (badges, or None). The page's keys and the pad
+  do nothing while it is open. `Browser` gained `set_collections` (puts the
+  state's lists on every game and drops a filter on a collection that is gone).
+- **Shared code and tests**: `summary`, `items` and `member` moved to
+  `zendo_shell::collections` with their two tests, and Iced uses them. The i18n
+  test now also reads `Tr.t("…")` in `.slint` files, because a message used only
+  by Slint looked unused. `Section`, `Toggle`, `Note` and `RowButton` moved from
+  `settings.slint` to `components.slint`, with a new `CheckBox`. 16 new tests in
+  `zendo-slint` (82 in all; workspace tests and clippy are clean): the sheet's
+  create, delete asked twice, names taken by the other kind, update, rename,
+  apply and delete of a view, the bulk chip and the ticks, Escape's order, the
+  game page's row; the keys and the row; the card counts, the switches, the four
+  window tests ported from Iced, a refused paste, typed text and an answer after
+  Cancel. `persist == false` keeps every one of them off the engines, the
+  window, the browser and the user's files.
+- **Checked on screen** (2026-11-14, throwaway home, no session bus, the user at
+  the PC, a seeded 24-game library, fake `legendary`, `gogdl` and `nile`
+  scripts in the home's `bin`, and a fake `xdg-open` that logs): the COLLECTIONS
+  chip and its count; Rename in place (typed a new name, Enter: renamed, list
+  re-sorted, chips behind it followed), Delete asked then done, Create with
+  nothing typed (refused) and with a name by Enter, Save view (its chip lit as
+  the view on screen), Open on a saved view (sheet closed, A-Z chosen), two
+  marked games and ADD TO COLLECTION, the tick (note, count, chip), Escape
+  closing only the sheet, Edit collections on a game page (badges updated
+  behind the sheet, the page stayed open); the new row and Ctrl+4; About;
+  Accounts with no engines (Sign in disabled, why), with engines, GOG signed in
+  (fake `gogdl auth`) with its switches (one turned off: `gog_playtime = false`
+  in `config.toml`), Epic's Sign in opening the real sign-in window (its page
+  failed to load here, "WebKit encountered an internal error": no session bus),
+  Use my browser instead (the window closed, the fake `xdg-open` logged
+  `https://legendary.gl/epiclogin`), typing with nothing focused filling the
+  field, Finish refusing "no code here" with the right note, Cancel, Amazon's
+  Sign in (fake nile made the page, the window opened, Cancel closed it and its
+  process), GOG's Sign out (card, switches, count and the credentials file
+  gone, footer note).
+- **A second run** (same day, same setup, after review) covered what the first
+  skipped, by mouse: the ACCOUNTS chip, both About buttons (the fake
+  `xdg-open` logged `https://github.com/leandrop-dev/zendo` and `.../issues`),
+  the second GOG switch (`gog_galaxy = false` written), TRY AGAIN (a fake nile
+  that printed garbage gave nile's parse error with TRY AGAIN, USE MY BROWSER
+  and CANCEL; with the fake fixed TRY AGAIN restarted and the window opened),
+  Amazon's browser steps (the page logged, OPEN THE PAGE AGAIN logged it a
+  second time, FINISH on "nothing to see" gave "No code there: paste the
+  address the page ended on"), the sheet's OK and CANCEL buttons, Escape during
+  a rename (the rename ended, the sheet stayed, and typed text went into the
+  name field), and a sheet over 26 collections: the card stopped at the
+  window's height, the list scrolled with the wheel, and CREATE, SAVE VIEW and
+  CANCEL stayed on screen and took clicks.
+- **Found and fixed on screen**: the rename field did not take the keyboard,
+  because the model is written again for each change and `changed` does not
+  fire for a row's first value (`init` does the same); the new row's chips
+  were as tall as the page; **keys died after a field went away**: Cancel on
+  the Accounts steps or on the Collections sheet destroyed the field that had
+  the keyboard, and Ctrl+1 and Escape reached nothing until a click on the page
+  (the Add game sheet's Cancel does the same, fixed alike but not tried on
+  screen). Closing a sheet or the steps now calls `focus_page`, and a rename
+  that ends hands the keyboard to the name field (`CollectionsData.focus-draft`);
+  the list's scrollbar sat on the Delete buttons (the list now leaves 14 px).
+- **Added beyond Iced**: the engines are asked again each time Accounts opens
+  (Iced asked only at start). A slow answer for GOG can land after Sign out and
+  show the account signed in until the page is opened again.
+- **Not checked.** A real sign-in to Epic, GOG or Amazon (the codes, the
+  engines' own answers, the keyring), a pasted code that is well formed, Ctrl+V
+  into the field with a real clipboard (the key's routing is a glue test), the
+  Add game sheet's Cancel keeping the keys, the sign-in window loading a real page, `fetch_owned` and the Store's lists after a
+  sign-in (51), pt-PT on the three pages, a light KDE scheme, a controller on
+  the sheet (the pad only closes it), and the count with a Steam session (none
+  can be made until 51).

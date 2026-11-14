@@ -259,10 +259,14 @@ mod tests {
         // The `src` of every crate in the workspace: the window's code is
         // in more than one.
         let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        // The Slint window's `ui` folder too: its texts ask `Tr.t("id")`.
         let mut files: Vec<_> = fs::read_dir(&crates)
             .unwrap()
-            .map(|entry| entry.unwrap().path().join("src"))
-            .filter(|src| src.is_dir())
+            .flat_map(|entry| {
+                let path = entry.unwrap().path();
+                [path.join("src"), path.join("ui")]
+            })
+            .filter(|dir| dir.is_dir())
             .collect();
         let mut unknown = Vec::new();
         let mut used = BTreeSet::new();
@@ -275,10 +279,33 @@ mod tests {
                 );
                 continue;
             }
+            let text_of = |path: &Path| fs::read_to_string(path).unwrap();
+            if path.extension().is_some_and(|ext| ext == "slint") {
+                // Comments carry examples (`Tr.t("page-library")`).
+                let text: String = text_of(&path)
+                    .lines()
+                    .filter(|line| !line.trim_start().starts_with("//"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                for call in ["Tr.t(\"", "Tr.with(\"", "Tr.count(\""] {
+                    for (at, _) in text.match_indices(call) {
+                        let id = text[at + call.len()..]
+                            .split('"')
+                            .next()
+                            .unwrap_or_default();
+                        let id = id.to_owned();
+                        if !english.contains_key(id.as_str()) {
+                            unknown.push(format!("{}: {id}", path.display()));
+                        }
+                        used.insert(id);
+                    }
+                }
+                continue;
+            }
             if path.extension().is_none_or(|ext| ext != "rs") || path.ends_with("i18n.rs") {
                 continue;
             }
-            let text = fs::read_to_string(&path).unwrap();
+            let text = text_of(&path);
             let mut rest = text.as_str();
             while let Some((before, after)) = rest.split_once("t!(") {
                 rest = after;

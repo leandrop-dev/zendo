@@ -1,0 +1,117 @@
+// The About page: what Zendo is, its licence and what it is built on. It is
+// static; Rust gives only the version.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton } from "components.slint";
+import { ScrollView } from "std-widgets.slint";
+import { SettingsData } from "settings.slint";
+
+export global AboutData {
+    in property <string> version;
+    in property <string> repository;
+}
+
+// A card with a heading and lines of words under it.
+component Block inherits Rectangle {
+    in property <string> heading;
+    in property <[string]> lines;
+    in property <length> inner;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.m;
+        Text {
+            text: root.heading.to-uppercase();
+            font-size: 14px;
+            font-weight: 700;
+            color: Colors.foreground;
+        }
+        for line in root.lines: Text {
+            width: root.inner;
+            text: line;
+            font-size: 14px;
+            color: Colors.foreground;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component AboutPage inherits Rectangle {
+    property <length> column: min(860px, root.width - 12px);
+    // The room inside a card: the column less the page's padding and the card's.
+    property <length> inner: root.column - 2 * Space.xl - 2 * Space.l;
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                width: root.column;
+                padding: Space.xl;
+                spacing: Space.l;
+                alignment: start;
+
+                Rectangle {
+                    background: Colors.surface;
+                    border-width: 1px;
+                    border-color: Colors.line;
+                    VerticalLayout {
+                        padding: Space.l;
+                        spacing: Space.l;
+                        VerticalLayout {
+                            spacing: Space.xs;
+                            Text {
+                                text: "Zendo";
+                                font-size: 40px;
+                                font-weight: 700;
+                                color: Colors.foreground;
+                            }
+                            Text {
+                                text: Tr.with("about-version", "version", AboutData.version);
+                                font-size: 14px;
+                                color: Colors.dim;
+                            }
+                        }
+                        Text {
+                            width: root.inner;
+                            text: Tr.t("about-intro");
+                            font-size: 15px;
+                            color: Colors.foreground;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: Space.s;
+                            alignment: start;
+                            ActionButton {
+                                label: Tr.t("about-source-code");
+                                clicked => { SettingsData.open(AboutData.repository); }
+                            }
+                            ActionButton {
+                                label: Tr.t("about-report-problem");
+                                clicked => { SettingsData.open(AboutData.repository + "/issues"); }
+                            }
+                        }
+                    }
+                }
+                Block {
+                    heading: Tr.t("about-licence");
+                    lines: [Tr.t("about-licence-text-slint")];
+                    inner: root.inner;
+                }
+                Block {
+                    heading: Tr.t("about-built-on");
+                    lines: [
+                        Tr.t("about-built-slint"),
+                        Tr.t("about-built-gilrs"),
+                        Tr.t("about-built-keyvalues"),
+                        Tr.t("about-built-ureq"),
+                        Tr.t("about-built-steamgriddb"),
+                        Tr.t("about-built-fluent"),
+                        Tr.t("about-built-font"),
+                    ];
+                    inner: root.inner;
+                }
+            }
+        }
+    }
+}

@@ -91,6 +91,8 @@ impl Glue {
         let was_open = self.local.form.borrow_mut().take().is_some();
         if was_open {
             self.show_form();
+            // The sheet's field had the keyboard and is gone with it.
+            self.focus_page();
         }
         was_open
     }

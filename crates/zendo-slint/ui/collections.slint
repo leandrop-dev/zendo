@@ -1,0 +1,232 @@
+// The Collections sheet, over the window: the user's hand-picked collections
+// and saved views in one list, a field to make one, and a tick per
+// collection for the games the sheet was opened for. The Rust side
+// (src/collections_ui.rs) holds the state; nothing here keeps a collection.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton, TextField, RowButton, CheckBox } from "components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+// One collection of either kind, with every text the row shows.
+export struct CollRow {
+    name: string,
+    // A saved view's summary, under its name; empty for a hand-picked one.
+    sub: string,
+    // "3 games" for a hand-picked one.
+    count: string,
+    view: bool,
+    // The sheet was opened for games: the row has a tick.
+    checkable: bool,
+    checked: bool,
+    // The name is a field.
+    renaming: bool,
+    // Delete was pressed once.
+    confirm: bool,
+}
+
+export global CollectionsData {
+    in-out property <bool> open;
+    in property <[CollRow]> rows;
+    in property <string> count;
+    // Said in place of the list when there is none.
+    in property <string> empty;
+    // What Save view would keep.
+    in property <string> now;
+    in-out property <string> draft;
+    in-out property <string> rename-draft;
+    in property <string> note;
+    in property <bool> note-good;
+    // Rust counts this up to put the keyboard in the name field again, when
+    // the field that had it (a rename's) is gone.
+    in property <int> focus-draft;
+
+    callback close();
+    callback draft-edited(string);
+    callback create();
+    callback save-view();
+    callback rename(string);
+    callback rename-edited(string);
+    callback rename-done();
+    callback set-member(string, bool);
+    callback delete(string);
+    callback apply(string);
+    // The window's language changed: Rust writes its texts again.
+    callback relabel();
+}
+
+component Entry inherits Rectangle {
+    in property <CollRow> item;
+    height: 44px;
+    // The field takes the keyboard when a rename starts.
+    property <bool> renaming: root.item.renaming;
+    changed renaming => {
+        if root.renaming { rename-field.focus-field(); }
+    }
+    // The model is written again for each change, so the row that starts a
+    // rename is a new one: `changed` does not fire for what it begins with.
+    init => {
+        if root.renaming { rename-field.focus-field(); }
+    }
+    HorizontalLayout {
+        spacing: 0px;
+        Rectangle {
+            width: root.item.checkable ? 32px : 0px;
+            CheckBox {
+                x: 0px;
+                visible: root.item.checkable;
+                on: root.item.checked;
+                label: root.item.name;
+                toggled(on) => { CollectionsData.set-member(root.item.name, on); }
+            }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            VerticalLayout {
+                visible: !root.item.renaming;
+                alignment: center;
+                Text {
+                    text: root.item.name;
+                    font-size: 15px;
+                    color: Colors.foreground;
+                    overflow: elide;
+                }
+                Text {
+                    height: root.item.sub == "" ? 0px : self.preferred-height;
+                    text: root.item.sub;
+                    font-size: 11px;
+                    color: Colors.dim;
+                    overflow: elide;
+                }
+            }
+            rename-field := TextField {
+                visible: root.item.renaming;
+                y: (parent.height - self.height) / 2;
+                width: parent.width - Space.s;
+                text <=> CollectionsData.rename-draft;
+                placeholder: root.item.name;
+                edited(text) => { CollectionsData.rename-edited(text); }
+                accepted => { CollectionsData.rename-done(); }
+            }
+        }
+        Text {
+            width: root.item.view || root.item.renaming ? 0px : 90px;
+            text: root.item.count;
+            font-size: 12px;
+            color: Colors.dim;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+        RowButton {
+            label: root.item.view && !root.item.renaming ? Tr.t("collections-apply") : "";
+            clicked => { CollectionsData.apply(root.item.name); }
+        }
+        RowButton {
+            label: root.item.renaming ? Tr.t("collections-ok") : Tr.t("collections-rename");
+            clicked => {
+                if root.item.renaming { CollectionsData.rename-done(); } else { CollectionsData.rename(root.item.name); }
+            }
+        }
+        RowButton {
+            label: root.item.confirm ? Tr.t("collections-really-delete") : Tr.t("collections-delete");
+            danger: root.item.confirm;
+            clicked => { CollectionsData.delete(root.item.name); }
+        }
+    }
+}
+
+export component CollectionsSheet inherits Rectangle {
+    background: #000000.with-alpha(0.6);
+    // Nothing behind the sheet hears a click; one outside the card closes it.
+    TouchArea {
+        clicked => { CollectionsData.close(); }
+    }
+    init => { draft-field.focus-field(); }
+    property <int> focus-tick: CollectionsData.focus-draft;
+    changed focus-tick => { draft-field.focus-field(); }
+
+    card := Rectangle {
+        width: min(620px, root.width - 2 * Space.xl);
+        height: min(root.height - 2 * Space.xl, body.preferred-height);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Colors.background;
+        border-width: 1px;
+        border-color: Colors.line;
+        // Clicks inside the card stay in it.
+        TouchArea { }
+        body := VerticalLayout {
+            padding: Space.xl;
+            spacing: Space.l;
+            Text {
+                text: Tr.t("collections-title").to-uppercase();
+                font-size: 18px;
+                font-weight: 700;
+                color: Colors.foreground;
+            }
+            Text {
+                text: CollectionsData.count;
+                font-size: 13px;
+                color: Colors.dim;
+            }
+            ScrollView {
+                vertical-stretch: 1;
+                min-height: min(list.preferred-height, 220px);
+                preferred-height: list.preferred-height;
+                list := VerticalLayout {
+                    // Room at the right for the scrollbar.
+                    x: 0px;
+                    width: parent.width - 14px;
+                    alignment: start;
+                    if CollectionsData.empty != "": Text {
+                        width: parent.width;
+                        text: CollectionsData.empty;
+                        font-size: 13px;
+                        color: Colors.dim;
+                        wrap: word-wrap;
+                    }
+                    for row in CollectionsData.rows: Entry {
+                        item: row;
+                    }
+                }
+            }
+            Text {
+                text: CollectionsData.now;
+                font-size: 12px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: Space.m;
+                draft-field := TextField {
+                    horizontal-stretch: 1;
+                    text <=> CollectionsData.draft;
+                    placeholder: Tr.t("collections-new-placeholder");
+                    edited(text) => { CollectionsData.draft-edited(text); }
+                    accepted => { CollectionsData.create(); }
+                }
+                ActionButton {
+                    label: Tr.t("collections-new");
+                    primary: true;
+                    clicked => { CollectionsData.create(); }
+                }
+                ActionButton {
+                    label: Tr.t("collections-save-view");
+                    clicked => { CollectionsData.save-view(); }
+                }
+            }
+            if CollectionsData.note != "": Text {
+                text: CollectionsData.note;
+                font-size: 13px;
+                color: CollectionsData.note-good ? Colors.good : Colors.accent;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                ActionButton {
+                    label: Tr.t("collections-cancel");
+                    clicked => { CollectionsData.close(); }
+                }
+            }
+        }
+    }
+}

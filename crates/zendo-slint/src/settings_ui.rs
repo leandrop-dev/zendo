@@ -47,12 +47,19 @@ pub(super) enum Setting {
     Language(Option<String>),
     AutoUpdate(bool),
     Theme(Option<String>),
-    SteamGridDbKey { key: Option<String>, then: KeyThen },
+    SteamGridDbKey {
+        key: Option<String>,
+        then: KeyThen,
+    },
     DefaultProton(Option<String>),
     MinimizeToTray(bool),
     DiscordPresence(bool),
     EnginesPathFirst(bool),
     Opaque(bool),
+    /// Whether the sessions of GOG games go to GOG.
+    GogPlaytime(bool),
+    /// Whether GOG games start with GOG Galaxy.
+    GogGalaxy(bool),
 }
 
 /// What the page says once the `SteamGridDB` key is written.
@@ -79,6 +86,8 @@ impl Setting {
             Self::DiscordPresence(on) => config.discord_presence = *on,
             Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
             Self::Opaque(on) => config.opaque = *on,
+            Self::GogPlaytime(on) => config.gog_playtime = *on,
+            Self::GogGalaxy(on) => config.gog_galaxy = *on,
         }
     }
 }
@@ -427,6 +436,8 @@ impl Glue {
             crate::window::paint(&window, palette);
         }
         self.show_settings();
+        // The GOG switches and the count beside Accounts read the settings.
+        self.show_accounts();
     }
 
     /// What the page does once a change is in the file.
@@ -465,7 +476,9 @@ impl Glue {
             | Setting::Language(_)
             | Setting::AutoUpdate(_)
             | Setting::Theme(_)
-            | Setting::Opaque(_) => {}
+            | Setting::Opaque(_)
+            | Setting::GogPlaytime(_)
+            | Setting::GogGalaxy(_) => {}
         }
         self.show_settings();
     }

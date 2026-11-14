@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38 and 41 to 49 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38 and 41 to 50 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -33,12 +33,20 @@ to `zendo-core` when that page is ported. Ask before building any other page
 - **50** Sliced into **50a** (the Settings page: General, Keys, Library and
   Diagnostics groups, built 2026-11-14), **50b** (built 2026-11-14: the Engines
   and Proton groups with engines, Protons, runtimes and the Epic overlay, the
-  Theme choices and the Discord switch with presence) and **50c** (Accounts,
-  About, Collections: the Library's COLLECTIONS and ADD TO COLLECTION chips come
-  with the sheet; the collection and saved-view chips already filter). Left in
-  50b for 51: an engine is also busy while a store job runs (Iced's
-  `engines_busy`; now only while a game runs).
-- **51** Store, store game page, Downloads, installer, Steam installs.
+  Theme choices and the Discord switch with presence) and **50c** (built
+  2026-11-14: the Accounts page for Epic, GOG and Amazon, About, and the
+  Collections sheet with the Library's COLLECTIONS and ADD TO COLLECTION chips
+  and the game page's collections row). Left in 50b for 51: an engine is also
+  busy while a store job runs (Iced's `engines_busy`; now only while a game
+  runs). **Left in 50c for 51**, each marked `// 51:` in `accounts_ui.rs`: asking
+  a store for its games once it is signed in or checked (`fetch_owned`), the
+  Store forgetting a store's list on sign-out (`store.forget`; `owned::forget`
+  is done), and Steam's card whole (its sign-in and sign-out on Steam's page,
+  the token in the keyring, the owned and family lists), which also brings
+  achievements for the signed-in Steam account (`achievements.rs` reads the
+  session in Iced) and the "n of 4" count with Steam in it.
+- **51** Store, store game page, Downloads, installer, Steam installs, and
+  Steam's card on Accounts (see 50c).
 - **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
@@ -100,6 +108,18 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   and Remove (a large download through legendary, signed in or not); Stop on a
   download (catch one on a slower link); the Engines buttons greyed while a
   game runs; Settings in pt-PT; your own KDE scheme as System, light and dark.
+- **Accounts, About and Collections (50c)**, same run. Claude already clicked
+  through every new control against fake engines (`docs/history.md`, item 50c);
+  not tried: Add game's Cancel keeping the keys after it closes (fixed like the
+  others), and a Collections sheet with a controller.
+  What needs you, with `cargo run -p zendo-slint` and your real engines: a real
+  sign-in to Epic, GOG and Amazon (the window loads the store's page and hands
+  the code back by itself; Use my browser instead, then paste the page or
+  address; Amazon's page is made by nile), a code pasted with Ctrl+V anywhere on
+  the page, Sign out of each, the two GOG switches with a real account (time
+  played goes to GOG; Galaxy starts GOG games), the sheet with a controller
+  (only B closes it), Accounts, About and the Collections sheet in pt-PT, and
+  F1 and Ctrl+4 / Ctrl+6.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

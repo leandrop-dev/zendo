@@ -25,8 +25,12 @@ use crate::library::{Browser, CardData, Chip, Outcome, Pick, Rows, Save, Scroll}
 use crate::theme::Themes;
 use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
+#[path = "accounts_ui.rs"]
+mod accounts;
 #[path = "cards_ui.rs"]
 mod cards;
+#[path = "collections_ui.rs"]
+mod collections;
 #[path = "compat_ui.rs"]
 mod compat;
 #[path = "engines_ui.rs"]
@@ -156,6 +160,9 @@ struct Chips {
     bulk: Rc<VecModel<ChipData>>,
 }
 
+/// Where the source is and where problems are reported, on the About page.
+const REPOSITORY: &str = "https://github.com/leandrop-dev/zendo";
+
 struct Glue {
     window: Weak<MainWindow>,
     browser: Rc<RefCell<Browser>>,
@@ -185,6 +192,10 @@ struct Glue {
     game: game::GameState,
     /// The Add game sheet and Remove (`local_ui.rs`).
     local: local::LocalState,
+    /// The Collections sheet (`collections_ui.rs`).
+    collections: collections::CollectionsState,
+    /// The Accounts page (`accounts_ui.rs`).
+    accounts: accounts::AccountsState,
     /// What the stores and sites say about the open game (`cards_ui.rs`).
     cards: cards::CardsState,
     /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
@@ -225,6 +236,8 @@ pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
     });
     glue.sync();
     glue.rescan();
+    glue.check_accounts();
+    glue.show_accounts();
 }
 
 impl Glue {
@@ -252,6 +265,9 @@ impl Glue {
             organize: Rc::new(VecModel::default()),
             bulk: Rc::new(VecModel::default()),
         };
+        let about = window.global::<crate::AboutData>();
+        about.set_version(env!("CARGO_PKG_VERSION").into());
+        about.set_repository(REPOSITORY.into());
         let data = window.global::<LibraryData>();
         data.set_rows(ModelRc::from(Rc::clone(&grid)));
         data.set_views(ModelRc::from(Rc::clone(&chips.views)));
@@ -278,6 +294,8 @@ impl Glue {
             open: RefCell::new(None),
             game: game::GameState::new(persist),
             local: local::LocalState::default(),
+            collections: collections::CollectionsState::new(),
+            accounts: accounts::AccountsState::new(),
             cards: cards::CardsState::new(),
             compat: compat::CompatState::new(persist),
             prefix: prefix::PrefixState::new(),
@@ -301,7 +319,14 @@ impl Glue {
             let pick = usize::try_from(id)
                 .ok()
                 .and_then(|id| glue.picks.borrow().get(id).cloned());
-            if let Some(pick) = pick {
+            if let Some(Pick::Collections { marked }) = pick {
+                let targets = if marked {
+                    glue.marked_games()
+                } else {
+                    std::collections::BTreeSet::new()
+                };
+                glue.open_collections(targets);
+            } else if let Some(pick) = pick {
                 let outcome = glue.browser.borrow_mut().pick(&pick);
                 glue.apply(outcome);
                 glue.focus_page();
@@ -347,6 +372,8 @@ impl Glue {
         });
         self.connect_game(window);
         self.connect_local(window);
+        self.connect_collections(window);
+        self.connect_accounts(window);
         self.connect_cards(window);
         self.connect_compat(window);
         self.connect_prefix(window);
@@ -713,7 +740,7 @@ impl Glue {
         if !focused {
             return;
         }
-        if self.form_open() {
+        if self.form_open() || self.collections_open() {
             // The sheet takes the keyboard; the pad only closes it.
             if pad == Pad::Back {
                 self.back();
@@ -748,7 +775,7 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.close_form() || self.close_game() {
+        if self.collections_back() || self.close_form() || self.close_game() {
             return;
         }
         let outcome = self.browser.borrow_mut().back();
@@ -774,13 +801,18 @@ impl Glue {
         if page == Page::Settings {
             self.open_settings();
         }
+        if page == Page::Accounts {
+            // Who is signed in is asked again each time the page opens.
+            self.check_accounts();
+            self.show_accounts();
+        }
         window.set_page(page);
     }
 
     /// A key the focused field did not use. Says whether it was taken.
     fn key(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
-        // Over the sheet, the fields have the keys.
-        if self.form_open() {
+        // Over a sheet, the fields have the keys.
+        if self.form_open() || self.collections_open() {
             return false;
         }
         let mut chars = text.chars();
@@ -790,8 +822,15 @@ impl Glue {
         if ctrl && !alt && !meta {
             return self.control_key(key);
         }
+        if key == char::from(Key::F1) {
+            self.navigate(Page::About);
+            return true;
+        }
         if self.open.borrow().is_some() && !alt && !meta {
             return self.game_key(key);
+        }
+        if !alt && !meta && !key.is_control() && !is_special(key) && self.type_code(text) {
+            return true;
         }
         if alt || meta || !self.on_library() {
             return false;
@@ -845,8 +884,11 @@ impl Glue {
             '1' => self.navigate(Page::Library),
             '2' => self.navigate(Page::Store),
             '3' => self.navigate(Page::Downloads),
+            '4' => self.navigate(Page::Accounts),
             '5' | ',' => self.navigate(Page::Settings),
+            '6' => self.navigate(Page::About),
             '7' => self.navigate(Page::Stats),
+            'v' if self.paste_code() => {}
             'p' if self.open.borrow().is_some() => self.toggle_pinned(),
             _ if !self.on_library() => return false,
             'f' => self.with_window(MainWindow::invoke_focus_search),
@@ -1016,6 +1058,7 @@ mod tests {
             [
                 t!("library-bulk-pin"),
                 t!("library-bulk-hide"),
+                t!("collections-assign"),
                 t!("library-clear-selection")
             ]
         );
@@ -1059,6 +1102,22 @@ mod tests {
         assert_eq!(data.get_search(), "");
         assert!(glue.key("1", true, false, false));
         assert_eq!(window.get_page(), Page::Library);
+    }
+
+    #[test]
+    fn accounts_and_about_are_reached_by_keys_and_by_the_settings_row() {
+        let (window, glue) = page(3);
+        assert!(glue.key("4", true, false, false));
+        assert_eq!(window.get_page(), Page::Accounts);
+        assert!(glue.key("6", true, false, false));
+        assert_eq!(window.get_page(), Page::About);
+        assert!(glue.key("5", true, false, false));
+        assert_eq!(window.get_page(), Page::Settings);
+        assert!(glue.key("1", true, false, false));
+        assert!(glue.key(&char::from(Key::F1).to_string(), false, false, false));
+        assert_eq!(window.get_page(), Page::About);
+        window.invoke_page_requested(Page::Accounts);
+        assert_eq!(window.get_page(), Page::Accounts);
     }
 
     #[test]
@@ -1619,5 +1678,365 @@ mod tests {
         game.invoke_steam_app_clear();
         assert!(!game.get_steam_app_clearable());
         assert_eq!(game.get_steam_app_input(), "");
+    }
+
+    fn typed(data: &crate::CollectionsData<'_>, text: &str) {
+        data.set_draft(text.into());
+        data.invoke_draft_edited(text.into());
+    }
+
+    fn note_of(data: &crate::CollectionsData<'_>) -> (String, bool) {
+        (data.get_note().to_string(), data.get_note_good())
+    }
+
+    #[test]
+    fn a_collection_is_deleted_only_on_the_second_press() {
+        let (window, glue) = page(3);
+        let data = window.global::<crate::CollectionsData>();
+        glue.open_collections(std::collections::BTreeSet::new());
+        assert!(data.get_open());
+        assert_eq!(data.get_empty(), t!("collections-empty"));
+        typed(&data, "Co-op");
+        data.invoke_create();
+        assert_eq!(glue.browser.borrow().categories().len(), 1);
+        assert_eq!(data.get_rows().row_count(), 1);
+        data.invoke_delete("Co-op".into());
+        assert_eq!(glue.browser.borrow().categories().len(), 1, "it only asks");
+        assert!(data.get_rows().row_data(0).is_some_and(|row| row.confirm));
+        data.invoke_delete("Co-op".into());
+        assert_eq!(glue.browser.borrow().categories().len(), 0);
+        assert_eq!(data.get_rows().row_count(), 0);
+        // Any other press takes the question back.
+        typed(&data, "Co-op");
+        data.invoke_create();
+        data.invoke_delete("Co-op".into());
+        data.invoke_save_view();
+        assert!(data.get_rows().row_data(0).is_some_and(|row| !row.confirm));
+    }
+
+    #[test]
+    fn a_saved_view_cannot_take_a_hand_picked_name_and_the_reverse() {
+        let (window, glue) = page(3);
+        let data = window.global::<crate::CollectionsData>();
+        glue.open_collections(std::collections::BTreeSet::new());
+        typed(&data, "Co-op");
+        data.invoke_create();
+        typed(&data, "co-op");
+        data.invoke_save_view();
+        assert!(
+            glue.browser.borrow().saved().is_empty(),
+            "a collection's name"
+        );
+        assert_eq!(
+            note_of(&data),
+            (t!("collections-taken", name = "co-op"), false)
+        );
+        typed(&data, "Evening");
+        data.invoke_save_view();
+        assert_eq!(glue.browser.borrow().saved().len(), 1);
+        typed(&data, "evening");
+        data.invoke_create();
+        assert_eq!(glue.browser.borrow().categories().len(), 1, "a view's name");
+        // Nothing typed: nothing made.
+        typed(&data, "  ");
+        data.invoke_create();
+        assert_eq!(note_of(&data), (t!("collections-blank"), false));
+    }
+
+    #[test]
+    fn a_saved_view_is_updated_renamed_applied_and_deleted_from_the_same_sheet() {
+        let (window, glue) = page(3);
+        let data = window.global::<crate::CollectionsData>();
+        let library = window.global::<LibraryData>();
+        glue.open_collections(std::collections::BTreeSet::new());
+        typed(&data, "Evening");
+        data.invoke_save_view();
+        assert_eq!(glue.browser.borrow().saved()[0].name, "Evening");
+        // The same name keeps what the page shows now.
+        library.invoke_search_edited("game 01".into());
+        typed(&data, "evening");
+        data.invoke_save_view();
+        assert_eq!(
+            glue.browser.borrow().saved().len(),
+            1,
+            "the same name updates"
+        );
+        assert_eq!(glue.browser.borrow().saved()[0].filter.search, "game 01");
+        assert_eq!(
+            note_of(&data),
+            (t!("collections-updated", name = "evening"), true)
+        );
+        // Rename in place.
+        data.invoke_rename("Evening".into());
+        assert!(data.get_rows().row_data(0).is_some_and(|row| row.renaming));
+        assert_eq!(data.get_rename_draft(), "Evening");
+        data.set_rename_draft("Night".into());
+        data.invoke_rename_edited("Night".into());
+        data.invoke_rename_done();
+        assert_eq!(glue.browser.borrow().saved()[0].name, "Night");
+        assert!(data.get_rows().row_data(0).is_some_and(|row| !row.renaming));
+        // Open puts the view on the page and closes the sheet.
+        library.invoke_search_edited(String::new().into());
+        data.invoke_apply("Night".into());
+        assert!(!data.get_open());
+        assert_eq!(library.get_search(), "game 01");
+        glue.open_collections(std::collections::BTreeSet::new());
+        data.invoke_delete("Night".into());
+        data.invoke_delete("Night".into());
+        assert_eq!(glue.browser.borrow().saved().len(), 0);
+    }
+
+    #[test]
+    fn the_bulk_chip_opens_the_sheet_for_the_marked_games_and_a_tick_assigns_them() {
+        let (window, glue) = page(3);
+        let data = window.global::<crate::CollectionsData>();
+        let library = window.global::<LibraryData>();
+        library.invoke_card_marked("desktop:0".into());
+        library.invoke_card_marked("desktop:1".into());
+        let chip = library
+            .get_bulk()
+            .iter()
+            .find(|chip| chip.label == t!("collections-assign"))
+            .expect("the chip is offered while games are marked");
+        library.invoke_chip(chip.id);
+        assert!(data.get_open());
+        typed(&data, "Co-op");
+        data.invoke_create();
+        // Made with the marked games in it, ticked.
+        let row = data.get_rows().row_data(0).expect("one row");
+        assert!(row.checkable && row.checked);
+        assert_eq!(row.count, t!("count-games", count = 2));
+        assert_eq!(glue.browser.borrow().games()[0].categories, ["Co-op"]);
+        assert_eq!(glue.browser.borrow().games()[2].categories.len(), 0);
+        data.invoke_set_member("Co-op".into(), false);
+        assert_eq!(
+            note_of(&data),
+            (t!("collections-unassigned", count = 2), true)
+        );
+        assert_eq!(glue.browser.borrow().games()[0].categories.len(), 0);
+        data.invoke_set_member("Co-op".into(), true);
+        assert_eq!(glue.browser.borrow().games()[1].categories, ["Co-op"]);
+        // Only to manage, there is no tick.
+        data.invoke_close();
+        glue.open_collections(std::collections::BTreeSet::new());
+        assert!(
+            data.get_rows()
+                .row_data(0)
+                .is_some_and(|row| !row.checkable)
+        );
+    }
+
+    #[test]
+    fn the_collections_chip_counts_and_opens_the_sheet_and_escape_leaves_in_order() {
+        let (window, glue) = page(3);
+        let data = window.global::<crate::CollectionsData>();
+        let library = window.global::<LibraryData>();
+        let chip = library
+            .get_organize()
+            .iter()
+            .find(|chip| chip.label == t!("collections-open"))
+            .expect("the way to the sheet is always there");
+        assert_eq!(chip.count, "");
+        library.invoke_chip(chip.id);
+        assert!(data.get_open());
+        typed(&data, "Co-op");
+        data.invoke_create();
+        let chip = library
+            .get_organize()
+            .iter()
+            .find(|chip| chip.label == t!("collections-open"))
+            .expect("still there");
+        assert_eq!(chip.count, "1");
+        // Over the sheet the page's keys are the fields', not the grid's.
+        assert!(!press(&glue, Key::DownArrow));
+        // Escape: a rename first, then the sheet.
+        data.invoke_rename("Co-op".into());
+        glue.back();
+        assert!(data.get_open());
+        assert!(data.get_rows().row_data(0).is_some_and(|row| !row.renaming));
+        glue.back();
+        assert!(!data.get_open());
+    }
+
+    #[test]
+    fn a_game_page_lists_its_collections_and_edits_them_in_the_sheet() {
+        let (window, glue) = page(3);
+        let game = window.global::<GameData>();
+        let data = window.global::<crate::CollectionsData>();
+        glue.open_game("desktop:1");
+        assert_eq!(game.get_collections().row_count(), 0);
+        game.invoke_edit_collections();
+        assert!(data.get_open());
+        typed(&data, "Co-op");
+        data.invoke_create();
+        assert_eq!(game.get_collections().row_count(), 1, "made with this game");
+        data.invoke_close();
+        // Escape closes the sheet and leaves the open game's page alone.
+        game.invoke_edit_collections();
+        glue.back();
+        assert!(!data.get_open());
+        assert!(game.get_open());
+    }
+
+    /// A GOG sign-in with its window open, as `open_window` leaves it.
+    fn with_sign_in_window() -> (MainWindow, Rc<Glue>) {
+        let (window, glue) = page(2);
+        window.global::<crate::AccountsData>().invoke_start(1);
+        glue.give_sign_in_a_window();
+        (window, glue)
+    }
+
+    fn card(window: &MainWindow, at: usize) -> crate::AccountCard {
+        window
+            .global::<crate::AccountsData>()
+            .get_cards()
+            .row_data(at)
+            .expect("three cards")
+    }
+
+    #[test]
+    fn the_count_beside_accounts_is_the_stores_signed_in_and_gog_gets_its_switches() {
+        use zendo_core::stores::Store;
+        let (window, glue) = page(2);
+        let data = window.global::<crate::AccountsData>();
+        assert_eq!(window.get_accounts_count(), "");
+        glue.account_checked(Store::Epic, Ok(None), None);
+        glue.account_checked(Store::Gog, Ok(Some("me".into())), None);
+        assert_eq!(
+            window.get_accounts_count(),
+            t!("top-bar-signed-in", count = 1, stores = 4)
+        );
+        assert!(card(&window, 1).gog && !card(&window, 0).gog);
+        assert_eq!(
+            card(&window, 1).status,
+            t!("accounts-signed-in-as", name = "me")
+        );
+        // No engine found: Sign in cannot be pressed, and the card says why.
+        assert!(!card(&window, 0).action_on);
+        assert!(!card(&window, 0).engine_ok);
+        // The switches are on until turned off, and are the config's.
+        assert!(data.get_gog_playtime() && data.get_gog_galaxy());
+        data.invoke_set_gog_playtime(false);
+        data.invoke_set_gog_galaxy(false);
+        assert!(!glue.settings_config().gog_playtime);
+        assert!(!glue.settings_config().gog_galaxy);
+        assert!(!data.get_gog_playtime() && !data.get_gog_galaxy());
+        // Signed out takes the switches and the count away.
+        glue.account_checked(Store::Gog, Ok(None), None);
+        assert!(!card(&window, 1).gog);
+        assert_eq!(window.get_accounts_count(), "");
+    }
+
+    #[test]
+    fn closing_the_sign_in_window_ends_the_sign_in() {
+        use zendo_core::stores::Store;
+        let (window, glue) = with_sign_in_window();
+        assert_eq!(card(&window, 1).flow, 1);
+        glue.window_ended(Store::Gog, Ok(None));
+        assert!(glue.sign_in_state().is_none());
+        assert_eq!(card(&window, 1).flow, 0);
+    }
+
+    #[test]
+    fn the_windows_code_signs_in_without_pasting() {
+        use zendo_core::stores::Store;
+        let (window, glue) = with_sign_in_window();
+        glue.window_ended(Store::Gog, Ok(Some("code".into())));
+        // The code went to gogdl (not in tests), and the window is let go.
+        assert_eq!(glue.sign_in_state(), Some((true, false, false, None)));
+        assert_eq!(card(&window, 1).line, t!("accounts-signing-in"));
+    }
+
+    #[test]
+    fn without_a_window_the_browser_takes_over() {
+        use zendo_core::stores::Store;
+        let (window, glue) = with_sign_in_window();
+        glue.window_ended(
+            Store::Gog,
+            Err("the sign-in window failed: no WebKitGTK".into()),
+        );
+        let (_, _, browser, note) = glue.sign_in_state().expect("still signing in");
+        assert!(browser);
+        assert!(note.is_some_and(|note| note.contains("browser")));
+        assert_eq!(card(&window, 1).flow, 2);
+    }
+
+    #[test]
+    fn going_to_the_browser_closes_the_window() {
+        use zendo_core::stores::Store;
+        let (_window, glue) = with_sign_in_window();
+        glue.use_browser();
+        // The window, closed for it, ends; the sign-in carries on by paste.
+        glue.window_ended(Store::Gog, Ok(None));
+        let (_, window_open, browser, _) = glue.sign_in_state().expect("still signing in");
+        assert!(browser && !window_open);
+    }
+
+    #[test]
+    fn a_pasted_text_with_no_code_is_refused_and_a_cancel_ends_the_sign_in() {
+        let (window, glue) = page(2);
+        let data = window.global::<crate::AccountsData>();
+        data.invoke_start(0);
+        data.invoke_use_browser();
+        assert!(!card(&window, 0).finish_on, "nothing pasted yet");
+        data.invoke_code_edited("this is not a code".into());
+        assert!(card(&window, 0).finish_on);
+        data.invoke_finish();
+        assert_eq!(glue.sign_in_state().map(|state| state.0), Some(false));
+        assert_eq!(card(&window, 0).note, t!("accounts-no-code-epic"));
+        // Typing again takes the note away; Cancel closes the steps.
+        data.invoke_code_edited("this is not a code either".into());
+        assert_eq!(card(&window, 0).note, "");
+        data.invoke_cancel();
+        assert!(glue.sign_in_state().is_none());
+        assert_eq!(card(&window, 0).flow, 0);
+    }
+
+    #[test]
+    fn text_typed_on_the_page_starts_the_code_and_only_there() {
+        let (window, glue) = page(2);
+        let data = window.global::<crate::AccountsData>();
+        data.invoke_start(0);
+        data.invoke_use_browser();
+        // Not on the Accounts page: typing is the library's search.
+        assert!(glue.key("x", false, false, false));
+        assert_eq!(data.get_code(), "");
+        assert_eq!(window.global::<LibraryData>().get_search(), "x");
+        window.invoke_page_requested(Page::Accounts);
+        assert!(glue.key("a", false, false, false));
+        assert_eq!(data.get_code(), "a");
+        // With something there, the field has the keys.
+        assert!(!glue.key("b", false, false, false));
+    }
+
+    #[test]
+    fn an_answer_after_cancel_still_says_how_the_account_stands_and_sign_out_works() {
+        use zendo_core::stores::Store;
+        let (window, glue) = page(2);
+        glue.sign_in_finished(Store::Gog, Ok("me".into()));
+        assert!(glue.account_is_signed_in(Store::Gog));
+        assert_eq!(
+            window.global::<LibraryData>().get_status(),
+            t!("accounts-signed-in-to", store = "GOG", name = "me")
+        );
+        window.global::<crate::AccountsData>().invoke_sign_out(1);
+        assert!(!glue.account_is_signed_in(Store::Gog));
+    }
+
+    #[test]
+    fn control_v_pastes_into_the_code_only_on_accounts_in_the_browser_steps() {
+        let (window, glue) = page(2);
+        let data = window.global::<crate::AccountsData>();
+        // On the Library it is the search's paste; the code field is not asked.
+        assert!(glue.key("v", true, false, false));
+        assert_eq!(data.get_paste_code(), 0);
+        window.invoke_page_requested(Page::Accounts);
+        data.invoke_start(0);
+        // In Zendo's window there is no field to paste into.
+        assert!(!glue.key("v", true, false, false));
+        assert_eq!(data.get_paste_code(), 0);
+        data.invoke_use_browser();
+        assert!(glue.key("v", true, false, false));
+        assert_eq!(data.get_paste_code(), 1);
     }
 }

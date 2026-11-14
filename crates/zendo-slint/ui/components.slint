@@ -252,6 +252,16 @@ export component TextField inherits Rectangle {
     callback accepted;
     forward-focus: input;
     public function focus-field() { input.focus(); }
+    // Takes the keyboard with the cursor after the text.
+    public function focus-end() {
+        input.focus();
+        input.set-selection-offsets(input.text.character-count, input.text.character-count);
+    }
+    // Takes the keyboard and pastes the clipboard.
+    public function paste-text() {
+        input.focus();
+        input.paste();
+    }
 
     height: 34px;
     background: Colors.surface;
@@ -282,5 +292,150 @@ export component TextField inherits Rectangle {
         font-size: 14px;
         vertical-alignment: center;
         overflow: elide;
+    }
+}
+
+export component Section inherits Rectangle {
+    in property <string> heading;
+    in property <string> about;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.m;
+        Text {
+            text: root.heading.to-uppercase();
+            font-size: 14px;
+            font-weight: 700;
+            color: Colors.foreground;
+        }
+        // An explicit width: a wrapped text's height is measured at it.
+        Text {
+            width: root.width - 2 * Space.l;
+            text: root.about;
+            font-size: 13px;
+            color: Colors.dim;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// A switch with its words beside it.
+export component Toggle inherits Rectangle {
+    in property <bool> on;
+    in property <string> label;
+    callback toggled(bool);
+    height: 24px;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(!root.on); }
+    HorizontalLayout {
+        spacing: Space.m;
+        Rectangle {
+            width: 40px;
+            height: 22px;
+            y: 1px;
+            background: root.on ? Colors.accent : Colors.raised;
+            border-width: 1px;
+            border-color: root.on ? Colors.accent : Colors.line;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                y: 3px;
+                x: root.on ? parent.width - self.width - 3px : 3px;
+                background: root.on ? (Colors.light ? #ffffff : #101010) : Colors.dim;
+            }
+        }
+        Text {
+            text: root.label;
+            font-size: 14px;
+            color: Colors.foreground;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(!root.on); }
+    }
+}
+
+// A line of words in one of the page's colours: 1 good, 2 bad, 3 dim.
+export component Note inherits Text {
+    in property <int> tone;
+    font-size: 13px;
+    wrap: word-wrap;
+    color: root.tone == 1 ? Colors.good : root.tone == 2 ? Colors.bad : Colors.dim;
+}
+
+// A button in a list's row. With no label it takes no room, so a row can
+// hold every button it might have and show the ones it needs.
+export component RowButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> danger;
+    callback clicked;
+    // The gap to what is before it is inside the button, so a button with no
+    // label takes no room at all.
+    width: root.label == "" ? 0px : words.preferred-width + 2 * Space.m + Space.s;
+    height: root.label == "" ? 0px : 28px;
+    visible: root.label != "";
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    Rectangle {
+        x: Space.s;
+        width: parent.width - Space.s;
+        background: touch.has-hover && root.enabled
+            ? (root.danger ? Colors.bad.brighter(0.15) : Colors.raised)
+            : (root.danger ? Colors.bad : Colors.surface);
+        border-width: 1px;
+        border-color: root.danger ? Colors.bad : Colors.line;
+        opacity: root.enabled ? 1.0 : 0.7;
+        words := Text {
+            x: Space.m;
+            text: root.label.to-uppercase();
+            font-size: 11px;
+            font-weight: 700;
+            height: parent.height;
+            vertical-alignment: center;
+            color: root.danger ? (Colors.light ? #ffffff : #101010) : Colors.foreground;
+        }
+    }
+    touch := TouchArea {
+        x: Space.s;
+        width: parent.width - Space.s;
+        mouse-cursor: root.enabled ? pointer : default;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+
+// A box that is ticked or not, for a row in a list.
+export component CheckBox inherits Rectangle {
+    in property <bool> on;
+    in property <string> label;
+    callback toggled(bool);
+    width: 20px;
+    height: 20px;
+    background: touch.has-hover ? Colors.raised : Colors.surface;
+    border-width: 1px;
+    border-color: root.on ? Colors.accent : Colors.line;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(!root.on); }
+    Rectangle {
+        width: 10px;
+        height: 10px;
+        background: root.on ? Colors.accent : transparent;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(!root.on); }
     }
 }

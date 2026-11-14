@@ -6,7 +6,46 @@ import { Colors, Space, Tr } from "style.slint";
 import { Tab, IconButton, ChipButton, SearchField } from "components.slint";
 import { LibraryData } from "library.slint";
 
-export enum Page { library, store, stats, downloads, settings }
+export enum Page { library, store, stats, downloads, settings, accounts, about }
+
+// The row under the top bar on the three pages the Settings button holds:
+// Settings, Accounts (with how many stores are signed in) and About.
+export component SettingsTabs inherits Rectangle {
+    in property <Page> page;
+    in property <string> accounts-count;
+    callback navigate(Page);
+    background: Colors.sidebar;
+    VerticalLayout {
+        HorizontalLayout {
+            padding-top: Space.s;
+            padding-bottom: Space.s;
+            padding-left: Space.xl;
+            padding-right: Space.xl;
+            spacing: Space.s;
+            ChipButton {
+                label: Tr.t("page-settings");
+                chosen: root.page == Page.settings;
+                clicked => { root.navigate(Page.settings); }
+            }
+            ChipButton {
+                label: Tr.t("page-accounts");
+                count: root.accounts-count;
+                chosen: root.page == Page.accounts;
+                clicked => { root.navigate(Page.accounts); }
+            }
+            ChipButton {
+                label: Tr.t("page-about");
+                chosen: root.page == Page.about;
+                clicked => { root.navigate(Page.about); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Rectangle {
+            height: 1px;
+            background: Colors.line;
+        }
+    }
+}
 
 export component TopBar inherits Rectangle {
     in property <Page> page;
@@ -94,7 +133,7 @@ export component TopBar inherits Rectangle {
             IconButton {
                 icon: @image-url("../../zendo/icons/settings.svg");
                 label: Tr.t("page-settings");
-                current: root.page == Page.settings;
+                current: root.page == Page.settings || root.page == Page.accounts || root.page == Page.about;
                 clicked => { root.navigate(Page.settings); }
             }
         }

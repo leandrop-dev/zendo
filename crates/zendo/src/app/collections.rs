@@ -12,8 +12,9 @@ use zendo_core::{Category, Filter, SavedFilter, State};
 
 use super::launch_options::{frame, overlay};
 use super::style::{self, BOLD, colors};
-use super::{Message, Zendo, format};
+use super::{Message, Zendo};
 use crate::i18n::t;
+use zendo_shell::collections::{Item, items, member, summary};
 
 /// The Collections sheet: the user's collections, and the games it assigns
 /// when it was opened from a game's page or a selection in the grid.
@@ -456,57 +457,6 @@ impl Zendo {
     }
 }
 
-/// One collection of either kind, for the list.
-enum Item<'a> {
-    Picked(&'a Category),
-    View(&'a SavedFilter),
-}
-
-impl Item<'_> {
-    fn name(&self) -> &str {
-        match self {
-            Self::Picked(category) => &category.name,
-            Self::View(saved) => &saved.name,
-        }
-    }
-}
-
-/// Every collection, hand-picked and saved views together, by name.
-fn items<'a>(categories: &'a [Category], filters: &'a [SavedFilter]) -> Vec<Item<'a>> {
-    let mut items: Vec<Item<'a>> = categories
-        .iter()
-        .map(Item::Picked)
-        .chain(filters.iter().map(Item::View))
-        .collect();
-    items.sort_by_cached_key(|item| (item.name().to_lowercase(), item.name().to_owned()));
-    items
-}
-
-/// Whether every game the sheet was opened for is in the collection, which
-/// is what its checkbox shows.
-fn member(sheet: &Collections, category: &Category) -> bool {
-    !sheet.targets.is_empty() && sheet.targets.iter().all(|id| category.games.contains(id))
-}
-
-/// A saved view in a few words: `FAVORITES · STEAM · BACKLOG · "doom"`.
-fn summary(filter: &Filter) -> String {
-    let mut parts = vec![format::view(filter.view).to_uppercase()];
-    if let Some(source) = filter.source {
-        parts.push(format::source(source).to_uppercase());
-    }
-    if let Some(category) = &filter.category {
-        parts.push(category.to_uppercase());
-    }
-    if let Some(status) = filter.status {
-        parts.push(format::play_status(status).to_uppercase());
-    }
-    if !filter.search.trim().is_empty() {
-        parts.push(format!("\u{201c}{}\u{201d}", filter.search.trim()));
-    }
-    parts.push(format::sort(filter.sort).to_uppercase());
-    parts.join(" · ")
-}
-
 fn collections_card<'a>(
     sheet: &'a Collections,
     categories: &'a [Category],
@@ -630,7 +580,7 @@ fn picked_row<'a>(sheet: &'a Collections, category: &'a Category) -> Element<'a,
     let name = category.name.clone();
     let mut items: Vec<Element<'a, Message>> = Vec::new();
     if !sheet.targets.is_empty() {
-        let member = member(sheet, category);
+        let member = member(&sheet.targets, category);
         let ticked = name.clone();
         items.push(
             checkbox(member)
@@ -707,20 +657,6 @@ mod tests {
         }
     }
 
-    fn view(name: &str) -> SavedFilter {
-        SavedFilter {
-            name: name.to_owned(),
-            filter: Filter::default(),
-        }
-    }
-
-    fn sheet(targets: &[&str]) -> Collections {
-        Collections {
-            targets: targets.iter().map(|id| (*id).to_owned()).collect(),
-            ..Collections::default()
-        }
-    }
-
     #[test]
     fn deletes_a_collection_only_on_the_second_press() {
         let (mut zendo, _) = Zendo::boot();
@@ -731,25 +667,6 @@ mod tests {
         assert_eq!(zendo.categories.len(), 1, "the first press only asks");
         let _ = zendo.update_collections(CollectionsMessage::Delete("Co-op".into()));
         assert_eq!(zendo.categories.len(), 0);
-    }
-
-    #[test]
-    fn ticks_only_when_every_target_is_in_the_collection() {
-        let co_op = category("Co-op", &["a"]);
-        assert!(!member(&sheet(&[]), &co_op), "no targets, nothing to tick");
-        assert!(!member(&sheet(&["a", "b"]), &co_op), "one of the two");
-        assert!(member(&sheet(&["a"]), &co_op));
-    }
-
-    #[test]
-    fn lists_both_kinds_together_by_name() {
-        let categories = [category("beta", &[]), category("Delta", &[])];
-        let views = [view("Alpha"), view("charlie")];
-        let names: Vec<String> = items(&categories, &views)
-            .iter()
-            .map(|item| item.name().to_owned())
-            .collect();
-        assert_eq!(names, ["Alpha", "beta", "charlie", "Delta"]);
     }
 
     #[test]

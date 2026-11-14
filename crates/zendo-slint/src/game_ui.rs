@@ -33,6 +33,8 @@ pub(super) struct GameState {
     images: RefCell<Vec<PathBuf>>,
     pub(super) technical: Cell<bool>,
     statuses: Rc<VecModel<ChipData>>,
+    /// The names of the collections the open game is in.
+    collections: Rc<VecModel<slint::SharedString>>,
     tiles: Rc<VecModel<Tile>>,
     facts: [Rc<VecModel<Fact>>; 4],
     /// Off in tests: no game is started and nothing is written.
@@ -53,6 +55,7 @@ impl GameState {
             images: RefCell::new(Vec::new()),
             technical: Cell::new(false),
             statuses: Rc::new(VecModel::default()),
+            collections: Rc::new(VecModel::default()),
             tiles: Rc::new(VecModel::default()),
             facts: std::array::from_fn(|_| Rc::new(VecModel::default())),
             persist,
@@ -165,6 +168,13 @@ impl Glue {
     pub(super) fn connect_game(self: &Rc<Self>, window: &MainWindow) {
         let data = window.global::<GameData>();
         data.set_statuses(ModelRc::from(Rc::clone(&self.game.statuses)));
+        data.set_collections(ModelRc::from(Rc::clone(&self.game.collections)));
+        let glue = Rc::clone(self);
+        data.on_edit_collections(move || {
+            if let Some(id) = glue.open.borrow().clone() {
+                glue.open_collections(std::collections::BTreeSet::from([id]));
+            }
+        });
         data.set_tiles(ModelRc::from(Rc::clone(&self.game.tiles)));
         data.set_sessions(ModelRc::from(Rc::clone(&self.game.facts[0])));
         data.set_recent(ModelRc::from(Rc::clone(&self.game.facts[1])));
@@ -308,6 +318,18 @@ impl Glue {
         copy
     }
 
+    /// Writes the collections the open game is in, after a change to them.
+    pub(super) fn show_game_collections(&self) {
+        if let Some(game) = self.open_game_record() {
+            let names: Vec<slint::SharedString> = game
+                .categories
+                .iter()
+                .map(|name| slint::SharedString::from(name.as_str()))
+                .collect();
+            self.game.collections.set_vec(names);
+        }
+    }
+
     /// Writes everything the open game's page shows.
     pub(super) fn show_game(&self) {
         let Some(game) = self.open_game_record() else {
@@ -393,6 +415,7 @@ impl Glue {
             })
             .collect();
         self.game.statuses.set_vec(statuses);
+        self.show_game_collections();
         self.game.tiles.set_vec(tiles_of(&game, now));
 
         let (summary, recent) = self.sessions_of(&game.id);

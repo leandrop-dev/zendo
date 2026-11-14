@@ -41,6 +41,10 @@ pub enum Pick {
     BulkPin(bool),
     BulkHide(bool),
     ClearMarks,
+    /// The Collections sheet: for the marked games, or only to manage.
+    Collections {
+        marked: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -212,7 +216,6 @@ impl Browser {
         &self.filter.search
     }
 
-    #[cfg(test)]
     #[must_use]
     pub fn current(&self) -> &Filter {
         &self.filter
@@ -233,7 +236,6 @@ impl Browser {
         &self.games
     }
 
-    #[cfg(test)]
     #[must_use]
     pub fn marked(&self) -> &BTreeSet<String> {
         &self.marked
@@ -446,6 +448,14 @@ impl Browser {
         }
         collections.sort_by_cached_key(|chip| (chip.label.to_lowercase(), chip.label.clone()));
         organize.extend(collections);
+        // The way to the sheet, with how many there are.
+        let total = self.categories.len() + self.saved.len();
+        organize.push(chip(
+            t!("collections-open"),
+            (total > 0).then_some(total),
+            false,
+            Pick::Collections { marked: false },
+        ));
         organize
     }
 
@@ -467,6 +477,7 @@ impl Browser {
                 "unpin" => t!("library-bulk-unpin"),
                 "hide" => t!("library-bulk-hide"),
                 "unhide" => t!("library-bulk-unhide"),
+                "assign" => t!("collections-assign"),
                 _ => t!("library-clear-selection"),
             },
             count: None,
@@ -486,6 +497,7 @@ impl Browser {
         if any(|game| game.hidden) {
             chips.push(chip("unhide", Pick::BulkHide(false)));
         }
+        chips.push(chip("assign", Pick::Collections { marked: true }));
         chips.push(chip("clear", Pick::ClearMarks));
         (
             Some(t!("library-selected", count = self.marked.len())),
@@ -608,7 +620,48 @@ impl Browser {
             Pick::BulkPin(pinned) => self.bulk_pinned(*pinned),
             Pick::BulkHide(hidden) => self.bulk_hidden(*hidden),
             Pick::ClearMarks => self.clear_marks(),
+            // The window opens the sheet; nothing here changes.
+            Pick::Collections { .. } => Outcome::default(),
         }
+    }
+
+    /// The hand-picked collections, as the state has them.
+    #[must_use]
+    pub fn categories(&self) -> &[Category] {
+        &self.categories
+    }
+
+    /// The saved views.
+    #[must_use]
+    pub fn saved(&self) -> &[SavedFilter] {
+        &self.saved
+    }
+
+    /// The collections as the state has them now, put on the page and on
+    /// every game. A filter on a collection that is gone is dropped.
+    pub fn set_collections(
+        &mut self,
+        categories: Vec<Category>,
+        saved: Vec<SavedFilter>,
+    ) -> Outcome {
+        for game in &mut self.games {
+            game.categories = categories
+                .iter()
+                .filter(|category| category.games.contains(&game.id))
+                .map(|category| category.name.clone())
+                .collect();
+        }
+        self.categories = categories;
+        self.saved = saved;
+        let id = self.selected_id();
+        if let Some(name) = &self.filter.category
+            && !self.categories.iter().any(|known| &known.name == name)
+        {
+            self.filter.category = None;
+        }
+        let mut outcome = self.reselect(id);
+        outcome.rows = Rows::All;
+        outcome
     }
 
     pub fn cycle_sort(&mut self) -> Outcome {
@@ -1163,7 +1216,8 @@ mod tests {
             .into_iter()
             .map(|chip| chip.label)
             .collect();
-        assert_eq!(names, ["Backlog", "co-op"]);
+        // The way to the sheet comes last, with the count.
+        assert_eq!(names, ["Backlog", "co-op", "Collections"]);
     }
 
     #[test]
