@@ -23,6 +23,8 @@ use crate::covers::{Cover, Covers, Decoded};
 use crate::library::{Browser, CardData, Chip, Outcome, Pick, Rows, Save, Scroll};
 use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
+#[path = "cards_ui.rs"]
+mod cards;
 #[path = "game_ui.rs"]
 mod game;
 #[path = "local_ui.rs"]
@@ -159,6 +161,8 @@ struct Glue {
     game: game::GameState,
     /// The Add game sheet and Remove (`local_ui.rs`).
     local: local::LocalState,
+    /// What the stores and sites say about the open game (`cards_ui.rs`).
+    cards: cards::CardsState,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
@@ -229,6 +233,7 @@ impl Glue {
             open: RefCell::new(None),
             game: game::GameState::new(persist),
             local: local::LocalState::default(),
+            cards: cards::CardsState::new(),
             persist,
         })
     }
@@ -287,6 +292,7 @@ impl Glue {
         });
         self.connect_game(window);
         self.connect_local(window);
+        self.connect_cards(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -1193,5 +1199,138 @@ mod tests {
             glue.browser.borrow().status(),
             Some(t!("local-removed", title = "Game 02").as_str())
         );
+    }
+
+    #[test]
+    fn the_cards_fill_from_what_the_stores_say_and_failures_offer_to_ask_again() {
+        use zendo_core::achievements::{Achievement, Achievements};
+        use zendo_core::owned::StoreDetails;
+        use zendo_core::protondb::Rating;
+        use zendo_core::requirements::{From, Requirements, Row, System};
+        use zendo_core::steam_facts::Facts;
+        let (window, glue) = page(3);
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:1".into());
+        assert_eq!(game.get_about(), "");
+        // ProtonDB found nothing: the card offers the way to give an app id.
+        glue.rating_arrived("desktop:1".into(), Ok(None));
+        assert_eq!(game.get_no_match(), t!("steam-app-no-match"));
+        assert_eq!(game.get_pills().row_count(), 0);
+        glue.rating_arrived(
+            "desktop:1".into(),
+            Ok(Some(Rating {
+                app: 620,
+                tier: Some("platinum".into()),
+                reports: 12,
+                native: false,
+            })),
+        );
+        assert_eq!(game.get_pills().row_count(), 1);
+        assert_eq!(game.get_no_match(), "");
+        // Steam's page: the description and facts, a link for Metacritic.
+        let details = StoreDetails {
+            summary: Some("A game about portals.".into()),
+            developer: Some("Valve".into()),
+            features: vec!["Single-player".into()],
+            metacritic: Some(zendo_core::owned::Metacritic {
+                score: 95,
+                url: "https://example.org/mc".into(),
+            }),
+            ..StoreDetails::default()
+        };
+        glue.facts_arrived(
+            "desktop:1".into(),
+            Ok(Some(Facts {
+                details,
+                shots: Vec::new(),
+            })),
+        );
+        assert_eq!(game.get_about(), "A game about portals.");
+        let rows: Vec<_> = game.get_details().iter().collect();
+        assert!(rows.iter().any(|row| row.label == t!("fact-developer")));
+        assert!(
+            rows.iter().any(
+                |row| row.label == t!("fact-metacritic") && row.url == "https://example.org/mc"
+            )
+        );
+        // Requirements, minimum and recommended.
+        glue.requirements_arrived(
+            "desktop:1".into(),
+            Ok(Some(Requirements {
+                system: System::Windows,
+                from: From::Steam,
+                rows: vec![Row {
+                    label: "Memory".into(),
+                    minimum: Some("2 GB".into()),
+                    recommended: Some("4 GB".into()),
+                }],
+            })),
+        );
+        assert_eq!(game.get_req().row_count(), 1);
+        assert!(game.get_req_both());
+        // Achievements: the progress shows, and fifteen show ten at first.
+        let list = (0..15)
+            .map(|n| Achievement {
+                name: format!("A{n}"),
+                description: String::new(),
+                hidden: false,
+                unlocked: (n < 3).then_some(1_700_000_000),
+                rarity: Some(5.0),
+                icon: None,
+            })
+            .collect();
+        glue.achievements_arrived(
+            "desktop:1".into(),
+            Ok(Some(Achievements {
+                list,
+                unlocks_known: true,
+            })),
+        );
+        assert_eq!(game.get_ach().row_count(), 10);
+        assert_eq!(game.get_ach_more(), t!("achievements-more", count = 5));
+        assert!((game.get_ach_share() - 0.2).abs() < 1e-6);
+        game.invoke_more_achievements();
+        assert_eq!(game.get_ach().row_count(), 15);
+        assert_eq!(game.get_ach_more(), "");
+        // The library's card now has its progress line.
+        let rows = window.global::<LibraryData>().get_rows();
+        let card = rows
+            .iter()
+            .flat_map(|row| row.cards.iter().collect::<Vec<_>>())
+            .find(|card| card.id == "desktop:1")
+            .expect("the card");
+        assert!(card.progress > 0.0);
+        // A failure is shown with its card's name, and asking again clears it.
+        glue.requirements_arrived("desktop:1".into(), Err("offline".into()));
+        assert_eq!(game.get_failures().row_count(), 1);
+        assert_eq!(game.get_req().row_count(), 0);
+    }
+
+    #[test]
+    fn a_steam_app_id_is_given_checked_and_taken_back() {
+        let (window, _glue) = page(3);
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:0".into());
+        assert!(game.get_steam_app_row());
+        assert!(!game.get_steam_app_clearable());
+        game.invoke_steam_app_save("not a number".into());
+        assert_eq!(
+            window.global::<LibraryData>().get_status(),
+            t!("steam-app-invalid")
+        );
+        game.invoke_steam_app_save(" 620 ".into());
+        assert!(game.get_steam_app_clearable());
+        assert_eq!(game.get_steam_app_input(), "620");
+        assert_eq!(
+            game.get_steam_app_line(),
+            t!("steam-app-by-you", app = "620".to_owned())
+        );
+        game.invoke_steam_app_clear();
+        assert!(!game.get_steam_app_clearable());
+        assert_eq!(game.get_steam_app_input(), "");
     }
 }

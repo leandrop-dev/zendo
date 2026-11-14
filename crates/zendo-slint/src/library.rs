@@ -818,6 +818,22 @@ impl Browser {
         }
     }
 
+    /// The achievements the store says are unlocked: the card's progress line.
+    pub fn set_achievements(&mut self, id: &str, unlocked: u32, total: u32) -> Outcome {
+        if let Some(game) = self.games.iter_mut().find(|game| game.id == id) {
+            game.achievements = Some((unlocked, total));
+        }
+        self.marks_changed(&[id.to_owned()])
+    }
+
+    /// Gives a game a Steam app id, or takes it back; its title when it is
+    /// there.
+    pub fn set_steam_app(&mut self, id: &str, app: Option<u32>) -> Option<String> {
+        let game = self.games.iter_mut().find(|game| game.id == id)?;
+        game.steam_app = app;
+        Some(game.title.clone())
+    }
+
     /// Zendo started the game: one more launch, now.
     pub fn launched(&mut self, id: &str, now: u64) -> Outcome {
         if let Some(game) = self.games.iter_mut().find(|game| game.id == id) {

@@ -53,8 +53,9 @@ list and details views, OptiScaler and recompiled games are on hold.
   holds 3 to 9 (`docs/history.md`, item 48). Item 49 is under way: 49a built
   (a card opens the game page with Play and Stop, the running badge, status,
   favorite, hide, tiles, sessions and details, local games with the Add game
-  sheet; the run logic is shared in `zendo_shell::running`), 49b and 49c
-  still to do.
+  sheet; the run logic is shared in `zendo_shell::running`), 49b (the
+  ProtonDB pill, Steam's description and facts, screenshots, requirements,
+  achievements, DLC installed, the Steam app id), 49c still to do.
   The other pages show their name. Run it as `zendo-slint`.
 
 ## Next

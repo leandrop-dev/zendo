@@ -3802,3 +3802,47 @@ Iced uses it from there). `zendo-slint` got `ui/local_form.slint` (`LocalData`,
   it, a Windows `.exe` through Proton, the arguments field, the
   `Ctrl+V`/focus order with Tab (Tab does nothing in the fields), the sheet
   at a window near the minimum height, the controller with the sheet open.
+
+## Item 49b, the store cards in Slint (2026-11-14)
+
+The cards that come from the network, on the game page, in `zendo-slint`:
+`src/cards_ui.rs` (a child module of `library_ui`, with `Ask<T>` for each
+question: asking, got, failed) and the cards in `ui/game.slint`.
+
+- **ProtonDB** pill beside the badges (Native, or the tier, in the tier's own
+  colour or the theme's good, bad and dim; its words show on hover below it,
+  the header is above the page for that), and the lookup that starts the
+  rest: the Steam app id it finds asks Steam's store and the requirements.
+- **About** (Steam's description), the Details rows from Steam (developer,
+  publisher, released, genres, features with the controller line, Metacritic
+  as a link), **Screenshots** (a row that scrolls sideways; each opens its full
+  size), **System requirements** (minimum and recommended), **Achievements**
+  (progress bar, ten at first, Show more; also writes the progress line the
+  Library's cards show), **DLC** installed, and the card that offers to give a
+  game a **Steam app id** when none was found, with the field and Save and
+  Clear in the Technical card (it saves to `state.json` and asks again).
+  Failed cards show why with Try again.
+- Asked on a thread once a session when the page opens; tests ask nothing and
+  feed the answers in. The page scrolls to its end through a request the page
+  clamps (`GameData.scroll-end`): setting the scroll position straight from
+  Rust went past the content and left the window blank.
+- **Left for later, on purpose.** The DLC's owned list, Install and Uninstall
+  (51, with the stores); the store's own facts (download size, publisher from
+  the owned list) and the Details row that hides what a store already said
+  (51); the Steam sign-in's account for achievements (50: the account Steam
+  on this computer signed in last is used); anti-cheat and the Deck review
+  (49c). Duplicated from Iced until the cut-over: `features_line`,
+  `rarity_text`, the tier colours.
+- **Checked** (clippy clean; 40 `zendo-slint` tests, two new for the cards):
+  on screen in the throwaway home, with the network: a game ProtonDB did not
+  know showed the "No Steam game was found" card; Set Steam app id opened
+  the Technical card and scrolled to it; app 620 typed and saved: the
+  footer said so, the PROTONDB NATIVE pill came (its hover said "Proton:
+  Platinum from 353 reports"), About, the Details rows (developer to
+  Metacritic 95 / 100), three screenshots and the requirements from Steam
+  appeared; Technical said "620 (set by you)" with Save and Clear; Clear
+  took it back, the cards went and `state.json` lost the entry.
+- **Not checked.** A game with achievements and DLC (the seed has none; tests
+  cover the lists and Show more), a failed card offline, a click on a
+  screenshot, the pill or Metacritic (all `xdg-open`, as PCGamingWiki in
+  49a), the pt-PT words, a window narrower than the page needs.

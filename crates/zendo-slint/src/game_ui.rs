@@ -30,7 +30,7 @@ pub(super) struct GameState {
     /// The cover and backdrop the page shows, so a picture arriving that the
     /// page does not use leaves it alone.
     images: RefCell<Vec<PathBuf>>,
-    technical: Cell<bool>,
+    pub(super) technical: Cell<bool>,
     statuses: Rc<VecModel<ChipData>>,
     tiles: Rc<VecModel<Tile>>,
     facts: [Rc<VecModel<Fact>>; 4],
@@ -101,6 +101,7 @@ fn fact(label: impl Into<String>, value: impl Into<String>) -> Fact {
         value: value.into().into(),
         path: false,
         mono: false,
+        url: "".into(),
     }
 }
 
@@ -243,6 +244,8 @@ impl Glue {
             *self.open.borrow_mut() = Some(id.to_owned());
             self.game.technical.set(false);
             *self.local.confirm_remove.borrow_mut() = None;
+            self.show_steam_input(id);
+            self.want_cards(id);
             if let Some(window) = self.window.upgrade() {
                 window.global::<GameData>().set_open(true);
             }
@@ -359,6 +362,7 @@ impl Glue {
         };
         data.set_has_backdrop(backdrop.is_some());
         data.set_backdrop(backdrop.unwrap_or_default());
+        images.extend(self.show_cards(&game, &data));
         *self.game.images.borrow_mut() = images;
 
         // Play, Running with Stop.
@@ -392,7 +396,7 @@ impl Glue {
         let (summary, recent) = self.sessions_of(&game.id);
         self.game.facts[0].set_vec(summary);
         self.game.facts[1].set_vec(recent);
-        self.game.facts[2].set_vec(Self::details_of(&game));
+        self.game.facts[2].set_vec(self.details_of(&game));
         data.set_technical_open(self.game.technical.get());
         self.game.facts[3].set_vec(self.technical_of(&game));
     }
@@ -424,7 +428,7 @@ impl Glue {
 
     /// The details worth a look: the store and install, and what Zendo has
     /// counted. (The store's own facts come with item 49b.)
-    fn details_of(game: &Game) -> Vec<Fact> {
+    fn details_of(&self, game: &Game) -> Vec<Fact> {
         let mut rows = vec![
             fact(t!("fact-store"), format::source(game.source)),
             fact(t!("fact-started-by"), game.launcher()),
@@ -441,6 +445,7 @@ impl Glue {
         if let Some(path) = &game.details.install_path {
             rows.push(path_fact(t!("fact-install-path"), path));
         }
+        rows.extend(self.steam_fact_rows(game));
         rows.push(fact(
             t!("fact-started-from-zendo"),
             t!("count-times", count = game.played.launches),

@@ -4,7 +4,7 @@
 // nothing here holds a game.
 
 import { Colors, Space, Tr } from "style.slint";
-import { ChipButton, ActionButton } from "components.slint";
+import { ChipButton, ActionButton, TextField } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
 import { ChipData } from "library.slint";
 
@@ -20,6 +20,43 @@ export struct Fact {
     value: string,
     path: bool,
     mono: bool,
+    // The value opens this link, when there is one.
+    url: string,
+}
+
+// A badge on the header that opens a page: ProtonDB's rating, say.
+export struct Pill {
+    label: string,
+    tint: color,
+    // 0 takes `tint`; 1, 2 and 3 take the theme's good, bad and dim.
+    tone: int,
+    // What it says on hover.
+    tip: string,
+    url: string,
+}
+
+// A screenshot: its small picture, and the address of the full one.
+export struct Shot {
+    thumb: image,
+    ready: bool,
+    full: string,
+}
+
+// A line of the system requirements.
+export struct Req {
+    label: string,
+    minimum: string,
+    recommended: string,
+}
+
+export struct Ach {
+    icon: image,
+    has-icon: bool,
+    name: string,
+    description: string,
+    // When it was unlocked or how rare it is.
+    side: string,
+    unlocked: bool,
 }
 
 export global GameData {
@@ -49,6 +86,32 @@ export global GameData {
     in property <[Fact]> details;
     in property <[Fact]> technical;
     in property <bool> technical-open;
+    in property <[Pill]> pills;
+    // What the store says the game is about, empty when nothing does.
+    in property <string> about;
+    // No Steam game was found for it: the card that offers the way to give one.
+    in property <string> no-match;
+    in property <[Shot]> shots;
+    in property <string> dlc-count;
+    in property <[Fact]> dlc;
+    in property <string> ach-summary;
+    // The share unlocked, 0 to 1, or -1 when the store did not say.
+    in property <float> ach-share: -1;
+    in property <[Ach]> ach;
+    // "Show 12 more", or empty.
+    in property <string> ach-more;
+    in property <string> req-source;
+    in property <bool> req-both;
+    in property <[Req]> req;
+    // Cards that could not be asked: the card's name and why.
+    in property <[Fact]> failures;
+    // The Technical card's Steam app id row.
+    in property <bool> steam-app-row;
+    in property <string> steam-app-line;
+    in-out property <string> steam-app-input;
+    // Asked for by Rust (one more each time): scroll the page to its end.
+    in-out property <int> scroll-end;
+    in property <bool> steam-app-clearable;
 
     callback back();
     callback play();
@@ -62,6 +125,11 @@ export global GameData {
     callback toggle-technical();
     callback edit();
     callback remove();
+    callback show-steam-app();
+    callback more-achievements();
+    callback retry();
+    callback steam-app-save(string);
+    callback steam-app-clear();
 }
 
 component Card inherits Rectangle {
@@ -95,11 +163,24 @@ component FactRow inherits HorizontalLayout {
     VerticalLayout {
         horizontal-stretch: 1;
         spacing: Space.s;
-        Text {
+        if root.fact.url == "": Text {
             text: root.fact.value;
             font-size: root.fact.mono ? 12px : 14px;
             color: Colors.foreground;
             wrap: word-wrap;
+        }
+        if root.fact.url != "": Rectangle {
+            height: link-text.preferred-height;
+            link-text := Text {
+                width: parent.width;
+                text: root.fact.value;
+                font-size: 14px;
+                color: link-touch.has-hover ? Colors.accent : Colors.foreground;
+            }
+            link-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { GameData.open-path(root.fact.url); }
+            }
         }
         if root.fact.path: ActionButton {
             label: Tr.t("files-open-folder");
@@ -110,11 +191,60 @@ component FactRow inherits HorizontalLayout {
     }
 }
 
+// A badge that opens a page, with its words on hover, below it.
+component PillButton inherits Rectangle {
+    in property <Pill> pill;
+    property <color> tone: root.pill.tone == 1 ? Colors.good : root.pill.tone == 2 ? Colors.bad : root.pill.tone == 3 ? Colors.dim : root.pill.tint;
+    width: pill-text.preferred-width + 14px;
+    height: pill-text.preferred-height + 4px;
+    background: touch.has-hover ? root.tone.with-alpha(0.25) : Colors.background.with-alpha(0.82);
+    border-width: 1px;
+    border-color: root.tone.with-alpha(0.5);
+    accessible-role: button;
+    accessible-label: root.pill.label;
+    accessible-action-default => { GameData.open-path(root.pill.url); }
+    pill-text := Text {
+        x: 7px;
+        y: 2px;
+        text: root.pill.label;
+        font-size: 11px;
+        font-weight: 700;
+        color: root.tone;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { GameData.open-path(root.pill.url); }
+    }
+    if touch.has-hover && root.pill.tip != "": Rectangle {
+        y: root.height + Space.xs;
+        width: tip-text.preferred-width + 2 * Space.s;
+        height: tip-text.preferred-height + 2 * Space.xs;
+        background: Colors.surface;
+        border-width: 1px;
+        border-color: Colors.line;
+        tip-text := Text {
+            x: Space.s;
+            y: Space.xs;
+            text: root.pill.tip;
+            font-size: 12px;
+            color: Colors.foreground;
+        }
+    }
+}
+
 export component GamePage inherits Rectangle {
     // The room for the page's content: its width less the margins and the
     // scroll bar.
     property <length> inner: root.width - 2 * Space.xl - 12px;
-    ScrollView {
+    // Whether the page's wide column has anything to say.
+    property <bool> has-main: GameData.about != "" || GameData.no-match != "" || GameData.shots.length > 0
+        || GameData.dlc.length > 0 || GameData.sessions.length > 0 || GameData.ach.length > 0
+        || GameData.req.length > 0 || GameData.failures.length > 0;
+    property <int> scroll-request: GameData.scroll-end;
+    changed scroll-request => {
+        sv.content-y = min(0px, -(sv.content-height - sv.visible-height));
+    }
+    sv := ScrollView {
         VerticalLayout {
             page := VerticalLayout {
                 padding: Space.xl;
@@ -137,6 +267,8 @@ export component GamePage inherits Rectangle {
                     }
                 }
                 header := Rectangle {
+                    // Above what follows, so a pill's words draw over it.
+                    z: 1;
                     height: 360px;
                     clip: true;
                     if GameData.has-backdrop: Image {
@@ -206,6 +338,7 @@ export component GamePage inherits Rectangle {
                                     small: true;
                                     clicked => { GameData.wiki(); }
                                 }
+                                for pill in GameData.pills: PillButton { pill: pill; }
                             }
                         }
                     }
@@ -299,11 +432,89 @@ export component GamePage inherits Rectangle {
                 }
                 HorizontalLayout {
                     spacing: Space.xl;
-                    if GameData.sessions.length > 0: VerticalLayout {
+                    if root.has-main: VerticalLayout {
                         width: (root.inner - Space.xl) * 0.6;
                         alignment: start;
                         spacing: Space.xl;
-                        Card {
+                        if GameData.about != "": Card {
+                            heading: Tr.t("game-about");
+                            Text {
+                                text: GameData.about;
+                                font-size: 14px;
+                                color: Colors.foreground;
+                                wrap: word-wrap;
+                            }
+                        }
+                        if GameData.no-match != "": Card {
+                            heading: Tr.t("game-about");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    text: GameData.no-match;
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                    wrap: word-wrap;
+                                }
+                                ActionButton {
+                                    label: Tr.t("steam-app-set");
+                                    small: true;
+                                    horizontal-stretch: 0;
+                                    clicked => { GameData.show-steam-app(); }
+                                }
+                            }
+                        }
+                        if GameData.shots.length > 0: Card {
+                            heading: Tr.t("screenshots-title");
+                            Flickable {
+                                height: 150px;
+                                content-width: shots-row.preferred-width;
+                                shots-row := HorizontalLayout {
+                                    spacing: Space.m;
+                                    for shot in GameData.shots: Rectangle {
+                                        width: shot.ready ? self.height * shot.thumb.width / max(1, shot.thumb.height) : 267px;
+                                        height: 150px;
+                                        background: Colors.raised;
+                                        if shot.ready: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: shot.thumb;
+                                            image-fit: cover;
+                                        }
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { GameData.open-path(shot.full); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if GameData.dlc.length > 0: Card {
+                            heading: Tr.t("dlc-title");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    text: GameData.dlc-count;
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                }
+                                for line in GameData.dlc: HorizontalLayout {
+                                    spacing: Space.m;
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: line.label;
+                                        font-size: 14px;
+                                        color: Colors.foreground;
+                                        wrap: word-wrap;
+                                    }
+                                    Text {
+                                        text: line.value;
+                                        font-size: 13px;
+                                        color: Colors.good;
+                                    }
+                                }
+                            }
+                        }
+                        if GameData.sessions.length > 0: Card {
                             heading: Tr.t("stats-game-title");
                             VerticalLayout {
                                 spacing: Space.l;
@@ -343,9 +554,159 @@ export component GamePage inherits Rectangle {
                                 }
                             }
                         }
+                        if GameData.ach.length > 0: Card {
+                            heading: Tr.t("achievements-title");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                HorizontalLayout {
+                                    spacing: Space.m;
+                                    Text {
+                                        text: GameData.ach-summary;
+                                        font-size: 14px;
+                                        color: GameData.ach-share >= 0 ? Colors.foreground : Colors.dim;
+                                        wrap: word-wrap;
+                                        horizontal-stretch: GameData.ach-share >= 0 ? 0 : 1;
+                                    }
+                                    if GameData.ach-share >= 0: Rectangle {
+                                        horizontal-stretch: 1;
+                                        height: 6px;
+                                        y: 8px;
+                                        background: Colors.raised;
+                                        Rectangle {
+                                            x: 0;
+                                            width: parent.width * clamp(GameData.ach-share, 0, 1);
+                                            background: Colors.accent;
+                                        }
+                                    }
+                                }
+                                for a in GameData.ach: HorizontalLayout {
+                                    spacing: Space.m;
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 44px;
+                                        background: Colors.raised;
+                                        clip: true;
+                                        if a.has-icon: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: a.icon;
+                                            image-fit: cover;
+                                        }
+                                        if !a.has-icon: Text {
+                                            text: "?";
+                                            color: Colors.dim;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        spacing: Space.xs;
+                                        Text {
+                                            text: a.name;
+                                            font-size: 14px;
+                                            font-weight: 700;
+                                            color: Colors.foreground;
+                                            wrap: word-wrap;
+                                        }
+                                        if a.description != "": Text {
+                                            text: a.description;
+                                            font-size: 13px;
+                                            color: Colors.dim;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    Text {
+                                        text: a.side;
+                                        font-size: 13px;
+                                        color: a.unlocked ? Colors.good : Colors.dim;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                if GameData.ach-more != "": ActionButton {
+                                    label: GameData.ach-more;
+                                    small: true;
+                                    horizontal-stretch: 0;
+                                    clicked => { GameData.more-achievements(); }
+                                }
+                            }
+                        }
+                        if GameData.req.length > 0: Card {
+                            heading: Tr.t("requirements-title");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    text: GameData.req-source;
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                }
+                                if GameData.req-both: HorizontalLayout {
+                                    spacing: Space.s;
+                                    Rectangle { width: 130px; }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: Tr.t("requirements-minimum");
+                                        font-size: 14px;
+                                        font-weight: 700;
+                                        color: Colors.dim;
+                                    }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: Tr.t("requirements-recommended");
+                                        font-size: 14px;
+                                        font-weight: 700;
+                                        color: Colors.dim;
+                                    }
+                                }
+                                for r in GameData.req: HorizontalLayout {
+                                    spacing: Space.s;
+                                    Text {
+                                        width: 130px;
+                                        text: r.label;
+                                        font-size: 14px;
+                                        color: Colors.dim;
+                                        wrap: word-wrap;
+                                    }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: r.minimum;
+                                        font-size: 14px;
+                                        color: Colors.foreground;
+                                        wrap: word-wrap;
+                                    }
+                                    if GameData.req-both: Text {
+                                        horizontal-stretch: 1;
+                                        text: r.recommended;
+                                        font-size: 14px;
+                                        color: Colors.foreground;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                        }
+                        // Cards that could not be asked, with the way to ask again.
+                        for failed in GameData.failures: Card {
+                            heading: failed.label;
+                            VerticalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    text: failed.value;
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                    wrap: word-wrap;
+                                }
+                                ActionButton {
+                                    label: Tr.t("try-again");
+                                    small: true;
+                                    horizontal-stretch: 0;
+                                    clicked => { GameData.retry(); }
+                                }
+                            }
+                        }
                     }
                     VerticalLayout {
-                        width: GameData.sessions.length > 0 ? (root.inner - Space.xl) * 0.4 : root.inner;
+                        width: root.has-main ? (root.inner - Space.xl) * 0.4 : root.inner;
                         alignment: start;
                         spacing: Space.xl;
                         Card {
@@ -368,6 +729,47 @@ export component GamePage inherits Rectangle {
                                 if GameData.technical-open: VerticalLayout {
                                     spacing: Space.m;
                                     for fact in GameData.technical: FactRow { fact: fact; }
+                                    if GameData.steam-app-row: HorizontalLayout {
+                                        spacing: Space.s;
+                                        Text {
+                                            width: 130px;
+                                            text: Tr.t("steam-app-label");
+                                            wrap: word-wrap;
+                                            color: Colors.dim;
+                                            vertical-alignment: top;
+                                        }
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: Space.s;
+                                            Text {
+                                                text: GameData.steam-app-line;
+                                                font-size: 13px;
+                                                font-weight: 700;
+                                                color: Colors.foreground;
+                                                wrap: word-wrap;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: Space.s;
+                                                TextField {
+                                                    horizontal-stretch: 1;
+                                                    height: 28px;
+                                                    text <=> GameData.steam-app-input;
+                                                    placeholder: Tr.t("steam-app-placeholder");
+                                                    accepted => { GameData.steam-app-save(GameData.steam-app-input); }
+                                                }
+                                                ActionButton {
+                                                    label: Tr.t("steam-app-save");
+                                                    small: true;
+                                                    clicked => { GameData.steam-app-save(GameData.steam-app-input); }
+                                                }
+                                                if GameData.steam-app-clearable: ActionButton {
+                                                    label: Tr.t("steam-app-clear");
+                                                    small: true;
+                                                    clicked => { GameData.steam-app-clear(); }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
