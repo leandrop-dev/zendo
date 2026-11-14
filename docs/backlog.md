@@ -23,7 +23,7 @@ to `zendo-core` when that page is ported. Ask before building any other page
   cloud saves, prefix, EOS overlay, Deck, GOG, local games, Add game) and the
   wide-art backdrop behind its header. Sliced into **49a** (shell, backdrop,
   Play/Stop and the running badge, status, favorite, hide, tiles, sessions,
-  details; local games and Add game still to do), **49b** (Steam facts,
+  details, local games and Add game: built 2026-11-14), **49b** (Steam facts,
   requirements, DLC, ProtonDB, achievements) and **49c** (anti-cheat, cloud
   saves, prefix, EOS overlay, Deck, GOG changelog and playtime). Left out of
   49a on purpose, to land with their item: Edit categories (50), Update, the

@@ -2,8 +2,9 @@
 // (src/library_ui.rs) fills `LibraryData`; nothing here holds a game.
 
 import { Colors, Space, Tr } from "style.slint";
-import { ChipButton } from "components.slint";
+import { ChipButton, ActionButton } from "components.slint";
 import { ListView } from "std-widgets.slint";
+import { LocalData } from "local_form.slint";
 
 export struct Card {
     id: string,
@@ -267,6 +268,11 @@ export component LibraryPage inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: Space.s;
+                ActionButton {
+                    height: 28px;
+                    label: Tr.t("library-add-game");
+                    clicked => { LocalData.add(); }
+                }
                 Rectangle {
                     width: refresh-row.preferred-width;
                     height: 28px;

@@ -3762,3 +3762,43 @@ Add game sheet are still to do.
   window alpha over the wallpaper), and darker back at the top; the Library
   could not be scrolled in the seed (two rows) to compare. Not known whether
   this is the stills or Slint's partial redraw of a translucent window.
+
+## Item 49a, local games and Add game (2026-11-14)
+
+The last of 49a. `guess_title` moved to `zendo_core::local` (its test with it;
+Iced uses it from there). `zendo-slint` got `ui/local_form.slint` (`LocalData`,
+`LocalSheet`), `TextField` and `ActionButton` in `components.slint`, and
+`src/local_ui.rs`, another child module of `library_ui`.
+
+- **The sheet** is the first one that grabs input: a dimmed overlay inside the
+  window's focus scope, so Escape reaches `LibraryData.back` first (sheet, then
+  the game page, then marks, then search); a click outside the card closes it;
+  while it is open the page's keys and the controller do nothing but close it
+  (`Glue::key` returns early). Enter in a field saves. The same sheet edits a
+  game (heading, Save). After a save or a Remove the library is read again and
+  `after_scan` opens the game and says what happened. A game page for a local
+  game has Edit and Remove (the first press asks, "Really remove").
+- **Checked** (clippy clean; 157 Iced, 282 core, 19 shell and 35 `zendo-slint`
+  tests, two new for the sheet): on screen, same throwaway home plus a
+  `run.sh` (`sleep 70`) in `Games/Cave Story`: Add game opens the sheet with
+  the program field focused; Add with nothing says "Give the game a title"
+  and stays open; a pasted path (through `wl-copy` and Ctrl+V, clipboard
+  restored) turned the hint to "A Linux program"; a title typed; Enter saved
+  to `local.toml`, closed the sheet, opened the game's page ("Added Cave
+  Story", library 12 to 13); Edit filled the sheet from the record and Esc
+  closed it leaving the page; Play ran `run.sh` and showed Running with Stop,
+  Stop ended it; Remove asked, then removed, back on the grid with the note
+  and the count at 12 and `local.toml` without the game; Choose opened the
+  GTK dialog as a child process, and closing it left the sheet as it was.
+- **Found on the way.** With `XDG_DATA_DIRS=/nonexistent` (the throwaway
+  recipe) the file dialog helper aborts (SIGABRT, GTK finds no GSettings
+  schemas); the sheet showed "the file dialog failed: signal: 6" and stayed
+  usable. For a check of the dialog, run with `XDG_DATA_DIRS=/usr/share:/usr/local/share`
+  (the grid then also lists the system's applications). `ydotool type` uses a
+  US layout: `/` came out as `-` on this keyboard, so paths go through
+  `wl-copy` and Ctrl+V. The card re-centres when an error line appears, so
+  fields move; take a still before each click.
+- **Not checked.** Choosing a file in the dialog and the title guessed from
+  it, a Windows `.exe` through Proton, the arguments field, the
+  `Ctrl+V`/focus order with Tab (Tab does nothing in the fields), the sheet
+  at a window near the minimum height, the controller with the sheet open.

@@ -36,6 +36,9 @@ export global GameData {
     in property <bool> pinned;
     in property <bool> hidden;
     in property <bool> steam;
+    // A game added by hand: Edit and Remove, and Remove pressed once.
+    in property <bool> local;
+    in property <bool> confirm-remove;
     // 0 Play, 1 Starting, 2 Running, 3 Stopping.
     in property <int> run-state;
     in property <string> line;
@@ -57,6 +60,8 @@ export global GameData {
     callback status(int);
     callback open-path(string);
     callback toggle-technical();
+    callback edit();
+    callback remove();
 }
 
 component Card inherits Rectangle {
@@ -231,6 +236,15 @@ export component GamePage inherits Rectangle {
                         ActionButton {
                             label: GameData.hidden ? Tr.t("game-unhide") : Tr.t("game-hide");
                             clicked => { GameData.toggle-hidden(); }
+                        }
+                        if GameData.local: ActionButton {
+                            label: Tr.t("edit");
+                            clicked => { GameData.edit(); }
+                        }
+                        if GameData.local: ActionButton {
+                            label: GameData.confirm-remove ? Tr.t("really-remove") : Tr.t("remove");
+                            danger: GameData.confirm-remove;
+                            clicked => { GameData.remove(); }
                         }
                         if GameData.steam: ActionButton {
                             label: Tr.t("game-manage-steam");

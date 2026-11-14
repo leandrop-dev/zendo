@@ -110,6 +110,27 @@ impl LocalGame {
     }
 }
 
+/// A title from the program's folder (`Cave Story/Doukutsu.exe` is "Cave
+/// Story"), or its own name when the folder says nothing.
+#[must_use]
+pub fn guess_title(program: &Path) -> String {
+    const PLAIN: [&str; 8] = [
+        "bin", "bin64", "x64", "x86", "win64", "binaries", "game", "games",
+    ];
+    let folder = program
+        .parent()
+        .and_then(Path::file_name)
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !PLAIN.contains(&name.to_lowercase().as_str()));
+    folder
+        .or_else(|| {
+            program
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
+        .unwrap_or_default()
+}
+
 /// A Windows program: `.exe`, `.bat` or `.msi`, case aside.
 #[must_use]
 pub fn is_windows(program: &Path) -> bool {
@@ -249,6 +270,18 @@ pub(crate) fn scan() -> Scan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guesses_a_title_from_the_folder() {
+        assert_eq!(
+            guess_title(Path::new("/g/Cave Story/Doukutsu.exe")),
+            "Cave Story"
+        );
+        assert_eq!(
+            guess_title(Path::new("/g/Celeste/bin/Celeste.exe")),
+            "Celeste"
+        );
+    }
 
     fn game(id: &str) -> LocalGame {
         LocalGame {

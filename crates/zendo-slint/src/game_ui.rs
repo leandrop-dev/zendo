@@ -226,7 +226,7 @@ impl Glue {
     }
 
     /// Says something in the footer.
-    fn say(&self, line: String) {
+    pub(super) fn say(&self, line: String) {
         self.browser.borrow_mut().say(Some(line));
         self.sync_status();
     }
@@ -242,6 +242,7 @@ impl Glue {
         if found {
             *self.open.borrow_mut() = Some(id.to_owned());
             self.game.technical.set(false);
+            *self.local.confirm_remove.borrow_mut() = None;
             if let Some(window) = self.window.upgrade() {
                 window.global::<GameData>().set_open(true);
             }
@@ -324,6 +325,10 @@ impl Glue {
         data.set_pinned(game.pinned);
         data.set_hidden(game.hidden);
         data.set_steam(steam_app(&game).is_some());
+        data.set_local(game.source == Source::Local);
+        data.set_confirm_remove(
+            self.local.confirm_remove.borrow().as_deref() == Some(game.id.as_str()),
+        );
 
         // The pictures: the cover the grid has too, and the wide art.
         let cover = game

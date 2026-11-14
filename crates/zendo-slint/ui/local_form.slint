@@ -1,0 +1,137 @@
+// The Add game sheet, which is also the Edit one: over the window, a card
+// with the program, the title and the arguments. The Rust side
+// (src/local_ui.rs) holds the form; nothing here keeps a game.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton, TextField } from "components.slint";
+
+export global LocalData {
+    in-out property <bool> open;
+    // Editing a game, not adding one.
+    in property <bool> editing;
+    in-out property <string> program;
+    in-out property <string> title;
+    in-out property <string> arguments;
+    // What kind of program it is, said under the heading.
+    in property <string> about;
+    in property <string> error;
+    // The file dialog is open.
+    in property <bool> picking;
+
+    callback add();
+    callback program-edited(string);
+    callback title-edited(string);
+    callback arguments-edited(string);
+    callback pick();
+    callback save();
+    callback close();
+}
+
+component Field inherits VerticalLayout {
+    in property <string> label;
+    spacing: Space.s;
+    Text {
+        text: root.label.to-uppercase();
+        font-size: 12px;
+        color: Colors.dim;
+    }
+    @children
+}
+
+export component LocalSheet inherits Rectangle {
+    background: #000000.with-alpha(0.6);
+    // Nothing behind the sheet hears a click; one outside the card closes it.
+    TouchArea {
+        clicked => { LocalData.close(); }
+    }
+    init => { program-field.focus-field(); }
+
+    card := Rectangle {
+        width: min(620px, root.width - 2 * Space.xl);
+        height: body.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: max(Space.xl, (root.height - self.height) / 2);
+        background: Colors.background;
+        border-width: 1px;
+        border-color: Colors.line;
+        // Clicks inside the card stay in it.
+        TouchArea { }
+        body := VerticalLayout {
+            padding: Space.xl;
+            spacing: Space.l;
+            Text {
+                text: (LocalData.editing ? Tr.t("local-edit-game") : Tr.t("local-add-game")).to-uppercase();
+                font-size: 18px;
+                font-weight: 700;
+                color: Colors.foreground;
+            }
+            Text {
+                text: LocalData.about;
+                font-size: 13px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            Field {
+                label: Tr.t("local-program");
+                HorizontalLayout {
+                    spacing: Space.m;
+                    program-field := TextField {
+                        horizontal-stretch: 1;
+                        text <=> LocalData.program;
+                        placeholder: Tr.t("local-program-placeholder");
+                        edited(text) => { LocalData.program-edited(text); }
+                        accepted => { LocalData.save(); }
+                    }
+                    ActionButton {
+                        label: LocalData.picking ? Tr.t("choosing") : Tr.t("choose");
+                        enabled: !LocalData.picking;
+                        clicked => { LocalData.pick(); }
+                    }
+                }
+            }
+            Field {
+                label: Tr.t("local-title");
+                TextField {
+                    text <=> LocalData.title;
+                    placeholder: Tr.t("local-title-placeholder");
+                    edited(text) => { LocalData.title-edited(text); }
+                    accepted => { LocalData.save(); }
+                }
+            }
+            Field {
+                label: Tr.t("local-arguments");
+                TextField {
+                    text <=> LocalData.arguments;
+                    placeholder: Tr.t("local-arguments-placeholder");
+                    edited(text) => { LocalData.arguments-edited(text); }
+                    accepted => { LocalData.save(); }
+                }
+            }
+            Text {
+                text: Tr.t("local-cover-note");
+                font-size: 13px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            if LocalData.error != "": Text {
+                text: LocalData.error;
+                font-size: 13px;
+                color: Colors.bad;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Space.m;
+                ActionButton {
+                    label: Tr.t("cancel");
+                    clicked => { LocalData.close(); }
+                }
+                ActionButton {
+                    label: LocalData.editing ? Tr.t("save") : Tr.t("add");
+                    primary: true;
+                    clicked => { LocalData.save(); }
+                }
+            }
+        }
+    }
+}

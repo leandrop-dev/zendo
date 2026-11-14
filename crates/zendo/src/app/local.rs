@@ -48,26 +48,6 @@ pub enum LocalMessage {
     Remove(String),
 }
 
-/// A title from the program's folder (`Cave Story/Doukutsu.exe` is "Cave
-/// Story"), or its own name when the folder says nothing.
-fn guess_title(program: &Path) -> String {
-    const PLAIN: [&str; 8] = [
-        "bin", "bin64", "x64", "x86", "win64", "binaries", "game", "games",
-    ];
-    let folder = program
-        .parent()
-        .and_then(Path::file_name)
-        .map(|name| name.to_string_lossy().into_owned())
-        .filter(|name| !PLAIN.contains(&name.to_lowercase().as_str()));
-    folder
-        .or_else(|| {
-            program
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().into_owned())
-        })
-        .unwrap_or_default()
-}
-
 impl Zendo {
     pub(super) fn update_local(&mut self, message: LocalMessage) -> Task<Message> {
         match message {
@@ -130,7 +110,7 @@ impl Zendo {
                 match result {
                     Ok(Some(path)) => {
                         if form.title.trim().is_empty() {
-                            form.title = guess_title(&path);
+                            form.title = local::guess_title(&path);
                         }
                         form.program = path.display().to_string();
                         form.error = None;
@@ -370,18 +350,6 @@ fn field<'a>(label: String, input: impl Into<Element<'a, Message>>) -> Element<'
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn guesses_a_title_from_the_folder() {
-        assert_eq!(
-            guess_title(Path::new("/g/Cave Story/Doukutsu.exe")),
-            "Cave Story"
-        );
-        assert_eq!(
-            guess_title(Path::new("/g/Celeste/bin/Celeste.exe")),
-            "Celeste"
-        );
-    }
 
     #[test]
     fn adds_checks_and_removes_with_a_second_press() {

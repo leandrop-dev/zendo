@@ -238,3 +238,46 @@ export component ActionButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
 }
+
+// A line of text in a sheet: a rim that takes the accent while it has the
+// keyboard, and the hint while it is empty. It fills the width it is given.
+export component TextField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    // The user changed the text.
+    callback edited(string);
+    // Enter was pressed in the field.
+    callback accepted;
+    forward-focus: input;
+    public function focus-field() { input.focus(); }
+
+    height: 34px;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: input.has-focus ? Colors.accent : Colors.line;
+    accessible-role: text-input;
+    accessible-label: root.placeholder;
+
+    input := TextInput {
+        x: Space.m;
+        width: root.width - 2 * Space.m;
+        height: root.height;
+        vertical-alignment: center;
+        text <=> root.text;
+        color: Colors.foreground;
+        font-size: 14px;
+        single-line: true;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(); }
+    }
+    if root.text == "": Text {
+        x: Space.m;
+        width: root.width - 2 * Space.m;
+        height: root.height;
+        text: root.placeholder;
+        color: Colors.dim;
+        font-size: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}

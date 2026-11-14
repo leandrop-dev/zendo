@@ -25,6 +25,8 @@ use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
 #[path = "game_ui.rs"]
 mod game;
+#[path = "local_ui.rs"]
+mod local;
 
 /// How long covers that came in are let to gather before the rows show them.
 const COVER_DELAY: Duration = Duration::from_millis(40);
@@ -155,6 +157,8 @@ struct Glue {
     open: RefCell<Option<String>>,
     /// The game page's own state (`game_ui.rs`).
     game: game::GameState,
+    /// The Add game sheet and Remove (`local_ui.rs`).
+    local: local::LocalState,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
@@ -224,6 +228,7 @@ impl Glue {
             scanning: Cell::new(false),
             open: RefCell::new(None),
             game: game::GameState::new(persist),
+            local: local::LocalState::default(),
             persist,
         })
     }
@@ -281,6 +286,7 @@ impl Glue {
             glue.show_game();
         });
         self.connect_game(window);
+        self.connect_local(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -512,6 +518,7 @@ impl Glue {
         self.apply(outcome);
         self.sync();
         self.refresh_game();
+        self.after_scan();
         self.download_images();
     }
 
@@ -641,7 +648,12 @@ impl Glue {
         if !focused {
             return;
         }
-        if pad == Pad::Back {
+        if self.form_open() {
+            // The sheet takes the keyboard; the pad only closes it.
+            if pad == Pad::Back {
+                self.back();
+            }
+        } else if pad == Pad::Back {
             self.back();
         } else if self.on_library() {
             match pad {
@@ -671,7 +683,7 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.close_game() {
+        if self.close_form() || self.close_game() {
             return;
         }
         let outcome = self.browser.borrow_mut().back();
@@ -699,6 +711,10 @@ impl Glue {
 
     /// A key the focused field did not use. Says whether it was taken.
     fn key(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
+        // Over the sheet, the fields have the keys.
+        if self.form_open() {
+            return false;
+        }
         let mut chars = text.chars();
         let (Some(key), None) = (chars.next(), chars.next()) else {
             return false;
@@ -1110,6 +1126,72 @@ mod tests {
                 .game("desktop:0")
                 .map(|g| g.played.launches),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn the_add_game_sheet_checks_the_form_and_escape_closes_it_first() {
+        use crate::LocalData;
+        let (window, glue) = page(3);
+        let sheet = window.global::<LocalData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:1".into());
+        sheet.invoke_add();
+        assert!(sheet.get_open());
+        assert_eq!(sheet.get_about(), t!("local-about-empty"));
+        // Over the sheet the page's keys are the fields', not the grid's.
+        assert!(!glue.key("x", false, false, false));
+        assert!(!press(&glue, Key::Delete));
+        // No title and no program: the form says so, and stays open.
+        sheet.invoke_save();
+        assert!(sheet.get_open());
+        assert!(sheet.get_error().contains("Give the game a title"));
+        sheet.invoke_program_edited("/g/Game.exe".into());
+        assert_eq!(sheet.get_about(), t!("local-about-windows"));
+        // Escape closes the sheet and leaves the open game's page alone.
+        window.global::<LibraryData>().invoke_back();
+        assert!(!sheet.get_open());
+        assert!(window.global::<GameData>().get_open());
+        window.global::<LibraryData>().invoke_back();
+        assert!(!window.global::<GameData>().get_open());
+    }
+
+    #[test]
+    fn a_good_form_adds_the_game_and_remove_asks_twice() {
+        use crate::LocalData;
+        use std::os::unix::fs::PermissionsExt;
+        let (window, glue) = page(3);
+        let sheet = window.global::<LocalData>();
+        let program = std::env::temp_dir().join(format!("zendo-local-{}.sh", std::process::id()));
+        std::fs::write(&program, "#!/bin/sh\n").expect("a program");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
+            .expect("executable");
+        sheet.invoke_add();
+        sheet.invoke_program_edited(program.display().to_string().into());
+        sheet.invoke_title_edited("Handmade".into());
+        sheet.invoke_save();
+        assert!(!sheet.get_open(), "{}", sheet.get_error());
+        // The library is read again, then the note is said.
+        glue.after_scan();
+        assert_eq!(
+            glue.browser.borrow().status(),
+            Some(t!("local-added", title = "Handmade").as_str())
+        );
+        let _ = std::fs::remove_file(program);
+
+        // Remove: the first press asks, the second takes the game out.
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:2".into());
+        game.invoke_remove();
+        assert!(game.get_confirm_remove());
+        game.invoke_remove();
+        assert!(!game.get_open());
+        assert_eq!(
+            glue.browser.borrow().status(),
+            Some(t!("local-removed", title = "Game 02").as_str())
         );
     }
 }
