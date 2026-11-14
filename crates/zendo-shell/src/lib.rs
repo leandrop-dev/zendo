@@ -17,6 +17,7 @@ pub mod i18n;
 pub mod links;
 pub mod open;
 pub mod presence;
+pub mod queue;
 pub mod running;
 pub mod sign_in_window;
 pub mod steam_list;

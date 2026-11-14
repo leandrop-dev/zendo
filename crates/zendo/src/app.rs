@@ -72,7 +72,7 @@ use crate::tray::{self, Tray, TrayMessage};
 use accounts::{AccountMessage, Accounts};
 use artwork::{ArtMessage, Picker};
 use collections::CollectionsMessage;
-use downloads::{DownloadMessage, DownloadsState};
+use downloads::{DownloadMessage, Queue};
 use engines::{EngineMessage, Engines};
 use eos_overlay::{OverlayMessage, OverlayState};
 use game::{GameView, GameViewMessage};
@@ -449,7 +449,7 @@ struct Zendo {
     images: ImageDownloads,
     /// The smaller copies of heroes drawn behind game pages.
     backdrops: backdrops::Backdrops,
-    downloads: DownloadsState,
+    downloads: Queue,
     running: Running,
     /// A game's launch options, open over its page.
     sheet: Option<Sheet>,
@@ -553,7 +553,7 @@ impl Zendo {
             view: library::View::default(),
             images: ImageDownloads::default(),
             backdrops: backdrops::Backdrops::default(),
-            downloads: DownloadsState::default(),
+            downloads: Queue::default(),
             running: Running::default(),
             sheet: None,
             local: LocalState::default(),

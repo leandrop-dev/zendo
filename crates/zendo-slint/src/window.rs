@@ -66,6 +66,10 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     window.window().on_close_requested(move || {
         // Read at the close, as Settings can turn the tray on and off.
         if !TRAY_THERE.get() {
+            // Closing for good while a download runs asks first.
+            if !library_ui::quit_requested() {
+                return CloseRequestResponse::KeepWindowShown;
+            }
             let _ = slint::quit_event_loop();
         } else if let Some(window) = weak.upgrade() {
             remember_size(&window);
@@ -156,7 +160,16 @@ fn handle_tray(window: &MainWindow, message: TrayMessage) {
             }
         }
         TrayMessage::Quit => {
-            let _ = slint::quit_event_loop();
+            if library_ui::quit_requested() {
+                let _ = slint::quit_event_loop();
+            } else if !window.window().is_visible() {
+                // The question is in the window, so the window comes back to
+                // ask it.
+                if let Some(size) = LAST_SIZE.get() {
+                    window.window().set_size(size);
+                }
+                let _ = window.show();
+            }
         }
     }
 }

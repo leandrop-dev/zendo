@@ -14,7 +14,6 @@ use zendo_core::nexus::User;
 use zendo_core::secrets::Key;
 use zendo_core::{Size, Source, State, launch, report};
 
-use super::downloads::UpdateState;
 use super::library::chip;
 use super::style::{self, BOLD, SPACE_L, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::themes::Choice;
@@ -368,16 +367,7 @@ impl Zendo {
     fn after_saved(&mut self, setting: Setting) -> Task<Message> {
         match setting {
             Setting::DownloadCovers(true) => self.download_images(),
-            Setting::AutoUpdate(_) => {
-                let found: Vec<String> = self
-                    .downloads
-                    .updates
-                    .iter()
-                    .filter(|(_, state)| matches!(state, UpdateState::Available(_)))
-                    .map(|(id, _)| id.clone())
-                    .collect();
-                self.update_by_themselves(&found)
-            }
+            Setting::AutoUpdate(_) => self.update_by_themselves(),
             Setting::SteamGridDbKey { then, .. } => match then {
                 KeyThen::Removed => {
                     self.key.note = Some((t!("key-removed"), true));

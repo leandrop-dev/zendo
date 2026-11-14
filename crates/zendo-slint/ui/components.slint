@@ -376,6 +376,8 @@ export component RowButton inherits Rectangle {
     in property <string> label;
     in property <bool> enabled: true;
     in property <bool> danger;
+    // The one to press first in a row (Resume, Try again).
+    in property <bool> primary;
     callback clicked;
     // The gap to what is before it is inside the button, so a button with no
     // label takes no room at all.
@@ -390,10 +392,10 @@ export component RowButton inherits Rectangle {
         x: Space.s;
         width: parent.width - Space.s;
         background: touch.has-hover && root.enabled
-            ? (root.danger ? Colors.bad.brighter(0.15) : Colors.raised)
-            : (root.danger ? Colors.bad : Colors.surface);
+            ? (root.danger ? Colors.bad.brighter(0.15) : root.primary ? Colors.accent.brighter(0.15) : Colors.raised)
+            : (root.danger ? Colors.bad : root.primary ? Colors.accent : Colors.surface);
         border-width: 1px;
-        border-color: root.danger ? Colors.bad : Colors.line;
+        border-color: root.danger ? Colors.bad : root.primary ? Colors.accent : Colors.line;
         opacity: root.enabled ? 1.0 : 0.7;
         words := Text {
             x: Space.m;
@@ -402,7 +404,7 @@ export component RowButton inherits Rectangle {
             font-weight: 700;
             height: parent.height;
             vertical-alignment: center;
-            color: root.danger ? (Colors.light ? #ffffff : #101010) : Colors.foreground;
+            color: root.danger || root.primary ? (Colors.light ? #ffffff : #101010) : Colors.foreground;
         }
     }
     touch := TouchArea {

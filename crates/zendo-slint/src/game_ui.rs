@@ -634,6 +634,10 @@ impl Glue {
         if self.game.running.borrow().is_open(&game.id) {
             return;
         }
+        if self.moving(&game.id) {
+            self.say(t!("downloads-moving-wait", title = game.title.as_str()));
+            return;
+        }
         self.say(t!("run-starting-game", title = game.title.as_str()));
         // Tests start nothing: as if the game went to its launcher.
         if !self.game.persist {
@@ -655,9 +659,8 @@ impl Glue {
     }
 
     /// What happened to a game Zendo started, and what the window does
-    /// about it. Discord's presence, the saves' sync, the GOG total and the
-    /// jobs held while a game runs come with the items that have them (50,
-    /// 49c and 51c).
+    /// about it: Discord's presence, the saves' sync, the GOG total, and the
+    /// queue's jobs that were held while the game ran (`Effect::NextJob`).
     pub(super) fn run_event(&self, message: RunMessage) {
         let effects = {
             let browser = self.browser.borrow();
@@ -695,7 +698,7 @@ impl Glue {
                 Effect::CloudSyncing(id, syncing) => self.cloud_syncing(id, syncing),
                 Effect::RefreshGogTotal(id) => self.refresh_gog_total(&id),
                 Effect::Presence => self.update_presence(),
-                Effect::NextJob => {}
+                Effect::NextJob => self.next_job(),
             }
         }
         self.show_game();

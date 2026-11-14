@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38, 41 to 50 and 51a are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 50, 51a and 51b are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -37,22 +37,24 @@ to `zendo-core` when that page is ported. Ask before building any other page
   2026-11-14: the Accounts page for Epic, GOG and Amazon, About, and the
   Collections sheet with the Library's COLLECTIONS and ADD TO COLLECTION chips
   and the game page's collections row). Left in 50b for 51: an engine is also
-  busy while a store job runs (Iced's `engines_busy`; now only while a game
-  runs). What 50c left for 51 (asking a store for its games after a sign-in
+  busy while a store job runs (Iced's `engines_busy`), done in 51b. What 50c left for 51 (asking a store for its games after a sign-in
   or check, the Store forgetting a list on sign-out, Steam's card whole with
   its achievements and the "n of 4" count) was done in 51a.
 - **51** Sliced with the user into three. **51a built 2026-11-14**: the Store
   page, a store game's page, Steam's card on Accounts, and the hooks 50c left.
-  **51b**: the Downloads page, the installer sheet and the queue, with what
-  waits for them on the store game's page (Install, Import, Resume, See
-  downloads, "Also install its DLC"; marked `// 51b:` in `store_ui.rs`), the
-  engines being busy while a store job runs (`engines_ui.rs`), the updates by
-  themselves (`settings_ui.rs`) and the update checks after a scan. **51c**:
+  **51b built 2026-11-14**: the Downloads page and the queue (shared with Iced
+  as `zendo_shell::queue`), Install, Import, Resume, See downloads and "Also
+  install its DLC" on the store game's page, the question about closing while
+  a job runs, the engines busy while a job runs, the updates by themselves and
+  the update checks after a scan. The "installer sheet" that was listed here is
+  the FOMOD mod installer: it moved to 52 [firm, decided with the user]. **51c**:
   Steam installs (Install with Steam, its progress, Stop waiting, Uninstall)
   and the game page's Update, job line, Check, Repair, Move, Uninstall and
   Steam Verify, the DLC's Install and Uninstall, and jobs held while a game
   runs (`game_ui.rs`). Item 54's parity checklist must go through these.
-- **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
+- **52** Mods, Nexus, Nexus search, the FOMOD installer sheet (Iced
+  `app/installer.rs`, opened from a mod's install; moved here from 51b), the
+  mods' card on Downloads, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
@@ -138,8 +140,28 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   family line on the card, and a restart that keeps you signed in; a store
   game's page with a real engine (sizes, "needs …", the DLC you own, the
   latest version); the Store in pt-PT; the pad on the grid (A opens, Y sorts);
-  Ctrl+F, Ctrl+V and Ctrl+R on the Store. Install, Import and Downloads are
-  not here yet (51b).
+  Ctrl+F, Ctrl+V and Ctrl+R on the Store.
+- **Downloads, Install and Import (51b)**, same run. **Careful: a real
+  `cargo run -p zendo-slint` now resumes the queue left in
+  `~/.local/state/zendo/downloads.json` (jobs not paused start at once), asks
+  your stores about the games Zendo installed, and, with "Update games by
+  themselves" on (the default), queues and runs the updates it finds.** Claude
+  already clicked every control of the Downloads page and of a store game's
+  page against a fake `legendary`, in two runs, and the same Resume, a finished
+  job and the saved queue in the Iced window (`docs/history.md`, item 51b).
+  What needs you, with a real engine: a real install of a game from your Epic
+  list, one you do not mind downloading (Zendo's page says "needs …" before you
+  press Install; Settings → Library says where it goes), and one that has
+  installable DLC, which the cache cannot tell, only the engine's answer when
+  the page opens: "Also install its DLC (n)" shows only then, ticked and
+  unticked; Pause and Resume mid-download, Cancel (the folder should be gone),
+  a failure (unplug the network), Close anyway and the queue still there next
+  time; Import with a game you already have on disk; the same for GOG and
+  Amazon (not checked at all on screen); the pad (A, B) on the question about
+  closing, and the tray's Quit with a download running (needs the session bus);
+  a game's update while it plays (the job waits, "Waits until the game is
+  closed"); Downloads in pt-PT and with a light KDE scheme. The game page's
+  Update, Check, Move and Uninstall come with 51c.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

@@ -4,9 +4,9 @@
 //! and latest version, Steam's page for a Steam game). A part of the
 //! Library's glue (`library_ui`), which owns the covers and the accounts.
 //!
-//! Left for the next slices of item 51: Install, Import and the queue (51b),
-//! and Install with Steam (51c); a store game that is not installed says what
-//! installing would do and has no button yet.
+//! Install, Import and the queue are `downloads_ui`'s (51b). Left for 51c:
+//! Install with Steam; a Steam game that is not installed says what installing
+//! would do and has no button yet.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -796,7 +796,7 @@ impl Glue {
     /// library.
     pub(super) fn owned_key(self: &Rc<Self>, key: char) -> bool {
         if key == char::from(Key::Return) {
-            self.open_in_library();
+            self.owned_activate();
             true
         } else {
             false
@@ -864,6 +864,10 @@ impl Glue {
                     )
                 },
             );
+        }
+        // Queued, running or paused: where it goes.
+        if let Some((job, _)) = self.downloads.queue.borrow().job_for(&owned.id) {
+            return t!("store-into", path = job.path.display().to_string());
         }
         let needs = match self.store.browser.borrow().info.get(&owned.id) {
             Some(InfoState::Got(info)) => info
@@ -982,9 +986,9 @@ impl Glue {
             ..fact(t!("fact-zendo-id"), owned.id.clone())
         }];
 
-        // 51b: Install, Import and See downloads beside Open in library, and
-        // "Also install its DLC"; 51c: Install with Steam. Until then the
-        // note says what installing would do.
+        // Install, Import and See downloads sit beside Open in library
+        // (`downloads_ui.rs`); 51c adds Install with Steam, and until then a
+        // Steam game's note says what installing would do.
         let game = synthesized(&owned);
         let summary = owned.summary.clone();
         let parts = OwnedPage {
@@ -999,6 +1003,7 @@ impl Glue {
             technical,
         };
         self.show_owned_page(parts, |data| {
+            self.show_owned_install(data, &owned, installed);
             let images = self.show_cards(&game, data);
             // The store's own summary leads; Steam's page says it otherwise.
             if let Some(summary) = summary {

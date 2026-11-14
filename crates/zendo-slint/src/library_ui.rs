@@ -33,6 +33,8 @@ mod cards;
 mod collections;
 #[path = "compat_ui.rs"]
 mod compat;
+#[path = "downloads_ui.rs"]
+mod downloads;
 #[path = "engines_ui.rs"]
 mod engines;
 #[path = "game_ui.rs"]
@@ -84,6 +86,14 @@ fn with_glue(then: impl FnOnce(&Rc<Glue>)) {
     if let Some(glue) = glue {
         then(&glue);
     }
+}
+
+/// The window is to close for good: says whether it may. While a download
+/// runs it may not, and the Downloads page asks first.
+pub fn quit_requested() -> bool {
+    let mut may = true;
+    with_glue(|glue| may = glue.quit_requested());
+    may
 }
 
 /// The KDE colour scheme changed and the window was painted again: Settings
@@ -204,6 +214,8 @@ struct Glue {
     steam: steam::SteamState,
     /// The Store page and a store game's page (`store_ui.rs`).
     store: store::StoreState,
+    /// The Downloads page and the queue (`downloads_ui.rs`).
+    downloads: downloads::DownloadsState,
     /// What the stores and sites say about the open game (`cards_ui.rs`).
     cards: cards::CardsState,
     /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
@@ -245,6 +257,7 @@ pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
     glue.sync();
     glue.show_store();
     glue.load_store_cache();
+    glue.load_queue();
     glue.rescan();
     glue.check_accounts();
     glue.show_accounts();
@@ -291,6 +304,7 @@ impl Glue {
             browser,
             covers,
             store,
+            downloads: downloads::DownloadsState::new(),
             steam: steam::SteamState::default(),
             grid,
             chips,
@@ -387,6 +401,7 @@ impl Glue {
         self.connect_local(window);
         self.connect_collections(window);
         self.connect_accounts(window);
+        self.connect_downloads(window);
         self.connect_steam(window);
         self.connect_store(window);
         self.connect_cards(window);
@@ -545,6 +560,8 @@ impl Glue {
             t!("library-looking")
         } else if let Some(status) = browser.status() {
             status.to_owned()
+        } else if let Some(summary) = self.queue_summary() {
+            summary
         } else if browser.problems() > 0 {
             t!("footer-unreadable", count = browser.problems())
         } else {
@@ -628,6 +645,7 @@ impl Glue {
         self.store_scanned();
         self.refresh_game();
         self.after_scan();
+        self.check_new_updates();
         self.download_images();
     }
 
@@ -784,6 +802,10 @@ impl Glue {
             }
         } else if pad == Pad::Back {
             self.back();
+        } else if self.asking() {
+            if pad == Pad::Activate {
+                self.close_anyway();
+            }
         } else if self.on_library() {
             match pad {
                 Pad::Left => self.step(Move::Left),
@@ -814,9 +836,9 @@ impl Glue {
                 | Pad::NextShelf => false,
             };
         } else if self.store_page_open() {
-            // On a store game's page: A opens an installed game.
+            // On a store game's page: A opens an installed game, or installs.
             if pad == Pad::Activate {
-                self.open_in_library();
+                self.owned_activate();
             }
         } else if self.open.borrow().is_some() {
             // On a game's page: A plays, Y makes it a favorite, X hides it.
@@ -833,7 +855,7 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.collections_back() || self.close_form() || self.close_game() {
+        if self.stay_open() || self.collections_back() || self.close_form() || self.close_game() {
             return;
         }
         if self.on_store() {
@@ -883,6 +905,15 @@ impl Glue {
         };
         if ctrl && !alt && !meta {
             return self.control_key(key);
+        }
+        // The question about closing a running download: Enter is Close
+        // anyway, and Escape (in `back`) keeps downloading.
+        if self.asking() {
+            if key == char::from(Key::Return) {
+                self.close_anyway();
+                return true;
+            }
+            return false;
         }
         if key == char::from(Key::F1) {
             self.navigate(Page::About);

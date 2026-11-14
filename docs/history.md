@@ -4271,3 +4271,141 @@ card shows, moved from Iced). `zendo_core::owned` gained `store_of`, `Filter`
   the real `xdg-open` (the seed script had been cut short before it made the
   logging fake) and opened `protondb.com/app/735580` in the user's Firefox: a
   tab for them to close.
+
+## Item 51b, Downloads, the queue and Install in Slint (2026-11-14)
+
+The second slice of item 51. **The "installer sheet" listed under 51b is the
+FOMOD mod installer** (Iced `app/installer.rs`: a mod's steps, options and
+pictures), opened only from a mod's install; store installs have no sheet in
+Iced (Install queues at once, "Also install its DLC" is a checkbox on the
+page). Decided with the user: it moves to item 52, with the Mods page.
+
+- **The queue is shared, as `running` is.** `zendo_shell::queue` holds the
+  state and every rule (`Queue`, was Iced's `DownloadsState`): the jobs, the one
+  running, what finished, why a job failed, the question about closing, the
+  updates found. Each method says what happened and returns `Effect`s (`Say`,
+  `Save`, `Start`, `Discard`, `Rescan`, `Exit`, `ShowDownloads`); the window
+  carries them out and calls `next(held)` after every change to start what is
+  due. Also there: the action words, `progress_line`, `update_line` (a `Tone`,
+  each toolkit has its own colours), `ask_updates`, `run` (the job's thread,
+  reporting to a closure like `running::follow`) and `clear_away`. Iced was
+  switched to it first: `app/downloads.rs` went from 1,242 lines to the message
+  mapping, the folder dialog and the views; `DownloadMessage::Event` and
+  `Ended` became one `Report`; the six queue tests moved with the logic (12 in
+  `queue.rs`, with the order of a Done job, a held job, the question about
+  closing and the update checks added) and Iced kept six that go through its
+  messages. `confirm_uninstall` lives in `Queue` too (51c's game page needs it).
+- **The Downloads page** (`ui/downloads.slint`, `src/downloads_ui.rs`): three
+  tiles (Up next, Paused, Finished), the question about closing, the running
+  card (title, "Installing · Epic Games", Pause and Cancel that say Pausing… and
+  Cancelling…, a bar once the engine gives a percentage, the line "48.0% ·
+  432.0 MiB downloaded · 25.0 MiB/s · 00:00:10 left"), Up next (Pause, Cancel,
+  "Waits until the game is closed"), Paused (Resume, orange, or Try again with
+  the error in red, Cancel), Finished (Done or why, Open, Clear), and the
+  empty state with Go to the Store. The tiles count as Iced's: Up next is the
+  queue less the paused, so the running job is in it. The tab's count is the
+  queue's length, the footer falls back to the running job's line or "n
+  downloads paused" when Zendo has nothing of its own to say (as in Iced, a
+  status line comes first).
+- **Progress**: the engine's log is read many times a second. Every event goes
+  into the queue at once, so the page is never behind what the engine said, and
+  only the redraw is coalesced: the first progress of a burst starts a 100 ms
+  timer (`progress_due`, as the covers' `covers_due`) and the timer writes the
+  running card, the bar and the footer from the latest. (The first version held
+  progress back in the worker and flushed it before the end only; the stills
+  showed it, a percentage with the previous tick's megabytes, and the next burst
+  dropped what was held.) `Folder` is kept in the queue file at once.
+- **The store game's page**: Install and Import from a folder… (Zendo's file
+  dialog), "Also install its DLC (n, size)" (the DLC the store says the user
+  owns and can install; the box keeps its choice per game), or Queued /
+  Installing / Resume with See downloads and "Into <folder>". Enter (and the
+  pad's A) installs, or opens an installed game in the library. Steam's own
+  games keep their note until 51c.
+- **Around it**: the queue left from last time is read at start (paused jobs stay
+  paused; a job not paused goes on); a scan asks the stores about the games
+  Zendo installed that were not asked about; with "Update games by themselves"
+  on, the updates found are queued, and turning it on queues those already found;
+  an engine cannot be replaced while a job runs; a game cannot start while its
+  files move; jobs that change a game's files wait while the game runs.
+- **Closing**, in Iced's order: with the tray there, the close button only hides
+  (even mid-download); the question is asked where the program would end, the
+  close with no tray and the tray's Quit (which shows the window first). The
+  window stays (`KeepWindowShown`), Downloads opens with the question, Enter or
+  A is Close anyway (the engine stops, the queue is held and saved, then the
+  window goes), Escape or B keeps downloading.
+- **Tests**: 12 in `zendo_shell::queue`, 7 in `zendo-slint`'s glue (Install once
+  and the buttons through queued, running, paused, the tile and the coalesced
+  progress; a failure and Try again, Cancel, Clear; the DLC box; Enter; closing
+  and its keys; the engines' buttons; the update checks and the switch), 154 in `zendo` (Iced), 109 in
+  `zendo-slint`, 35 in `zendo-shell`, 285 in `zendo-core`. Clippy is clean.
+- **Checked on screen** (2026-11-14, throwaway home, no session bus, the user at
+  the PC; three Epic games from the real cache with a cover, a fake `legendary`
+  that prints the real log's lines for about 20 s, ends on SIGINT, fails when a
+  marker file is there and writes the record Zendo reads back; a logging fake
+  `xdg-open`): the store game's page with Install, Import from a folder…, the
+  note and the DLC box; Install (the engine got `--with-dlcs`, the tab said 1,
+  the footer said Installing); See downloads; the running card; Pause (the job
+  waited paused, the footer said so), Resume (the engine ran again) and Cancel
+  (a red Cancelled, "its files are gone"); a failure (the engine's error in
+  red) and Try again; a close request with a job running (the question, the
+  footer's keys), Keep downloading (the job went on) and Close anyway (the
+  process ended, `downloads.json` had the job paused with its folder), and the
+  queue back, paused, after a restart and Resume; Done (Library 3 to 4, the
+  Installed badge in the Store, the update check in the engine's log); the
+  Settings switch (three Update jobs queued, one running, the tab said 3, the
+  engine got `--update-only`); Import with the real folder dialog and a typed
+  path (the engine's `import`, Open in library, Library 7); Open (the game's
+  library page), Clear, Go to the Store, and Enter on the store game's page.
+- **A second run** (same day and setup, after a review of the first found
+  controls never clicked and a stale progress line): the DLC words clicked (the
+  box unticked, the engine got `--skip-dlcs`); three installs queued (Install,
+  then Enter on two pages) and the queue went on by itself, one at a time;
+  Pause on a row in Up next (it moved to Paused, Resume orange); Resume from the
+  store game's page (the page read Resume, then Installing, and the engine
+  ran); Pause on the running card and Cancel on the paused row (nothing
+  running: "Cancelled …; its files are gone", the tiles followed); a close
+  request with a job running answered by Escape (the question went, the job
+  went on) and again by Enter (Close anyway: the process ended, the job saved
+  paused); the progress lines pair up (92.0% with 828.0 MiB, 48.0% with 432.0,
+  36.0% with 324.0; the fake prints percent times nine). **The Iced window**,
+  which the rewrite of `app/downloads.rs` made run on the shared queue, was
+  launched in the same home: it read the saved queue (Paused 1, Resume orange,
+  the footer "1 download paused"), Resume ran the engine (24.0% with 216.0 MiB
+  on the running card), the job ended Done with Open, Library went to 6, the
+  tab's count cleared and the update check ran after it.
+- **Found on screen**: the title, the tiles' numbers and the empty message drew
+  black on the dark cards (a `Text` with no colour; each now says
+  `Colors.foreground`); Enter on a store game's page only opened an installed
+  game, where Iced queues the install (found by reading Iced's `activate` while
+  the page was open; now `owned_activate`, with a test). A Pause that did not
+  stop the fake was the rig's: a background process started from a script
+  ignores SIGINT, and so did the engine under it (`grep SigIgn
+  /proc/<pid>/status` showed 0x1006); `set -m` in the launcher fixed it. The
+  job then ended Done, which is what `zendo_core::downloads::run` does with a
+  Stop at the last moment of an install the record already has. A real
+  legendary, a Python program, would behave the same: Python keeps a SIGINT it
+  inherited as ignored (`signal.getsignal` printed `SIG_IGN` from a background
+  job and the default handler from a normal shell, checked); Zendo started from
+  a launcher or a terminal does not hand it down, and a Stop that goes unheard
+  ends in `kill -KILL` after the grace. The review of the first run found: the
+  stale progress above; the Up next tile that left the running job out (Iced
+  counts the queue less the paused); Resume and Try again, which set a primary
+  flag the Slint never read (`RowButton` has `primary` now); the DLC box's words,
+  which did not toggle it where Iced's label does; and a claim in the backlog
+  that every control was clicked when four were not (corrected).
+- **Not checked.** A real engine or a real install (the fake stands for
+  legendary: GOG's and Amazon's paths are `zendo_core::downloads`' and Iced's,
+  with its tests; the sizes in the page's note come from the fake's `info`); the
+  pad (A, B) on the question about closing; the tray's Quit with a job running
+  (no session bus); the "waits until the game is closed" note (a game running
+  while an update is due); the folder a Cancel clears (the fake makes it only at
+  the end, `downloads::discard` has its own tests); a game with DLC the engine
+  really reports (the DLC box was the fake's); the Iced window's other flows
+  (Install, Import, Move, close question) beyond the Resume, Done and update
+  check above, whose code is the shared queue's and has tests; pt-PT; a light KDE
+  scheme. Left out on purpose: the Steam card and count on Downloads (51c), the
+  mods' card (52), the game page's Update, Check, Move, Repair, Uninstall and job
+  line (51c).
+- **Side effects**: only the scratch home (7 MB, deleted); nothing opened a
+  browser (the fake `xdg-open` logged nothing); `ydotoold` and the sockets were
+  stopped and removed.

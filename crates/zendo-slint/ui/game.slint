@@ -4,7 +4,7 @@
 // nothing here holds a game.
 
 import { Colors, Space, Tr } from "style.slint";
-import { ChipButton, ActionButton, TextField } from "components.slint";
+import { ChipButton, ActionButton, TextField, CheckBox } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
 import { ChipData } from "library.slint";
 
@@ -82,7 +82,20 @@ export global GameData {
     // What installing it would do, in words, beside Open in library.
     in property <string> owned-note;
     in property <[OwnedBadge]> owned-badges;
+    // What the queue holds of it: 0 nothing to press, 1 it can be installed,
+    // 2 queued, 3 running, 4 paused.
+    in property <int> owned-job;
+    // What the running job is doing, as a button says it: "Installing".
+    in property <string> owned-job-label;
+    // "Also install its DLC", with how many; empty when it has none to give.
+    in property <string> owned-dlc;
+    in property <bool> owned-dlc-on;
     callback open-library();
+    callback owned-install();
+    callback owned-import();
+    callback owned-resume();
+    callback owned-downloads();
+    callback owned-toggle-dlc();
     // Whether a game's page replaces the Library's grid.
     in-out property <bool> open;
     in property <string> title;
@@ -592,20 +605,78 @@ export component GamePage inherits Rectangle {
                 }
                 // A store game: Open in library when it is there, else what
                 // installing it would do.
-                if GameData.owned: HorizontalLayout {
+                if GameData.owned: VerticalLayout {
                     spacing: Space.m;
-                    if GameData.owned-installed: ActionButton {
-                        label: Tr.t("store-open-in-library");
-                        primary: true;
-                        clicked => { GameData.open-library(); }
+                    HorizontalLayout {
+                        spacing: Space.m;
+                        if GameData.owned-installed: ActionButton {
+                            label: Tr.t("store-open-in-library");
+                            primary: true;
+                            clicked => { GameData.open-library(); }
+                        }
+                        // Install and Import, until the game is queued.
+                        if GameData.owned-job == 1: ActionButton {
+                            label: Tr.t("install");
+                            primary: true;
+                            clicked => { GameData.owned-install(); }
+                        }
+                        if GameData.owned-job == 1: ActionButton {
+                            label: Tr.t("downloads-import");
+                            clicked => { GameData.owned-import(); }
+                        }
+                        // Queued, running (nothing to press) or paused.
+                        if GameData.owned-job == 2: ActionButton {
+                            label: Tr.t("queued");
+                            primary: true;
+                            enabled: false;
+                        }
+                        if GameData.owned-job == 3: ActionButton {
+                            label: GameData.owned-job-label;
+                            primary: true;
+                            enabled: false;
+                        }
+                        if GameData.owned-job == 4: ActionButton {
+                            label: Tr.t("resume");
+                            primary: true;
+                            clicked => { GameData.owned-resume(); }
+                        }
+                        if GameData.owned-job >= 2: ActionButton {
+                            label: Tr.t("see-downloads");
+                            clicked => { GameData.owned-downloads(); }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: GameData.owned-note;
+                            font-size: 14px;
+                            color: Colors.dim;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                        }
                     }
-                    Text {
-                        horizontal-stretch: 1;
-                        text: GameData.owned-note;
-                        font-size: 14px;
-                        color: Colors.dim;
-                        vertical-alignment: center;
-                        wrap: word-wrap;
+                    if GameData.owned-dlc != "": HorizontalLayout {
+                        spacing: Space.m;
+                        alignment: start;
+                        CheckBox {
+                            on: GameData.owned-dlc-on;
+                            label: GameData.owned-dlc;
+                            toggled(on) => { GameData.owned-toggle-dlc(); }
+                        }
+                        // The words toggle it too, as Iced's label does.
+                        Rectangle {
+                            width: dlc-words.preferred-width;
+                            height: 20px;
+                            dlc-words := Text {
+                                height: parent.height;
+                                text: GameData.owned-dlc;
+                                font-size: 14px;
+                                color: Colors.foreground;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { GameData.owned-toggle-dlc(); }
+                            }
+                        }
                     }
                 }
                 // Play, or Running with Stop; then the less pressed ones.

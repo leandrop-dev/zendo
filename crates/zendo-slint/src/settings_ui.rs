@@ -486,11 +486,11 @@ impl Glue {
             Setting::EnginesPathFirst(_) => self.refresh_engines(),
             // Steam's list shows, or leaves the Store, with the sign-in.
             Setting::SteamSession(_) => self.store_accounts_changed(),
-            // 51b: the update by themselves come with the Downloads page.
+            // Turning it on queues the updates already found.
+            Setting::AutoUpdate(_) => self.update_by_themselves(),
             Setting::DownloadCovers(false)
             | Setting::Workers(_)
             | Setting::Language(_)
-            | Setting::AutoUpdate(_)
             | Setting::Theme(_)
             | Setting::Opaque(_)
             | Setting::GogPlaytime(_)
