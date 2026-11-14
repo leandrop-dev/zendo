@@ -5,8 +5,9 @@ where it stands. It is short, and it is the only file to read up front.
 
 The rest is read on demand, never all at once:
 
-- `docs/backlog.md`: what is next (nothing queued), what is on hold, and a
-  table of the built items 27 to 38. Read it when starting new work.
+- `docs/backlog.md`: what is next (items 49 to 54, the port to Slint), what is
+  on hold, and a table of the built items 27 to 48. Read it when starting new
+  work.
 - `docs/design.md`: the redesign (omakade's ideas, no code). Read it before
   working on the window's look or pages.
 - `docs/history.md`: what was built, when, and what was checked. Read it when
@@ -43,7 +44,10 @@ On KDE Plasma (Fedora), checked 2026-11-12:
 - `grim` and `wtype` are untested on KWin; they need wlroots protocols.
 
 The virtual mouse and keyboard reach the whole session, so use them with
-the user present.
+the user present. A script that clicks takes exactly two integer
+coordinates and refuses anything else: a malformed call (zsh does not split
+`"$p"`) otherwise clicks where the pointer already is. Call it as
+`set -- X Y; zclick.sh $1 $2`.
 
 After a layout change, click every new control once in the app. A control
 can be drawn outside the area that receives clicks.
