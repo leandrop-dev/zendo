@@ -3421,3 +3421,53 @@ clicks guarded by the window's pid.
   226 KB source) and the backdrop showed. Not measured: page-open time in the
   window itself (only the decode); the library's scroll speed after the
   profile change; a PNG hero.
+
+## Item 45, the Slint spike (2026-11-14)
+
+A throwaway crate (Slint 1.18.1, winit backend, FemtoVG on OpenGL) outside the
+repo, with `zendo-core` as a path dependency: the Library grid with real
+covers, caption lines, the four Lucide SVGs and the KDE scheme. It lives in the
+session scratchpad (`slint-spike/`), builds into `~/.cache/slint-spike-target`
+(the scratchpad is tmpfs and a 5 GB `target/` ran the linker out of space:
+"ld terminated with signal 7 [Bus error]"), and was run only in a throwaway
+home (24 seeded `.desktop` games, a read-only copy of `kdeglobals`, no session
+bus). Nothing in the repo changed.
+
+| Point | Verdict | Evidence |
+|---|---|---|
+| Translucency | **Yes, with any alpha** | A blank pixel read 60,61,68 at alpha 0.85, over wallpaper 190,189,188 and the opaque value 37,39,47 (0.85·37+0.15·190 = 60). Iced's `Rgb10a2` surface has four alpha levels and showed 0.85 as opaque (item 31), so Zendo's 2/3 or 1/3 is not a limit here. The window is transparent when its `background` has alpha. |
+| Blur | **Yes, the same way as Iced: by window class** | Under Better Blur DX a window with class `zendo` blurred the opaque window behind it (smeared, unreadable) and one with class `slint-spike` stayed sharp, in the same crop of a full-screen still (16,991 differing pixels). `slint::set_xdg_app_id("zendo")` sets the class, and needs `BackendSelector::new().select()` first (it panics with "No default Slint platform was selected" otherwise). `with_blur(true)` and `set_blur(true)` (feature `unstable-winit-030`) change nothing here: winit 0.30.13's Wayland `set_blur` only speaks `org_kde_kwin_blur_manager`, which this KWin does not advertise (it offers `ext_background_effect_manager_v1`); a `WAYLAND_DEBUG` trace shows Zendo (Iced) sends no blur request either. |
+| Fonts | **Yes** | `import "../fonts/JetBrainsMono-Regular.ttf";` in the `.slint` file embeds the font; monospace drew. Without it the family is not installed and Slint fell back to a sans. |
+| KDE colours | **Not built in; Zendo's code carries over** | `zendo_core::kde::Scheme` and `Theme::from_scheme` fed a `Colors` global: scheme "PlasmonkA", accent 61,120,198 applied; raised and dim mixed in Rust. Slint's own styles (cosmic, fluent, material, qt) were not tried: the spike draws its own widgets. A light scheme was not tried. |
+| Scrolling | **Works; the grid is built by hand** | `ListView` is vertical and virtual only, so the Rust side regroups the cards into rows when the column count (computed in `.slint` from the width) changes: 6 columns at 1376 px, 4 at 900 px. On 2,700 cards (the library ×100) auto-scrolled end to end with `SLINT_DEBUG_PERFORMANCE=refresh_full_speed,console` on a 75 Hz screen: 37 to 68 fps in release, 35 to 61 in debug. RSS 243 MB when the repeats share one decoded `Image`; it grew from 0.9 to 3.5 GB in nine seconds when each card loaded its own copy, so cards must share handles or use the thumbnails. No Iced number was taken to compare with. Wheel and drag were not tried (the scroll was driven by a timer). |
+| SVG | **Yes** | `Image` with `colorize` drew `plus`, `refresh-cw`, `download` and `settings` at 18 px in the foreground colour. |
+| Size | **Not a measured saving** | Release (strip, thin LTO, same profile as the workspace): the spike 26,156,112 bytes in 2 min 28 s cold; Zendo from `main` (`cargo build --release --locked -p zendo`, same machine) 41,707,576 bytes in 4 min 28 s, with other builds running. Normal-edge crates: `zendo-core` 247, Zendo 585, the spike 570. But the spike has no sign-in web view (wry, WebKitGTK), tray or Discord, so the two are not like for like: the Iced-versus-Slint difference cannot be read from them. The installed RPM's `/usr/bin/zendo` (28,319,736, built 2026-11-12) is an older build. |
+| Keyboard and controller | **Yes** | Arrow keys through a `FocusScope` moved a cursor (accent border) over the 6-column grid, wrapped by rows, kept its row on screen and Enter activated it; sent inside the process with `dispatch_event`, so the real key path through KWin was not exercised. gilrs on its own thread (Zendo's `gamepad.rs` logic: D-pad, left stick with the 0.6/0.3 lean, Cross) handed moves to the window with `Weak::upgrade_in_event_loop`; on the user's real DualSense ("PS5 Controller") D-pad, stick and Cross moved and activated the cursor. The first 40 seconds produced no events only because nobody pressed anything. |
+| Licence | **The user's call** | Slint is offered under Royalty-free, GPLv3 or commercial. Its FAQ (`FAQ.md`, read 2026-11-14): your own files may stay MIT whichever you choose. **GPLv3**: the combined product is GPLv3 as a whole, on any platform (MIT is GPL-compatible). **Royalty-free**: free for desktop, mobile and web, not embedded; one of (a) the `AboutSlint` widget in an About screen reachable from the top-level menu, or (b) the "Made with Slint" badge on a public web page (where the binaries are, if possible); the Slint licence notices stay; an MIT fork of the app may be redistributed under MIT, and a fork using Slint takes its own Slint licence. **Not confirmed**: whether Fedora allows `LicenseRef-Slint-Royalty-free-2.0` (a search found no Fedora page on it, only that Fedora's licensing rules apply to COPR repositories, with some flexibility; those pages are old and I did not read them in full). GPLv3 is on Fedora's allowed list, from general knowledge, not checked here. |
+
+- **Not tried**: a click on a card (only hover, by the real pointer), keys
+  from the real keyboard (only synthetic, inside the process), Game Mode's
+  shelves and hero, text input, the Skia renderer, the game page and its hero,
+  a light scheme, and a rendering comparison with Iced.
+- **What carries over unchanged**: `zendo-core` (library, covers, thumbs, KDE
+  scheme, themes) and the icons and fonts. What would be rewritten: every
+  `app/*.rs` view, in `.slint`, with models and callbacks in between.
+- **The checks' side effects**: KWin's stock Blur effect was loaded and
+  unloaded six times through D-Bus (the user agreed to it) while I looked for
+  blur; `blurEnabled=false` in `kwinrc` before and after, and `isEffectLoaded`
+  was false at the end. It was never what blurs here (see item 31); I should
+  have read item 31 first. By mistake I moved the invisible
+  `xwaylandvideobridge` helper window to 900,200 with `kdotool windowmove`
+  (`kdotool search --pid` is not a filter; match `getwindowpid` instead). Its
+  old position is unknown and I did not look at it afterwards.
+- **Code size**: the spike is 170 lines of `.slint` and 230 of Rust (about 60 of
+  them hooks for the checks: blur, class, scroll, alpha, synthetic keys) for
+  covers, captions, a progress line, the top bar, the row regrouping, the
+  cursor and the controller thread. `app/library.rs`'s
+  card and grid code (lines 363 to 668) is about as long but also does
+  selection, marking, badges, fading and virtual rows by hand, and leans on
+  `style.rs` (671 lines) for hover and borders, which the spike hard-codes. So
+  the sizes are the same order; this is not a measured saving either way.
+- **Left open**: whether Fedora and COPR accept the Royalty-free licence (see
+  its row); a like-for-like Iced and Slint comparison of build time and size
+  (it needs the same screens in both).
