@@ -3609,3 +3609,97 @@ hides to the tray, with the pages empty (their name shows).
 - During the on-screen checks KDE's application launcher opened once, unasked by
   these tests (only pointer moves and left clicks were sent, and the click
   landed on Settings); the helper refused to click while the focus was elsewhere.
+
+## Item 48, the Library in Slint (2026-11-14)
+
+The Library page of `zendo-slint`, from the plan (`~/.claude/plans/drifting-hugging-scone.md`),
+checked against Iced's on the same libraries.
+
+- **Scope, as decided with the user.** The Collections sheet moved to item 50
+  (the collection and saved-view chips filter now; COLLECTIONS and ADD TO
+  COLLECTION come with the sheet). The hero backdrop moved to item 49: Iced's
+  Library draws none, and `docs/design.md` puts the wide art behind the game
+  page's header. Until item 49 a card opens a stand-in page that says so
+  (`open-title`, Esc goes back). Add game, the RUNNING badge and Play wait for
+  49, the update checks for 51.
+- **Shared logic, out of the Iced app.** `zendo_core::browse`: `visible` and
+  `visible_indices` (the filter and the sort), `step` and `Move`, `reveal_y`
+  and `rows_in` (with a `Geometry`, since the toolkits' cards differ), and
+  `set_pinned` and `set_hidden` for the bulk changes. `format.rs` moved to
+  `zendo-shell/src/format.rs`, with `played_line` and `progress_of`; Iced's
+  `app/format.rs` is a one-line re-export. Iced's `visible`, `step` and
+  `reveal_y` call the shared code, and its 158 tests still pass.
+- **`zendo-slint`.** `src/library.rs` is the page's state with no toolkit
+  (filters, cursor, marks, chips with their counts, cards, empty states, and an
+  `Outcome` of what to save, which rows to redraw and whether to scroll);
+  `src/library_ui.rs` carries it to Slint (a hand-written `Model` of rows made
+  when asked, the chip models, the scan and cover threads, the file watch, the
+  controller, the keys); `src/covers.rs` is the cover cache; `ui/library.slint`
+  is the page, `components.slint` gained `ChipButton` and `SearchField`, and
+  `top_bar.slint` the view chips and the search. The cursor is a property
+  compared by index, so a move touches no model; a mark redraws one row.
+- **Covers, three tries** (the bar was the plan's: at least 35 fps on the
+  2,700-card library with every game's own cover file, measured against Iced's
+  Library first). `Image::load_from_path` on the UI thread: 45 to 71 fps but RSS
+  1.4 GB, because some store covers are 1080 to 1200 px wide (6 MB decoded). The
+  same with a downscale to 360 px on the UI thread: RSS 290 MB but dips to 2 fps
+  on runs of big covers. Kept: two worker threads decode to a
+  `SharedPixelBuffer` (an `Image` is not `Send`), the newest request first and
+  at most 96 waiting, a blank card until the cover arrives, rows redrawn 40 ms
+  after arrivals, 150 covers kept.
+- **Measured** (1368×892, six columns, the library ×2,700 `.desktop` games in a
+  throwaway home, `ZENDO_BENCH_SPEED` px/s through the real scroll path, a
+  75 Hz screen; the rig was a throwaway worktree, never committed):
+
+  | | idle | scrolling | RSS |
+  |---|---|---|---|
+  | Iced, dev, 3,000 px/s | 75 fps | 1 to 5 fps | 314 MB, up to about 1 GB |
+  | Iced, dev, 800 px/s | 75 fps | 3 to 6 fps | 312 to 560 MB |
+  | Iced, release, 800 px/s | 75 fps | 6 to 9 fps | 255 to 533 MB |
+  | Slint, dev, 3,000 px/s | 74 fps | 61 to 75 fps | about 300 MB, flat |
+  | Slint, dev, 800 px/s | 74 fps | 61 to 75 fps | about 300 MB, flat |
+  | Slint, release, 800 px/s | 75 fps | 66 to 75 fps | about 310 MB, flat |
+
+  The bar is met in both profiles. Iced's low figures are on distinct covers:
+  it decodes each on the thread that draws.
+- **Checked on screen** (the 24-game throwaway home with a seeded `state.json`:
+  favorites, statuses, achievements, two collections and a saved view; stills
+  with `spectacle`; about 40 clicks and as many keys with `ydotool`, guarded by
+  the pid of the active window and of the one under the pointer):
+  - every new control clicked: the view chips (All, Favorites, Recent, Hidden),
+    the store chip, the three sort chips, Refresh, a status chip, a collection
+    chip, the saved view, the mark box, the bulk Hide and Clear, a card, and the
+    search field by mouse;
+  - through the real keyboard: the arrows (with the grid scrolling to keep the
+    cursor's card whole), Home, typing with no field focused, Esc (search, then
+    marks, then a game's page), Ctrl+Space, Enter, Tab, Delete, Ctrl+H, Ctrl+F
+    then Esc then Down, Ctrl+1 and Ctrl+2, F5 (the hidden game and the sort came
+    back from `state.json`);
+  - a resize from 1368 to 1100 wide: six columns to five, the cursor's card kept
+    in view; the footer's status elides.
+- **Found and fixed in the check.** (1) The FAVORITE badge, a `Rectangle` with no
+  size, filled and dimmed the whole cover. (2) `FlexboxLayout` took the leftover
+  height and stretched the chips when the page had no grid. (3) The grid reported
+  its height only when it scrolled, so the cursor's reveal assumed 800 px and a
+  card hung off the bottom. (4) The page rectangles did not stretch, so the
+  footer floated. (5) The status message stayed after a page change and a tab
+  press left an open game and the marks in place; tab presses now go through
+  Rust. (6) My own `zclick.sh` clicked at the pointer when handed one argument
+  instead of two (zsh does not split `"$p"`); it now refuses anything but two
+  integers, and that click landed on a harmless chip.
+- **Tests.** `browse` (5), `library` (10, with no window), `covers` (4, with
+  real files on disk) and the window glue (8, on `i-slint-backend-testing`:
+  typing, Esc's order, arrows, marks and the bulk chips, a chip that empties the
+  page, page changes, the footer, a tab press). Workspace clippy is clean;
+  `cargo fmt --check` still flags `zendo-core/src/achievements.rs`, which is
+  not from this item.
+- **Not checked.** The controller (the code gates it on the window's focus
+  through winit; no pad was pressed), cover downloads and the file-watch rescan
+  (the throwaway homes ran with `download_covers = false` and no launcher file
+  changed), the wheel and scrollbar drag (no wheel through `ydotool`; the grid
+  was moved by keys and by the bench's timer), Ctrl+V paste, a language change
+  on a live window (`changed language` calls `relabel`; only the `Tr` part has a
+  test), focus after the tray makes a new window, a light theme, blur, a
+  second monitor or another scale, and the bulk Unfavorite and Unhide chips and
+  Ctrl+P (covered by tests, not clicked). The 2,700-card library was measured,
+  not looked at. F11 and the shelves are item 53.

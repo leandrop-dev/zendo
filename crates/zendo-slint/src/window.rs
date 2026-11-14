@@ -14,7 +14,7 @@ use zendo_shell::tray::{self, Tray, TrayMessage};
 use zendo_shell::{APP_ID, i18n};
 
 use crate::theme::{Palette, Themes};
-use crate::{Colors, MainWindow, tr};
+use crate::{Colors, MainWindow, library_ui, tr};
 
 /// How often Zendo looks whether the KDE colour scheme changed.
 const LOOK: Duration = Duration::from_secs(2);
@@ -43,6 +43,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
 
     let window = MainWindow::new().context("could not make the window")?;
     tr::install(&window);
+    library_ui::install(&window);
     if opaque {
         window.set_translucency(1.0);
     }

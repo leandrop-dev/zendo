@@ -59,6 +59,7 @@ use iced::keyboard::{self, Key, key::Named};
 use iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use iced::widget::{Id, column, container, operation, row, space, text};
 use iced::{Element, Event, Length, Size, Subscription, Task, event, window};
+use zendo_core::browse;
 use zendo_core::config::Config;
 use zendo_core::covers::{Artwork, Fetcher, KeyCheck, Kind};
 use zendo_core::owned::Owned;
@@ -207,17 +208,7 @@ pub(super) enum Grid {
     Store,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Move {
-    Left,
-    Right,
-    Up,
-    Down,
-    PageUp,
-    PageDown,
-    First,
-    Last,
-}
+use zendo_core::browse::Move;
 
 /// The library read in a thread: the games, the saved sort, the user's
 /// categories, the settings and the saved filters.
@@ -638,32 +629,7 @@ impl Zendo {
         let Some(library) = &self.library else {
             return Vec::new();
         };
-        let words: Vec<String> = self
-            .search
-            .split_whitespace()
-            .map(str::to_lowercase)
-            .collect();
-        // The lowered title once per game, not twice per comparison.
-        let now = now();
-        let mut games: Vec<(&Game, String)> = library
-            .games
-            .iter()
-            .filter(|game| self.view.shows(game, now))
-            .filter(|game| self.source.is_none_or(|source| game.source == source))
-            .filter(|game| {
-                self.category
-                    .as_ref()
-                    .is_none_or(|name| game.categories.contains(name))
-            })
-            .filter(|game| {
-                self.play_status
-                    .is_none_or(|status| game.status == Some(status))
-            })
-            .map(|game| (game, game.title.to_lowercase()))
-            .filter(|(_, title)| words.iter().all(|word| title.contains(word.as_str())))
-            .collect();
-        games.sort_by(|(a, at), (b, bt)| self.sort.compare_with_titles(a, b, at, bt));
-        games.into_iter().map(|(game, _)| game).collect()
+        browse::visible(&library.games, &self.current_filter(), now())
     }
 
     fn selected_id(&self) -> Option<String> {
@@ -1538,41 +1504,11 @@ impl Zendo {
         if count == 0 {
             return Task::none();
         }
-        let last = count - 1;
-        let page = self.columns * self.rows_on_screen();
+        let rows = browse::rows_in(self.viewport_height, grid_geometry());
         let columns = self.columns;
         let selected = self.cursor().0;
-        let current = (*selected).min(last);
-        *selected = match step {
-            Move::Left => current.saturating_sub(1),
-            Move::Right => (current + 1).min(last),
-            Move::Up => current.checked_sub(columns).unwrap_or(current),
-            Move::Down => {
-                let below = current + columns;
-                // From the row above the last, a short last row still counts.
-                if below <= last || current / columns < last / columns {
-                    below.min(last)
-                } else {
-                    current
-                }
-            }
-            Move::PageUp => current.saturating_sub(page),
-            Move::PageDown => (current + page).min(last),
-            Move::First => 0,
-            Move::Last => last,
-        };
+        *selected = browse::step(*selected, count, columns, rows, step);
         self.reveal()
-    }
-
-    fn rows_on_screen(&self) -> usize {
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a whole number of rows; heights are never negative"
-        )]
-        let rows = ((self.viewport_height + library::SPACING)
-            / (library::CARD_HEIGHT + library::SPACING)) as usize;
-        rows.max(1)
     }
 
     /// Scrolls just enough to show the selected card.
@@ -1875,16 +1811,15 @@ trait Fallback {
 /// Where the grid scrolls to show `selected`: just enough, or `None` when
 /// it is already in view.
 fn reveal_y(selected: usize, columns: usize, scroll_top: f32, viewport: f32) -> Option<f32> {
-    #[expect(clippy::cast_precision_loss, reason = "row counts are small")]
-    let row = (selected / columns) as f32;
-    let top = row * (library::CARD_HEIGHT + library::SPACING);
-    let bottom = top + library::CARD_HEIGHT + 2.0 * library::GRID_PADDING;
-    if top < scroll_top {
-        Some(top)
-    } else if bottom > scroll_top + viewport {
-        Some(bottom - viewport)
-    } else {
-        None
+    browse::reveal_y(selected, columns, scroll_top, viewport, grid_geometry())
+}
+
+/// The library grid's cards, for the cursor's scrolling.
+fn grid_geometry() -> browse::Geometry {
+    browse::Geometry {
+        card_height: library::CARD_HEIGHT,
+        spacing: library::SPACING,
+        padding: library::GRID_PADDING,
     }
 }
 

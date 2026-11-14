@@ -532,21 +532,7 @@ fn check_button<'a>(ticked: bool, message: Message) -> Element<'a, Message> {
         .into()
 }
 
-/// The share of achievements unlocked, for a card's line: nothing for a
-/// game with none.
-pub fn progress_of((unlocked, total): (u32, u32)) -> Option<f32> {
-    #[expect(clippy::cast_precision_loss, reason = "counts of achievements")]
-    (total > 0).then(|| unlocked.min(total) as f32 / total as f32)
-}
-
-/// The line under a card's title: how much it was played.
-pub(super) fn played_line(game: &Game, now: u64) -> String {
-    match (game.played.minutes, game.played.last) {
-        (0, None) => t!("played-never"),
-        (0, Some(last)) => t!("played-when", when = format::ago(last, now)),
-        (minutes, _) => t!("played-time", time = format::play_time(minutes)),
-    }
-}
+pub use format::{played_line, progress_of};
 
 /// The foot of a cover: the progress line, when there is one. The title is
 /// in the caption under the cover, not over it.
@@ -668,27 +654,6 @@ pub fn card(card: Card<'_>) -> Element<'_, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_card_says_how_much_was_played() {
-        let mut game = Game::new(
-            "desktop:x".into(),
-            "X".into(),
-            Source::Desktop,
-            zendo_core::Launch::Uri { uri: String::new() },
-        );
-        assert_eq!(played_line(&game, 0), t!("played-never"));
-        game.played.last = Some(0);
-        assert_eq!(
-            played_line(&game, 0),
-            t!("played-when", when = format::ago(0, 0))
-        );
-        game.played.minutes = 90;
-        assert_eq!(
-            played_line(&game, 0),
-            t!("played-time", time = format::play_time(90))
-        );
-    }
 
     #[test]
     fn fits_whole_cards_across_the_window() {

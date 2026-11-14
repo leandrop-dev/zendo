@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+image.workspace = true
 slint.workspace = true
 zendo-core.workspace = true
 zendo-shell.workspace = true

@@ -5,9 +5,10 @@ import "../../zendo/fonts/JetBrainsMono-Regular.ttf";
 import "../../zendo/fonts/JetBrainsMono-Bold.ttf";
 import { Colors, Space, Tr } from "style.slint";
 import { TopBar, Page } from "top_bar.slint";
+import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
-// Rust reaches the globals and the enum through these.
-export { Colors, Space, Tr, Page }
+// Rust reaches the globals, the structs and the enum through these.
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -20,6 +21,7 @@ export component MainWindow inherits Window {
     // Translucent unless Settings asks for an opaque window: the compositor
     // shows the desktop through it (blurred, for the class `zendo`).
     background: Colors.background.with-alpha(root.translucency);
+    forward-focus: scope;
 
     in-out property <Page> page: Page.library;
     // How much of the window is paint: 1 is opaque.
@@ -27,6 +29,9 @@ export component MainWindow inherits Window {
     in property <string> library-count;
     in property <string> store-count;
     in property <string> downloads-count;
+    // The title of the game whose page was asked for: the game page comes in
+    // item 49, so this stands in for it.
+    in property <string> open-title;
     // The page's name, in the window's language, for the page area until the
     // pages arrive.
     out property <string> page-title:
@@ -36,22 +41,95 @@ export component MainWindow inherits Window {
         : root.page == Page.downloads ? Tr.t("page-downloads")
         : Tr.t("page-settings");
 
-    VerticalLayout {
-        TopBar {
-            // Above the page, so the icon buttons' tooltips draw over it.
-            z: 1;
-            page: root.page;
-            library-count: root.library-count;
-            store-count: root.store-count;
-            downloads-count: root.downloads-count;
-            navigate(page) => { root.page = page; }
+    // A tab or icon button was pressed: Rust changes the page, so what the
+    // old one held (marks, an open game, its message) is let go.
+    callback page-requested(Page);
+
+    // Texts Rust writes (the chips, the cards' lines) do not read `Tr.language`,
+    // so a change of language asks for them again.
+    property <int> language: Tr.language;
+    changed language => { LibraryData.relabel(); }
+
+    // Ctrl+F and Ctrl+V.
+    public function focus-search() { top-bar.focus-search(); }
+    public function paste-search() { top-bar.paste-search(); }
+    // Takes the keyboard back from the search field, so the arrows move the
+    // cursor in the grid again.
+    public function focus-page() { scope.focus(); }
+
+    scope := FocusScope {
+        // Escape before a focused field can keep it.
+        capture-key-pressed(event) => {
+            if event.text == Key.Escape {
+                LibraryData.back();
+                scope.focus();
+                return accept;
+            }
+            reject
         }
-        Rectangle {
-            Text {
-                text: root.page-title.to-uppercase();
-                font-size: 20px;
-                font-weight: 700;
-                color: Colors.dim;
+        // Whatever the search field did not use.
+        key-pressed(event) => {
+            LibraryData.key(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta, event.modifiers.shift) ? accept : reject
+        }
+
+        VerticalLayout {
+            top-bar := TopBar {
+                // Above the page, so the icon buttons' tooltips draw over it.
+                z: 1;
+                page: root.page;
+                library-count: root.library-count;
+                store-count: root.store-count;
+                downloads-count: root.downloads-count;
+                navigate(page) => { root.page-requested(page); }
+            }
+            if root.page == Page.library && root.open-title == "": LibraryPage { }
+            if root.page == Page.library && root.open-title != "": Rectangle {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Space.s;
+                    Text {
+                        text: root.open-title;
+                        font-size: 20px;
+                        font-weight: 700;
+                        color: Colors.foreground;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "The game page comes in item 49 · Esc goes back";
+                        color: Colors.dim;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+            if root.page != Page.library: Rectangle {
+                vertical-stretch: 1;
+                Text {
+                    text: root.page-title.to-uppercase();
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: Colors.dim;
+                }
+            }
+            // The footer: what Zendo says, and the keys.
+            HorizontalLayout {
+                padding-left: Space.xl;
+                padding-right: Space.xl;
+                padding-top: Space.s;
+                padding-bottom: Space.s;
+                spacing: Space.l;
+                Text {
+                    horizontal-stretch: 1;
+                    text: LibraryData.status;
+                    font-size: 13px;
+                    color: Colors.dim;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.page == Page.library ? LibraryData.hints : Tr.t("hints-other");
+                    font-size: 13px;
+                    color: Colors.dim;
+                }
             }
         }
     }

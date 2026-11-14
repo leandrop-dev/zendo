@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38 and 41 to 47 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38 and 41 to 48 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -18,14 +18,15 @@ logic in `zendo-core`; where `app/*.rs` mixes logic with views, move the logic
 to `zendo-core` when that page is ported. Ask before building any other page
 `docs/design.md` lists (a Home page was built and removed at the user's wish).
 
-- **48** Library: grid, chips, search, sort, marking, bulk actions, keyboard
-  and pad cursor, hero backdrop (bar: at least 35 fps on the 2,700-card stress
-  library, measured against Iced's Library first).
-- **49** Game page and what hangs off it (running, achievements, anti-cheat,
-  ProtonDB, Steam facts, requirements, DLC, cloud saves, prefix, EOS overlay,
-  Deck, GOG, local games).
+- **49** Game page and what hangs off it (running and its badge on the
+  cards, achievements, anti-cheat, ProtonDB, Steam facts, requirements, DLC,
+  cloud saves, prefix, EOS overlay, Deck, GOG, local games, Add game) and the
+  wide-art backdrop behind its header. Until it exists a card opens a stand-in
+  that says so (`zendo-slint`'s `open-title`).
 - **50** Settings, engines, Protons, runtimes, themes, Accounts, About,
-  Collections sheet.
+  Collections sheet (the Library's COLLECTIONS and ADD TO COLLECTION chips
+  come with it; the collection and saved-view chips already filter). The
+  language switch there must call `tr::show`; the Library re-labels itself.
 - **51** Store, store game page, Downloads, installer, Steam installs.
 - **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
@@ -99,5 +100,6 @@ history.md and the commits.
 | 45 | Slint spike of the Library grid: a verdict on eight points, no port | 2026-11-14 |
 | 46 | Slint licence checked against COPR (GPLv3 chosen); the toolkit-free modules moved to `zendo-shell` | 2026-11-14 |
 | 47 | `zendo-slint` skeleton: window, themes, `Tr`, top bar, tray with size kept, `--game-mode`; the command line moved to `zendo-shell` | 2026-11-14 |
+| 48 | The Library in Slint: grid, chips, search, sort, marks, bulk actions, keyboard and pad cursor, cover downloads, file watch; the grid's logic in `zendo_core::browse` | 2026-11-14 |
 
 Item 37 (emulation) is on hold above.

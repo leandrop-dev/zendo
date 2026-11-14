@@ -109,3 +109,86 @@ export component IconButton inherits Rectangle {
         }
     }
 }
+
+// A toggle in a page's toolbar: the name in capitals, a count when there is
+// one, and the accent rim while it is chosen.
+export component ChipButton inherits Rectangle {
+    in property <string> label;
+    in property <string> count;
+    in property <bool> chosen;
+    callback clicked;
+
+    background: touch.has-hover ? Colors.raised : transparent;
+    border-width: 1px;
+    border-color: root.chosen ? Colors.accent : Colors.line;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+
+    HorizontalLayout {
+        padding-left: Space.m;
+        padding-right: Space.m;
+        padding-top: Space.xs;
+        padding-bottom: Space.xs;
+        spacing: 6px;
+        Text {
+            text: root.label.to-uppercase();
+            font-size: 13px;
+            vertical-alignment: center;
+            color: root.chosen ? Colors.accent : Colors.foreground;
+        }
+        if root.count != "": Text {
+            text: root.count;
+            font-size: 12px;
+            vertical-alignment: center;
+            color: root.chosen ? Colors.accent : Colors.dim;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The search box: a rim that takes the accent while it has the keyboard, and
+// the hint while it is empty.
+export component SearchField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    // The user changed the text.
+    callback edited(string);
+    // Enter was pressed in the field.
+    callback accepted;
+    forward-focus: input;
+    public function paste() { input.paste(); }
+
+    width: 220px;
+    height: 34px;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: input.has-focus ? Colors.accent : Colors.line;
+    accessible-role: text-input;
+    accessible-label: root.placeholder;
+
+    input := TextInput {
+        x: Space.m;
+        width: root.width - 2 * Space.m;
+        height: root.height;
+        vertical-alignment: center;
+        text <=> root.text;
+        color: Colors.foreground;
+        font-size: 14px;
+        single-line: true;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(); }
+    }
+    if root.text == "": Text {
+        x: Space.m;
+        height: root.height;
+        text: root.placeholder;
+        color: Colors.dim;
+        font-size: 14px;
+        vertical-alignment: center;
+    }
+}

@@ -12,6 +12,7 @@
 pub mod achievements;
 pub mod appinfo;
 pub mod areweanticheatyet;
+pub mod browse;
 pub mod cloud_saves;
 pub mod config;
 pub mod covers;

@@ -1,0 +1,378 @@
+// The Library page: chip rows, and the grid of covers. The Rust side
+// (src/library_ui.rs) fills `LibraryData`; nothing here holds a game.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ChipButton } from "components.slint";
+import { ListView } from "std-widgets.slint";
+
+export struct Card {
+    id: string,
+    title: string,
+    // "STEAM · 12 h", under the title.
+    caption: string,
+    caption-accent: bool,
+    faded: bool,
+    badge: string,
+    // The share of achievements, 0 to 1, or -1 for none.
+    progress: float,
+    marked: bool,
+    has-cover: bool,
+    // The cover is being read: an empty cover, not the title.
+    loading: bool,
+    cover: image,
+}
+
+// One row of the grid: `first` is the place of its first card in the list.
+export struct CardRow {
+    first: int,
+    cards: [Card],
+}
+
+export struct ChipData {
+    // Where the Rust side finds what the chip does.
+    id: int,
+    label: string,
+    count: string,
+    chosen: bool,
+}
+
+export global LibraryData {
+    in property <[CardRow]> rows;
+    // The place of the card under the cursor.
+    in property <int> cursor;
+    in property <[ChipData]> views;
+    in property <[ChipData]> sources;
+    in property <[ChipData]> sorts;
+    in property <[ChipData]> organize;
+    in property <[ChipData]> bulk;
+    // "3 marked", when any are.
+    in property <string> marked;
+    // What the page says instead of the grid; empty when there are cards.
+    in property <string> empty-title;
+    in property <string> empty-about;
+    in property <bool> scanning;
+    in property <string> status;
+    in property <string> hints;
+    in-out property <string> search;
+    // Where the grid is scrolled: 0 at the top, below 0 further down.
+    in-out property <length> viewport-y;
+
+    callback chip(int);
+    callback card-clicked(string);
+    callback card-marked(string);
+    callback columns-changed(int);
+    callback scrolled(float, float);
+    callback search-edited(string);
+    callback refresh();
+    // The window's language changed: what Rust wrote is written again.
+    callback relabel();
+    // A key the page's own scope did not use: text, then control, alt,
+    // meta and shift. Says whether it was taken.
+    callback key(string, bool, bool, bool, bool) -> bool;
+    callback back();
+}
+
+// The card's size is fixed so the keyboard knows the columns.
+export global Grid {
+    out property <length> cover-width: 180px;
+    out property <length> cover-height: 270px;
+    out property <length> caption-height: 84px;
+    out property <length> card-padding: 6px;
+    out property <length> card-width: self.cover-width + 2 * self.card-padding;
+    out property <length> card-height: self.cover-height + self.caption-height + 4px + 2 * self.card-padding;
+    out property <length> spacing: 16px;
+    out property <length> margin: 24px;
+}
+
+component Badge inherits Rectangle {
+    in property <string> label;
+    in property <color> tint;
+    background: Colors.background.with-alpha(0.82);
+    border-width: 1px;
+    border-color: root.tint.with-alpha(0.5);
+    // Its text's size, not the whole cover.
+    width: label-row.preferred-width;
+    height: label-row.preferred-height;
+    label-row := HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        Text {
+            text: root.label;
+            font-size: 11px;
+            font-weight: 700;
+            color: root.tint;
+        }
+    }
+}
+
+component CardView inherits Rectangle {
+    in property <Card> card;
+    in property <bool> selected;
+    callback clicked;
+    callback marked;
+
+    width: Grid.card-width;
+    height: Grid.card-height;
+    background: touch.has-hover ? Colors.surface : transparent;
+    border-width: 2px;
+    border-radius: 2px;
+    border-color: root.card.marked ? Colors.good : root.selected ? Colors.accent : transparent;
+    accessible-role: button;
+    accessible-label: root.card.title;
+    accessible-action-default => { root.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Rectangle {
+        x: Grid.card-padding;
+        y: Grid.card-padding;
+        width: Grid.cover-width;
+        height: Grid.cover-height;
+        clip: true;
+        border-radius: 2px;
+
+        if root.card.has-cover: Image {
+            width: 100%;
+            height: 100%;
+            source: root.card.cover;
+            image-fit: cover;
+            opacity: root.card.faded ? 0.35 : 1.0;
+        }
+        if !root.card.has-cover: Rectangle {
+            background: Colors.surface;
+            if !root.card.loading: Text {
+                x: 12px;
+                width: parent.width - 24px;
+                height: parent.height;
+                text: root.card.title;
+                font-size: 18px;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                color: Colors.foreground;
+            }
+        }
+        // The progress line along the foot.
+        if root.card.progress >= 0: Rectangle {
+            y: parent.height - 3px;
+            height: 3px;
+            background: Colors.raised;
+            Rectangle {
+                width: parent.width * clamp(root.card.progress, 0, 1);
+                background: Colors.accent;
+            }
+        }
+        // The mark box, top left; the badge, top right.
+        Rectangle {
+            x: Space.s;
+            y: Space.s;
+            width: 20px;
+            height: 20px;
+            background: root.card.marked ? Colors.good : mark-touch.has-hover ? Colors.raised : Colors.surface;
+            border-width: 1px;
+            border-color: root.card.marked ? Colors.good : Colors.line;
+            accessible-role: checkbox;
+            accessible-checked: root.card.marked;
+            accessible-label: root.card.title;
+            accessible-action-default => { root.marked(); }
+            mark-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.marked(); }
+            }
+        }
+        if root.card.badge != "": Badge {
+            x: parent.width - self.width - Space.s;
+            y: Space.s;
+            label: root.card.badge;
+            tint: Colors.accent;
+        }
+    }
+
+    Rectangle {
+        x: Grid.card-padding;
+        y: Grid.card-padding + Grid.cover-height + 4px;
+        width: Grid.cover-width;
+        height: Grid.caption-height;
+        clip: true;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            Text {
+                text: root.card.title;
+                font-size: 14px;
+                wrap: word-wrap;
+                color: Colors.foreground;
+            }
+            Text {
+                text: root.card.caption;
+                font-size: 12px;
+                wrap: word-wrap;
+                color: root.card.caption-accent ? Colors.accent : Colors.dim;
+            }
+        }
+    }
+}
+
+export component LibraryPage inherits Rectangle {
+    // How many cards fit across: the window's width less the margins, the
+    // scroll bar's room, and one gap more than there are between cards.
+    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - 12px + Grid.spacing) / (Grid.card-width + Grid.spacing)));
+    // Where the first card starts, so the grid is centred and a short last
+    // row stays in its columns.
+    property <length> left: (root.width - 12px - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
+
+    changed columns => { LibraryData.columns-changed(root.columns); }
+    init => { LibraryData.columns-changed(root.columns); }
+
+    VerticalLayout {
+        // The stores and the sorts, and Refresh at the right.
+        HorizontalLayout {
+            padding-top: Space.xl;
+            padding-bottom: Space.xs;
+            padding-left: Grid.margin;
+            padding-right: Grid.margin;
+            spacing: Space.l;
+            FlexboxLayout {
+                horizontal-stretch: 1;
+                // The chips keep their own height, whatever room is left.
+                vertical-stretch: 0;
+                cross-axis-alignment: start;
+                cross-axis-line-alignment: start;
+                spacing: Space.s;
+                for chip in LibraryData.sources: ChipButton {
+                    label: chip.label;
+                    count: chip.count;
+                    chosen: chip.chosen;
+                    clicked => { LibraryData.chip(chip.id); }
+                }
+                Text {
+                    text: Tr.t("library-sort-keys").to-uppercase();
+                    font-size: 12px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                }
+                for chip in LibraryData.sorts: ChipButton {
+                    label: chip.label;
+                    chosen: chip.chosen;
+                    clicked => { LibraryData.chip(chip.id); }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Space.s;
+                Rectangle {
+                    width: refresh-row.preferred-width;
+                    height: 28px;
+                    background: refresh-touch.has-hover && !LibraryData.scanning ? Colors.raised : transparent;
+                    border-width: 1px;
+                    border-color: Colors.line;
+                    refresh-row := HorizontalLayout {
+                        padding-left: Space.m;
+                        padding-right: Space.m;
+                        spacing: 6px;
+                        alignment: center;
+                        Image {
+                            source: @image-url("../../zendo/icons/refresh-cw.svg");
+                            colorize: Colors.foreground;
+                            width: 14px;
+                            height: 14px;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        Text {
+                            text: (LibraryData.scanning ? Tr.t("library-scanning") : Tr.t("library-refresh")).to-uppercase();
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            color: LibraryData.scanning ? Colors.dim : Colors.foreground;
+                        }
+                    }
+                    refresh-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        enabled: !LibraryData.scanning;
+                        clicked => { LibraryData.refresh(); }
+                    }
+                }
+            }
+        }
+        // Organize: statuses, collections, and what is marked.
+        FlexboxLayout {
+            vertical-stretch: 0;
+            cross-axis-alignment: start;
+            cross-axis-line-alignment: start;
+            padding-top: Space.xs;
+            padding-bottom: Space.xs;
+            padding-left: Grid.margin;
+            padding-right: Grid.margin;
+            spacing: Space.s;
+            Text {
+                text: Tr.t("library-organize").to-uppercase();
+                font-size: 12px;
+                color: Colors.dim;
+                vertical-alignment: center;
+            }
+            for chip in LibraryData.organize: ChipButton {
+                label: chip.label;
+                count: chip.count;
+                chosen: chip.chosen;
+                clicked => { LibraryData.chip(chip.id); }
+            }
+            if LibraryData.marked != "": Text {
+                text: LibraryData.marked;
+                font-size: 13px;
+                color: Colors.accent;
+                vertical-alignment: center;
+            }
+            for chip in LibraryData.bulk: ChipButton {
+                label: chip.label;
+                clicked => { LibraryData.chip(chip.id); }
+            }
+        }
+
+        if LibraryData.empty-title != "": Rectangle {
+            VerticalLayout {
+                alignment: center;
+                spacing: Space.s;
+                Text {
+                    text: LibraryData.empty-title;
+                    font-size: LibraryData.empty-about != "" ? 20px : 14px;
+                    color: LibraryData.empty-about != "" ? Colors.foreground : Colors.dim;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if LibraryData.empty-about != "": Text {
+                    text: LibraryData.empty-about;
+                    color: Colors.dim;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        if LibraryData.empty-title == "": ListView {
+            content-y <=> LibraryData.viewport-y;
+            // The cursor's scrolling needs both: how far down, and how tall.
+            init => {
+                LibraryData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            changed content-y => {
+                LibraryData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            changed visible-height => {
+                LibraryData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            for row in LibraryData.rows: Rectangle {
+                height: Grid.card-height + Grid.spacing;
+                for card[i] in row.cards: CardView {
+                    x: root.left + i * (Grid.card-width + Grid.spacing);
+                    card: card;
+                    selected: row.first + i == LibraryData.cursor;
+                    clicked => { LibraryData.card-clicked(card.id); }
+                    marked => { LibraryData.card-marked(card.id); }
+                }
+            }
+        }
+    }
+}

@@ -1,9 +1,10 @@
 // The top bar: the name, the tabs (Library, Store, Stats), and the Downloads
-// and Settings icon buttons, as in the Iced window's `app/top_bar.rs`. The view
-// chips and the search come with the Library (item 48).
+// and Settings icon buttons, as in the Iced window's `app/top_bar.rs`; on the
+// Library the view chips and the search.
 
 import { Colors, Space, Tr } from "style.slint";
-import { Tab, IconButton } from "components.slint";
+import { Tab, IconButton, ChipButton, SearchField } from "components.slint";
+import { LibraryData } from "library.slint";
 
 export enum Page { library, store, stats, downloads, settings }
 
@@ -13,6 +14,9 @@ export component TopBar inherits Rectangle {
     in property <string> store-count;
     in property <string> downloads-count;
     callback navigate(Page);
+    // Ctrl+F and Ctrl+V: the search takes the keyboard.
+    public function focus-search() { search.focus(); }
+    public function paste-search() { search.focus(); search.paste(); }
 
     background: Colors.sidebar;
 
@@ -58,7 +62,28 @@ export component TopBar inherits Rectangle {
                 current: root.page == Page.stats;
                 clicked => { root.navigate(Page.stats); }
             }
+            // The view chips, on the Library only.
+            if root.page == Page.library: HorizontalLayout {
+                padding-left: Space.m;
+                spacing: Space.s;
+                for chip in LibraryData.views: ChipButton {
+                    label: chip.label;
+                    count: chip.count;
+                    chosen: chip.chosen;
+                    clicked => { LibraryData.chip(chip.id); }
+                }
+            }
             Rectangle { horizontal-stretch: 1; }
+            // Always there, so Ctrl+F and Ctrl+V can reach it; no room on
+            // the other pages.
+            search := SearchField {
+                visible: root.page == Page.library;
+                width: root.page == Page.library ? 220px : 0px;
+                placeholder: Tr.t("library-search");
+                text <=> LibraryData.search;
+                edited(text) => { LibraryData.search-edited(text); }
+                accepted => { LibraryData.key("\n", false, false, false, false); }
+            }
             IconButton {
                 icon: @image-url("../../zendo/icons/download.svg");
                 label: Tr.t("page-downloads");

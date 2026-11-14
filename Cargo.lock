@@ -9169,6 +9169,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "i-slint-backend-testing",
+ "image",
  "slint",
  "slint-build",
  "zendo-core",

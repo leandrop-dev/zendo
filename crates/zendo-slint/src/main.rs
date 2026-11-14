@@ -3,6 +3,9 @@
 //! command line, the helper windows and everything else that needs no toolkit
 //! are in `zendo-shell`.
 
+mod covers;
+mod library;
+mod library_ui;
 mod theme;
 mod tr;
 mod window;
