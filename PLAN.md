@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38 and 41 to 48 are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38 and 41 to 49 are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -50,17 +50,18 @@ list and details views, OptiScaler and recompiled games are on hold.
   keyboard and pad cursor, cover downloads), the grid's logic is
   `zendo_core::browse` and the labels are `zendo_shell::format`, both shared
   with Iced. On 2,700 distinct covers it scrolls at 61 to 75 fps where Iced
-  holds 3 to 9 (`docs/history.md`, item 48). Item 49 is under way: 49a built
-  (a card opens the game page with Play and Stop, the running badge, status,
-  favorite, hide, tiles, sessions and details, local games with the Add game
-  sheet; the run logic is shared in `zendo_shell::running`), 49b (the
+  holds 3 to 9 (`docs/history.md`, item 48). Item 49, the game page, is built:
+  49a (a card opens the game page with Play and Stop, the running badge,
+  status, favorite, hide, tiles, sessions and details, local games with the
+  Add game sheet; the run logic is shared in `zendo_shell::running`), 49b (the
   ProtonDB pill, Steam's description and facts, screenshots, requirements,
-  achievements, DLC installed, the Steam app id), 49c still to do.
-  The other pages show their name. Run it as `zendo-slint`.
+  achievements, DLC installed, the Steam app id) and 49c (Anti-cheat, the Steam
+  Deck pill, the cloud saves row, the Wine prefix card, GOG's changelog and
+  total time played). The other pages show their name. Run it as `zendo-slint`.
 
 ## Next
 
-Items 49 to 54, the port: `docs/backlog.md` has them, and what is on hold.
+Items 50 to 54, the port: `docs/backlog.md` has them, and what is on hold.
 
 ## Direction [firm]
 

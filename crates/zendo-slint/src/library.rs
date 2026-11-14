@@ -851,6 +851,16 @@ impl Browser {
         self.marks_changed(&[id.to_owned()])
     }
 
+    /// A store says the game was played for this long in all: kept where it
+    /// is more than the count known.
+    pub fn raise_minutes(&mut self, id: &str, minutes: u64) -> Outcome {
+        match self.games.iter_mut().find(|game| game.id == id) {
+            Some(game) if game.played.minutes < minutes => game.played.minutes = minutes,
+            _ => return Outcome::default(),
+        }
+        self.marks_changed(&[id.to_owned()])
+    }
+
     /// A game by its id.
     #[must_use]
     pub fn game(&self, id: &str) -> Option<&Game> {

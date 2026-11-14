@@ -25,10 +25,16 @@ use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
 #[path = "cards_ui.rs"]
 mod cards;
+#[path = "compat_ui.rs"]
+mod compat;
 #[path = "game_ui.rs"]
 mod game;
+#[path = "gog_ui.rs"]
+mod gog;
 #[path = "local_ui.rs"]
 mod local;
+#[path = "prefix_ui.rs"]
+mod prefix;
 
 /// How long covers that came in are let to gather before the rows show them.
 const COVER_DELAY: Duration = Duration::from_millis(40);
@@ -163,6 +169,13 @@ struct Glue {
     local: local::LocalState,
     /// What the stores and sites say about the open game (`cards_ui.rs`).
     cards: cards::CardsState,
+    /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
+    /// (`compat_ui.rs`).
+    compat: compat::CompatState,
+    /// The Wine prefix card (`prefix_ui.rs`).
+    prefix: prefix::PrefixState,
+    /// GOG's changelog and total time played (`gog_ui.rs`).
+    gog: gog::GogState,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
@@ -234,6 +247,9 @@ impl Glue {
             game: game::GameState::new(persist),
             local: local::LocalState::default(),
             cards: cards::CardsState::new(),
+            compat: compat::CompatState::new(persist),
+            prefix: prefix::PrefixState::new(),
+            gog: gog::GogState::new(),
             persist,
         })
     }
@@ -293,6 +309,9 @@ impl Glue {
         self.connect_game(window);
         self.connect_local(window);
         self.connect_cards(window);
+        self.connect_compat(window);
+        self.connect_prefix(window);
+        self.connect_gog(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -1199,6 +1218,163 @@ mod tests {
             glue.browser.borrow().status(),
             Some(t!("local-removed", title = "Game 02").as_str())
         );
+    }
+
+    #[test]
+    fn a_windows_game_gets_the_prefix_tools_and_gogs_changelog_and_total() {
+        use zendo_core::gog_changelog::{Block, Entry};
+        use zendo_core::prefix_tools::Ran;
+        i_slint_backend_testing::init_no_event_loop();
+        let window = MainWindow::new().expect("the window opens");
+        let glue = Glue::new(&window, false);
+        glue.connect(&window);
+        let mut sugar = Game::new(
+            "gog:1".into(),
+            "Sugar".into(),
+            Source::Gog,
+            Launch::Engine {
+                runner: "gogdl".into(),
+                app: "1".into(),
+            },
+        );
+        sugar.details.platform = Some("windows".into());
+        sugar.played.minutes = 90;
+        let outcome = glue.browser.borrow_mut().loaded(
+            Library {
+                games: vec![sugar],
+                problems: Vec::new(),
+            },
+            Some(Sort::Title),
+            Vec::new(),
+            Vec::new(),
+        );
+        glue.apply(outcome);
+        glue.sync();
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("gog:1".into());
+        assert!(game.get_prefix_show());
+        assert!(game.get_prefix_free() && game.get_prefix_gog());
+        // One tool at a time, and how it went.
+        game.invoke_prefix_run(0);
+        assert!(!game.get_prefix_free());
+        assert_eq!(game.get_prefix_status_tone(), 3);
+        game.invoke_prefix_run(1);
+        assert!(
+            game.get_prefix_status().contains("Wine settings"),
+            "the first still runs"
+        );
+        glue.prefix_done("gog:1".into(), Ok(Ran::default()));
+        assert!(game.get_prefix_free());
+        assert_eq!(game.get_prefix_status(), "Wine settings ended");
+        assert_eq!(game.get_prefix_status_tone(), 1);
+        // An option is not a component.
+        game.invoke_prefix_typed("vcrun2022 -q".into());
+        game.invoke_prefix_install();
+        assert!(game.get_prefix_free());
+        assert_eq!(game.get_prefix_status_tone(), 2);
+        game.invoke_prefix_typed("vcrun2022".into());
+        game.invoke_prefix_install();
+        assert!(!game.get_prefix_free(), "installing");
+        glue.prefix_done(
+            "gog:1".into(),
+            Ok(Ran {
+                installed: vec!["vcrun2022".into()],
+                already: Vec::new(),
+            }),
+        );
+        assert_eq!(game.get_prefix_components(), "", "typed text is cleared");
+        // GOG's changelog: the newest update, and a few more on demand.
+        assert_eq!(game.get_changelog().row_count(), 0);
+        let update = |title: &str| Entry {
+            title: Some(title.into()),
+            blocks: vec![Block::Item("A fix".into())],
+        };
+        glue.changelog_arrived("gog:1".into(), Ok(vec![update("2.0"), update("1.1")]));
+        assert_eq!(game.get_changelog().row_count(), 2);
+        assert_eq!(
+            game.get_changelog_more(),
+            t!("changelog-earlier", count = 1)
+        );
+        game.invoke_more_changelog();
+        assert_eq!(
+            game.get_changelog().row_count(),
+            5,
+            "a gap between two updates"
+        );
+        assert_eq!(game.get_changelog_more(), "");
+        // GOG's total time, where it is more than Zendo's count.
+        let minutes = || {
+            glue.browser
+                .borrow()
+                .game("gog:1")
+                .map(|game| game.played.minutes)
+        };
+        glue.gog_total_arrived("gog:1", &Ok(Some(60)));
+        assert_eq!(minutes(), Some(90));
+        glue.gog_total_arrived("gog:1", &Ok(Some(300)));
+        assert_eq!(minutes(), Some(300));
+    }
+
+    #[test]
+    fn the_anti_cheat_card_leads_when_online_play_is_blocked_and_the_deck_pill_follows() {
+        use zendo_core::areweanticheatyet::{Entry, Note, Status};
+        use zendo_core::steam_deck::{Category, Report};
+        let (window, glue) = page(3);
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:1".into());
+        assert!(!game.get_ac_show());
+        let entry = |status| Entry {
+            name: "Rust".into(),
+            status,
+            anti_cheats: vec!["Easy Anti-Cheat".into()],
+            notes: vec![Note {
+                text: "A note".into(),
+                link: Some("https://example.org/n".into()),
+            }],
+            latest: None,
+            slug: "rust".into(),
+        };
+        glue.anti_cheat_arrived("desktop:1".into(), Ok(Some(entry(Status::Denied))));
+        assert!(game.get_ac_show() && game.get_ac_first());
+        assert_eq!(game.get_ac_label(), "DENIED");
+        assert_eq!(game.get_ac_tone(), 2);
+        assert_eq!(game.get_ac_makers(), "Easy Anti-Cheat");
+        let notes: Vec<_> = game.get_ac_notes().iter().collect();
+        assert_eq!(
+            (notes.len(), notes[0].url.as_str()),
+            (1, "https://example.org/n")
+        );
+        glue.anti_cheat_arrived("desktop:1".into(), Ok(Some(entry(Status::Supported))));
+        assert!(game.get_ac_show() && !game.get_ac_first(), "after About");
+        glue.anti_cheat_arrived("desktop:1".into(), Ok(None));
+        assert!(!game.get_ac_show(), "not on the list");
+        // A failure becomes a card with the way to ask again.
+        glue.anti_cheat_arrived("desktop:1".into(), Err("offline".into()));
+        let failures: Vec<_> = game.get_failures().iter().collect();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].label, t!("anti-cheat-title"));
+        // Valve's review: a pill after ProtonDB's, and a failure a card.
+        glue.deck_arrived(
+            "desktop:1".into(),
+            Ok(Some(Report {
+                app: 1,
+                category: Category::Verified,
+                notes: Vec::new(),
+            })),
+        );
+        let pills: Vec<_> = game.get_pills().iter().collect();
+        assert_eq!(pills.len(), 1);
+        assert_eq!(pills[0].label, t!("deck-verified"));
+        glue.deck_arrived("desktop:1".into(), Err("offline".into()));
+        assert_eq!(game.get_pills().row_count(), 0);
+        assert_eq!(game.get_failures().row_count(), 2);
+        // Another Steam app id: both answers are forgotten, to be asked again.
+        glue.give_steam_app("desktop:1", Some(7));
+        assert_eq!(game.get_failures().row_count(), 0);
     }
 
     #[test]

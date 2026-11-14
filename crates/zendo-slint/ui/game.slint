@@ -22,6 +22,8 @@ export struct Fact {
     mono: bool,
     // The value opens this link, when there is one.
     url: string,
+    // The value's colour: 0 plain, 1 good, 2 bad, 3 dim.
+    tone: int,
 }
 
 // A badge on the header that opens a page: ProtonDB's rating, say.
@@ -40,6 +42,13 @@ export struct Shot {
     thumb: image,
     ready: bool,
     full: string,
+}
+
+// A line of GOG's changelog: 0 an update's title, 1 a heading, 2 a paragraph,
+// 3 a list item, 4 a gap between updates.
+export struct Line {
+    kind: int,
+    text: string,
 }
 
 // A line of the system requirements.
@@ -105,6 +114,32 @@ export global GameData {
     in property <[Req]> req;
     // Cards that could not be asked: the card's name and why.
     in property <[Fact]> failures;
+    // The Anti-cheat card: shown first when the game will not play online.
+    in property <bool> ac-show;
+    in property <bool> ac-first;
+    in property <string> ac-label;
+    // 1 good, 2 bad, 3 dim.
+    in property <int> ac-tone;
+    in property <string> ac-makers;
+    in property <string> ac-about;
+    // The list's notes: the words in `label`, the source in `url`.
+    in property <[Fact]> ac-notes;
+    in property <string> ac-url;
+    // The Wine prefix card, for a Windows game Zendo starts.
+    in property <bool> prefix-show;
+    // No tool runs in the prefix and the game does not.
+    in property <bool> prefix-free;
+    in property <bool> prefix-gog;
+    // The prefix's folder, empty when it is not there yet.
+    in property <string> prefix-folder;
+    in-out property <string> prefix-components;
+    in property <[Fact]> prefix-fixes;
+    in property <string> prefix-status;
+    // 1 good, 2 bad, 3 dim.
+    in property <int> prefix-status-tone;
+    // GOG's changelog.
+    in property <[Line]> changelog;
+    in property <string> changelog-more;
     // The Technical card's Steam app id row.
     in property <bool> steam-app-row;
     in property <string> steam-app-line;
@@ -130,6 +165,12 @@ export global GameData {
     callback retry();
     callback steam-app-save(string);
     callback steam-app-clear();
+    // 0 Wine settings, 1 winetricks, 2 GOG's setup, 3 the known fixes.
+    callback prefix-run(int);
+    callback prefix-pick();
+    callback prefix-typed(string);
+    callback prefix-install();
+    callback more-changelog();
 }
 
 component Card inherits Rectangle {
@@ -166,7 +207,7 @@ component FactRow inherits HorizontalLayout {
         if root.fact.url == "": Text {
             text: root.fact.value;
             font-size: root.fact.mono ? 12px : 14px;
-            color: Colors.foreground;
+            color: root.fact.tone == 1 ? Colors.good : root.fact.tone == 2 ? Colors.bad : root.fact.tone == 3 ? Colors.dim : Colors.foreground;
             wrap: word-wrap;
         }
         if root.fact.url != "": Rectangle {
@@ -187,6 +228,177 @@ component FactRow inherits HorizontalLayout {
             small: true;
             horizontal-stretch: 0;
             clicked => { GameData.open-path(root.fact.value); }
+        }
+    }
+}
+
+// Whether the game's anti-cheat lets it play online on Linux: the verdict, the
+// anti-cheats it ships, what the site says, its notes and the way to its page.
+component AntiCheatCard inherits Card {
+    heading: Tr.t("anti-cheat-title");
+    property <color> tone: GameData.ac-tone == 1 ? Colors.good : GameData.ac-tone == 2 ? Colors.bad : Colors.dim;
+    VerticalLayout {
+        spacing: Space.m;
+        HorizontalLayout {
+            alignment: start;
+            spacing: Space.m;
+            Rectangle {
+                width: verdict.preferred-width + 14px;
+                height: verdict.preferred-height + 4px;
+                border-width: 1px;
+                border-color: root.tone.with-alpha(0.5);
+                verdict := Text {
+                    x: 7px;
+                    y: 2px;
+                    text: GameData.ac-label;
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: root.tone;
+                }
+            }
+            Text {
+                text: GameData.ac-makers;
+                font-size: 14px;
+                color: Colors.dim;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: GameData.ac-about;
+            font-size: 14px;
+            color: Colors.foreground;
+            wrap: word-wrap;
+        }
+        for note in GameData.ac-notes: HorizontalLayout {
+            spacing: Space.m;
+            Text {
+                text: "\u{2022}";
+                font-size: 14px;
+                color: Colors.dim;
+                vertical-alignment: top;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: note-text.preferred-height;
+                note-text := Text {
+                    width: parent.width;
+                    text: note.label;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                    color: note-touch.has-hover && note.url != "" ? Colors.accent : Colors.foreground;
+                }
+                note-touch := TouchArea {
+                    enabled: note.url != "";
+                    mouse-cursor: note.url != "" ? pointer : default;
+                    clicked => { GameData.open-path(note.url); }
+                }
+            }
+        }
+        ActionButton {
+            label: Tr.t("anti-cheat-open");
+            small: true;
+            horizontal-stretch: 0;
+            clicked => { GameData.open-path(GameData.ac-url); }
+        }
+    }
+}
+
+// The tools that act on the game's Wine prefix, a box to install components
+// and the game's known fixes, with how the last tool went.
+component PrefixCard inherits Card {
+    heading: Tr.t("prefix-title");
+    VerticalLayout {
+        spacing: Space.m;
+        Text {
+            text: Tr.t("prefix-about");
+            font-size: 13px;
+            color: Colors.dim;
+            wrap: word-wrap;
+        }
+        FlexboxLayout {
+            vertical-stretch: 0;
+            cross-axis-alignment: start;
+            cross-axis-line-alignment: start;
+            spacing: Space.s;
+            ActionButton {
+                label: Tr.t("prefix-wine-settings");
+                small: true;
+                enabled: GameData.prefix-free;
+                clicked => { GameData.prefix-run(0); }
+            }
+            ActionButton {
+                label: "winetricks";
+                small: true;
+                enabled: GameData.prefix-free;
+                clicked => { GameData.prefix-run(1); }
+            }
+            ActionButton {
+                label: Tr.t("prefix-run-program");
+                small: true;
+                enabled: GameData.prefix-free;
+                clicked => { GameData.prefix-pick(); }
+            }
+            if GameData.prefix-gog: ActionButton {
+                label: Tr.t("prefix-gog-setup");
+                small: true;
+                enabled: GameData.prefix-free;
+                clicked => { GameData.prefix-run(2); }
+            }
+            if GameData.prefix-folder != "": ActionButton {
+                label: Tr.t("files-open-folder");
+                small: true;
+                clicked => { GameData.open-path(GameData.prefix-folder); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Space.m;
+            TextField {
+                horizontal-stretch: 1;
+                placeholder: Tr.t("prefix-components-placeholder");
+                text <=> GameData.prefix-components;
+                edited(typed) => { GameData.prefix-typed(typed); }
+                accepted => {
+                    if GameData.prefix-free { GameData.prefix-install(); }
+                }
+            }
+            ActionButton {
+                label: Tr.t("prefix-install");
+                small: true;
+                enabled: GameData.prefix-free;
+                horizontal-stretch: 0;
+                clicked => { GameData.prefix-install(); }
+            }
+        }
+        if GameData.prefix-fixes.length > 0: HorizontalLayout {
+            spacing: Space.m;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Space.xs;
+                Text {
+                    text: Tr.t("prefix-known-fixes-title");
+                    font-size: 14px;
+                    color: Colors.foreground;
+                }
+                for fix in GameData.prefix-fixes: Text {
+                    text: fix.label;
+                    font-size: 13px;
+                    color: Colors.dim;
+                    wrap: word-wrap;
+                }
+            }
+            ActionButton {
+                label: Tr.t("prefix-known-fixes");
+                small: true;
+                enabled: GameData.prefix-free;
+                horizontal-stretch: 0;
+                clicked => { GameData.prefix-run(3); }
+            }
+        }
+        if GameData.prefix-status != "": Text {
+            text: GameData.prefix-status;
+            font-size: 13px;
+            wrap: word-wrap;
+            color: GameData.prefix-status-tone == 1 ? Colors.good : GameData.prefix-status-tone == 2 ? Colors.bad : Colors.dim;
         }
     }
 }
@@ -239,7 +451,8 @@ export component GamePage inherits Rectangle {
     // Whether the page's wide column has anything to say.
     property <bool> has-main: GameData.about != "" || GameData.no-match != "" || GameData.shots.length > 0
         || GameData.dlc.length > 0 || GameData.sessions.length > 0 || GameData.ach.length > 0
-        || GameData.req.length > 0 || GameData.failures.length > 0;
+        || GameData.req.length > 0 || GameData.failures.length > 0 || GameData.ac-show
+        || GameData.prefix-show || GameData.changelog.length > 0;
     property <int> scroll-request: GameData.scroll-end;
     changed scroll-request => {
         sv.content-y = min(0px, -(sv.content-height - sv.visible-height));
@@ -436,6 +649,7 @@ export component GamePage inherits Rectangle {
                         width: (root.inner - Space.xl) * 0.6;
                         alignment: start;
                         spacing: Space.xl;
+                        if GameData.ac-show && GameData.ac-first: AntiCheatCard { }
                         if GameData.about != "": Card {
                             heading: Tr.t("game-about");
                             Text {
@@ -488,6 +702,7 @@ export component GamePage inherits Rectangle {
                                 }
                             }
                         }
+                        if GameData.ac-show && !GameData.ac-first: AntiCheatCard { }
                         if GameData.dlc.length > 0: Card {
                             heading: Tr.t("dlc-title");
                             VerticalLayout {
@@ -511,6 +726,28 @@ export component GamePage inherits Rectangle {
                                         font-size: 13px;
                                         color: Colors.good;
                                     }
+                                }
+                            }
+                        }
+                        if GameData.prefix-show: PrefixCard { }
+                        if GameData.changelog.length > 0: Card {
+                            heading: Tr.t("changelog-title");
+                            VerticalLayout {
+                                spacing: Space.s;
+                                // One text per line: an update's title and headings in bold,
+                                // paragraphs, items with a bullet, a thin gap between updates.
+                                for part in GameData.changelog: Text {
+                                    text: part.kind == 3 ? "\u{2022}  " + part.text : part.kind == 4 ? " " : part.text;
+                                    font-size: part.kind == 0 ? 15px : part.kind == 4 ? 10px : 14px;
+                                    font-weight: part.kind <= 1 ? 700 : 400;
+                                    color: part.kind == 1 ? Colors.dim : Colors.foreground;
+                                    wrap: word-wrap;
+                                }
+                                if GameData.changelog-more != "": ActionButton {
+                                    label: GameData.changelog-more;
+                                    small: true;
+                                    horizontal-stretch: 0;
+                                    clicked => { GameData.more-changelog(); }
                                 }
                             }
                         }

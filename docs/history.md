@@ -3846,3 +3846,60 @@ question: asking, got, failed) and the cards in `ui/game.slint`.
   cover the lists and Show more), a failed card offline, a click on a
   screenshot, the pill or Metacritic (all `xdg-open`, as PCGamingWiki in
   49a), the pt-PT words, a window narrower than the page needs.
+
+## Item 49c, how a game plays on Linux, in Slint (2026-11-14)
+
+The rest of the game page's network and tool cards, in `zendo-slint`: three
+child modules of `library_ui` beside `cards_ui` (`compat_ui.rs`, `prefix_ui.rs`,
+`gog_ui.rs`), the cards in `ui/game.slint`.
+
+- **Anti-cheat** card (`AreWeAntiCheatYet`): the verdict badge, the
+  anti-cheats the game ships, the site's meaning, the latest change and the
+  list's notes (each opens its source), and a button to the site. Shown first
+  when the status warns (denied, broken, unknown), else after About; asked
+  once a session after ProtonDB's answer gives the Steam app id.
+- **Steam Deck** pill beside ProtonDB's (Verified in the theme's good,
+  Playable in ProtonDB's Gold, Unsupported dim), Valve's notes in its hover
+  text, the game's Steam page when clicked. The words for Valve's tests are
+  duplicated from Iced until the cut-over. A failure of either shows as a
+  card in the failures list with Try again (which asks both again).
+- **Cloud saves** row in the Details card for Epic and GOG Windows games, in
+  the tone of how the last sync went. The syncs themselves were already in
+  `zendo_shell::running`; the window now reads their effects (`CloudReload`,
+  `CloudSyncing`) instead of ignoring them.
+- **Wine prefix** card for a Windows game Zendo starts: Wine settings,
+  winetricks, Run a program, GOG's setup, the prefix's folder, a box to
+  install components (saved in the game's launch options), the game's known
+  fixes with why, and how the last tool went. One tool at a time per game,
+  none while the game runs.
+- **GOG**: the Changelog card (the newest update, three more each time Show
+  earlier updates is pressed) and GOG's total time played, raised over
+  Zendo's count (`Browser::raise_minutes`) when the page opens and again after
+  a session was sent (`Effect::RefreshGogTotal`).
+- **Moved to item 50**: the EOS overlay is a Settings section in Iced
+  (`eos_overlay.rs`: Install, Update, Remove), not a game-page card as
+  the backlog said.
+- **Found on screen, fixed**: giving a game a Steam app id did not forget the
+  anti-cheat and Deck answers, so a lookup made with no app id stayed "not on
+  the list" (Iced forgets both); and a Changelog card built as conditionals
+  inside a repeated layout drew its height but no text, so each line is one
+  `Text` whose size, weight and colour come from its kind.
+- **Checked** (clippy clean; 48 `zendo-slint` tests, three new): on screen in
+  the throwaway home with the network. A Windows game added by hand, given
+  Steam app 252490 (Rust): the Deck pill (Unsupported, its hover text with
+  the note and "Opens the game's Steam page"), the Anti-cheat card first,
+  DENIED in red with Easy Anti-Cheat, VAC, the site's words, the dated latest
+  note and its button; the Wine prefix card: Wine settings and Install both
+  ended with umu's own "needed" error in red (no umu on the stripped PATH, so
+  no Wine started), the typed component was saved to `games.toml`, Run a
+  program showed the file dialog's failure (`XDG_DATA_DIRS=/nonexistent`
+  aborts the helper). A GOG-installed Windows game (Cyberpunk 2077's product
+  id): the Cloud saves row ("They sync once the game has started"), GOG's
+  setup button, the Changelog card (Patch 2.5 with headings and bullets), Show
+  earlier updates (27 more) added Patch 2.31 after a gap, ProtonDB Gold and
+  Deck Verified pills.
+- **Not checked.** GOG's total (needs a GOG sign-in), the cloud line after a
+  real sync, Run a program with a real dialog, a real Wine or winetricks run,
+  known fixes (needs a game Heroic's list knows), the buttons that open the
+  browser (the anti-cheat site, a note's source, the Deck pill), pt-PT, a
+  light scheme, a window narrower than the page needs.

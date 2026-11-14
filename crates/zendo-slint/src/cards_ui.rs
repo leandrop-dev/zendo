@@ -178,6 +178,7 @@ fn fact(label: impl Into<String>, value: impl Into<String>) -> Fact {
         path: false,
         mono: false,
         url: "".into(),
+        tone: 0,
     }
 }
 
@@ -226,7 +227,7 @@ impl Glue {
 
     /// Runs `work` on a thread and hands its answer to `arrived` on the
     /// window's thread. Nothing is asked in tests.
-    fn ask<R: Send + 'static>(
+    pub(super) fn ask<R: Send + 'static>(
         &self,
         work: impl FnOnce() -> Result<R, String> + Send + 'static,
         arrived: impl FnOnce(&Self, Result<R, String>) + Send + 'static,
@@ -244,6 +245,8 @@ impl Glue {
     /// The page just opened: asks what it has not asked yet this session.
     pub(super) fn want_cards(&self, id: &str) {
         self.cards.achievements_more.set(0);
+        self.want_prefix(id);
+        self.want_gog(id);
         self.want_rating(id);
         self.want_achievements(id);
     }
@@ -284,6 +287,7 @@ impl Glue {
             return;
         };
         let app = rating.as_ref().map(|rating| rating.app);
+        self.want_compat(&id, app);
         self.want_requirements(&id, app);
         if let Some(app) = app {
             self.want_facts(&id, app);
@@ -457,6 +461,7 @@ impl Glue {
             Some(Ask::Got(Some(rating))) => Some(rating.app),
             _ => None,
         };
+        self.want_compat(id, app);
         self.want_requirements(id, app);
         self.want_achievements(id);
         if let Some(app) = app {
@@ -494,6 +499,7 @@ impl Glue {
         self.cards.ratings.borrow_mut().remove(id);
         self.cards.facts.borrow_mut().remove(id);
         self.cards.requirements.borrow_mut().remove(id);
+        self.forget_compat(id);
         self.say(if let Some(app) = app {
             t!("steam-app-saved", title = title, app = app.to_string())
         } else {
@@ -550,6 +556,7 @@ impl Glue {
             Some(Ask::Got(Some(rating))) => pills.push(pill_of(rating)),
             _ => {}
         }
+        pills.extend(self.deck_pills(id));
         self.cards.pills.set_vec(pills);
 
         // About, or the way to give the game a Steam app id.
@@ -586,7 +593,10 @@ impl Glue {
         }
         self.cards.shots.set_vec(shots);
 
+        self.show_anti_cheat(id, data);
         self.show_dlc(game, data);
+        self.show_prefix(game, data);
+        self.show_changelog(id, data);
         images.extend(self.show_achievements(id, data));
         self.show_requirements(id, data);
         self.show_failures(id);
@@ -689,7 +699,7 @@ impl Glue {
 
     /// The cards that could not be asked, with why.
     fn show_failures(&self, id: &str) {
-        let mut failures = Vec::new();
+        let mut failures = self.compat_failures(id);
         if let Some(Ask::Failed(error)) = self.cards.requirements.borrow().get(id) {
             failures.push(fact(
                 t!("requirements-title"),

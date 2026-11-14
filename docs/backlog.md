@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38 and 41 to 48 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38 and 41 to 49 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -18,25 +18,23 @@ logic in `zendo-core`; where `app/*.rs` mixes logic with views, move the logic
 to `zendo-core` when that page is ported. Ask before building any other page
 `docs/design.md` lists (a Home page was built and removed at the user's wish).
 
-- **49** Game page and what hangs off it (running and its badge on the
-  cards, achievements, anti-cheat, ProtonDB, Steam facts, requirements, DLC,
-  cloud saves, prefix, EOS overlay, Deck, GOG, local games, Add game) and the
-  wide-art backdrop behind its header. Sliced into **49a** (shell, backdrop,
-  Play/Stop and the running badge, status, favorite, hide, tiles, sessions,
-  details, local games and Add game: built 2026-11-14), **49b** (Steam facts,
-  requirements, DLC, ProtonDB, achievements: built 2026-11-14; the DLC's
-  owned list and Install/Uninstall wait for 51) and **49c** (anti-cheat, cloud
-  saves, prefix, EOS overlay, Deck, GOG changelog and playtime). Left out of
-  49a on purpose, to land with their item: Edit categories (50), Update, the
-  job line, Check/Repair/Move/Uninstall and Steam Verify/Uninstall (51),
-  Launch options and Change cover/backdrop (52), Discord presence (50), the
-  saves' sync and GOG total after a session (49c), jobs held while a game runs
-  (51), the hero pills and the Technical card's Steam app id (49b).
-  Item 54's parity checklist must go through this list.
-- **50** Settings, engines, Protons, runtimes, themes, Accounts, About,
-  Collections sheet (the Library's COLLECTIONS and ADD TO COLLECTION chips
-  come with it; the collection and saved-view chips already filter). The
-  language switch there must call `tr::show`; the Library re-labels itself.
+- **49 built 2026-11-14** Game page and what hangs off it, in three slices:
+  **49a** (shell, backdrop, Play/Stop and the running badge, status, favorite,
+  hide, tiles, sessions, details, local games and Add game), **49b** (Steam
+  facts, requirements, DLC, ProtonDB, achievements; the DLC's owned list and
+  Install/Uninstall wait for 51) and **49c** (Anti-cheat, the Deck pill, the
+  cloud saves row and the syncs' effects, the Wine prefix card, GOG's
+  changelog and total time played). Left out on purpose, to land with their
+  item: Edit categories (50), Update, the job line, Check/Repair/Move/Uninstall
+  and Steam Verify/Uninstall (51), Launch options and Change cover/backdrop
+  (52), Discord presence (50), jobs held while a game runs (51). The EOS
+  overlay was listed under 49 but is a Settings section in Iced, so it is part
+  of 50. Item 54's parity checklist must go through this list.
+- **50** Settings, engines, Protons, runtimes, themes, Accounts, About, the
+  Epic overlay section (`app/eos_overlay.rs`), Collections sheet (the
+  Library's COLLECTIONS and ADD TO COLLECTION chips come with it; the
+  collection and saved-view chips already filter). The language switch there
+  must call `tr::show`; the Library re-labels itself.
 - **51** Store, store game page, Downloads, installer, Steam installs.
 - **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
@@ -55,6 +53,31 @@ Built but not yet tried by the user with `cargo build`: items 33 to 36, and
 items 28 and 29. Not looked at on screen: a light KDE colour scheme (item
 31), pt-PT for item 38, the Store grid, signed-in Accounts, mods and Nexus
 (item 33), and a real controller (item 34).
+
+**For the user to try, `zendo-slint` items 49a to 49c** (checked by Claude only
+in a throwaway home; what was not checked is in `docs/history.md`). Run
+`cargo run -p zendo-slint` with your real library and tick off:
+
+- Game page: Play and Stop on a real game, the running badge, a status chip,
+  Favorite and Hide, Add game with the real file dialog (an `.exe` and a
+  native program), Edit and Remove on a local game.
+- Cards from the network on a Steam game: the ProtonDB pill, About, Details
+  rows, screenshots (click one), requirements, achievements with Show more
+  (needs a game that has some), a click on the Metacritic row and the pill.
+- Anti-cheat: a game on AreWeAntiCheatYet (Rust, 252490) shows the card; its
+  site button and a note's link open the browser; a game that is not listed
+  has none. Deck pill: Verified, Playable and Unsupported games, and its click.
+- Offline: unplug the network, open a game: failed cards say why and Try again
+  asks again.
+- Wine prefix card on a Windows game Zendo starts (needs umu from Settings →
+  Engines): Wine settings, winetricks, Run a program, installing a component
+  (the typed text is saved and cleared after success), known fixes list and
+  its button, one tool at a time, none while the game runs.
+- GOG (signed in): the Changelog card and Show earlier updates; GOG's total
+  time played after a session; the Cloud saves row before, during and after a
+  real sync (Epic too).
+- pt-PT and a light KDE scheme on the game page; a window narrower than the
+  page needs; arrow keys and a controller on the Library into a game and back.
 
 Waiting on the user: the COPR resubmit of `main` (item 30). They run
 `copr-cli buildscm zendo --clone-url https://github.com/leandrop-dev/zendo.git

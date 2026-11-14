@@ -1046,6 +1046,7 @@ anti-cheat-latest-dated = Latest: { $change } · { $date }
 anti-cheat-open = Open AreWeAntiCheatYet
 
 ## The Steam Deck pill, from Valve's review
+deck-title = Steam Deck
 deck-verified = DECK VERIFIED
 deck-playable = DECK PLAYABLE
 deck-unsupported = DECK UNSUPPORTED

@@ -102,6 +102,7 @@ fn fact(label: impl Into<String>, value: impl Into<String>) -> Fact {
         path: false,
         mono: false,
         url: "".into(),
+        tone: 0,
     }
 }
 
@@ -445,6 +446,7 @@ impl Glue {
         if let Some(path) = &game.details.install_path {
             rows.push(path_fact(t!("fact-install-path"), path));
         }
+        rows.extend(self.cloud_row(game));
         rows.extend(self.steam_fact_rows(game));
         rows.push(fact(
             t!("fact-started-from-zendo"),
@@ -598,11 +600,10 @@ impl Glue {
                     let outcome = self.browser.borrow_mut().set_running(&id, running);
                     self.apply(outcome);
                 }
-                Effect::CloudReload
-                | Effect::CloudSyncing(..)
-                | Effect::Presence
-                | Effect::NextJob
-                | Effect::RefreshGogTotal(_) => {}
+                Effect::CloudReload => self.cloud_reload(),
+                Effect::CloudSyncing(id, syncing) => self.cloud_syncing(id, syncing),
+                Effect::RefreshGogTotal(id) => self.refresh_gog_total(&id),
+                Effect::Presence | Effect::NextJob => {}
             }
         }
         self.show_game();
