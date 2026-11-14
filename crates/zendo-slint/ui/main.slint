@@ -7,10 +7,11 @@ import { Colors, Space, Tr } from "style.slint";
 import { TopBar, Page } from "top_bar.slint";
 import { GamePage, GameData, Tile, Fact } from "game.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
+import { SettingsPage, SettingsData } from "settings.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, LocalData }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, LocalData, SettingsData }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -47,7 +48,10 @@ export component MainWindow inherits Window {
     // Texts Rust writes (the chips, the cards' lines) do not read `Tr.language`,
     // so a change of language asks for them again.
     property <int> language: Tr.language;
-    changed language => { LibraryData.relabel(); }
+    changed language => {
+        LibraryData.relabel();
+        SettingsData.relabel();
+    }
 
     // Ctrl+F and Ctrl+V.
     public function focus-search() { top-bar.focus-search(); }
@@ -85,7 +89,10 @@ export component MainWindow inherits Window {
             if root.page == Page.library && GameData.open: GamePage {
                 vertical-stretch: 1;
             }
-            if root.page != Page.library: Rectangle {
+            if root.page == Page.settings: SettingsPage {
+                vertical-stretch: 1;
+            }
+            if root.page != Page.library && root.page != Page.settings: Rectangle {
                 vertical-stretch: 1;
                 Text {
                     text: root.page-title.to-uppercase();

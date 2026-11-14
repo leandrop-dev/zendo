@@ -1,0 +1,411 @@
+// The Settings page: groups of settings shown one at a time (chips at the
+// top), each a card with a heading and a line about it. The Rust side
+// (src/settings_ui.rs) fills `SettingsData`; nothing here holds a setting.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ChipButton, ActionButton, TextField } from "components.slint";
+import { ScrollView } from "std-widgets.slint";
+import { ChipData } from "library.slint";
+import { Fact } from "game.slint";
+
+export global SettingsData {
+    // The groups' chips; `group` is the shown one's id.
+    in property <[ChipData]> groups;
+    in property <int> group;
+    // General.
+    in property <[ChipData]> languages;
+    in property <bool> tray;
+    in property <bool> opaque;
+    // Keys: SteamGridDB's.
+    in-out property <string> key-value;
+    in property <bool> key-shown;
+    // 1 good, 2 bad, 3 dim; empty when there is nothing to say.
+    in property <string> key-note;
+    in property <int> key-tone;
+    in property <bool> key-checking;
+    in property <bool> key-changed;
+    in property <string> key-kept;
+    in property <bool> key-kept-bad;
+    // Library.
+    in property <bool> covers;
+    in property <string> covers-progress;
+    in property <bool> covers-now;
+    in property <bool> auto-update;
+    in property <[ChipData]> workers;
+    in property <[Fact]> sources;
+    // Diagnostics.
+    in property <[Fact]> files;
+    in property <bool> report-busy;
+    in property <string> report-note;
+    in property <int> report-tone;
+    in property <bool> logs;
+
+    callback group-chosen(int);
+    callback language-chosen(int);
+    callback set-tray(bool);
+    callback set-opaque(bool);
+    callback key-edited(string);
+    callback key-toggle-shown();
+    callback key-check();
+    callback key-save();
+    callback key-get();
+    callback set-covers(bool);
+    callback covers-download();
+    callback set-auto-update(bool);
+    callback workers-chosen(int);
+    callback open(string);
+    callback copy-report();
+    callback open-logs();
+    // The window's language changed: Rust writes its texts again.
+    callback relabel();
+}
+
+component Section inherits Rectangle {
+    in property <string> heading;
+    in property <string> about;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.m;
+        Text {
+            text: root.heading.to-uppercase();
+            font-size: 14px;
+            font-weight: 700;
+            color: Colors.foreground;
+        }
+        Text {
+            text: root.about;
+            font-size: 13px;
+            color: Colors.dim;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// A switch with its words beside it.
+component Toggle inherits Rectangle {
+    in property <bool> on;
+    in property <string> label;
+    callback toggled(bool);
+    height: 24px;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(!root.on); }
+    HorizontalLayout {
+        spacing: Space.m;
+        Rectangle {
+            width: 40px;
+            height: 22px;
+            y: 1px;
+            background: root.on ? Colors.accent : Colors.raised;
+            border-width: 1px;
+            border-color: root.on ? Colors.accent : Colors.line;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                y: 3px;
+                x: root.on ? parent.width - self.width - 3px : 3px;
+                background: root.on ? (Colors.light ? #ffffff : #101010) : Colors.dim;
+            }
+        }
+        Text {
+            text: root.label;
+            font-size: 14px;
+            color: Colors.foreground;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(!root.on); }
+    }
+}
+
+// A line of words in one of the page's colours: 1 good, 2 bad, 3 dim.
+component Note inherits Text {
+    in property <int> tone;
+    font-size: 13px;
+    wrap: word-wrap;
+    color: root.tone == 1 ? Colors.good : root.tone == 2 ? Colors.bad : Colors.dim;
+}
+
+export component SettingsPage inherits Rectangle {
+    VerticalLayout {
+        FlexboxLayout {
+            vertical-stretch: 0;
+            cross-axis-alignment: start;
+            cross-axis-line-alignment: start;
+            padding-left: Space.xl;
+            padding-right: Space.xl;
+            padding-top: Space.xs;
+            padding-bottom: Space.xs;
+            spacing: Space.s;
+            for chip in SettingsData.groups: ChipButton {
+                label: chip.label;
+                chosen: chip.chosen;
+                clicked => { SettingsData.group-chosen(chip.id); }
+            }
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            HorizontalLayout {
+                alignment: center;
+                VerticalLayout {
+                    width: min(960px, root.width - 12px);
+                    padding: Space.xl;
+                    spacing: Space.l;
+                    alignment: start;
+
+                    // General.
+                    if SettingsData.group == 0: Section {
+                        heading: Tr.t("language-title");
+                        about: Tr.t("language-about");
+                        FlexboxLayout {
+                            vertical-stretch: 0;
+                            cross-axis-alignment: start;
+                            cross-axis-line-alignment: start;
+                            spacing: Space.s;
+                            for chip in SettingsData.languages: ChipButton {
+                                label: chip.label;
+                                chosen: chip.chosen;
+                                clicked => { SettingsData.language-chosen(chip.id); }
+                            }
+                        }
+                    }
+                    if SettingsData.group == 0: Section {
+                        heading: Tr.t("window-title");
+                        about: Tr.t("window-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            Toggle {
+                                label: Tr.t("minimize-to-tray");
+                                on: SettingsData.tray;
+                                toggled(on) => { SettingsData.set-tray(on); }
+                            }
+                            Toggle {
+                                label: Tr.t("theme-opaque");
+                                on: SettingsData.opaque;
+                                toggled(on) => { SettingsData.set-opaque(on); }
+                            }
+                        }
+                    }
+
+                    // Keys.
+                    if SettingsData.group == 1: Section {
+                        heading: "SteamGridDB";
+                        about: Tr.t("steamgriddb-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            HorizontalLayout {
+                                spacing: Space.s;
+                                TextField {
+                                    horizontal-stretch: 1;
+                                    placeholder: Tr.t("steamgriddb-paste");
+                                    password: !SettingsData.key-shown;
+                                    text <=> SettingsData.key-value;
+                                    edited(typed) => { SettingsData.key-edited(typed); }
+                                    accepted => { SettingsData.key-save(); }
+                                }
+                                ActionButton {
+                                    label: SettingsData.key-shown ? Tr.t("key-hide") : Tr.t("key-show");
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.key-toggle-shown(); }
+                                }
+                                ActionButton {
+                                    label: SettingsData.key-checking ? Tr.t("key-checking") : Tr.t("key-check");
+                                    enabled: !SettingsData.key-checking && SettingsData.key-value != "";
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.key-check(); }
+                                }
+                                ActionButton {
+                                    label: Tr.t("key-save");
+                                    primary: true;
+                                    enabled: SettingsData.key-changed;
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.key-save(); }
+                                }
+                            }
+                            if SettingsData.key-note != "": Note {
+                                text: SettingsData.key-note;
+                                tone: SettingsData.key-tone;
+                            }
+                            if SettingsData.key-kept != "": Note {
+                                text: SettingsData.key-kept;
+                                tone: SettingsData.key-kept-bad ? 2 : 3;
+                            }
+                            Rectangle {
+                                height: get-key.preferred-height;
+                                get-key := Text {
+                                    text: Tr.t("steamgriddb-get-key");
+                                    font-size: 13px;
+                                    color: get-touch.has-hover ? Colors.accent : Colors.foreground;
+                                }
+                                get-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    width: get-key.preferred-width;
+                                    clicked => { SettingsData.key-get(); }
+                                }
+                            }
+                        }
+                    }
+
+                    // Library.
+                    if SettingsData.group == 2: Section {
+                        heading: Tr.t("covers-title");
+                        about: Tr.t("covers-about");
+                        VerticalLayout {
+                            spacing: Space.l;
+                            Toggle {
+                                label: Tr.t("covers-download");
+                                on: SettingsData.covers;
+                                toggled(on) => { SettingsData.set-covers(on); }
+                            }
+                            HorizontalLayout {
+                                spacing: Space.m;
+                                alignment: start;
+                                ActionButton {
+                                    label: Tr.t("covers-download-now");
+                                    enabled: SettingsData.covers-now;
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.covers-download(); }
+                                }
+                                Text {
+                                    text: SettingsData.covers-progress;
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                    if SettingsData.group == 2: Section {
+                        heading: Tr.t("downloads-settings-title");
+                        about: Tr.t("downloads-settings-about");
+                        VerticalLayout {
+                            spacing: Space.l;
+                            Toggle {
+                                label: Tr.t("auto-update");
+                                on: SettingsData.auto-update;
+                                toggled(on) => { SettingsData.set-auto-update(on); }
+                            }
+                            VerticalLayout {
+                                spacing: Space.s;
+                                Text {
+                                    text: Tr.t("workers-title");
+                                    font-size: 14px;
+                                    color: Colors.foreground;
+                                }
+                                FlexboxLayout {
+                                    vertical-stretch: 0;
+                                    cross-axis-alignment: start;
+                                    cross-axis-line-alignment: start;
+                                    spacing: Space.s;
+                                    for chip in SettingsData.workers: ChipButton {
+                                        label: chip.label;
+                                        chosen: chip.chosen;
+                                        clicked => { SettingsData.workers-chosen(chip.id); }
+                                    }
+                                }
+                                Text {
+                                    text: Tr.t("workers-about");
+                                    font-size: 13px;
+                                    color: Colors.dim;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                    if SettingsData.group == 2: Section {
+                        heading: Tr.t("sources-title");
+                        about: Tr.t("sources-about");
+                        VerticalLayout {
+                            spacing: Space.s;
+                            for source in SettingsData.sources: HorizontalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    width: 220px;
+                                    text: source.label;
+                                    font-size: 14px;
+                                    color: Colors.foreground;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: source.value;
+                                    font-size: source.tone == 2 ? 13px : 14px;
+                                    color: source.tone == 2 ? Colors.bad : source.tone == 3 ? Colors.dim : Colors.foreground;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+
+                    // Diagnostics.
+                    if SettingsData.group == 3: Section {
+                        heading: Tr.t("files-title");
+                        about: Tr.t("files-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            for file in SettingsData.files: HorizontalLayout {
+                                spacing: Space.m;
+                                Text {
+                                    width: 160px;
+                                    text: file.label;
+                                    font-size: 14px;
+                                    color: Colors.dim;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: file.value;
+                                    font-size: 13px;
+                                    color: Colors.foreground;
+                                    wrap: word-wrap;
+                                }
+                                ActionButton {
+                                    label: Tr.t("files-open-folder");
+                                    small: true;
+                                    enabled: file.path;
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.open(file.url); }
+                                }
+                            }
+                        }
+                    }
+                    if SettingsData.group == 3: Section {
+                        heading: Tr.t("report-title");
+                        about: Tr.t("report-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            HorizontalLayout {
+                                spacing: Space.s;
+                                alignment: start;
+                                ActionButton {
+                                    label: SettingsData.report-busy ? Tr.t("report-gathering") : Tr.t("report-copy");
+                                    primary: true;
+                                    enabled: !SettingsData.report-busy;
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.copy-report(); }
+                                }
+                                ActionButton {
+                                    label: Tr.t("report-open-logs");
+                                    enabled: SettingsData.logs;
+                                    horizontal-stretch: 0;
+                                    clicked => { SettingsData.open-logs(); }
+                                }
+                            }
+                            if SettingsData.report-note != "": Note {
+                                text: SettingsData.report-note;
+                                tone: SettingsData.report-tone;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

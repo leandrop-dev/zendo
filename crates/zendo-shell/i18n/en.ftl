@@ -199,6 +199,7 @@ report-about = A report of what Zendo found, to paste into a bug report: the sys
 report-gathering = Gathering…
 report-copy = Copy report
 report-open-logs = Open launch logs
+report-no-clipboard = No clipboard tool found (install wl-clipboard or xclip); `zendo report` prints the report.
 report-gathered = Report gathered: { $count } lines. The clipboard write is best effort; `zendo report` prints it.
 images-none = No images to download
 images-left = { $count } left

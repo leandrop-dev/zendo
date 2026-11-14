@@ -219,7 +219,7 @@ impl Glue {
 
     /// Opens a folder or a link in the desktop's program for it; tests open
     /// nothing.
-    fn open_target(&self, target: &str) {
+    pub(super) fn open_target(&self, target: &str) {
         if self.game.persist
             && let Err(err) = open::target(target)
         {

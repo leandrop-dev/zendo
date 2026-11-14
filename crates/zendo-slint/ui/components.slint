@@ -244,6 +244,8 @@ export component ActionButton inherits Rectangle {
 export component TextField inherits Rectangle {
     in-out property <string> text;
     in property <string> placeholder;
+    // Shows dots in place of the letters, for a key.
+    in property <bool> password;
     // The user changed the text.
     callback edited(string);
     // Enter was pressed in the field.
@@ -267,6 +269,7 @@ export component TextField inherits Rectangle {
         color: Colors.foreground;
         font-size: 14px;
         single-line: true;
+        input-type: root.password ? InputType.password : InputType.text;
         edited => { root.edited(self.text); }
         accepted => { root.accepted(); }
     }

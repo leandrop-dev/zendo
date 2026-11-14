@@ -3903,3 +3903,44 @@ child modules of `library_ui` beside `cards_ui` (`compat_ui.rs`, `prefix_ui.rs`,
   known fixes (needs a game Heroic's list knows), the buttons that open the
   browser (the anti-cheat site, a note's source, the Deck pill), pt-PT, a
   light scheme, a window narrower than the page needs.
+
+## Item 50a, the Settings page in Slint (2026-11-14)
+
+The first slice of item 50: `ui/settings.slint` (the page, its `SettingsData`
+global, a `Toggle` and a `Section`) and `src/settings_ui.rs` (a child module
+of `library_ui`, which owns the config). Groups General, Keys, Library and
+Diagnostics, as chips; Engines and Proton come with 50b.
+
+- **General**: the language (the system's or each language; the window
+  follows at once through `tr::show`, and Rust-built texts through
+  `SettingsData.relabel`), the tray switch (`window::set_tray` puts the icon
+  in the tray or takes it out while the program runs; closing hides the window
+  only while the icon is there, and one hidden when the icon goes is shown
+  again) and the Opaque switch (the window's `translucency` goes to 1 or 2/3
+  at once: Slint needs no reopened window, as Iced did).
+- **Keys**: the `SteamGridDB` key, as in Iced: Show/Hide, Check, Save (kept
+  only after the site accepted it, or when offline), the notes (accepted,
+  rejected, saved unchecked, removed, where it is kept), the link to get one.
+  An answer for a key no longer in the field is let go. `TextField` has a
+  `password` property for this.
+- **Library**: covers on or off and Download now with its progress; Update by
+  themselves and the download workers; the sources found with their counts.
+- **Diagnostics**: Zendo's files with Open folder, Copy report (through
+  `wl-copy`, else `xclip`, there being no clipboard in the Slint crate; the
+  note says so when neither is there) and Open logs.
+- A change is written on a thread through `Config::update`; the page shows it
+  at once, and one that fails is put back and said in the footer. Nothing is
+  written in tests (`persist`).
+- **Left for later, on purpose**: the Theme section (the colour choices; the
+  Opaque switch is already here) and the Discord switch (50b, with presence),
+  Nexus's key (52), what Auto-update does (51: the switch is saved), Engines,
+  Proton and runtimes, the Epic overlay section (50b), Accounts, About and
+  Collections (50c).
+- **Checked** (clippy clean; 50 `zendo-slint` tests, one new): the new test
+  changes Opaque, the covers switch and the workers, checks a key by hand
+  (rejected: not saved; an answer for another key: let go; accepted: saved,
+  and the Save button goes dim), moves between groups and counts the files
+  and sources.
+- **Not checked.** Not looked at on screen (the user was away: the virtual
+  mouse and keyboard are for when they are there). Everything is in the
+  user's list in `docs/backlog.md`.

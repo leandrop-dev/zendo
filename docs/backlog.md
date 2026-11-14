@@ -30,7 +30,11 @@ to `zendo-core` when that page is ported. Ask before building any other page
   (52), Discord presence (50), jobs held while a game runs (51). The EOS
   overlay was listed under 49 but is a Settings section in Iced, so it is part
   of 50. Item 54's parity checklist must go through this list.
-- **50** Settings, engines, Protons, runtimes, themes, Accounts, About, the
+- **50** Sliced into **50a** (the Settings page: General, Keys, Library and
+  Diagnostics groups, built 2026-11-14), **50b** (Engines and Proton groups:
+  engines, Protons, runtimes, the Epic overlay section, the Theme choices, the
+  Discord switch with presence) and **50c** (Accounts, About, Collections).
+  Settings, engines, Protons, runtimes, themes, Accounts, About, the
   Epic overlay section (`app/eos_overlay.rs`), Collections sheet (the
   Library's COLLECTIONS and ADD TO COLLECTION chips come with it; the
   collection and saved-view chips already filter). The language switch there
@@ -76,6 +80,17 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
 - GOG (signed in): the Changelog card and Show earlier updates; GOG's total
   time played after a session; the Cloud saves row before, during and after a
   real sync (Epic too).
+- **Settings (50a)**, with `cargo run -p zendo-slint` (it writes your real
+  `config.toml`; Claude has not seen this page on screen): open it with the
+  gear or Ctrl+5. Language chips switch every text at once, and back; the tray
+  switch puts the icon in the tray and takes it out (close the window with it
+  on: hides; with it off: quits; turning it off while hidden brings the window
+  back); Opaque makes the window solid and back; SteamGridDB: paste a good key
+  (Check, then Save keeps it), a wrong one (rejected, not saved), Show/Hide,
+  an empty field plus Save removes it, "Get a key" opens the site; covers
+  switch, Download now, workers chips; the sources' counts; Diagnostics: each
+  Open folder, Copy report (needs wl-clipboard or xclip) and Open logs; the
+  switches survive a restart.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

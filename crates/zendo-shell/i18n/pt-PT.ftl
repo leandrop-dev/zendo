@@ -201,6 +201,7 @@ report-about = Um relatório do que o Zendo encontrou, para colar num relatório
 report-gathering = A reunir…
 report-copy = Copiar relatório
 report-open-logs = Abrir registos de lançamento
+report-no-clipboard = Nenhuma ferramenta de área de transferência encontrada (instale wl-clipboard ou xclip); `zendo report` imprime o relatório.
 report-gathered = Relatório reunido: { $count } linhas. A cópia para a área de transferência é uma tentativa; `zendo report` imprime-o.
 images-none = Não há imagens para transferir
 images-left = { $count ->

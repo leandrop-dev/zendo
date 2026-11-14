@@ -35,6 +35,8 @@ mod gog;
 mod local;
 #[path = "prefix_ui.rs"]
 mod prefix;
+#[path = "settings_ui.rs"]
+mod settings;
 
 /// How long covers that came in are let to gather before the rows show them.
 const COVER_DELAY: Duration = Duration::from_millis(40);
@@ -176,6 +178,8 @@ struct Glue {
     prefix: prefix::PrefixState,
     /// GOG's changelog and total time played (`gog_ui.rs`).
     gog: gog::GogState,
+    /// The Settings page (`settings_ui.rs`).
+    settings: settings::SettingsState,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
@@ -250,6 +254,7 @@ impl Glue {
             compat: compat::CompatState::new(persist),
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
+            settings: settings::SettingsState::new(),
             persist,
         })
     }
@@ -312,6 +317,7 @@ impl Glue {
         self.connect_compat(window);
         self.connect_prefix(window);
         self.connect_gog(window);
+        self.connect_settings(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -731,6 +737,9 @@ impl Glue {
         self.close_game();
         self.browser.borrow_mut().say(None);
         self.sync_status();
+        if page == Page::Settings {
+            self.open_settings();
+        }
         window.set_page(page);
     }
 
@@ -872,7 +881,7 @@ fn scan() -> Scanned {
 
 #[cfg(test)]
 mod tests {
-    use crate::GameData;
+    use crate::{GameData, SettingsData};
     use zendo_core::launch::{Started, Watch};
     use zendo_core::{Launch, Source, View};
     use zendo_shell::format;
@@ -1218,6 +1227,55 @@ mod tests {
             glue.browser.borrow().status(),
             Some(t!("local-removed", title = "Game 02").as_str())
         );
+    }
+
+    #[test]
+    fn settings_apply_at_once_and_a_key_is_kept_only_once_checked() {
+        use zendo_core::covers::KeyCheck;
+        let (window, glue) = page(2);
+        let settings = window.global::<SettingsData>();
+        window.invoke_page_requested(Page::Settings);
+        assert_eq!(window.get_page(), Page::Settings);
+        assert_eq!(settings.get_groups().row_count(), 4);
+        assert_eq!(settings.get_group(), 0);
+        // The window's paint and the switches follow a change.
+        settings.invoke_set_opaque(true);
+        assert!((window.get_translucency() - 1.0).abs() < f32::EPSILON);
+        assert!(settings.get_opaque());
+        settings.invoke_set_opaque(false);
+        assert!(window.get_translucency() < 1.0);
+        settings.invoke_set_covers(true);
+        assert!(settings.get_covers() && settings.get_covers_now());
+        settings.invoke_workers_chosen(4);
+        let chosen: Vec<_> = settings
+            .get_workers()
+            .iter()
+            .filter(|chip| chip.chosen)
+            .map(|chip| chip.id)
+            .collect();
+        assert_eq!(chosen, [4]);
+        // The key: checked, then saved only once the site accepted it.
+        settings.invoke_key_edited("abc".into());
+        assert!(settings.get_key_changed());
+        settings.invoke_key_save();
+        assert!(settings.get_key_checking());
+        glue.key_checked("abc".into(), Ok(KeyCheck::Rejected));
+        assert_eq!(settings.get_key_note(), t!("steamgriddb-rejected-unsaved"));
+        assert!(settings.get_key_changed(), "a rejected key is not saved");
+        settings.invoke_key_save();
+        glue.key_checked("other".into(), Ok(KeyCheck::Accepted));
+        assert!(
+            settings.get_key_checking(),
+            "an answer for another key is let go"
+        );
+        glue.key_checked("abc".into(), Ok(KeyCheck::Accepted));
+        assert_eq!(settings.get_key_note(), t!("steamgriddb-saved"));
+        assert!(!settings.get_key_changed());
+        // The groups, and the files the last one lists.
+        settings.invoke_group_chosen(3);
+        assert_eq!(settings.get_group(), 3);
+        assert_eq!(settings.get_files().row_count(), 6);
+        assert!(settings.get_sources().row_count() >= 7);
     }
 
     #[test]

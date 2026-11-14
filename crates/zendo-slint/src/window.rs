@@ -61,32 +61,51 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
 
     // The tray is there only when the setting asks for it and it could be
     // made; then closing the window hides it, and the tray brings it back.
-    let tray = if hide_to_tray { Tray::spawn() } else { None };
-    let hide_on_close = tray.is_some();
-    TRAY_THERE.set(hide_on_close);
+    set_tray(&window, hide_to_tray);
     let weak = window.as_weak();
     window.window().on_close_requested(move || {
-        if !hide_on_close {
+        // Read at the close, as Settings can turn the tray on and off.
+        if !TRAY_THERE.get() {
             let _ = slint::quit_event_loop();
         } else if let Some(window) = weak.upgrade() {
             remember_size(&window);
         }
         CloseRequestResponse::HideWindow
     });
-    if tray.is_some() {
+
+    window.show().context("could not show the window")?;
+    // Until `quit_event_loop`: hiding the last window to the tray must not
+    // end the program.
+    slint::run_event_loop_until_quit().context("the window's event loop failed")?;
+    drop(watcher);
+    Ok(())
+}
+
+thread_local! {
+    /// The tray icon, while there is one: dropping it takes it out.
+    static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
+    /// The tray's messages are being heard.
+    static TRAY_HEARD: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Puts the icon in the tray, or takes it out (Settings' Window switch).
+/// Closing the window hides it only while the icon is there; one hidden when
+/// the icon goes is shown again, so the window is never lost.
+pub fn set_tray(window: &MainWindow, on: bool) {
+    let tray = if on { Tray::spawn() } else { None };
+    let there = tray.is_some();
+    TRAY.replace(tray);
+    TRAY_THERE.set(there);
+    if there && !TRAY_HEARD.replace(true) {
         let weak = window.as_weak();
         tray::events(move |message| {
             weak.upgrade_in_event_loop(move |window| handle_tray(&window, message))
                 .is_ok()
         });
     }
-
-    window.show().context("could not show the window")?;
-    // Until `quit_event_loop`: hiding the last window to the tray must not
-    // end the program.
-    slint::run_event_loop_until_quit().context("the window's event loop failed")?;
-    drop((tray, watcher));
-    Ok(())
+    if !there && !window.window().is_visible() {
+        let _ = window.show();
+    }
 }
 
 thread_local! {
