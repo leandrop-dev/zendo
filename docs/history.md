@@ -3532,3 +3532,80 @@ Royalty-free licence, with the plan to check Fedora and COPR first.
 - Not run: an RPM mock build. `packaging/fedora/zendo.spec` and the PKGBUILD name
   no path that moved (`crates/zendo/fonts/OFL.txt` and `crates/zendo/Cargo.toml`
   stay), and the new crate is a workspace library, but the spec was not built.
+
+## Item 47, the `zendo-slint` skeleton (2026-11-14)
+
+Built from the plan (`~/.claude/plans/drifting-hugging-scone.md`): a window
+in Slint 1.18 that opens, paints itself from a theme, switches pages and
+hides to the tray, with the pages empty (their name shows).
+
+- **`zendo-shell::cli`** (moved out of `crates/zendo/src/main.rs`, which is now
+  four lines): the command line, with the window passed in as
+  `cli::RunWindow = fn(bool, Option<String>) -> anyhow::Result<()>`. Both
+  binaries share it, so `zendo-slint list`, `launch`, `report`, the helper
+  windows and `nxm://` behave as `zendo`'s do. `serde_json` left `crates/zendo`.
+- **`crates/zendo-slint`**: `ui/style.slint` (a `Colors` global with the
+  palette `app/style.rs` has, `Space`, and `Tr`), `ui/components.slint` (`Tab`,
+  `IconButton`), `ui/top_bar.slint`, `ui/main.slint`; `src/window.rs`
+  (`run`, tray, close, size), `theme.rs` (the Iced `style.rs` and `themes.rs`
+  colour rules without the toolkit, over `zendo_core::theme` and `kde`), `tr.rs`.
+  The Lucide icons and JetBrains Mono are imported from `crates/zendo/`, not
+  copied.
+- **Strings: kept Fluent** [the plan's tentative choice, now verified]. `Tr` is a
+  global with `pure callback lookup(int, string) -> string` (plus `lookup-with`
+  and `lookup-count`, not yet used by a page) and `pure public function t(id)`
+  that passes `Tr.language`, so every text asks again when it changes. A test
+  (`tr::tests`, on `i-slint-backend-testing`) changes the language on a live
+  window and the page title goes `Library`, `Store`, `Loja`, `Biblioteca`. A
+  message with two values (`top-bar-signed-in`) needs a second lookup shape; it
+  comes with the first page that uses one.
+- **Lints.** The generated code carries `#[allow(unsafe_code)]`, which the
+  workspace's `unsafe_code = "forbid"` overrules (error E0453, four times). The
+  crate restates the workspace lints in its own `[lints]` with `unsafe_code =
+  "deny"`; handwritten `unsafe` would need an `allow`, which `allow_attributes`
+  flags. Clippy (pedantic) then has no warning on the generated code.
+- **Window.** `BackendSelector::new().select()` then `slint::set_xdg_app_id("zendo")`
+  (the class blur rules name); `set_fullscreen(true)` for `--game-mode`;
+  background `Colors.background.with-alpha(translucency)`, 2/3 by default (any
+  value is possible now, item 45) and 1 when `config.toml` has `opaque = true`.
+  Closing quits unless the tray is on; with it, closing hides, and the tray
+  (`zendo-shell::tray::events`, a closure into `upgrade_in_event_loop`) toggles,
+  opens and quits. `run_event_loop_until_quit` so hiding the last window does not
+  end the program. The size is kept in a `thread_local` `Cell` and set before
+  `show()`, because a Wayland app cannot unminimise: showing makes a new window.
+- **Checked on screen** (throwaway home; no session bus except the tray run;
+  stills with `spectacle`, clicks with `ydotool` guarded by the pid of the
+  active and the pointed-at window, about 20 clicks, no stray one):
+  - class `zendo`, 1368×892 like Iced's, JetBrains Mono, the translucent window
+    (2/3) and the Library tab's accent rim;
+  - each of Library, Store, Stats, Downloads and Settings clicked, the page's
+    name changing and the tab or icon marked; the icon buttons' tooltips drawn
+    over the page;
+  - Portuguese from `language = "pt-PT"` (BIBLIOTECA, LOJA, ESTATÍSTICAS) and
+    `theme = "system"` taking the scheme "PlasmonkA";
+  - `opaque = true`: a blank pixel reads 23,23,23 (`#171717`) against 26,26,26
+    translucent; `--game-mode`: 2560×1080 at 0,0; close with no tray: the
+    process ends;
+  - **the tray, on the real session bus** (the user agreed, since the skeleton
+    reads only `Config::load_file`, which does not touch the keyring), driven by
+    the StatusNotifierItem's own `Activate` and the dbusmenu's `Event`: close
+    request leaves the process and the icon; a tray click brings back a window
+    in front with focus; a second click hides it; menu Open shows it; menu Quit
+    ends the process and the icon is gone; a window resized to 1200×800 and
+    then 1150×700 came back at those sizes.
+- **Found and fixed in the check.** (1) The icon buttons' tooltip was a
+  `PopupWindow` opened on hover; the press never reached the button under it
+  (Downloads and Settings did not navigate, with `pointer-event` logging `move`
+  and `up` but no `down`); it is now a plain element drawn below the button,
+  with `z: 1` on the top bar so it draws over the page. (2) The window came back
+  from the tray at the default size; fixed with the size kept at hide.
+- **Not checked**: the tray icon's look in the panel (only that it registers and
+  answers), a real keyboard's focus (no key was sent), `Tab` keyboard navigation
+  and accessibility (labels are set, not exercised), blur on a `zendo` window
+  with `zendo-slint` itself (item 45 showed the class works; here only the class
+  was read), a light theme, user themes from `~/.config/zendo/themes/`, a
+  window on a second monitor or at another scale, and the tray's click on the
+  panel itself (the same method, called over D-Bus).
+- During the on-screen checks KDE's application launcher opened once, unasked by
+  these tests (only pointer moves and left clicks were sent, and the click
+  landed on Settings); the helper refused to click while the focus was elsewhere.

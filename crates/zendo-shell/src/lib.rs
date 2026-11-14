@@ -8,6 +8,7 @@
 //! returns `false` once nothing wants them any more; each toolkit turns
 //! that into its own kind of stream or event.
 
+pub mod cli;
 pub mod file_dialog;
 pub mod gamepad;
 pub mod i18n;

@@ -1,0 +1,55 @@
+// Zendo's look, in one place so no page hard-codes a colour: the colours the
+// theme sets (theme.rs), the spacing, and the window's words (tr.rs).
+
+// The window's colours, as `app/style.rs` has them in the Iced window. Zendo's
+// own until a theme is read.
+export global Colors {
+    in property <color> background: #171717;
+    // The top bar, a step away from the background.
+    in property <color> sidebar: #121212;
+    // Cards, inputs, chips.
+    in property <color> surface: #222222;
+    // A surface under the pointer, a track.
+    in property <color> raised: #2c2c2c;
+    // The rim of cards and inputs.
+    in property <color> line: #303030;
+    in property <color> foreground: #ccd0cf;
+    // Text that matters less.
+    in property <color> dim: #808483;
+    in property <color> accent: #f25623;
+    in property <color> good: #7fb069;
+    in property <color> bad: #e05a4c;
+    // Dark text on a light background.
+    in property <bool> light: false;
+}
+
+export global Space {
+    out property <length> xs: 4px;
+    out property <length> s: 8px;
+    out property <length> m: 12px;
+    out property <length> l: 16px;
+    out property <length> xl: 24px;
+}
+
+// The window's words: Fluent messages (crates/zendo-shell/i18n), looked up
+// by Rust. `language` is read by every function so a change of language
+// makes every text ask again.
+export global Tr {
+    in property <int> language: 0;
+    pure callback lookup(int, string) -> string;
+    pure callback lookup-with(int, string, string, string) -> string;
+    pure callback lookup-count(int, string, string, int) -> string;
+
+    // A message: `Tr.t("page-library")`.
+    pure public function t(id: string) -> string {
+        return lookup(language, id);
+    }
+    // A message with one text value: `Tr.with("id", "name", value)`.
+    pure public function with(id: string, name: string, value: string) -> string {
+        return lookup-with(language, id, name, value);
+    }
+    // A message with one number, for the plural ones: `Tr.count("id", "count", 3)`.
+    pure public function count(id: string, name: string, number: int) -> string {
+        return lookup-count(language, id, name, number);
+    }
+}

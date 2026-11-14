@@ -1,0 +1,81 @@
+// The top bar: the name, the tabs (Library, Store, Stats), and the Downloads
+// and Settings icon buttons, as in the Iced window's `app/top_bar.rs`. The view
+// chips and the search come with the Library (item 48).
+
+import { Colors, Space, Tr } from "style.slint";
+import { Tab, IconButton } from "components.slint";
+
+export enum Page { library, store, stats, downloads, settings }
+
+export component TopBar inherits Rectangle {
+    in property <Page> page;
+    in property <string> library-count;
+    in property <string> store-count;
+    in property <string> downloads-count;
+    callback navigate(Page);
+
+    background: Colors.sidebar;
+
+    VerticalLayout {
+        HorizontalLayout {
+            padding-top: Space.m;
+            padding-bottom: Space.m;
+            padding-left: Space.xl;
+            padding-right: Space.xl;
+            spacing: Space.s;
+
+            HorizontalLayout {
+                padding-right: Space.l - Space.s;
+                spacing: 2px;
+                Text {
+                    text: "ZENDO";
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: Colors.foreground;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "•";
+                    font-size: 20px;
+                    color: Colors.accent;
+                    vertical-alignment: center;
+                }
+            }
+            Tab {
+                label: Tr.t("page-library");
+                count: root.library-count;
+                current: root.page == Page.library;
+                clicked => { root.navigate(Page.library); }
+            }
+            Tab {
+                label: Tr.t("page-store");
+                count: root.store-count;
+                current: root.page == Page.store;
+                clicked => { root.navigate(Page.store); }
+            }
+            Tab {
+                label: Tr.t("page-stats");
+                current: root.page == Page.stats;
+                clicked => { root.navigate(Page.stats); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            IconButton {
+                icon: @image-url("../../zendo/icons/download.svg");
+                label: Tr.t("page-downloads");
+                count: root.downloads-count;
+                current: root.page == Page.downloads;
+                clicked => { root.navigate(Page.downloads); }
+            }
+            IconButton {
+                icon: @image-url("../../zendo/icons/settings.svg");
+                label: Tr.t("page-settings");
+                current: root.page == Page.settings;
+                clicked => { root.navigate(Page.settings); }
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: Colors.line;
+        }
+    }
+}

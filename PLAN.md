@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38 and 41 to 46 are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38 and 41 to 47 are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -41,12 +41,16 @@ list and details views, OptiScaler and recompiled games are on hold.
   sources under a licence outside Fedora's allowed list and Slint's
   Royalty-free licence is on neither list (item 46); the binary is GPLv3, the
   source files stay MIT. Staging: a new crate `crates/zendo-slint` beside the
-  Iced `crates/zendo`, shared toolkit-free code in `crates/zendo-shell`, the
-  Iced crate deleted at parity (items 47 to 54). Keep logic in `zendo-core`.
+  Iced `crates/zendo`, shared toolkit-free code in `crates/zendo-shell` (words,
+  tray, controller, links, sign-in window, file dialog and the command line),
+  the Iced crate deleted at parity (items 47 to 54). Keep logic in
+  `zendo-core`. `zendo-slint` exists since item 47: it opens, follows themes
+  and the KDE scheme, switches pages (empty) and hides to the tray; run it
+  as `zendo-slint`.
 
 ## Next
 
-Items 47 to 54, the port: `docs/backlog.md` has them, and what is on hold.
+Items 48 to 54, the port: `docs/backlog.md` has them, and what is on hold.
 
 ## Direction [firm]
 

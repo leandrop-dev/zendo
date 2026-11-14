@@ -1,0 +1,111 @@
+// Zendo's own controls, in the look of the Iced window's `app/style.rs`: flat,
+// square, the accent for the current one. Pages use these, not Slint's
+// widgets, so the look is set once.
+
+import { Colors, Space } from "style.slint";
+
+// A tab in the top bar: the name in capitals, a count beside it when there is
+// one, and the accent rim when it is the current page.
+export component Tab inherits Rectangle {
+    in property <string> label;
+    in property <string> count;
+    in property <bool> current;
+    callback clicked;
+
+    background: touch.has-hover ? Colors.raised : transparent;
+    border-width: 1px;
+    border-color: root.current ? Colors.accent : transparent;
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+
+    HorizontalLayout {
+        padding-left: Space.m;
+        padding-right: Space.m;
+        padding-top: Space.s;
+        padding-bottom: Space.s;
+        spacing: Space.s;
+        Text {
+            text: root.label.to-uppercase();
+            font-size: 13px;
+            font-weight: 700;
+            vertical-alignment: center;
+            color: root.current ? Colors.accent : touch.has-hover ? Colors.foreground : Colors.dim;
+        }
+        if root.count != "": Text {
+            text: root.count;
+            font-size: 12px;
+            vertical-alignment: center;
+            color: Colors.dim;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A square button in the top bar that holds an icon, with a count beside it
+// when there is one; its name shows below it on hover.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <string> count;
+    in property <bool> current;
+    callback clicked;
+
+    height: 34px;
+    min-width: 34px;
+    background: touch.has-hover ? Colors.raised : transparent;
+    border-width: 1px;
+    border-color: root.current ? Colors.accent : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+
+    HorizontalLayout {
+        padding-left: Space.s;
+        padding-right: Space.s;
+        spacing: Space.s;
+        alignment: center;
+        Image {
+            source: root.icon;
+            colorize: root.current ? Colors.accent : Colors.foreground;
+            width: 18px;
+            height: 18px;
+            y: (root.height - self.height) / 2 - 1px;
+        }
+        if root.count != "": Text {
+            text: root.count;
+            font-size: 12px;
+            vertical-alignment: center;
+            color: Colors.dim;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    // Shown on hover, below the button. Drawn outside the button's own
+    // rectangle, so whatever holds the button must be above the page (`z`),
+    // and it takes no clicks, which a `PopupWindow` here swallowed.
+    if touch.has-hover: Rectangle {
+        x: (root.width - self.width) / 2;
+        y: root.height + Space.xs;
+        width: tip-text.preferred-width + 2 * Space.s;
+        height: tip-text.preferred-height + 2 * Space.xs;
+        background: Colors.surface;
+        border-width: 1px;
+        border-color: Colors.line;
+        tip-text := Text {
+            x: Space.s;
+            y: Space.xs;
+            text: root.label.to-uppercase();
+            font-size: 12px;
+            color: Colors.foreground;
+        }
+    }
+}

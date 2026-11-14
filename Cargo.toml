@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/zendo", "crates/zendo-core", "crates/zendo-shell"]
+members = ["crates/zendo", "crates/zendo-core", "crates/zendo-shell", "crates/zendo-slint"]
 
 [workspace.package]
 edition = "2024"
@@ -37,6 +37,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.2.0"
 shlex = "2.0.1"
+# The window in Slint, under the GPLv3 (the port from Iced, items 47 to 54);
+# the winit hook is for the window's class and fullscreen.
+slint = { version = "1.18", features = ["unstable-winit-030"] }
+slint-build = "1.18"
 sys-locale = "0.3.2"
 unic-langid = "0.9"
 x11rb = "0.13.2"

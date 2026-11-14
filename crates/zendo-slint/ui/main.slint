@@ -1,0 +1,58 @@
+// Zendo's window, in Slint. The pages come one item at a time (docs/backlog.md,
+// items 48 to 53); until then each shows its name.
+
+import "../../zendo/fonts/JetBrainsMono-Regular.ttf";
+import "../../zendo/fonts/JetBrainsMono-Bold.ttf";
+import { Colors, Space, Tr } from "style.slint";
+import { TopBar, Page } from "top_bar.slint";
+
+// Rust reaches the globals and the enum through these.
+export { Colors, Space, Tr, Page }
+
+export component MainWindow inherits Window {
+    title: "Zendo";
+    min-width: 1100px;
+    min-height: 560px;
+    preferred-width: 1360px;
+    preferred-height: 860px;
+    default-font-family: "JetBrains Mono";
+    default-font-size: 14px;
+    // Translucent unless Settings asks for an opaque window: the compositor
+    // shows the desktop through it (blurred, for the class `zendo`).
+    background: Colors.background.with-alpha(root.translucency);
+
+    in-out property <Page> page: Page.library;
+    // How much of the window is paint: 1 is opaque.
+    in property <float> translucency: 2.0 / 3.0;
+    in property <string> library-count;
+    in property <string> store-count;
+    in property <string> downloads-count;
+    // The page's name, in the window's language, for the page area until the
+    // pages arrive.
+    out property <string> page-title:
+        root.page == Page.library ? Tr.t("page-library")
+        : root.page == Page.store ? Tr.t("page-store")
+        : root.page == Page.stats ? Tr.t("page-stats")
+        : root.page == Page.downloads ? Tr.t("page-downloads")
+        : Tr.t("page-settings");
+
+    VerticalLayout {
+        TopBar {
+            // Above the page, so the icon buttons' tooltips draw over it.
+            z: 1;
+            page: root.page;
+            library-count: root.library-count;
+            store-count: root.store-count;
+            downloads-count: root.downloads-count;
+            navigate(page) => { root.page = page; }
+        }
+        Rectangle {
+            Text {
+                text: root.page-title.to-uppercase();
+                font-size: 20px;
+                font-weight: 700;
+                color: Colors.dim;
+            }
+        }
+    }
+}

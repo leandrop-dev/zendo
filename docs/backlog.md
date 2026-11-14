@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38 and 41 to 46 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38 and 41 to 47 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -11,15 +11,13 @@ forbids sources under a licence outside Fedora's allowed list, and Slint's
 Royalty-free licence is on neither list; item 46), in a **new crate
 `crates/zendo-slint` beside the Iced `crates/zendo`**, so `main` stays
 releasable. Strings stay in Fluent, handed to Slint through a `Tr` global with
-pure callbacks (to verify in item 47). One commit per item, when asked. Keep
+pure callbacks (verified in item 47; a message with two values needs a second
+lookup shape, to come with the first page that uses one). One commit per item,
+when asked. Keep
 logic in `zendo-core`; where `app/*.rs` mixes logic with views, move the logic
 to `zendo-core` when that page is ported. Ask before building any other page
 `docs/design.md` lists (a Home page was built and removed at the user's wish).
 
-- **47** Skeleton of `zendo-slint`: window, class `zendo`, translucency,
-  theme/KDE/user themes, font, `Tr` global, top bar with tabs and Lucide
-  icons, tray, `--game-mode`/`--fullscreen`, a test that hide-to-tray and
-  restore work on Wayland, and a check that clippy accepts the generated code.
 - **48** Library: grid, chips, search, sort, marking, bulk actions, keyboard
   and pad cursor, hero backdrop (bar: at least 35 fps on the 2,700-card stress
   library, measured against Iced's Library first).
@@ -100,5 +98,6 @@ history.md and the commits.
 | 44 | Dependencies optimised in debug builds; 960-pixel copies of heroes | 2026-11-13 |
 | 45 | Slint spike of the Library grid: a verdict on eight points, no port | 2026-11-14 |
 | 46 | Slint licence checked against COPR (GPLv3 chosen); the toolkit-free modules moved to `zendo-shell` | 2026-11-14 |
+| 47 | `zendo-slint` skeleton: window, themes, `Tr`, top bar, tray with size kept, `--game-mode`; the command line moved to `zendo-shell` | 2026-11-14 |
 
 Item 37 (emulation) is on hold above.
