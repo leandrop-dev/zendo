@@ -256,6 +256,68 @@ impl Artwork for Owned {
     }
 }
 
+/// The store a game id belongs to, and the store's own id for the game;
+/// `None` for Steam's and the other sources' ids.
+#[must_use]
+pub fn store_of(id: &str) -> Option<(Store, &str)> {
+    let (key, app) = id.split_once(':')?;
+    let store = match key {
+        "epic" => Store::Epic,
+        "gog" => Store::Gog,
+        "amazon" => Store::Amazon,
+        _ => return None,
+    };
+    Some((store, app))
+}
+
+/// What the Store page's chips and search ask of its list: one store or all,
+/// without the installed games or with them, and the words of the search.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Filter<'a> {
+    pub source: Option<Shop>,
+    pub hide_installed: bool,
+    pub search: &'a str,
+}
+
+impl Filter<'_> {
+    /// Whether the game stays, `installed` being whether it is in the
+    /// library already.
+    #[must_use]
+    pub fn keeps(&self, game: &Owned, installed: bool) -> bool {
+        if self.source.is_some_and(|source| source != game.shop) {
+            return false;
+        }
+        if self.hide_installed && installed {
+            return false;
+        }
+        let title = game.title.to_lowercase();
+        self.search
+            .split_whitespace()
+            .all(|word| title.contains(&word.to_lowercase()))
+    }
+}
+
+/// The Store's order: by title, last played first, or longest played first;
+/// games with nothing to go by after the rest, by title.
+pub fn sort(games: &mut [&Owned], sort: crate::Sort) {
+    games.sort_by_cached_key(|game| sort_key(game, sort));
+}
+
+/// What [`sort`] orders a game by.
+#[must_use]
+pub fn sort_key(game: &Owned, sort: crate::Sort) -> (std::cmp::Reverse<u64>, String, String) {
+    let first = match sort {
+        crate::Sort::Title => 0,
+        crate::Sort::Recent => game.last_played.unwrap_or(0),
+        crate::Sort::MostPlayed => game.minutes.unwrap_or(0),
+    };
+    (
+        std::cmp::Reverse(first),
+        game.title.to_lowercase(),
+        game.id.clone(),
+    )
+}
+
 fn cache_file(shop: Shop) -> Option<PathBuf> {
     paths::cache_home().map(|dir| dir.join(format!("zendo/store/{}.json", shop.key())))
 }
@@ -1141,6 +1203,57 @@ pub(crate) fn plain_text(html: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sorts_by_title_last_played_or_time_played() {
+        let game = |id: &str, title: &str, last: Option<u64>, minutes: Option<u64>| {
+            let mut game = Owned::new(Shop::Steam, id, title.into());
+            game.last_played = last;
+            game.minutes = minutes;
+            game
+        };
+        let games = [
+            game("1", "Beta", Some(100), Some(5)),
+            game("2", "Alpha", None, None),
+            game("3", "Gamma", Some(300), Some(1)),
+        ];
+        let order = |by| {
+            let mut list: Vec<&Owned> = games.iter().collect();
+            sort(&mut list, by);
+            list.iter()
+                .map(|game| game.title.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(order(crate::Sort::Title), ["Alpha", "Beta", "Gamma"]);
+        assert_eq!(order(crate::Sort::Recent), ["Gamma", "Beta", "Alpha"]);
+        assert_eq!(order(crate::Sort::MostPlayed), ["Beta", "Gamma", "Alpha"]);
+    }
+
+    #[test]
+    fn the_filter_keeps_by_store_installed_and_every_word() {
+        let game = Owned::new(Store::Gog, "1", "Delta Quest".into());
+        let keeps = |source, hide_installed, search, installed| {
+            Filter {
+                source,
+                hide_installed,
+                search,
+            }
+            .keeps(&game, installed)
+        };
+        assert!(keeps(None, false, "", true));
+        assert!(keeps(Some(Shop::Gog), false, "quest DELTA", false));
+        assert!(!keeps(Some(Shop::Epic), false, "", false));
+        assert!(!keeps(None, true, "", true));
+        assert!(keeps(None, true, "", false));
+        assert!(!keeps(None, false, "delta omega", false));
+    }
+
+    #[test]
+    fn finds_the_store_of_an_id() {
+        assert_eq!(store_of("gog:12"), Some((Store::Gog, "12")));
+        assert_eq!(store_of("steam:620"), None);
+        assert_eq!(store_of("nothing"), None);
+    }
 
     #[test]
     fn writes_store_descriptions_as_plain_text() {

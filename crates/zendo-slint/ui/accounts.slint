@@ -38,7 +38,30 @@ export struct AccountCard {
     finish-on: bool,
 }
 
+// Steam's card: its sign-in is on Steam's own page, in Zendo's window.
+export struct SteamCardData {
+    // 0 signed out, 1 signing in, 2 signed in.
+    state: int,
+    // Who is signed in, or that the window is open.
+    status: string,
+    about: string,
+    // The Steam family, when the last list said.
+    family: string,
+    // What the last sign-in, sign-out or list said, and how it went.
+    note: string,
+    note-good: bool,
+    // Why the family's games could not be listed.
+    family-note: string,
+    // Where the token is kept, and whether that is a problem.
+    kept: string,
+    kept-bad: bool,
+}
+
 export global AccountsData {
+    in property <SteamCardData> steam;
+    callback steam-sign-in();
+    callback steam-cancel();
+    callback steam-sign-out();
     in property <[AccountCard]> cards;
     in property <bool> gog-playtime;
     in property <bool> gog-galaxy;
@@ -247,6 +270,92 @@ component Card inherits Rectangle {
     }
 }
 
+component SteamCard inherits Rectangle {
+    in property <SteamCardData> steam;
+    in property <length> inner;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.s;
+        HorizontalLayout {
+            spacing: Space.m;
+            Rectangle {
+                width: badge.preferred-width + 2 * Space.s;
+                height: 22px;
+                y: 3px;
+                border-width: 1px;
+                border-color: Colors.accent;
+                badge := Text {
+                    text: "STEAM";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Colors.accent;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: "STEAM";
+                font-size: 16px;
+                font-weight: 700;
+                color: Colors.foreground;
+                vertical-alignment: center;
+            }
+            ActionButton {
+                label: root.steam.state == 0 ? Tr.t("steam-sign-in")
+                    : root.steam.state == 1 ? Tr.t("cancel")
+                    : Tr.t("accounts-sign-out");
+                primary: root.steam.state == 0;
+                clicked => {
+                    if root.steam.state == 0 { AccountsData.steam-sign-in(); }
+                    else if root.steam.state == 1 { AccountsData.steam-cancel(); }
+                    else { AccountsData.steam-sign-out(); }
+                }
+            }
+        }
+        if root.steam.status != "": Text {
+            width: root.inner;
+            text: root.steam.status;
+            font-size: 14px;
+            color: root.steam.state == 2 ? Colors.good : Colors.foreground;
+            wrap: word-wrap;
+        }
+        Text {
+            width: root.inner;
+            text: root.steam.about;
+            font-size: 13px;
+            color: Colors.dim;
+            wrap: word-wrap;
+        }
+        if root.steam.family != "": Text {
+            width: root.inner;
+            text: root.steam.family;
+            font-size: 13px;
+            color: Colors.foreground;
+            wrap: word-wrap;
+        }
+        if root.steam.note != "": Note {
+            width: root.inner;
+            text: root.steam.note;
+            tone: root.steam.note-good ? 1 : 2;
+        }
+        if root.steam.family-note != "": Note {
+            width: root.inner;
+            text: root.steam.family-note;
+            tone: 2;
+        }
+        if root.steam.kept != "": Note {
+            width: root.inner;
+            text: root.steam.kept;
+            tone: root.steam.kept-bad ? 2 : 0;
+        }
+    }
+}
+
 export component AccountsPage inherits Rectangle {
     property <length> column: min(960px, root.width - 12px);
     // The room inside a card: the column less the page's padding and the card's.
@@ -275,6 +384,7 @@ export component AccountsPage inherits Rectangle {
                         }
                     }
                 }
+                SteamCard { steam: AccountsData.steam; inner: root.inner; }
                 Card { index: 0; card: AccountsData.cards[0]; inner: root.inner; }
                 Card { index: 1; card: AccountsData.cards[1]; inner: root.inner; }
                 Card { index: 2; card: AccountsData.cards[2]; inner: root.inner; }

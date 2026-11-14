@@ -153,7 +153,7 @@ impl Glue {
 
     /// Whether replacing or deleting an engine could pull the program out
     /// from under a game (umu-run lives as long as one). A store job counts
-    /// too once the Downloads page is here (item 51).
+    /// too once the Downloads page is here (item 51b).
     fn engines_busy(&self) -> bool {
         self.game.running.borrow().busy()
     }

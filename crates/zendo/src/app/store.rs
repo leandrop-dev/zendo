@@ -10,7 +10,6 @@ use zendo_core::Sort;
 use zendo_core::downloads::{self, Job};
 use zendo_core::info::{self, Dlc, GameInfo};
 use zendo_core::owned::{self, Owned, Shop, StoreDetails};
-use zendo_core::stores::Store;
 
 use super::accounts::Account;
 use super::downloads::{DownloadMessage, FolderFor, action_doing_alone};
@@ -50,12 +49,7 @@ impl Default for StoreSort {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InfoState {
-    Asking,
-    Got(GameInfo),
-    Failed(String),
-}
+pub use zendo_shell::store_facts::InfoState;
 
 #[derive(Debug, Clone)]
 pub enum StoreMessage {
@@ -360,22 +354,16 @@ impl Zendo {
 
     /// The owned games the page shows, in the order chosen.
     pub(super) fn store_visible(&self) -> Vec<&Owned> {
-        let words: Vec<String> = self
-            .store
-            .search
-            .split_whitespace()
-            .map(str::to_lowercase)
-            .collect();
+        let wanted = owned::Filter {
+            source: self.store.source,
+            hide_installed: self.store.hide_installed,
+            search: &self.store.search,
+        };
         let mut games: Vec<&Owned> = self
             .shown()
-            .filter(|game| self.store.source.is_none_or(|source| source == game.shop))
-            .filter(|game| !self.store.hide_installed || !self.is_installed(&game.id))
-            .filter(|game| {
-                let title = game.title.to_lowercase();
-                words.iter().all(|word| title.contains(word.as_str()))
-            })
+            .filter(|game| wanted.keeps(game, self.is_installed(&game.id)))
             .collect();
-        sort_owned(&mut games, self.store.sort.0);
+        owned::sort(&mut games, self.store.sort.0);
         games
     }
 
@@ -486,7 +474,7 @@ impl Zendo {
                     badge: self
                         .is_installed(&game.id)
                         .then(|| (t!("badge-installed"), colors().good)),
-                    line: card_line(game),
+                    line: format::owned_line(game),
                     line_color: colors().dim,
                     selected: index == selected,
                     on_press: Message::Store(StoreMessage::Clicked(game.id.clone())),
@@ -798,55 +786,13 @@ impl Zendo {
     }
 }
 
-/// The Store's order: by title, last played first, or longest played
-/// first; games with nothing to go by after the rest, by title.
-fn sort_owned(games: &mut [&Owned], sort: Sort) {
-    games.sort_by_cached_key(|game| {
-        let first = match sort {
-            Sort::Title => 0,
-            Sort::Recent => game.last_played.unwrap_or(0),
-            Sort::MostPlayed => game.minutes.unwrap_or(0),
-        };
-        (
-            std::cmp::Reverse(first),
-            game.title.to_lowercase(),
-            game.id.clone(),
-        )
-    });
-}
-
-/// The line under a card's title: the developer or platforms, or for a
-/// Steam game the time Steam counted.
-fn card_line(game: &Owned) -> String {
-    if game.shared && game.minutes.is_none_or(|minutes| minutes == 0) {
-        return t!("store-shared");
-    }
-    match game.minutes {
-        Some(0) => t!("played-never"),
-        Some(minutes) => t!("played-time", time = format::play_time(minutes)),
-        None => game
-            .developer
-            .clone()
-            .unwrap_or_else(|| game.platforms.join(", ")),
-    }
-}
-
-/// The store a game id belongs to, and the store's own id for the game.
-pub fn store_of(id: &str) -> Option<(Store, &str)> {
-    let (key, app) = id.split_once(':')?;
-    let store = match key {
-        "epic" => Store::Epic,
-        "gog" => Store::Gog,
-        "amazon" => Store::Amazon,
-        _ => return None,
-    };
-    Some((store, app))
-}
+pub use zendo_core::owned::store_of;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app::Move;
+    use zendo_core::stores::Store;
     use zendo_core::{Game, Launch, Library, Source};
 
     /// Epic and GOG signed in, Amazon signed out, no Steam key; Epic's
@@ -932,28 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn sorts_by_title_last_played_or_time_played() {
-        let game = |id: &str, title: &str, last: Option<u64>, minutes: Option<u64>| {
-            let mut game = Owned::new(Shop::Steam, id, title.into());
-            game.last_played = last;
-            game.minutes = minutes;
-            game
-        };
-        let games = [
-            game("1", "Beta", Some(100), Some(5)),
-            game("2", "Alpha", None, None),
-            game("3", "Gamma", Some(300), Some(1)),
-        ];
-        let order = |sort| {
-            let mut list: Vec<&Owned> = games.iter().collect();
-            sort_owned(&mut list, sort);
-            list.iter()
-                .map(|game| game.title.as_str())
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(order(Sort::Title), ["Alpha", "Beta", "Gamma"]);
-        assert_eq!(order(Sort::Recent), ["Gamma", "Beta", "Alpha"]);
-        assert_eq!(order(Sort::MostPlayed), ["Beta", "Gamma", "Alpha"]);
+    fn the_store_sorts_by_title_until_another_is_chosen() {
         let mut zendo = zendo();
         assert_eq!(zendo.store.sort.0, Sort::Title);
         let _ = zendo.update(Message::Store(StoreMessage::Sort(Sort::Recent)));

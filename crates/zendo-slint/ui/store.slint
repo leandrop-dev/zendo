@@ -1,0 +1,185 @@
+// The Store page: the games the signed-in stores say the user owns, in the
+// Library's grid of covers. The Rust side (src/store_ui.rs) fills
+// `StoreData`; nothing here holds a game.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ChipButton, ActionButton } from "components.slint";
+import { ListView } from "std-widgets.slint";
+import { CardRow, ChipData, Grid, CardView } from "library.slint";
+
+export global StoreData {
+    in property <[CardRow]> rows;
+    // The place of the card under the cursor.
+    in property <int> cursor;
+    in property <[ChipData]> sources;
+    in property <[ChipData]> sorts;
+    // What went wrong, a line for each store.
+    in property <[string]> problems;
+    // "Asking Epic, GOG for your games…", while a store is being asked.
+    in property <string> asking;
+    // "Refresh", or "Asking…" while one is; and whether it can be pressed.
+    in property <string> refresh-label;
+    in property <bool> refresh-on;
+    // What the page says instead of the grid; empty when there are cards.
+    in property <string> empty-title;
+    // No store is signed in: the way to Accounts is offered.
+    in property <bool> empty-accounts;
+    in-out property <string> search;
+    // Where the grid is scrolled: 0 at the top, below 0 further down.
+    in-out property <length> viewport-y;
+
+    callback chip(int);
+    callback card-clicked(string);
+    callback columns-changed(int);
+    callback scrolled(float, float);
+    callback search-edited(string);
+    callback refresh();
+    callback go-accounts();
+    // The window's language changed: what Rust wrote is written again.
+    callback relabel();
+}
+
+export component StorePage inherits Rectangle {
+    // How many cards fit across, as the Library's grid counts them.
+    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - 12px + Grid.spacing) / (Grid.card-width + Grid.spacing)));
+    property <length> left: (root.width - 12px - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
+
+    changed columns => { StoreData.columns-changed(root.columns); }
+    init => { StoreData.columns-changed(root.columns); }
+
+    VerticalLayout {
+        // The stores, the installed ones, and Refresh at the right.
+        HorizontalLayout {
+            padding-top: Space.xl;
+            padding-bottom: Space.xs;
+            padding-left: Grid.margin;
+            padding-right: Grid.margin;
+            spacing: Space.l;
+            FlexboxLayout {
+                horizontal-stretch: 1;
+                vertical-stretch: 0;
+                cross-axis-alignment: start;
+                cross-axis-line-alignment: start;
+                spacing: Space.s;
+                for chip in StoreData.sources: ChipButton {
+                    label: chip.label;
+                    count: chip.count;
+                    chosen: chip.chosen;
+                    clicked => { StoreData.chip(chip.id); }
+                }
+            }
+            Rectangle {
+                width: refresh-text.preferred-width + 2 * Space.m;
+                height: 28px;
+                background: refresh-touch.has-hover && StoreData.refresh-on ? Colors.raised : transparent;
+                border-width: 1px;
+                border-color: Colors.line;
+                refresh-text := Text {
+                    x: Space.m;
+                    text: StoreData.refresh-label.to-uppercase();
+                    font-size: 13px;
+                    vertical-alignment: center;
+                    color: StoreData.refresh-on ? Colors.foreground : Colors.dim;
+                }
+                refresh-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    enabled: StoreData.refresh-on;
+                    clicked => { StoreData.refresh(); }
+                }
+            }
+        }
+        // The sort chips and what the stores are being asked.
+        FlexboxLayout {
+            vertical-stretch: 0;
+            cross-axis-alignment: start;
+            cross-axis-line-alignment: start;
+            padding-top: Space.xs;
+            padding-bottom: Space.xs;
+            padding-left: Grid.margin;
+            padding-right: Grid.margin;
+            spacing: Space.s;
+            Text {
+                text: Tr.t("library-sort-keys").to-uppercase();
+                font-size: 12px;
+                color: Colors.dim;
+                vertical-alignment: center;
+            }
+            for chip in StoreData.sorts: ChipButton {
+                label: chip.label;
+                chosen: chip.chosen;
+                clicked => { StoreData.chip(chip.id); }
+            }
+            if StoreData.asking != "": Text {
+                text: StoreData.asking;
+                font-size: 13px;
+                color: Colors.dim;
+                vertical-alignment: center;
+            }
+        }
+        // What went wrong, on a card, since it is red text over the window.
+        if StoreData.problems.length > 0: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: Grid.margin;
+            padding-right: Grid.margin;
+            padding-top: Space.xs;
+            Rectangle {
+                background: Colors.surface;
+                border-width: 1px;
+                border-color: Colors.line;
+                VerticalLayout {
+                    padding: Space.m;
+                    spacing: Space.xs;
+                    for line in StoreData.problems: Text {
+                        text: line;
+                        font-size: 13px;
+                        color: Colors.bad;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        if StoreData.empty-title != "": Rectangle {
+            VerticalLayout {
+                alignment: center;
+                spacing: Space.l;
+                Text {
+                    text: StoreData.empty-title;
+                    font-size: StoreData.empty-accounts ? 18px : 14px;
+                    color: StoreData.empty-accounts ? Colors.foreground : Colors.dim;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if StoreData.empty-accounts: HorizontalLayout {
+                    alignment: center;
+                    ActionButton {
+                        label: Tr.t("store-go-accounts");
+                        clicked => { StoreData.go-accounts(); }
+                    }
+                }
+            }
+        }
+        if StoreData.empty-title == "": ListView {
+            content-y <=> StoreData.viewport-y;
+            init => {
+                StoreData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            changed content-y => {
+                StoreData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            changed visible-height => {
+                StoreData.scrolled(-self.content-y / 1px, self.visible-height / 1px);
+            }
+            for row in StoreData.rows: Rectangle {
+                height: Grid.card-height + Grid.spacing;
+                for card[i] in row.cards: CardView {
+                    x: root.left + i * (Grid.card-width + Grid.spacing);
+                    card: card;
+                    markable: false;
+                    selected: row.first + i == StoreData.cursor;
+                    clicked => { StoreData.card-clicked(card.id); }
+                }
+            }
+        }
+    }
+}

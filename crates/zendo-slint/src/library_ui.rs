@@ -14,8 +14,8 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::{ComponentHandle, Model, ModelNotify, ModelRc, ModelTracker, VecModel, Weak};
 use zendo_core::browse::Move;
 use zendo_core::config::Config;
-use zendo_core::covers::{Fetcher, Kind};
-use zendo_core::{Category, Game, Library, SavedFilter, Sort, State};
+use zendo_core::covers::{Artwork, Fetcher, Kind};
+use zendo_core::{Category, Library, SavedFilter, Sort, State};
 use zendo_shell::gamepad::{self, Pad};
 use zendo_shell::presence::PresenceHandle;
 use zendo_shell::t;
@@ -51,6 +51,10 @@ mod protons;
 mod runtimes;
 #[path = "settings_ui.rs"]
 mod settings;
+#[path = "steam_ui.rs"]
+mod steam;
+#[path = "store_ui.rs"]
+mod store;
 
 /// How long covers that came in are let to gather before the rows show them.
 const COVER_DELAY: Duration = Duration::from_millis(40);
@@ -194,8 +198,12 @@ struct Glue {
     local: local::LocalState,
     /// The Collections sheet (`collections_ui.rs`).
     collections: collections::CollectionsState,
-    /// The Accounts page (`accounts_ui.rs`).
+    /// The Accounts page (`accounts_ui.rs`) and Steam's card on it
+    /// (`steam_ui.rs`).
     accounts: accounts::AccountsState,
+    steam: steam::SteamState,
+    /// The Store page and a store game's page (`store_ui.rs`).
+    store: store::StoreState,
     /// What the stores and sites say about the open game (`cards_ui.rs`).
     cards: cards::CardsState,
     /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
@@ -235,6 +243,8 @@ pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
             .is_ok()
     });
     glue.sync();
+    glue.show_store();
+    glue.load_store_cache();
     glue.rescan();
     glue.check_accounts();
     glue.show_accounts();
@@ -275,10 +285,13 @@ impl Glue {
         data.set_sorts(ModelRc::from(Rc::clone(&chips.sorts)));
         data.set_organize(ModelRc::from(Rc::clone(&chips.organize)));
         data.set_bulk(ModelRc::from(Rc::clone(&chips.bulk)));
+        let store = store::StoreState::new(&covers);
         Rc::new(Self {
             window: window.as_weak(),
             browser,
             covers,
+            store,
+            steam: steam::SteamState::default(),
             grid,
             chips,
             covers_due: Cell::new(false),
@@ -374,6 +387,8 @@ impl Glue {
         self.connect_local(window);
         self.connect_collections(window);
         self.connect_accounts(window);
+        self.connect_steam(window);
+        self.connect_store(window);
         self.connect_cards(window);
         self.connect_compat(window);
         self.connect_prefix(window);
@@ -571,6 +586,7 @@ impl Glue {
         for row in near.start..near.end.min(rows) {
             self.grid.notify.row_changed(row);
         }
+        self.show_store_covers();
     }
 
     // Reading the games.
@@ -609,6 +625,7 @@ impl Glue {
             .loaded(library, Some(sort), categories, saved);
         self.apply(outcome);
         self.sync();
+        self.store_scanned();
         self.refresh_game();
         self.after_scan();
         self.download_images();
@@ -627,14 +644,29 @@ impl Glue {
         let Some(mut fetcher) = self.config.borrow().as_ref().and_then(Fetcher::new) else {
             return;
         };
-        let wanted: Vec<(Game, Kind)> = {
+        // The library's games, and the store games not in it (an installed
+        // one comes with the library's). Every cover first: the grids show
+        // them.
+        let wanted: Vec<(Box<dyn Artwork + Send>, Kind)> = {
             let browser = self.browser.borrow();
-            [Kind::Cover, Kind::Hero]
-                .into_iter()
-                .flat_map(|kind| browser.games().iter().map(move |game| (game, kind)))
-                .filter(|(game, kind)| fetcher.wants(*game, *kind))
-                .map(|(game, kind)| (game.clone(), kind))
-                .collect()
+            let owned = self.store.browser.borrow().images_wanted();
+            let mut wanted: Vec<(Box<dyn Artwork + Send>, Kind)> = Vec::new();
+            for kind in [Kind::Cover, Kind::Hero] {
+                wanted.extend(
+                    browser
+                        .games()
+                        .iter()
+                        .filter(|game| fetcher.wants(*game, kind))
+                        .map(|game| (Box::new(game.clone()) as Box<dyn Artwork + Send>, kind)),
+                );
+                wanted.extend(
+                    owned
+                        .iter()
+                        .filter(|game| fetcher.wants(*game, kind))
+                        .map(|game| (Box::new(game.clone()) as Box<dyn Artwork + Send>, kind)),
+                );
+            }
+            wanted
         };
         if wanted.is_empty() {
             return;
@@ -645,8 +677,10 @@ impl Glue {
         let window = self.window.clone();
         std::thread::spawn(move || {
             for (game, kind) in wanted {
-                let result = fetcher.fetch(&game, kind).map_err(|err| format!("{err:#}"));
-                let id = game.id;
+                let result = fetcher
+                    .fetch(game.as_ref(), kind)
+                    .map_err(|err| format!("{err:#}"));
+                let id = game.id().to_owned();
                 let sent = window.upgrade_in_event_loop(move |_| {
                     with_glue(|glue| glue.image_arrived(&id, kind, result));
                 });
@@ -663,6 +697,9 @@ impl Glue {
             .set(self.images_left.get().saturating_sub(1));
         match result {
             Ok(Some(path)) => {
+                // A store game's id is not a library game's, and the other
+                // way round: only one of them takes it.
+                self.store_image(id, kind, &path);
                 let outcome = self.browser.borrow_mut().set_image(id, kind, path);
                 self.apply(outcome);
             }
@@ -760,6 +797,27 @@ impl Glue {
                 // Game Mode and its shelves come in item 53.
                 Pad::Back | Pad::ToggleGameMode | Pad::PrevShelf | Pad::NextShelf => false,
             };
+        } else if self.on_store() {
+            match pad {
+                Pad::Left => self.store_step(Move::Left),
+                Pad::Right => self.store_step(Move::Right),
+                Pad::Up => self.store_step(Move::Up),
+                Pad::Down => self.store_step(Move::Down),
+                Pad::Activate => self.open_selected_owned(),
+                Pad::Sort => self.store_cycle_sort(),
+                // Game Mode and its shelves come in item 53.
+                Pad::Back
+                | Pad::Hide
+                | Pad::ShowHidden
+                | Pad::ToggleGameMode
+                | Pad::PrevShelf
+                | Pad::NextShelf => false,
+            };
+        } else if self.store_page_open() {
+            // On a store game's page: A opens an installed game.
+            if pad == Pad::Activate {
+                self.open_in_library();
+            }
         } else if self.open.borrow().is_some() {
             // On a game's page: A plays, Y makes it a favorite, X hides it.
             match pad {
@@ -776,6 +834,10 @@ impl Glue {
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
         if self.collections_back() || self.close_form() || self.close_game() {
+            return;
+        }
+        if self.on_store() {
+            self.store_back();
             return;
         }
         let outcome = self.browser.borrow_mut().back();
@@ -829,8 +891,14 @@ impl Glue {
         if self.open.borrow().is_some() && !alt && !meta {
             return self.game_key(key);
         }
+        if self.store_page_open() && !alt && !meta {
+            return self.owned_key(key);
+        }
         if !alt && !meta && !key.is_control() && !is_special(key) && self.type_code(text) {
             return true;
+        }
+        if self.on_store() && !alt && !meta {
+            return self.store_key(text, key);
         }
         if alt || meta || !self.on_library() {
             return false;
@@ -890,6 +958,9 @@ impl Glue {
             '7' => self.navigate(Page::Stats),
             'v' if self.paste_code() => {}
             'p' if self.open.borrow().is_some() => self.toggle_pinned(),
+            'f' if self.on_store() => self.with_window(MainWindow::invoke_focus_search),
+            'v' if self.on_store() => self.with_window(MainWindow::invoke_paste_search),
+            'r' if self.on_store() => self.refresh_stores(),
             _ if !self.on_library() => return false,
             'f' => self.with_window(MainWindow::invoke_focus_search),
             'v' => self.with_window(MainWindow::invoke_paste_search),
@@ -959,7 +1030,7 @@ fn scan() -> Scanned {
 mod tests {
     use crate::{GameData, SettingsData};
     use zendo_core::launch::{Started, Watch};
-    use zendo_core::{Launch, Source, View};
+    use zendo_core::{Game, Launch, Source, View};
     use zendo_shell::format;
     use zendo_shell::running::RunMessage;
 
@@ -976,7 +1047,7 @@ mod tests {
 
     /// A window with the page's glue and `count` games, with no thread
     /// started and nothing written to the user's files.
-    fn page(count: usize) -> (MainWindow, Rc<Glue>) {
+    pub(super) fn page(count: usize) -> (MainWindow, Rc<Glue>) {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().expect("the window opens");
         let glue = Glue::new(&window, false, crate::theme::Themes::plain());
@@ -1097,7 +1168,12 @@ mod tests {
         assert!(glue.key("2", true, false, false));
         assert_eq!(window.get_page(), Page::Store);
         assert_eq!(data.get_marked(), "");
-        // Off the Library, typing is not a search.
+        // On the Store, typing is the Store's search, not the Library's.
+        assert!(glue.key("x", false, false, false));
+        assert_eq!(data.get_search(), "");
+        assert_eq!(window.global::<crate::StoreData>().get_search(), "x");
+        // Off the Library and the Store, typing is not a search.
+        assert!(glue.key("4", true, false, false));
         assert!(!glue.key("x", false, false, false));
         assert_eq!(data.get_search(), "");
         assert!(glue.key("1", true, false, false));

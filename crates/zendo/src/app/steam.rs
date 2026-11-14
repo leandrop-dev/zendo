@@ -7,14 +7,15 @@
 use iced::widget::{button, column, container, row, space, text};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Source;
-use zendo_core::owned::{self, Owned, Shop};
+use zendo_core::owned::{self, Shop};
 use zendo_core::secrets::Key;
-use zendo_core::steam_web::{self, Family, Session, WebAnswer};
+use zendo_core::steam_web::{self, Family, Session};
+use zendo_shell::steam_list::{SteamFetch, fetch_signed_in};
 
 use super::settings::kept_note;
 use super::store::StoreMessage;
 use super::style::{self, BOLD, BUTTON, SPACE_L, SPACE_M, SPACE_S, button_text, colors};
-use super::{Message, Zendo, blocking, now};
+use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 use crate::sign_in_window::{self, Handle};
 
@@ -38,20 +39,6 @@ pub enum SteamMessage {
     SignedIn(Result<Option<Session>, String>),
     SignOut,
     Fetched(Result<SteamFetch, String>),
-}
-
-/// Steam's list asked with the sign-in.
-#[derive(Debug, Clone)]
-pub enum SteamFetch {
-    Games {
-        games: Vec<Owned>,
-        /// A new token, when the old one had run out.
-        renewed: Option<Session>,
-        family: Option<Family>,
-        family_error: Option<String>,
-    },
-    /// Steam's page no longer knows the sign-in.
-    SignedOut,
 }
 
 impl Zendo {
@@ -294,47 +281,10 @@ pub(super) fn fetch_steam_signed_in(session: Session) -> Task<Message> {
     )
 }
 
-/// Steam's list with the sign-in: a new token from Steam's page first when
-/// the old one has run out, and again once if Steam refuses it.
-fn fetch_signed_in(session: Session) -> anyhow::Result<SteamFetch> {
-    let mut session = session;
-    let mut renewed = None;
-    if !session.fresh(now()) {
-        match sign_in_window::renew_steam()? {
-            Some(new) => {
-                session = new.clone();
-                renewed = Some(new);
-            }
-            None => return Ok(SteamFetch::SignedOut),
-        }
-    }
-    let mut answer = steam_web::ask(&session)?;
-    if matches!(answer, WebAnswer::Rejected) && renewed.is_none() {
-        match sign_in_window::renew_steam()? {
-            Some(new) => {
-                answer = steam_web::ask(&new)?;
-                renewed = Some(new);
-            }
-            None => return Ok(SteamFetch::SignedOut),
-        }
-    }
-    match answer {
-        WebAnswer::Games {
-            games,
-            family,
-            family_error,
-        } => Ok(SteamFetch::Games {
-            games: steam_web::keep(games)?,
-            renewed,
-            family,
-            family_error,
-        }),
-        WebAnswer::Rejected => Ok(SteamFetch::SignedOut),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use zendo_core::owned::Owned;
+
     use super::*;
 
     fn session() -> Session {

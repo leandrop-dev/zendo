@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38 and 41 to 50 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 50 and 51a are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -38,15 +38,20 @@ to `zendo-core` when that page is ported. Ask before building any other page
   Collections sheet with the Library's COLLECTIONS and ADD TO COLLECTION chips
   and the game page's collections row). Left in 50b for 51: an engine is also
   busy while a store job runs (Iced's `engines_busy`; now only while a game
-  runs). **Left in 50c for 51**, each marked `// 51:` in `accounts_ui.rs`: asking
-  a store for its games once it is signed in or checked (`fetch_owned`), the
-  Store forgetting a store's list on sign-out (`store.forget`; `owned::forget`
-  is done), and Steam's card whole (its sign-in and sign-out on Steam's page,
-  the token in the keyring, the owned and family lists), which also brings
-  achievements for the signed-in Steam account (`achievements.rs` reads the
-  session in Iced) and the "n of 4" count with Steam in it.
-- **51** Store, store game page, Downloads, installer, Steam installs, and
-  Steam's card on Accounts (see 50c).
+  runs). What 50c left for 51 (asking a store for its games after a sign-in
+  or check, the Store forgetting a list on sign-out, Steam's card whole with
+  its achievements and the "n of 4" count) was done in 51a.
+- **51** Sliced with the user into three. **51a built 2026-11-14**: the Store
+  page, a store game's page, Steam's card on Accounts, and the hooks 50c left.
+  **51b**: the Downloads page, the installer sheet and the queue, with what
+  waits for them on the store game's page (Install, Import, Resume, See
+  downloads, "Also install its DLC"; marked `// 51b:` in `store_ui.rs`), the
+  engines being busy while a store job runs (`engines_ui.rs`), the updates by
+  themselves (`settings_ui.rs`) and the update checks after a scan. **51c**:
+  Steam installs (Install with Steam, its progress, Stop waiting, Uninstall)
+  and the game page's Update, job line, Check, Repair, Move, Uninstall and
+  Steam Verify, the DLC's Install and Uninstall, and jobs held while a game
+  runs (`game_ui.rs`). Item 54's parity checklist must go through these.
 - **52** Mods, Nexus, Nexus search, launch options (and gamescope), artwork.
 - **53** Stats tab and Game Mode.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
@@ -120,6 +125,21 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   played goes to GOG; Galaxy starts GOG games), the sheet with a controller
   (only B closes it), Accounts, About and the Collections sheet in pt-PT, and
   F1 and Ctrl+4 / Ctrl+6.
+- **The Store, a store game's page and Steam's card (51a)**, same run. Claude
+  already clicked through the Store's chips, sorts, keys, search field,
+  Refresh and errors card, a store game's page with its pills and trail,
+  Open in library, the sign-in-first state, and Steam's card (Sign out, Sign
+  in's window, Cancel, Refresh with a token Steam refuses) against a seeded home
+  and fake engines
+  (`docs/history.md`, item 51a). What needs you, with your real accounts: the
+  Store after a real sign-in to Epic, GOG and Amazon (the lists, their covers,
+  Refresh); a real Steam sign-in on Steam's page (and Steam Guard), the list
+  that follows with your family's games marked "Shared by your family", the
+  family line on the card, and a restart that keeps you signed in; a store
+  game's page with a real engine (sizes, "needs …", the DLC you own, the
+  latest version); the Store in pt-PT; the pad on the grid (A opens, Y sorts);
+  Ctrl+F, Ctrl+V and Ctrl+R on the Store. Install, Import and Downloads are
+  not here yet (51b).
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

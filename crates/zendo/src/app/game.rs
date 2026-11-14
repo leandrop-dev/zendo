@@ -9,15 +9,13 @@ use iced::widget::{button, column, container, image, row, scrollable, space, sta
 use iced::{Alignment, ContentFit, Element, Font, Length, Task};
 use zendo_core::downloads::{Action, Job};
 use zendo_core::launch;
-use zendo_core::owned::Owned;
-use zendo_core::{Game, Size, Source, Status};
+use zendo_core::{Game, Source, Status};
 
 use super::artwork::ArtMessage;
 use super::collections::CollectionsMessage;
 use super::downloads::{DownloadMessage, FolderFor, UpdateState, action_doing_alone, update_line};
 use super::protondb::RatingState;
 use super::steam_installs::SteamInstallMessage;
-use super::store::InfoState;
 use super::style::{self, BOLD, SPACE_L, SPACE_M, SPACE_S, SPACE_XL, SPACE_XS, colors};
 use super::{Message, Page, Zendo, format, game_scroll_id, now};
 use crate::i18n::t;
@@ -723,70 +721,9 @@ fn platform_label(platform: &str) -> String {
     }
 }
 
-/// What the store says about a game: sizes and the latest version asked of
-/// its engine, then what its list records. `installed` leaves out the size
-/// on disk, which the install's own record gives.
-pub fn store_facts(
-    owned: Option<&Owned>,
-    info: Option<&InfoState>,
-    installed: bool,
-) -> Vec<(String, String)> {
-    let mut facts = Vec::new();
-    match info {
-        // Steam's store is asked for the page's details, not sizes.
-        Some(InfoState::Asking) if owned.is_some_and(|owned| owned.store().is_none()) => {
-            facts.push((t!("fact-store-details"), t!("fact-asking")));
-        }
-        Some(InfoState::Asking) => facts.push((t!("fact-download-size"), t!("fact-asking"))),
-        Some(InfoState::Got(info)) => {
-            if let Some(bytes) = info.download_size {
-                facts.push((t!("fact-download-size"), Size::Bytes(bytes).to_string()));
-            }
-            if let Some(bytes) = info.install_size.filter(|_| !installed) {
-                facts.push((t!("fact-size-on-disk"), Size::Bytes(bytes).to_string()));
-            }
-            if let Some(version) = &info.version {
-                facts.push((t!("fact-latest-version"), version.clone()));
-            }
-            if let Some(day) = &info.updated {
-                facts.push((t!("fact-latest-build"), day.clone()));
-            }
-        }
-        Some(InfoState::Failed(err)) => {
-            facts.push((
-                t!("fact-store-details"),
-                t!("fact-store-failed", error = err.as_str()),
-            ));
-        }
-        None => {}
-    }
-    if let Some(owned) = owned {
-        if let Some(sizes) = owned.sizes {
-            facts.push((
-                t!("fact-download-size"),
-                Size::Bytes(sizes.download).to_string(),
-            ));
-            if !installed {
-                facts.push((
-                    t!("fact-size-on-disk"),
-                    Size::Bytes(sizes.install).to_string(),
-                ));
-            }
-        } else if let Some(bytes) = owned.space.filter(|_| !installed) {
-            facts.push((t!("fact-space-needed"), Size::Bytes(bytes).to_string()));
-        }
-        if let Some(publisher) = &owned.publisher {
-            facts.push((t!("fact-publisher"), publisher.clone()));
-        }
-        if let Some(day) = &owned.released {
-            facts.push((t!("fact-released"), day.clone()));
-        }
-        if !owned.genres.is_empty() {
-            facts.push((t!("fact-genres"), owned.genres.join(", ")));
-        }
-    }
-    facts
-}
+/// What the store says about a game, as rows: in `zendo-shell`, shared with
+/// the Slint window.
+pub use zendo_shell::store_facts::facts as store_facts;
 
 /// Whether the More row has anything for the game.
 fn has_more(game: &Game) -> bool {

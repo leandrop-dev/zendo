@@ -5,7 +5,7 @@
 use iced::widget::{button, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length};
 use zendo_core::Size;
-use zendo_core::owned::{Owned, PlayedOn};
+use zendo_core::owned::Owned;
 
 use super::format;
 use super::game::{
@@ -146,7 +146,7 @@ impl Zendo {
                 plain(format::play_time(game.recent_minutes)),
             );
         }
-        if let Some(systems) = played_on(game.played_on) {
+        if let Some(systems) = format::played_on(game.played_on) {
             add(t!("fact-played-on"), plain(systems));
         }
         card(t!("game-details"), column(rows).spacing(12).into())
@@ -212,19 +212,4 @@ impl Zendo {
             .style(style::card)
             .into()
     }
-}
-
-/// "Linux 10 h · Windows 45 min": the systems Steam counted time on.
-fn played_on(minutes: PlayedOn) -> Option<String> {
-    let systems: Vec<String> = [
-        (t!("system-linux"), minutes.linux),
-        (t!("system-deck"), minutes.deck),
-        (t!("system-windows"), minutes.windows),
-        (t!("system-mac"), minutes.mac),
-    ]
-    .into_iter()
-    .filter(|(_, minutes)| *minutes > 0)
-    .map(|(system, minutes)| format!("{system} {}", format::play_time(minutes)))
-    .collect();
-    (!systems.is_empty()).then(|| systems.join(" · "))
 }

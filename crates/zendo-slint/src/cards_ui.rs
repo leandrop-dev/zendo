@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use slint::{Color, ComponentHandle, ModelRc, VecModel};
 use zendo_core::achievements::{self, Achievement, Achievements};
-use zendo_core::owned::StoreDetails;
+use zendo_core::owned::{Owned, StoreDetails};
 use zendo_core::protondb::{self, Rating};
 use zendo_core::requirements::{self, From, Requirements, System};
 use zendo_core::steam_facts::{self, Facts};
@@ -201,7 +201,9 @@ impl Glue {
         });
         let glue = Rc::clone(self);
         data.on_retry(move || {
-            if let Some(id) = glue.open.borrow().clone() {
+            // A library game's page, or a store game's.
+            let id = glue.open.borrow().clone().or_else(|| glue.store_open_id());
+            if let Some(id) = id {
                 glue.retry_cards(&id);
             }
         });
@@ -251,6 +253,14 @@ impl Glue {
         self.want_achievements(id);
     }
 
+    /// A store game's page just opened: its rating and achievements, which
+    /// need no installed game. The prefix and GOG's extras do.
+    pub(super) fn want_owned_cards(&self, id: &str) {
+        self.cards.achievements_more.set(0);
+        self.want_rating(id);
+        self.want_achievements(id);
+    }
+
     /// Asks `ProtonDB` about the game, once a session. Steam's store is asked
     /// for the game's facts on the way when its app id is known already.
     fn want_rating(&self, id: &str) {
@@ -258,11 +268,7 @@ impl Glue {
         if !self.persist || self.cards.ratings.borrow().contains_key(id) {
             return;
         }
-        let Some((title, chosen)) = self
-            .browser
-            .borrow()
-            .game(id)
-            .map(|game| (game.title.clone(), game.steam_app))
+        let Some((title, chosen)) = self.card_game(id).map(|game| (game.title, game.steam_app))
         else {
             return;
         };
@@ -303,11 +309,7 @@ impl Glue {
         if !self.persist {
             return;
         }
-        let chosen = self
-            .browser
-            .borrow()
-            .game(id)
-            .and_then(|game| game.steam_app);
+        let chosen = self.card_game(id).and_then(|game| game.steam_app);
         if let Some(app) = steam_facts::app_for(id, chosen) {
             self.want_facts(id, app);
         }
@@ -352,10 +354,8 @@ impl Glue {
             return;
         }
         let linux = self
-            .browser
-            .borrow()
-            .game(id)
-            .and_then(|game| game.details.platform.clone())
+            .card_game(id)
+            .and_then(|game| game.details.platform)
             .is_some_and(|platform| platform.eq_ignore_ascii_case("linux"));
         let system = if linux {
             System::Linux
@@ -408,11 +408,13 @@ impl Glue {
             .borrow_mut()
             .insert(id.to_owned(), Ask::Asking);
         let (owned, asked) = (id.to_owned(), id.to_owned());
+        let signed_in = self.steam_session().map(|session| session.steamid);
         self.ask(
             move || {
-                // The account Steam on this computer signed in last; the
-                // Steam sign-in of Accounts comes with item 50.
-                let steam_id = steam::user(&steam::roots()).map(|user| user.id);
+                // The Steam sign-in's account, else the one Steam on this
+                // computer signed in last.
+                let steam_id =
+                    signed_in.or_else(|| steam::user(&steam::roots()).map(|user| user.id));
                 achievements::for_game(&asked, steam_id.as_deref())
                     .map_err(|err| format!("{err:#}"))
             },
@@ -604,20 +606,15 @@ impl Glue {
         images
     }
 
-    /// The DLC installed with a game of Epic or GOG. What the store says the
-    /// user owns, and Install and Uninstall, come with item 51.
+    /// The DLC of a game of Epic or GOG: those the store says the user owns
+    /// and those installed. (Install and Uninstall come with item 51c.)
     fn show_dlc(&self, game: &Game, data: &GameData<'_>) {
-        let lines: Vec<Fact> = if matches!(game.source, Source::Epic | Source::Gog) {
-            game.details
-                .dlc
-                .iter()
-                .map(|dlc| fact(dlc.title.as_deref().unwrap_or(&dlc.id), t!("installed")))
-                .collect()
+        let (count, lines) = if matches!(game.source, Source::Epic | Source::Gog) {
+            self.dlc_rows(game)
         } else {
-            Vec::new()
+            (String::new(), Vec::new())
         };
-        let count = lines.len();
-        data.set_dlc_count(t!("dlc-count", installed = count, total = count).into());
+        data.set_dlc_count(count.into());
         self.cards.dlc.set_vec(lines);
     }
 
@@ -737,8 +734,8 @@ impl Glue {
     /// Rows for the details card from Steam's store: the developer,
     /// publisher, release date and genres, then the features and the
     /// Metacritic score, which only Steam gives. (What a game's own store
-    /// already said is left out when the stores come in item 51.)
-    pub(super) fn steam_fact_rows(&self, game: &Game) -> Vec<Fact> {
+    /// already said comes first, in `store_ui`'s rows.)
+    pub(super) fn steam_fact_rows(&self, game: &Game, owned: Option<&Owned>) -> Vec<Fact> {
         if let Some(Ask::Failed(error)) = self.cards.facts.borrow().get(&game.id) {
             return vec![fact(
                 t!("fact-store-details"),
@@ -749,19 +746,26 @@ impl Glue {
             return Vec::new();
         };
         let details = &facts.details;
+        // What the game's own store already said is not said twice.
+        let said = |own: Option<&Option<String>>| own.is_some_and(Option::is_some);
         let mut rows = Vec::new();
         if let Some(developer) = &details.developer
             && game.details.developer.is_none()
+            && !said(owned.map(|owned| &owned.developer))
         {
             rows.push(fact(t!("fact-developer"), developer.clone()));
         }
-        if let Some(publisher) = &details.publisher {
+        if let Some(publisher) = &details.publisher
+            && !said(owned.map(|owned| &owned.publisher))
+        {
             rows.push(fact(t!("fact-publisher"), publisher.clone()));
         }
-        if let Some(day) = &details.released {
+        if let Some(day) = &details.released
+            && !said(owned.map(|owned| &owned.released))
+        {
             rows.push(fact(t!("fact-released"), day.clone()));
         }
-        if !details.genres.is_empty() {
+        if !details.genres.is_empty() && owned.is_none_or(|owned| owned.genres.is_empty()) {
             rows.push(fact(t!("fact-genres"), details.genres.join(", ")));
         }
         let features = features_line(details);

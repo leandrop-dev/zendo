@@ -5,16 +5,17 @@ import "../../zendo/fonts/JetBrainsMono-Regular.ttf";
 import "../../zendo/fonts/JetBrainsMono-Bold.ttf";
 import { Colors, Space, Tr } from "style.slint";
 import { TopBar, SettingsTabs, Page } from "top_bar.slint";
-import { GamePage, GameData, Tile, Fact } from "game.slint";
+import { GamePage, GameData, Tile, Fact, OwnedBadge } from "game.slint";
+import { StorePage, StoreData } from "store.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
 import { CollectionsSheet, CollectionsData, CollRow } from "collections.slint";
 import { SettingsPage, SettingsData, SetRow, Bar } from "settings.slint";
 import { AboutPage, AboutData } from "about.slint";
-import { AccountsPage, AccountsData, AccountCard } from "accounts.slint";
+import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, AccountsData, AccountCard }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, AccountsData, AccountCard, SteamCardData }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -57,6 +58,7 @@ export component MainWindow inherits Window {
     property <int> language: Tr.language;
     changed language => {
         LibraryData.relabel();
+        StoreData.relabel();
         SettingsData.relabel();
         CollectionsData.relabel();
         AccountsData.relabel();
@@ -114,7 +116,11 @@ export component MainWindow inherits Window {
             if root.page == Page.accounts: AccountsPage {
                 vertical-stretch: 1;
             }
-            if root.page == Page.store || root.page == Page.stats || root.page == Page.downloads: Rectangle {
+            if root.page == Page.store && !GameData.open: StorePage { }
+            if root.page == Page.store && GameData.open: GamePage {
+                vertical-stretch: 1;
+            }
+            if root.page == Page.stats || root.page == Page.downloads: Rectangle {
                 vertical-stretch: 1;
                 Text {
                     text: root.page-title.to-uppercase();
@@ -138,7 +144,9 @@ export component MainWindow inherits Window {
                     overflow: elide;
                 }
                 Text {
-                    text: root.page == Page.library ? (GameData.open ? Tr.t("hints-game") : LibraryData.hints) : Tr.t("hints-other");
+                    text: root.page == Page.library ? (GameData.open ? Tr.t("hints-game") : LibraryData.hints)
+                        : root.page == Page.store ? (GameData.open ? Tr.t("hints-owned") : Tr.t("hints-store"))
+                        : Tr.t("hints-other");
                     font-size: 13px;
                     color: Colors.dim;
                 }

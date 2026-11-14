@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38 and 41 to 50 are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38, 41 to 50 and 51a are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -61,12 +61,18 @@ list and details views, OptiScaler and recompiled games are on hold.
   Keys, Library and Diagnostics groups), 50b (the Engines and Proton groups,
   the Theme choices and the Discord switch) and 50c (the Accounts page for Epic,
   GOG and Amazon, About, and the Collections sheet with its chips and the game
-  page's collections row; Steam's card goes with the Store in 51). The other
-  pages show their name. Run it as `zendo-slint`.
+  page's collections row). Item 51 is sliced: 51a is built (the Store page
+  with its chips, sorts, keys, Refresh and errors; a store game's page, which
+  is the game page in an owned mode; Steam's sign-in card on Accounts, with
+  its list and achievements; the shared rules moved to `zendo-core` and
+  `zendo-shell`). Install, Import and Downloads (51b) and Steam installs and
+  the game page's jobs (51c) are next. The other pages show their name. Run it
+  as `zendo-slint`.
 
 ## Next
 
-Items 51 to 54, the port: `docs/backlog.md` has them, and what is on hold.
+Items 51b, 51c and 52 to 54, the port: `docs/backlog.md` has them, and what is
+on hold.
 
 ## Direction [firm]
 

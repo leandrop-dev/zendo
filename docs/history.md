@@ -4149,3 +4149,125 @@ Store's lists; nothing in the Slint code reads a Steam session yet.
   sign-in (51), pt-PT on the three pages, a light KDE scheme, a controller on
   the sheet (the pad only closes it), and the count with a Steam session (none
   can be made until 51).
+
+## Item 51a, the Store, a store game's page and Steam's card in Slint (2026-11-14)
+
+The first slice of item 51 (sliced with the user: 51a here, 51b Downloads and
+the installer, 51c Steam installs and the game page's jobs). New files:
+`ui/store.slint`; `src/store.rs` (the page's state with no toolkit in it,
+`StoreBrowser`), `src/store_ui.rs` (its glue and the store game's page) and
+`src/steam_ui.rs` (Steam's card), the last two child modules of `library_ui` by
+`#[path]` like the others; in `zendo-shell` `steam_list` (Steam's list with the
+sign-in, moved from Iced) and `store_facts` (`InfoState` and the rows the details
+card shows, moved from Iced). `zendo_core::owned` gained `store_of`, `Filter`
+(`keeps`), `sort` and `sort_key`, and `zendo_shell::format` gained `owned_line` and
+`played_on`; Iced calls all of them, so each rule is written once.
+
+- **The Store page**: a chip for All, each store with its count and Not
+  installed only; the three sort chips (Tab cycles); Refresh (says Asking…
+  while a store is asked, with a line naming the stores); the errors, in a
+  card (a line per store); the empty states of Iced's page (sign in first with
+  Go to Accounts, asking, no match, none here, nothing); the count beside the
+  tab; the Library's grid of covers with an Installed badge and no mark box
+  (`CardView` got `markable`). Arrows, PageUp/PageDown, Home/End, Enter, typing,
+  Backspace, Tab, Esc, F5 and Ctrl+R/F/V, and the pad (A opens, Y sorts), work
+  on it; the footer has `hints-store` and `hints-owned`. The top bar's search is
+  one field per page in the same place, so the tabs do not shift.
+- **Where the lists come from**: the lists kept from last time are read on a
+  thread at start, and no store is asked until they are in (`lists_loaded`);
+  after that a store signed in with no list is asked, on each account check
+  and once when the first scan has brought the settings (Steam's session
+  among them). A list kept from last time waits for Refresh, a sign-in asks
+  its store at once, and a sign-out forgets its list. Covers of store games
+  not in the library download with the library's (`download_images` takes
+  `Box<dyn Artwork + Send>`, as Iced's `Job`).
+- **A store game's page** is the game page in an owned mode (`GameData.owned`)
+  rather than a copy: the header, About, the network cards (ProtonDB and Deck
+  pills, anti-cheat, screenshots, achievements, requirements, Try again) and the
+  Technical fold are shared; the trail `STORE / TITLE`, the platform badges and
+  Installed, Open in library (Enter and the pad's A as well) or what installing
+  would do ("Installs into … · needs …", "no home folder", Steam's words), the
+  play-time tile, the DLC the store says the user owns (the size, or "comes with
+  the game") and the details card (store, owner when shared, status, platforms,
+  developer, the store's sizes and latest version, publisher, released, genres,
+  time played, last played, played on) are its own. `show_game` is the one
+  dispatch point: every answer that arrives calls it, and it writes the store
+  game's page when that is the open one. The cards look a game up through
+  `card_game`, the library's or a stand-in made from what the store says.
+- **The installed game's page** now has the store's rows in its details card
+  and the DLC list the store says the user owns beside the installed ones (the
+  count "n of m"); Steam's own rows leave out what the owned entry said.
+- **Steam's card on Accounts** (above the three stores, as in Iced): Sign in
+  with Steam opens Zendo's sign-in window on Steam's page, Cancel closes it,
+  Sign out forgets the session, the kept list and Steam's cached profile; the
+  signed-in line, the family when the last list said, the notes and where the
+  token is kept. The session is saved through `Setting::SteamSession`, so it is
+  applied at once, written on a thread and put back if the write fails. One
+  rule decides "signed in to Steam": the session must parse (Iced used its mere
+  presence for the Store and the parse for the card); the card, the Store, the
+  tab's count and the achievements all use it. Achievements for a Steam game
+  ask with the sign-in's account first, then Steam's own user on this computer.
+  A renewed token is kept; Steam's page not knowing the sign-in drops the
+  session with "sign in again".
+- **Tests**: 11 in `zendo-slint`'s Store glue (the chips and counts, the search,
+  a card opens the page and Escape returns with the cursor, Open in library,
+  the keys, sign-out, a store that failed, the store's words on the page,
+  Steam's card from sign-in to a renewed token to a lost session, sign-out, a
+  session that does not parse) and 9 for `StoreBrowser`; the sort, the filter and
+  `store_of` moved to `zendo-core` with their tests, `owned_line`/`played_on` and
+  `store_facts` have their own. 102 tests in `zendo-slint`; the workspace's
+  tests and clippy are clean. `persist == false` keeps every one of them off
+  the disk, the engines, the network and the window.
+- **Found by tests**: `StoreBrowser` read the cursor's game after the lists were
+  replaced, so a list landing moved the cursor to another game; a click moved
+  the cursor in the browser but not in the window.
+- **Checked on screen** (2026-11-14, throwaway home, no session bus, the user at
+  the PC; copies of the first ten games of each store's cached list with their
+  covers, fake `legendary` (prints `[]` for `list`), `gogdl` and `nile`, a
+  seeded Steam session with a far-off expiry, one GOG game installed): the Store
+  with 40 games and the Installed badge; each chip (Steam, Epic, GOG, Amazon,
+  Not installed only on and off, All), each sort chip; a Steam card (the page
+  with the ProtonDB and Deck pills, About, the details card, screenshots,
+  achievements, the Technical fold, Escape back with the cursor on that card), an
+  Amazon card (its install note with the install folder), the installed GOG card
+  (Installed badge, Open in library, which opened its own page); typing
+  searched and Escape cleared it, Right, Down, Tab and Enter; Accounts with
+  Steam's card, Sign out (the list left the Store, `steam_session = ""` in
+  `config.toml`, the cached list removed, the counts fell to 30 and 3 of 4),
+  Sign in with Steam (the sign-in window opened as its own process) and Cancel
+  (it closed); Refresh (Epic's list emptied by the fake, GOG's 401 and Amazon's
+  missing `library.json` in the errors card, the other lists kept).
+- **A second run** (same day, same setup, after a review of the first found a
+  bug in its own still): the Library page after Open in library showed the
+  store game's platform and Installed badges before PCGamingWiki, because the
+  header's badge row read a model that was never emptied; `close_owned` now
+  empties it (and a test asserts it), and the store page's empty tiles row no
+  longer adds a second gap under the actions. Checked after the fix: the
+  library page has only PCGamingWiki and the pills; both pills on a store page
+  (the Deck pill logged `https://store.steampowered.com/app/735580` in a fake
+  `xdg-open`; the ProtonDB pill opened the real browser, see below); the
+  trail's `← STORE` link by mouse (back on the grid, cursor on that card); the
+  Store's search field by click and typing, then Escape and Ctrl+F (the field
+  took the keyboard and "ar" filtered to five games); the Library's mark box and
+  search field (restructured with the top bar); Refresh with Steam signed in
+  (the label said ASKING…, the line "Asking Steam for your games…" showed while
+  the hidden renewal window ran, then the card said "Steam's sign-in has
+  ended: sign in again", Steam's games left, the other lists and the errors
+  stayed, the cursor stayed on its card); and, in a home with nothing signed
+  in and no cache, the sign-in-first state (Refresh disabled, counts 0) and GO
+  TO ACCOUNTS, which opened Accounts.
+- **Not checked.** A real Steam sign-in on Steam's page, a real token and a
+  list fetched with it, the family line, a renewal that works; the DLC list and
+  the store's sizes ("needs …") from a real engine (the fakes said nothing
+  about a game); the library page's details with the store's rows; Ctrl+V and
+  Ctrl+R on the Store (glue tests only); the pad; pt-PT; a light KDE scheme.
+  Left out on purpose, each marked in the code and listed in
+  `docs/backlog.md`: Install, Import, See downloads and "Also install its DLC"
+  (51b), Install with Steam (51c).
+- **Network and side effects during the checks**: ProtonDB, Steam's store and
+  the achievements were asked for real; GOG's library with the fake token
+  (401); Steam's Web API with a fake token on Refresh; the sign-in window
+  loaded Steam's page. In the second run the first ProtonDB pill click went to
+  the real `xdg-open` (the seed script had been cut short before it made the
+  logging fake) and opened `protondb.com/app/735580` in the user's Firefox: a
+  tab for them to close.

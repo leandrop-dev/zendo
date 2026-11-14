@@ -134,9 +134,76 @@ pub fn played_line(game: &zendo_core::Game, now: u64) -> String {
     }
 }
 
+/// The line under a Store card's title: the developer or platforms, or for a
+/// Steam game the time Steam counted.
+#[must_use]
+pub fn owned_line(game: &zendo_core::owned::Owned) -> String {
+    if game.shared && game.minutes.is_none_or(|minutes| minutes == 0) {
+        return t!("store-shared");
+    }
+    match game.minutes {
+        Some(0) => t!("played-never"),
+        Some(minutes) => t!("played-time", time = play_time(minutes)),
+        None => game
+            .developer
+            .clone()
+            .unwrap_or_else(|| game.platforms.join(", ")),
+    }
+}
+
+/// "Linux 10 h · Windows 45 min": the systems Steam counted time on.
+#[must_use]
+pub fn played_on(minutes: zendo_core::owned::PlayedOn) -> Option<String> {
+    let systems: Vec<String> = [
+        (t!("system-linux"), minutes.linux),
+        (t!("system-deck"), minutes.deck),
+        (t!("system-windows"), minutes.windows),
+        (t!("system-mac"), minutes.mac),
+    ]
+    .into_iter()
+    .filter(|(_, minutes)| *minutes > 0)
+    .map(|(system, minutes)| format!("{system} {}", play_time(minutes)))
+    .collect();
+    (!systems.is_empty()).then(|| systems.join(" · "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_store_card_says_who_made_it_or_how_long_it_was_played() {
+        use zendo_core::owned::{Owned, PlayedOn, Shop};
+        let mut game = Owned::new(Shop::Steam, "1", "X".into());
+        game.platforms = vec!["Windows".into(), "Linux".into()];
+        assert_eq!(owned_line(&game), "Windows, Linux");
+        game.developer = Some("Maker".into());
+        assert_eq!(owned_line(&game), "Maker");
+        game.minutes = Some(0);
+        assert_eq!(owned_line(&game), t!("played-never"));
+        game.minutes = Some(90);
+        assert_eq!(owned_line(&game), t!("played-time", time = play_time(90)));
+        game.minutes = None;
+        game.shared = true;
+        assert_eq!(owned_line(&game), t!("store-shared"));
+        let on = PlayedOn {
+            linux: 600,
+            windows: 45,
+            ..PlayedOn::default()
+        };
+        assert_eq!(
+            played_on(on).as_deref(),
+            Some(
+                format!(
+                    "{} 10 h · {} 45 min",
+                    t!("system-linux"),
+                    t!("system-windows")
+                )
+                .as_str()
+            )
+        );
+        assert_eq!(played_on(PlayedOn::default()), None);
+    }
 
     #[test]
     fn reads_like_people_write() {

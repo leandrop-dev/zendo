@@ -5,6 +5,7 @@
 import { Colors, Space, Tr } from "style.slint";
 import { Tab, IconButton, ChipButton, SearchField } from "components.slint";
 import { LibraryData } from "library.slint";
+import { StoreData } from "store.slint";
 
 export enum Page { library, store, stats, downloads, settings, accounts, about }
 
@@ -54,8 +55,18 @@ export component TopBar inherits Rectangle {
     in property <string> downloads-count;
     callback navigate(Page);
     // Ctrl+F and Ctrl+V: the search takes the keyboard.
-    public function focus-search() { search.focus(); }
-    public function paste-search() { search.focus(); search.paste(); }
+    public function focus-search() {
+        if root.page == Page.store { store-search.focus(); } else { search.focus(); }
+    }
+    public function paste-search() {
+        if root.page == Page.store {
+            store-search.focus();
+            store-search.paste();
+        } else {
+            search.focus();
+            search.paste();
+        }
+    }
 
     background: Colors.sidebar;
 
@@ -113,15 +124,28 @@ export component TopBar inherits Rectangle {
                 }
             }
             Rectangle { horizontal-stretch: 1; }
-            // Always there, so Ctrl+F and Ctrl+V can reach it; no room on
-            // the other pages.
-            search := SearchField {
-                visible: root.page == Page.library;
-                width: root.page == Page.library ? 220px : 0px;
-                placeholder: Tr.t("library-search");
-                text <=> LibraryData.search;
-                edited(text) => { LibraryData.search-edited(text); }
-                accepted => { LibraryData.key("\n", false, false, false, false); }
+            // Always there, so Ctrl+F and Ctrl+V can reach them; no room on
+            // the other pages. The Library and the Store each have a field
+            // in the same place.
+            Rectangle {
+                width: root.page == Page.library || root.page == Page.store ? 220px : 0px;
+                height: 34px;
+                search := SearchField {
+                    visible: root.page == Page.library;
+                    width: parent.width;
+                    placeholder: Tr.t("library-search");
+                    text <=> LibraryData.search;
+                    edited(text) => { LibraryData.search-edited(text); }
+                    accepted => { LibraryData.key("\n", false, false, false, false); }
+                }
+                store-search := SearchField {
+                    visible: root.page == Page.store;
+                    width: parent.width;
+                    placeholder: Tr.t("store-search");
+                    text <=> StoreData.search;
+                    edited(text) => { StoreData.search-edited(text); }
+                    accepted => { LibraryData.key("\n", false, false, false, false); }
+                }
             }
             IconButton {
                 icon: @image-url("../../zendo/icons/download.svg");

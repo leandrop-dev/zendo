@@ -110,9 +110,11 @@ component Badge inherits Rectangle {
     }
 }
 
-component CardView inherits Rectangle {
+export component CardView inherits Rectangle {
     in property <Card> card;
     in property <bool> selected;
+    // The Store's cards have no mark box.
+    in property <bool> markable: true;
     callback clicked;
     callback marked;
 
@@ -171,7 +173,7 @@ component CardView inherits Rectangle {
             }
         }
         // The mark box, top left; the badge, top right.
-        Rectangle {
+        if root.markable: Rectangle {
             x: Space.s;
             y: Space.s;
             width: 20px;

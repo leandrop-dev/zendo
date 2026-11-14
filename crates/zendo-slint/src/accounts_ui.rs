@@ -3,10 +3,9 @@
 //! code when the store's sign-in ends; nothing to copy. When that window
 //! cannot open, or the user prefers, the page opens in their browser and
 //! they paste back the code or address it ends on. A part of the Library's
-//! glue (`library_ui`), which owns the settings.
-//!
-//! Left for item 51, which has the Store's lists: asking a store for its
-//! games once it is signed in, forgetting them on sign-out, and Steam's card.
+//! glue (`library_ui`), which owns the settings. Steam's card is in
+//! `steam_ui`; what a sign-in or sign-out means for the Store's lists is in
+//! `store_ui`, called from here.
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -243,6 +242,23 @@ impl Glue {
         self.accounts.accounts.borrow_mut()[index(store)] = account;
     }
 
+    /// Whether the store's account is known to be signed in.
+    pub(super) fn store_signed_in(&self, store: Store) -> bool {
+        matches!(
+            self.accounts.accounts.borrow()[index(store)],
+            Account::SignedIn(_)
+        )
+    }
+
+    /// Whether the store's account is known to be signed out: the Store
+    /// shows a list kept from last time while the check runs or fails.
+    pub(super) fn store_signed_out(&self, store: Store) -> bool {
+        matches!(
+            self.accounts.accounts.borrow()[index(store)],
+            Account::SignedOut
+        )
+    }
+
     /// Asks each engine who is signed in, each on a thread.
     pub(super) fn check_accounts(&self) {
         if !self.persist {
@@ -261,7 +277,7 @@ impl Glue {
     }
 
     pub(super) fn account_checked(
-        &self,
+        self: &Rc<Self>,
         store: Store,
         result: Result<Option<String>, String>,
         engine: Option<PathBuf>,
@@ -275,7 +291,10 @@ impl Glue {
                 Err(err) => Account::Failed(err),
             },
         );
-        // 51: a store signed in whose list is not kept is asked for its games.
+        // A list kept from last time waits for Refresh; a store signed in
+        // with none is asked for its games.
+        self.store_accounts_changed();
+        self.fetch_missing();
         self.show_accounts();
     }
 
@@ -518,7 +537,7 @@ impl Glue {
 
     /// The engine's answer to a sign-in, whether or not the page that started
     /// it still shows it.
-    pub(super) fn sign_in_finished(&self, store: Store, result: Result<String, String>) {
+    pub(super) fn sign_in_finished(self: &Rc<Self>, store: Store, result: Result<String, String>) {
         let still = self.signing_in_to(store, |sign_in| sign_in.busy = false);
         if still.is_none() {
             // Cancel does not stop the engine, which writes its own
@@ -531,7 +550,8 @@ impl Glue {
                     name = name.as_str()
                 ));
                 self.set_account(store, Account::SignedIn(name));
-                // 51: the store's games are asked for.
+                self.store_accounts_changed();
+                self.fetch_owned(Shop::from(store));
             }
             self.show_accounts();
             return;
@@ -545,7 +565,8 @@ impl Glue {
                     name = name.as_str()
                 ));
                 self.set_account(store, Account::SignedIn(name));
-                // 51: the store's games are asked for.
+                self.store_accounts_changed();
+                self.fetch_owned(Shop::from(store));
                 self.focus_page();
             }
             Err(err) => {
@@ -576,14 +597,14 @@ impl Glue {
         });
     }
 
-    pub(super) fn signed_out(&self, store: Store, result: Result<(), String>) {
+    pub(super) fn signed_out(self: &Rc<Self>, store: Store, result: Result<(), String>) {
         match result {
             Ok(()) => {
                 self.set_account(store, Account::SignedOut);
-                // 51: the Store page forgets this store's list as well.
                 if self.persist {
                     owned::forget(Shop::from(store));
                 }
+                self.store_forget(Shop::from(store));
                 self.say(t!("accounts-signed-out-of", store = store.label()));
             }
             Err(err) => self.set_account(store, Account::Failed(err)),
@@ -651,6 +672,7 @@ impl Glue {
             })
             .collect();
         self.accounts.cards.set_vec(cards);
+        data.set_steam(self.steam_card());
         data.set_gog_playtime(config.gog_playtime);
         data.set_gog_galaxy(config.gog_galaxy);
         let pasted = signing_in
@@ -667,7 +689,7 @@ impl Glue {
             .iter()
             .filter(|account| matches!(account, Account::SignedIn(_)))
             .count()
-            + usize::from(config.steam_session.is_some());
+            + usize::from(self.steam_session().is_some());
         window.set_accounts_count(
             if connected == 0 {
                 String::new()

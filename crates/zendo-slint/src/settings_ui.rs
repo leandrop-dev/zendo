@@ -60,6 +60,8 @@ pub(super) enum Setting {
     GogPlaytime(bool),
     /// Whether GOG games start with GOG Galaxy.
     GogGalaxy(bool),
+    /// Zendo's Steam sign-in, as the keyring keeps it (`Session::to_text`).
+    SteamSession(Option<String>),
 }
 
 /// What the page says once the `SteamGridDB` key is written.
@@ -88,7 +90,19 @@ impl Setting {
             Self::Opaque(on) => config.opaque = *on,
             Self::GogPlaytime(on) => config.gog_playtime = *on,
             Self::GogGalaxy(on) => config.gog_galaxy = *on,
+            Self::SteamSession(session) => config.steam_session.clone_from(session),
         }
+    }
+}
+
+/// Where a secret is kept, in words, and whether that is a problem.
+pub(super) fn kept_text(kept: &Kept) -> (String, bool) {
+    match kept {
+        Kept::Nowhere => (String::new(), false),
+        Kept::Keyring => (t!("kept-keyring"), false),
+        Kept::File(None) => (t!("kept-file"), false),
+        Kept::File(Some(why)) => (t!("kept-file-why", why = why.as_str()), false),
+        Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), true),
     }
 }
 
@@ -470,7 +484,9 @@ impl Glue {
             }
             Setting::DefaultProton(_) => self.default_proton_set(),
             Setting::EnginesPathFirst(_) => self.refresh_engines(),
-            // The update by themselves come with the Downloads page (item 51).
+            // Steam's list shows, or leaves the Store, with the sign-in.
+            Setting::SteamSession(_) => self.store_accounts_changed(),
+            // 51b: the update by themselves come with the Downloads page.
             Setting::DownloadCovers(false)
             | Setting::Workers(_)
             | Setting::Language(_)
@@ -678,13 +694,7 @@ impl Glue {
         };
         data.set_key_note(note.into());
         data.set_key_tone(tone);
-        let (kept, bad) = match config.kept(Key::SteamGridDb) {
-            Kept::Nowhere => (String::new(), false),
-            Kept::Keyring => (t!("kept-keyring"), false),
-            Kept::File(None) => (t!("kept-file"), false),
-            Kept::File(Some(why)) => (t!("kept-file-why", why = why.as_str()), false),
-            Kept::Unread(why) => (t!("kept-unread", why = why.as_str()), true),
-        };
+        let (kept, bad) = kept_text(config.kept(Key::SteamGridDb));
         data.set_key_kept(kept.into());
         data.set_key_kept_bad(bad);
         drop(key);

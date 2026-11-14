@@ -20,6 +20,20 @@ use super::{Glue, with_glue};
 use crate::covers::Cover;
 use crate::{ChipData, Fact, GameData, MainWindow, Tile};
 
+/// What the Store's glue makes of a store game, for its page.
+pub(super) struct OwnedPage {
+    pub(super) title: String,
+    pub(super) source: String,
+    pub(super) installed: bool,
+    /// What installing it would do, in words.
+    pub(super) note: String,
+    pub(super) cover: Option<PathBuf>,
+    pub(super) hero: Option<PathBuf>,
+    pub(super) tiles: Vec<Tile>,
+    pub(super) details: Vec<Fact>,
+    pub(super) technical: Vec<Fact>,
+}
+
 /// What the game page keeps between one redraw and the next.
 pub(super) struct GameState {
     /// The games Zendo started and still runs.
@@ -258,6 +272,7 @@ impl Glue {
             *self.local.confirm_remove.borrow_mut() = None;
             self.show_steam_input(id);
             self.want_cards(id);
+            self.want_info(id);
             if let Some(window) = self.window.upgrade() {
                 window.global::<GameData>().set_open(true);
             }
@@ -265,10 +280,15 @@ impl Glue {
         }
     }
 
+    /// Closes the open page, a library game's or a store game's.
     pub(super) fn close_game(&self) -> bool {
-        let was_open = self.open.borrow_mut().take().is_some();
+        let was_library = self.open.borrow_mut().take().is_some();
+        let was_store = self.close_owned();
+        let was_open = was_library || was_store;
         if was_open && let Some(window) = self.window.upgrade() {
-            window.global::<GameData>().set_open(false);
+            let data = window.global::<GameData>();
+            data.set_open(false);
+            data.set_owned(false);
         }
         was_open
     }
@@ -289,7 +309,8 @@ impl Glue {
 
     /// Whether the page draws this picture.
     pub(super) fn page_shows(&self, path: &Path) -> bool {
-        self.open.borrow().is_some() && self.game.images.borrow().iter().any(|own| own == path)
+        (self.open.borrow().is_some() || self.store_page_open())
+            && self.game.images.borrow().iter().any(|own| own == path)
     }
 
     /// The faint wide picture behind the header: the hero's smaller copy,
@@ -330,8 +351,80 @@ impl Glue {
         }
     }
 
+    /// Writes the cover and the wide art, and says which pictures they are,
+    /// so one arriving later draws the page again.
+    fn show_art(
+        &self,
+        data: &GameData<'_>,
+        cover: Option<&Path>,
+        hero: Option<&Path>,
+    ) -> Vec<PathBuf> {
+        let mut images = Vec::new();
+        let cover = cover.map(|path| (path, self.covers.borrow_mut().get(path)));
+        if let Some((path, _)) = &cover {
+            images.push(path.to_path_buf());
+        }
+        let cover = match cover {
+            Some((_, Cover::Ready(image))) => Some(image),
+            _ => None,
+        };
+        data.set_has_cover(cover.is_some());
+        data.set_cover(cover.unwrap_or_default());
+        let backdrop = hero.and_then(|hero| self.backdrop_of(hero)).map(|copy| {
+            let shown = self.covers.borrow_mut().get_wide(&copy);
+            images.push(copy);
+            shown
+        });
+        let backdrop = match backdrop {
+            Some(Cover::Ready(image)) => Some(image),
+            _ => None,
+        };
+        data.set_has_backdrop(backdrop.is_some());
+        data.set_backdrop(backdrop.unwrap_or_default());
+        images
+    }
+
+    /// Writes a store game's page: the header and the details card are the
+    /// game page's, filled from what the store says. `parts` is what the
+    /// Store's glue made of the game.
+    pub(super) fn show_owned_page(
+        &self,
+        parts: OwnedPage,
+        cards: impl FnOnce(&GameData<'_>) -> Vec<PathBuf>,
+    ) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let data = window.global::<GameData>();
+        data.set_owned(true);
+        data.set_owned_installed(parts.installed);
+        data.set_owned_note(parts.note.into());
+        data.set_title(parts.title.into());
+        data.set_source_line(parts.source.into());
+        data.set_pinned(false);
+        data.set_hidden(false);
+        data.set_steam(false);
+        data.set_local(false);
+        data.set_confirm_remove(false);
+        data.set_run_state(0);
+        let mut images = self.show_art(&data, parts.cover.as_deref(), parts.hero.as_deref());
+        images.extend(cards(&data));
+        *self.game.images.borrow_mut() = images;
+        self.game.tiles.set_vec(parts.tiles);
+        self.game.facts[0].set_vec(Vec::new());
+        self.game.facts[1].set_vec(Vec::new());
+        self.game.facts[2].set_vec(parts.details);
+        data.set_technical_open(self.game.technical.get());
+        self.game.facts[3].set_vec(parts.technical);
+    }
+
     /// Writes everything the open game's page shows.
     pub(super) fn show_game(&self) {
+        // A store game's page is the open one, when there is one.
+        if self.store_page_open() {
+            self.show_owned();
+            return;
+        }
         let Some(game) = self.open_game_record() else {
             return;
         };
@@ -339,8 +432,8 @@ impl Glue {
             return;
         };
         let data = window.global::<GameData>();
+        data.set_owned(false);
         let now = running::now();
-        let mut images = Vec::new();
 
         let mut source = vec![format::source(game.source)];
         source.extend(game.details.developer.clone());
@@ -358,34 +451,7 @@ impl Glue {
         );
 
         // The pictures: the cover the grid has too, and the wide art.
-        let cover = game
-            .cover
-            .as_deref()
-            .map(|path| (path, self.covers.borrow_mut().get(path)));
-        if let Some((path, _)) = &cover {
-            images.push(path.to_path_buf());
-        }
-        let cover = match cover {
-            Some((_, Cover::Ready(image))) => Some(image),
-            _ => None,
-        };
-        data.set_has_cover(cover.is_some());
-        data.set_cover(cover.unwrap_or_default());
-        let backdrop = game
-            .hero
-            .as_deref()
-            .and_then(|hero| self.backdrop_of(hero))
-            .map(|copy| {
-                let shown = self.covers.borrow_mut().get_wide(&copy);
-                images.push(copy);
-                shown
-            });
-        let backdrop = match backdrop {
-            Some(Cover::Ready(image)) => Some(image),
-            _ => None,
-        };
-        data.set_has_backdrop(backdrop.is_some());
-        data.set_backdrop(backdrop.unwrap_or_default());
+        let mut images = self.show_art(&data, game.cover.as_deref(), game.hero.as_deref());
         images.extend(self.show_cards(&game, &data));
         *self.game.images.borrow_mut() = images;
 
@@ -471,7 +537,8 @@ impl Glue {
             rows.push(path_fact(t!("fact-install-path"), path));
         }
         rows.extend(self.cloud_row(game));
-        rows.extend(self.steam_fact_rows(game));
+        rows.extend(self.store_fact_rows(&game.id, game.details.size.is_some()));
+        rows.extend(self.steam_fact_rows(game, self.owned_of(&game.id).as_ref()));
         rows.push(fact(
             t!("fact-started-from-zendo"),
             t!("count-times", count = game.played.launches),
@@ -590,7 +657,7 @@ impl Glue {
     /// What happened to a game Zendo started, and what the window does
     /// about it. Discord's presence, the saves' sync, the GOG total and the
     /// jobs held while a game runs come with the items that have them (50,
-    /// 49c and 51).
+    /// 49c and 51c).
     pub(super) fn run_event(&self, message: RunMessage) {
         let effects = {
             let browser = self.browser.borrow();

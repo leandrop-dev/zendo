@@ -6,6 +6,7 @@
 mod covers;
 mod library;
 mod library_ui;
+mod store;
 mod theme;
 mod tr;
 mod window;

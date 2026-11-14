@@ -19,6 +19,8 @@ pub mod open;
 pub mod presence;
 pub mod running;
 pub mod sign_in_window;
+pub mod steam_list;
+pub mod store_facts;
 pub mod tray;
 
 /// Used by [`t!`]'s expansion in the crates that call it.

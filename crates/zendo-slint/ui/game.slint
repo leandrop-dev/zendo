@@ -68,7 +68,21 @@ export struct Ach {
     unlocked: bool,
 }
 
+// A badge under the title of a store game: a platform, or Installed.
+export struct OwnedBadge {
+    label: string,
+    good: bool,
+}
+
 export global GameData {
+    // The page is a store game's (the Store page's, with what the store says),
+    // not a game of the library: no Play, status, collections or sessions.
+    in property <bool> owned;
+    in property <bool> owned-installed;
+    // What installing it would do, in words, beside Open in library.
+    in property <string> owned-note;
+    in property <[OwnedBadge]> owned-badges;
+    callback open-library();
     // Whether a game's page replaces the Library's grid.
     in-out property <bool> open;
     in property <string> title;
@@ -468,11 +482,12 @@ export component GamePage inherits Rectangle {
                 // The back link, then the header over the faint wide art.
                 HorizontalLayout {
                     alignment: start;
+                    spacing: Space.s;
                     back := Rectangle {
                         width: back-text.preferred-width;
                         height: back-text.preferred-height;
                         back-text := Text {
-                            text: Tr.t("game-back").to-uppercase();
+                            text: (GameData.owned ? Tr.t("store-back") : Tr.t("game-back")).to-uppercase();
                             font-size: 13px;
                             color: back-touch.has-hover ? Colors.accent : Colors.dim;
                         }
@@ -480,6 +495,17 @@ export component GamePage inherits Rectangle {
                             mouse-cursor: pointer;
                             clicked => { GameData.back(); }
                         }
+                    }
+                    if GameData.owned: Text {
+                        text: "/";
+                        font-size: 13px;
+                        color: Colors.dim;
+                    }
+                    if GameData.owned: Text {
+                        text: GameData.title.to-uppercase();
+                        font-size: 13px;
+                        color: Colors.dim;
+                        overflow: elide;
                     }
                 }
                 header := Rectangle {
@@ -540,6 +566,11 @@ export component GamePage inherits Rectangle {
                                 alignment: start;
                                 spacing: Space.s;
                                 padding-top: Space.s;
+                                for badge in GameData.owned-badges: ActionButton {
+                                    label: badge.label;
+                                    small: true;
+                                    tint: badge.good ? Colors.good : Colors.dim;
+                                }
                                 if GameData.pinned: ActionButton {
                                     label: GameData.favorite-badge;
                                     small: true;
@@ -549,7 +580,7 @@ export component GamePage inherits Rectangle {
                                     label: GameData.hidden-badge;
                                     small: true;
                                 }
-                                ActionButton {
+                                if !GameData.owned: ActionButton {
                                     label: "PCGamingWiki";
                                     small: true;
                                     clicked => { GameData.wiki(); }
@@ -559,8 +590,26 @@ export component GamePage inherits Rectangle {
                         }
                     }
                 }
+                // A store game: Open in library when it is there, else what
+                // installing it would do.
+                if GameData.owned: HorizontalLayout {
+                    spacing: Space.m;
+                    if GameData.owned-installed: ActionButton {
+                        label: Tr.t("store-open-in-library");
+                        primary: true;
+                        clicked => { GameData.open-library(); }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: GameData.owned-note;
+                        font-size: 14px;
+                        color: Colors.dim;
+                        vertical-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
                 // Play, or Running with Stop; then the less pressed ones.
-                VerticalLayout {
+                if !GameData.owned: VerticalLayout {
                     spacing: Space.s;
                     HorizontalLayout {
                         alignment: start;
@@ -607,7 +656,7 @@ export component GamePage inherits Rectangle {
                     }
                 }
                 // The collections the game is in, and the way to change them.
-                HorizontalLayout {
+                if !GameData.owned: HorizontalLayout {
                     alignment: start;
                     spacing: Space.s;
                     Text {
@@ -647,7 +696,7 @@ export component GamePage inherits Rectangle {
                     }
                 }
                 // The play status: the chosen one is pressed again to clear it.
-                HorizontalLayout {
+                if !GameData.owned: HorizontalLayout {
                     alignment: start;
                     spacing: Space.s;
                     Text {
@@ -662,8 +711,10 @@ export component GamePage inherits Rectangle {
                         clicked => { GameData.status(chip.id); }
                     }
                 }
-                HorizontalLayout {
+                // (A store game has none, or one, a quarter of the width.)
+                if GameData.tiles.length > 0: HorizontalLayout {
                     spacing: Space.m;
+                    width: GameData.owned ? root.inner * 0.25 : root.inner;
                     for tile in GameData.tiles: Rectangle {
                         horizontal-stretch: 1;
                         background: Colors.surface;
@@ -750,7 +801,7 @@ export component GamePage inherits Rectangle {
                             heading: Tr.t("dlc-title");
                             VerticalLayout {
                                 spacing: Space.m;
-                                Text {
+                                if GameData.dlc-count != "": Text {
                                     text: GameData.dlc-count;
                                     font-size: 13px;
                                     color: Colors.dim;
