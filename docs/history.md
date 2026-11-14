@@ -3703,3 +3703,62 @@ checked against Iced's on the same libraries.
   second monitor or another scale, and the bulk Unfavorite and Unhide chips and
   Ctrl+P (covered by tests, not clicked). The 2,700-card library was measured,
   not looked at. F11 and the shelves are item 53.
+
+## Item 49a, the game page in Slint (2026-11-14)
+
+Item 49 is sliced in three (49a here; 49b the Steam facts, requirements, DLC,
+ProtonDB and achievements; 49c anti-cheat, cloud saves, prefix, EOS overlay,
+Deck, GOG changelog and playtime). 49a is not finished: local games and the
+Add game sheet are still to do.
+
+- **Run logic moved, not copied.** `zendo_shell::running` holds `Running`,
+  `Session`, `RunMessage` and `follow` (the thread that prepares, starts and
+  watches the game). `Running::apply` takes a message and returns `Effect`s
+  (`Say`, `Launched`, `Played`, `Session`, `HideOnLaunch`, `Changed`, and
+  the ones whose item is later: `CloudReload`, `CloudSyncing`, `Presence`,
+  `NextJob`, `RefreshGogTotal`); each toolkit carries them out. Iced's
+  `running.rs` is now a wrapper, and its seven tests became six in
+  `zendo-shell` plus the Iced ones that still drive `Zendo`. `follow` takes a
+  closure that returns `false` once nothing wants the messages (as the other
+  `zendo-shell` threads do), and keeps `launch::after` and `gog_playtime::send`
+  so a game started from Slint still syncs saves.
+- **`zendo-slint`.** `ui/game.slint` (`GameData`, `GamePage`) and
+  `src/game_ui.rs`, a child module of `library_ui` so it reaches the glue's
+  fields. The page: back link, header over the faint wide art (the 960-pixel
+  copy from `zendo_core::thumbs`, made on a thread, decoded by the covers
+  worker through `Covers::get_wide`), cover, title, source line, Favorite and
+  PCGamingWiki badges, Play / Starting / Running with Stop and Force stop,
+  Favorite, Hide, Manage in Steam (Steam games), status chips, four tiles, the
+  Sessions card, Details and a Technical card folded under it. Cards show a
+  green RUNNING badge. Enter plays, Delete hides, Ctrl+P favorites, Esc goes
+  back; on the pad A plays, Y favorites and X hides. `Browser` got
+  `toggle_pinned_of`, `toggle_hidden_of`, `set_status_of`, `set_running`,
+  `launched`, `add_minutes` and `game`, so the page acts on its own game even
+  after hiding it moves the cursor. `zendo_shell::open` is `xdg-open`.
+- **Checked** (clippy clean; 158 Iced, 19 shell and 32 `zendo-slint` tests,
+  three of them new for the page): on screen in a throwaway home (12
+  `.desktop` games, `Exec=sleep 70`, real art, two seeded sessions, no
+  session bus) with `ydotool` behind pid checks: the grid opens a game; the
+  page draws the backdrop, cover and tiles; Play started `sleep 70`, the
+  button turned to Running with Stop and the line said so; Stop ended the
+  process and the line said "closed"; Favorite and the Playing chip (pressed
+  once; the chip highlights and the footer says so); Hide (HIDDEN badge, the
+  tab counts moved, the button became Unhide); the Sessions card and the
+  Details card side by side; the Technical toggle; the scrollbar by dragging;
+  Enter played from the keyboard, Ctrl+P favorited and Esc went back to the
+  grid with the RUNNING badge on the card; the PCGamingWiki button ran
+  `xdg-open` (no error in the footer).
+- **Found on the way.** Two columns left to the layout (stretch factors) put
+  the narrow one where the wide one should be; explicit widths from the page's
+  width fixed it. `game-back` already has its own arrow.
+- **Not checked.** Where the PCGamingWiki link went (the run had no session
+  bus and Zen is the default browser; no new window appeared), Manage in
+  Steam (no Steam game in the seed), the controller, hide-on-launch with the
+  tray, a game that ends by itself after a minute (the session written to
+  `sessions.jsonl`), a game launched by Steam or Heroic (`Watch::Folder`),
+  force stop, a light theme, a smaller window than 1100 pixels (the minimum),
+  the wheel. **Open question for the user's eyes:** while the page is
+  scrolled, the whole window looks lighter in a `spectacle` still (the 2/3
+  window alpha over the wallpaper), and darker back at the top; the Library
+  could not be scrolled in the seed (two rows) to compare. Not known whether
+  this is the stills or Slint's partial redraw of a translucent window.

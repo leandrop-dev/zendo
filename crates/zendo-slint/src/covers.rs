@@ -43,10 +43,16 @@ pub enum Cover {
 /// The pixels of a cover a worker decoded, or `None` when it could not.
 pub type Decoded = Option<SharedPixelBuffer<Rgba8Pixel>>;
 
+/// The widest a wide picture is kept: a game page's backdrop is a copy of
+/// 960 pixels, drawn faint across the page.
+const MAX_WIDE: u32 = 960;
+
 #[derive(Default)]
 struct Queue {
     stack: Mutex<Vec<PathBuf>>,
     ready: Condvar,
+    /// Paths asked for as wide pictures, which keep more pixels.
+    wide: Mutex<HashSet<PathBuf>>,
 }
 
 impl Queue {
@@ -109,7 +115,12 @@ impl Covers {
             thread::spawn(move || {
                 loop {
                     let path = queue.next();
-                    let pixels = decode(&path);
+                    let wide = queue
+                        .wide
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .contains(&path);
+                    let pixels = decode(&path, if wide { MAX_WIDE } else { MAX_WIDTH });
                     ready(path, pixels);
                 }
             });
@@ -135,6 +146,17 @@ impl Covers {
             self.pending.remove(&dropped);
         }
         Cover::Loading
+    }
+
+    /// A wide picture (a game page's backdrop): [`Covers::get`], keeping up
+    /// to 960 pixels across instead of a card's.
+    pub fn get_wide(&mut self, path: &Path) -> Cover {
+        self.queue
+            .wide
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(path.to_path_buf());
+        self.get(path)
     }
 
     /// A worker's result, on the window's thread. Keeps the cover, and says
@@ -177,10 +199,10 @@ impl Covers {
 
 /// Reads and decodes a cover, made smaller when it is bigger than a card
 /// needs.
-fn decode(path: &Path) -> Decoded {
+fn decode(path: &Path, max: u32) -> Decoded {
     let mut decoded = image::open(path).ok()?;
-    if decoded.width() > MAX_WIDTH {
-        decoded = decoded.resize(MAX_WIDTH, u32::MAX, image::imageops::FilterType::Triangle);
+    if decoded.width() > max {
+        decoded = decoded.resize(max, u32::MAX, image::imageops::FilterType::Triangle);
     }
     let pixels = decoded.into_rgba8();
     Some(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(

@@ -21,8 +21,17 @@ to `zendo-core` when that page is ported. Ask before building any other page
 - **49** Game page and what hangs off it (running and its badge on the
   cards, achievements, anti-cheat, ProtonDB, Steam facts, requirements, DLC,
   cloud saves, prefix, EOS overlay, Deck, GOG, local games, Add game) and the
-  wide-art backdrop behind its header. Until it exists a card opens a stand-in
-  that says so (`zendo-slint`'s `open-title`).
+  wide-art backdrop behind its header. Sliced into **49a** (shell, backdrop,
+  Play/Stop and the running badge, status, favorite, hide, tiles, sessions,
+  details; local games and Add game still to do), **49b** (Steam facts,
+  requirements, DLC, ProtonDB, achievements) and **49c** (anti-cheat, cloud
+  saves, prefix, EOS overlay, Deck, GOG changelog and playtime). Left out of
+  49a on purpose, to land with their item: Edit categories (50), Update, the
+  job line, Check/Repair/Move/Uninstall and Steam Verify/Uninstall (51),
+  Launch options and Change cover/backdrop (52), Discord presence (50), the
+  saves' sync and GOG total after a session (49c), jobs held while a game runs
+  (51), the hero pills and the Technical card's Steam app id (49b).
+  Item 54's parity checklist must go through this list.
 - **50** Settings, engines, Protons, runtimes, themes, Accounts, About,
   Collections sheet (the Library's COLLECTIONS and ADD TO COLLECTION chips
   come with it; the collection and saved-view chips already filter). The

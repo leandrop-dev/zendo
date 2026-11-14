@@ -74,6 +74,10 @@ pub struct Chips {
 
 /// What a card shows.
 #[derive(Debug, Clone, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one thing the card draws, as the Slint struct has them"
+)]
 pub struct CardData {
     pub id: String,
     pub title: String,
@@ -83,6 +87,8 @@ pub struct CardData {
     pub caption_accent: bool,
     pub faded: bool,
     pub badge: Option<String>,
+    /// The badge says Running, in the colour for good news.
+    pub badge_running: bool,
     pub progress: Option<f32>,
     pub marked: bool,
     pub cover: Option<PathBuf>,
@@ -109,6 +115,7 @@ pub enum Save {
     Sort(Sort),
     Pinned(Vec<String>, bool),
     Hidden(Vec<String>, bool),
+    Status(String, Option<Status>),
 }
 
 /// Which rows of the grid to draw again.
@@ -142,6 +149,8 @@ pub struct Browser {
     shown: Vec<usize>,
     cursor: usize,
     marked: BTreeSet<String>,
+    /// The games seen running, for their cards' badge.
+    running: BTreeSet<String>,
     columns: usize,
     scroll_top: f32,
     viewport: f32,
@@ -173,6 +182,7 @@ impl Browser {
             shown: Vec::new(),
             cursor: 0,
             marked: BTreeSet::new(),
+            running: BTreeSet::new(),
             columns: 5,
             scroll_top: 0.0,
             viewport: 800.0,
@@ -263,7 +273,12 @@ impl Browser {
             caption: format!("{} · {line}", format::source(game.source).to_uppercase()),
             caption_accent,
             faded: game.hidden,
-            badge: game.pinned.then(|| t!("badge-favorite")),
+            badge: if self.running.contains(&game.id) {
+                Some(t!("badge-running"))
+            } else {
+                game.pinned.then(|| t!("badge-favorite"))
+            },
+            badge_running: self.running.contains(&game.id),
             progress: game.achievements.and_then(format::progress_of),
             marked: self.marked.contains(&game.id),
             cover: game.cover.clone(),
@@ -716,9 +731,15 @@ impl Browser {
 
     /// Hides the game under the cursor, or brings it back.
     pub fn toggle_hidden(&mut self) -> Outcome {
-        let Some(id) = self.selected_id() else {
-            return Outcome::default();
-        };
+        match self.selected_id() {
+            Some(id) => self.toggle_hidden_of(&id),
+            None => Outcome::default(),
+        }
+    }
+
+    /// Hides a game by its id, or brings it back: the game page's button.
+    pub fn toggle_hidden_of(&mut self, id: &str) -> Outcome {
+        let id = id.to_owned();
         let Some(game) = self.games.iter_mut().find(|game| game.id == id) else {
             return Outcome::default();
         };
@@ -737,9 +758,15 @@ impl Browser {
 
     /// Makes the game under the cursor a favorite, or not one.
     pub fn toggle_pinned(&mut self) -> Outcome {
-        let Some(id) = self.selected_id() else {
-            return Outcome::default();
-        };
+        match self.selected_id() {
+            Some(id) => self.toggle_pinned_of(&id),
+            None => Outcome::default(),
+        }
+    }
+
+    /// Makes a game a favorite by its id, or not one.
+    pub fn toggle_pinned_of(&mut self, id: &str) -> Outcome {
+        let id = id.to_owned();
         let Some(game) = self.games.iter_mut().find(|game| game.id == id) else {
             return Outcome::default();
         };
@@ -753,6 +780,65 @@ impl Browser {
         let mut outcome = self.reselect(Some(id.clone()));
         outcome.save = Some(Save::Pinned(vec![id], pinned));
         outcome
+    }
+
+    /// Sets a game's play status, or clears it.
+    pub fn set_status_of(&mut self, id: &str, status: Option<Status>) -> Outcome {
+        let Some(game) = self.games.iter_mut().find(|game| game.id == id) else {
+            return Outcome::default();
+        };
+        game.status = status;
+        let title = game.title.clone();
+        self.status = Some(if let Some(status) = status {
+            t!(
+                "status-is",
+                title = title,
+                status = format::play_status(status)
+            )
+        } else {
+            t!("status-cleared", title = title)
+        });
+        // A game that leaves the chosen status leaves the grid.
+        let mut outcome = self.reselect(Some(id.to_owned()));
+        outcome.save = Some(Save::Status(id.to_owned(), status));
+        outcome
+    }
+
+    /// A game started or stopped running: its card's badge changes.
+    pub fn set_running(&mut self, id: &str, running: bool) -> Outcome {
+        let changed = if running {
+            self.running.insert(id.to_owned())
+        } else {
+            self.running.remove(id)
+        };
+        if changed {
+            self.marks_changed(&[id.to_owned()])
+        } else {
+            Outcome::default()
+        }
+    }
+
+    /// Zendo started the game: one more launch, now.
+    pub fn launched(&mut self, id: &str, now: u64) -> Outcome {
+        if let Some(game) = self.games.iter_mut().find(|game| game.id == id) {
+            game.played.launches += 1;
+            game.played.last = Some(now);
+        }
+        self.marks_changed(&[id.to_owned()])
+    }
+
+    /// Zendo timed the game for these minutes.
+    pub fn add_minutes(&mut self, id: &str, minutes: u64) -> Outcome {
+        if let Some(game) = self.games.iter_mut().find(|game| game.id == id) {
+            game.played.minutes += minutes;
+        }
+        self.marks_changed(&[id.to_owned()])
+    }
+
+    /// A game by its id.
+    #[must_use]
+    pub fn game(&self, id: &str) -> Option<&Game> {
+        self.games.iter().find(|game| game.id == id)
     }
 
     /// Makes every marked game a favorite, or not one: the same for all, so

@@ -63,6 +63,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     // made; then closing the window hides it, and the tray brings it back.
     let tray = if hide_to_tray { Tray::spawn() } else { None };
     let hide_on_close = tray.is_some();
+    TRAY_THERE.set(hide_on_close);
     let weak = window.as_weak();
     window.window().on_close_requested(move || {
         if !hide_on_close {
@@ -92,6 +93,20 @@ thread_local! {
     /// The size the window had when it was last hidden to the tray. Only
     /// the window's own thread asks, so it need not be shared.
     static LAST_SIZE: Cell<Option<slint::LogicalSize>> = const { Cell::new(None) };
+}
+
+thread_local! {
+    /// The tray is there (the setting asked for it and it was made).
+    static TRAY_THERE: Cell<bool> = const { Cell::new(false) };
+}
+
+/// A game is up: hides the window to the tray, when the Window setting asks
+/// for it and the tray is there.
+pub fn hide_for_launch(window: &MainWindow) {
+    if TRAY_THERE.get() && window.window().is_visible() {
+        remember_size(window);
+        let _ = window.hide();
+    }
 }
 
 /// Notes the window's size, for the window that comes back: a Wayland app

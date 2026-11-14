@@ -23,6 +23,9 @@ use crate::covers::{Cover, Covers, Decoded};
 use crate::library::{Browser, CardData, Chip, Outcome, Pick, Rows, Save, Scroll};
 use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
+#[path = "game_ui.rs"]
+mod game;
+
 /// How long covers that came in are let to gather before the rows show them.
 const COVER_DELAY: Duration = Duration::from_millis(40);
 
@@ -108,6 +111,7 @@ fn to_card(card: CardData, covers: &mut Covers) -> Card {
         caption_accent: card.caption_accent,
         faded: card.faded,
         badge: card.badge.unwrap_or_default().into(),
+        badge_running: card.badge_running,
         progress: card.progress.unwrap_or(-1.0),
         marked: card.marked,
         has_cover: cover.is_some(),
@@ -147,8 +151,10 @@ struct Glue {
     /// What each chip does, by the id the window sends back.
     picks: RefCell<Vec<Pick>>,
     scanning: Cell<bool>,
-    /// The game whose page was asked for, until the game page exists (item 49).
+    /// The game whose page is open.
     open: RefCell<Option<String>>,
+    /// The game page's own state (`game_ui.rs`).
+    game: game::GameState,
     /// Off in tests, so they never write the user's files.
     persist: bool,
 }
@@ -217,6 +223,7 @@ impl Glue {
             picks: RefCell::new(Vec::new()),
             scanning: Cell::new(false),
             open: RefCell::new(None),
+            game: game::GameState::new(persist),
             persist,
         })
     }
@@ -271,7 +278,9 @@ impl Glue {
             });
             // The chips and the footer say their words again too.
             glue.sync();
+            glue.show_game();
         });
+        self.connect_game(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -323,6 +332,7 @@ impl Glue {
                     state.set_hidden(id, *hidden);
                 }
             }
+            Save::Status(id, status) => state.set_status(id, *status),
         });
         if let Err(err) = saved {
             self.browser.borrow_mut().say(Some(format!("{err:#}")));
@@ -440,7 +450,12 @@ impl Glue {
     /// A worker decoded a cover. The rows near the screen are drawn again a
     /// moment later, once for all the covers that came in that time.
     fn cover_ready(self: &Rc<Self>, path: PathBuf, pixels: Decoded) {
-        if !self.covers.borrow_mut().deliver(path, pixels) || self.covers_due.replace(true) {
+        let shown = self.page_shows(&path);
+        let delivered = self.covers.borrow_mut().deliver(path, pixels);
+        if delivered && shown {
+            self.show_game();
+        }
+        if !delivered || self.covers_due.replace(true) {
             return;
         }
         slint::Timer::single_shot(COVER_DELAY, || with_glue(|glue| glue.show_covers()));
@@ -496,6 +511,7 @@ impl Glue {
             .loaded(library, Some(sort), categories, saved);
         self.apply(outcome);
         self.sync();
+        self.refresh_game();
         self.download_images();
     }
 
@@ -640,34 +656,18 @@ impl Glue {
                 // Game Mode and its shelves come in item 53.
                 Pad::Back | Pad::ToggleGameMode | Pad::PrevShelf | Pad::NextShelf => false,
             };
-        }
-    }
-
-    // From the window to the browser.
-
-    /// Opens a game's page: until the game page exists, a stand-in.
-    fn open_game(&self, id: &str) {
-        let title = {
-            let mut browser = self.browser.borrow_mut();
-            browser.click(id);
-            browser.selected().map(|game| game.title.clone())
-        };
-        self.sync_cursor();
-        if let Some(title) = title {
-            *self.open.borrow_mut() = Some(id.to_owned());
-            if let Some(window) = self.window.upgrade() {
-                window.set_open_title(title.into());
+        } else if self.open.borrow().is_some() {
+            // On a game's page: A plays, Y makes it a favorite, X hides it.
+            match pad {
+                Pad::Activate => self.play(),
+                Pad::Sort => self.toggle_pinned(),
+                Pad::Hide => self.toggle_hidden(),
+                _ => {}
             }
         }
     }
 
-    fn close_game(&self) -> bool {
-        let was_open = self.open.borrow_mut().take().is_some();
-        if was_open && let Some(window) = self.window.upgrade() {
-            window.set_open_title("".into());
-        }
-        was_open
-    }
+    // From the window to the browser.
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
@@ -705,6 +705,9 @@ impl Glue {
         };
         if ctrl && !alt && !meta {
             return self.control_key(key);
+        }
+        if self.open.borrow().is_some() && !alt && !meta {
+            return self.game_key(key);
         }
         if alt || meta || !self.on_library() {
             return false;
@@ -760,6 +763,7 @@ impl Glue {
             '3' => self.navigate(Page::Downloads),
             '5' | ',' => self.navigate(Page::Settings),
             '7' => self.navigate(Page::Stats),
+            'p' if self.open.borrow().is_some() => self.toggle_pinned(),
             _ if !self.on_library() => return false,
             'f' => self.with_window(MainWindow::invoke_focus_search),
             'v' => self.with_window(MainWindow::invoke_paste_search),
@@ -798,7 +802,7 @@ impl Glue {
         self.change(|browser| browser.step(step))
     }
 
-    fn open_selected(&self) -> bool {
+    pub(super) fn open_selected(&self) -> bool {
         let id = self.browser.borrow().selected().map(|game| game.id.clone());
         if let Some(id) = id {
             self.open_game(&id);
@@ -827,8 +831,11 @@ fn scan() -> Scanned {
 
 #[cfg(test)]
 mod tests {
+    use crate::GameData;
+    use zendo_core::launch::{Started, Watch};
     use zendo_core::{Launch, Source, View};
     use zendo_shell::format;
+    use zendo_shell::running::RunMessage;
 
     use super::*;
 
@@ -904,11 +911,12 @@ mod tests {
         assert!(press(&glue, Key::RightArrow));
         assert_eq!(data.get_cursor(), 6);
         assert!(press(&glue, Key::Return));
-        assert_eq!(window.get_open_title(), "Game 06");
+        assert!(window.global::<GameData>().get_open());
+        assert_eq!(window.global::<GameData>().get_title(), "Game 06");
         // Open, the page takes no arrows; Escape closes it.
         assert!(!press(&glue, Key::DownArrow));
         data.invoke_back();
-        assert_eq!(window.get_open_title(), "");
+        assert!(!window.global::<GameData>().get_open());
     }
 
     #[test]
@@ -991,17 +999,117 @@ mod tests {
         assert!(press(&glue, Key::Delete));
         data.invoke_card_marked("desktop:1".into());
         data.invoke_card_clicked("desktop:2".into());
-        assert_eq!(window.get_open_title(), "Game 02");
+        assert!(window.global::<GameData>().get_open());
+        assert_eq!(window.global::<GameData>().get_title(), "Game 02");
         window.invoke_page_requested(Page::Store);
         assert_eq!(window.get_page(), Page::Store);
-        assert_eq!(window.get_open_title(), "");
+        assert!(!window.global::<GameData>().get_open());
         assert_eq!(data.get_marked(), "");
         assert_eq!(data.get_status(), "");
         // The Library's own tab, pressed over an open game, closes it.
         window.invoke_page_requested(Page::Library);
         data.invoke_card_clicked("desktop:2".into());
         window.invoke_page_requested(Page::Library);
-        assert_eq!(window.get_open_title(), "");
+        assert!(!window.global::<GameData>().get_open());
         assert_eq!(window.get_page(), Page::Library);
+    }
+
+    fn badge_of(window: &MainWindow, id: &str) -> (String, bool) {
+        let rows = window.global::<LibraryData>().get_rows();
+        for row in rows.iter() {
+            if let Some(card) = row.cards.iter().find(|card| card.id == id) {
+                return (card.badge.to_string(), card.badge_running);
+            }
+        }
+        panic!("no card for {id}");
+    }
+
+    #[test]
+    fn a_game_page_shows_the_game_and_its_buttons_change_it() {
+        let (window, _glue) = page(3);
+        let library = window.global::<LibraryData>();
+        let game = window.global::<GameData>();
+        library.invoke_card_clicked("desktop:1".into());
+        assert_eq!(game.get_title(), "Game 01");
+        assert_eq!(game.get_tiles().row_count(), 4);
+        assert_eq!(game.get_run_state(), 0);
+        assert_eq!(game.get_statuses().row_count(), 4);
+        // Favorite: the card's badge says so, and a second press undoes it.
+        game.invoke_toggle_pinned();
+        assert!(game.get_pinned());
+        assert_eq!(badge_of(&window, "desktop:1").0, t!("badge-favorite"));
+        game.invoke_toggle_pinned();
+        assert!(!game.get_pinned());
+        // The status chips: the chosen one is pressed again to clear it.
+        game.invoke_status(1);
+        assert!(game.get_statuses().iter().any(|chip| chip.chosen));
+        game.invoke_status(1);
+        assert!(!game.get_statuses().iter().any(|chip| chip.chosen));
+        // Hide: the page stays on the game, which leaves the grid.
+        game.invoke_toggle_hidden();
+        assert!(game.get_hidden());
+        assert_eq!(game.get_title(), "Game 01");
+        game.invoke_toggle_hidden();
+        assert!(!game.get_hidden());
+    }
+
+    #[test]
+    fn play_counts_a_launch_and_a_running_game_shows_its_badge_and_stop() {
+        let (window, glue) = page(3);
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:2".into());
+        // In tests Play hands the game to its launcher and starts nothing.
+        game.invoke_play();
+        assert_eq!(game.get_run_state(), 0);
+        assert_eq!(
+            glue.browser
+                .borrow()
+                .game("desktop:2")
+                .map(|g| g.played.launches),
+            Some(1)
+        );
+        // A game Zendo watches: Running, with Stop, and a badge on its card.
+        glue.game.running.borrow_mut().begin("desktop:2");
+        let started = Started {
+            watch: Watch::Group(zendo_core::launch::Group::new(4_000_000, None)),
+            log: None,
+            warning: None,
+        };
+        glue.run_event(RunMessage::Started("desktop:2".into(), Ok(started)));
+        assert_eq!(game.get_run_state(), 2);
+        assert_eq!(badge_of(&window, "desktop:2"), (t!("badge-running"), true));
+        glue.run_event(RunMessage::Ended("desktop:2".into()));
+        assert_eq!(game.get_run_state(), 0);
+        assert_eq!(badge_of(&window, "desktop:2"), (String::new(), false));
+        assert_eq!(
+            window.global::<LibraryData>().get_status(),
+            t!("run-closed", title = "Game 02", minutes = 0)
+        );
+    }
+
+    #[test]
+    fn a_game_page_keys_play_and_hide_and_the_grid_hears_nothing() {
+        let (window, glue) = page(3);
+        let game = window.global::<GameData>();
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:0".into());
+        assert!(!press(&glue, Key::DownArrow));
+        assert!(!glue.key("x", false, false, false));
+        assert_eq!(window.global::<LibraryData>().get_search(), "");
+        assert!(glue.key("p", true, false, false));
+        assert!(game.get_pinned());
+        assert!(press(&glue, Key::Delete));
+        assert!(game.get_hidden());
+        assert!(press(&glue, Key::Return));
+        assert_eq!(
+            glue.browser
+                .borrow()
+                .game("desktop:0")
+                .map(|g| g.played.launches),
+            Some(1)
+        );
     }
 }

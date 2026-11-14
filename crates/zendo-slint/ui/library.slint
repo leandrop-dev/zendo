@@ -13,6 +13,8 @@ export struct Card {
     caption-accent: bool,
     faded: bool,
     badge: string,
+    // The badge says Running, in the colour for good news.
+    badge-running: bool,
     // The share of achievements, 0 to 1, or -1 for none.
     progress: float,
     marked: bool,
@@ -189,7 +191,7 @@ component CardView inherits Rectangle {
             x: parent.width - self.width - Space.s;
             y: Space.s;
             label: root.card.badge;
-            tint: Colors.accent;
+            tint: root.card.badge-running ? Colors.good : Colors.accent;
         }
     }
 

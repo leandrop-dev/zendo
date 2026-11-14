@@ -50,8 +50,11 @@ list and details views, OptiScaler and recompiled games are on hold.
   keyboard and pad cursor, cover downloads), the grid's logic is
   `zendo_core::browse` and the labels are `zendo_shell::format`, both shared
   with Iced. On 2,700 distinct covers it scrolls at 61 to 75 fps where Iced
-  holds 3 to 9 (`docs/history.md`, item 48). The other pages show their name;
-  a card opens a stand-in until item 49. Run it as `zendo-slint`.
+  holds 3 to 9 (`docs/history.md`, item 48). Item 49 is under way: 49a built
+  (a card opens the game page with Play and Stop, the running badge, status,
+  favorite, hide, tiles, sessions and details; the run logic is shared in
+  `zendo_shell::running`), local games and Add game, 49b and 49c still to do.
+  The other pages show their name. Run it as `zendo-slint`.
 
 ## Next
 

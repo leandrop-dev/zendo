@@ -192,3 +192,49 @@ export component SearchField inherits Rectangle {
         vertical-alignment: center;
     }
 }
+
+// A button for a page's actions: the name in capitals. `primary` is the
+// accent's fill (Play), `danger` the red one (Stop); `tint` colours a badge
+// that is not pressed.
+export component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary;
+    in property <bool> danger;
+    in property <bool> small;
+    in property <bool> enabled: true;
+    in property <color> tint: Colors.foreground;
+    callback clicked;
+
+    private property <color> fill: root.primary ? Colors.accent : root.danger ? Colors.bad : transparent;
+    background: root.fill != transparent
+        ? (touch.has-hover && root.enabled ? root.fill.brighter(0.15) : root.fill)
+        : (touch.has-hover && root.enabled ? Colors.raised : Colors.surface);
+    border-width: 1px;
+    border-color: root.fill != transparent ? root.fill : Colors.line;
+    opacity: root.enabled ? 1.0 : 0.7;
+    width: row.preferred-width;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    row := HorizontalLayout {
+        padding-left: root.small ? Space.s : root.primary ? 32px : Space.l;
+        padding-right: root.small ? Space.s : root.primary ? 32px : Space.l;
+        padding-top: root.small ? 2px : root.primary ? 10px : Space.s;
+        padding-bottom: root.small ? 2px : root.primary ? 10px : Space.s;
+        Text {
+            text: root.label.to-uppercase();
+            font-size: root.small ? 11px : root.primary ? 16px : 13px;
+            font-weight: root.primary || root.danger || root.small ? 700 : 400;
+            vertical-alignment: center;
+            color: root.fill != transparent ? (Colors.light ? #ffffff : #101010) : root.tint;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}

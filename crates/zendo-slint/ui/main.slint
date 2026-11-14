@@ -5,10 +5,11 @@ import "../../zendo/fonts/JetBrainsMono-Regular.ttf";
 import "../../zendo/fonts/JetBrainsMono-Bold.ttf";
 import { Colors, Space, Tr } from "style.slint";
 import { TopBar, Page } from "top_bar.slint";
+import { GamePage, GameData, Tile, Fact } from "game.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -29,9 +30,6 @@ export component MainWindow inherits Window {
     in property <string> library-count;
     in property <string> store-count;
     in property <string> downloads-count;
-    // The title of the game whose page was asked for: the game page comes in
-    // item 49, so this stands in for it.
-    in property <string> open-title;
     // The page's name, in the window's language, for the page area until the
     // pages arrive.
     out property <string> page-title:
@@ -82,25 +80,9 @@ export component MainWindow inherits Window {
                 downloads-count: root.downloads-count;
                 navigate(page) => { root.page-requested(page); }
             }
-            if root.page == Page.library && root.open-title == "": LibraryPage { }
-            if root.page == Page.library && root.open-title != "": Rectangle {
+            if root.page == Page.library && !GameData.open: LibraryPage { }
+            if root.page == Page.library && GameData.open: GamePage {
                 vertical-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: Space.s;
-                    Text {
-                        text: root.open-title;
-                        font-size: 20px;
-                        font-weight: 700;
-                        color: Colors.foreground;
-                        horizontal-alignment: center;
-                    }
-                    Text {
-                        text: "The game page comes in item 49 · Esc goes back";
-                        color: Colors.dim;
-                        horizontal-alignment: center;
-                    }
-                }
             }
             if root.page != Page.library: Rectangle {
                 vertical-stretch: 1;
@@ -126,7 +108,7 @@ export component MainWindow inherits Window {
                     overflow: elide;
                 }
                 Text {
-                    text: root.page == Page.library ? LibraryData.hints : Tr.t("hints-other");
+                    text: root.page == Page.library ? (GameData.open ? Tr.t("hints-game") : LibraryData.hints) : Tr.t("hints-other");
                     font-size: 13px;
                     color: Colors.dim;
                 }

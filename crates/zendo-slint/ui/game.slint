@@ -1,0 +1,365 @@
+// A game's page: its wide art faint behind the header, the cover, the title
+// and badges, one bar of actions, the status chips, four tiles, then the
+// sessions and the details. The Rust side (src/game_ui.rs) fills `GameData`;
+// nothing here holds a game.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ChipButton, ActionButton } from "components.slint";
+import { ScrollView } from "std-widgets.slint";
+import { ChipData } from "library.slint";
+
+export struct Tile {
+    label: string,
+    value: string,
+}
+
+// A label and its value in the details card; `path` says the value is a
+// folder or file that can be opened.
+export struct Fact {
+    label: string,
+    value: string,
+    path: bool,
+    mono: bool,
+}
+
+export global GameData {
+    // Whether a game's page replaces the Library's grid.
+    in-out property <bool> open;
+    in property <string> title;
+    in property <string> source-line;
+    in property <image> cover;
+    in property <bool> has-cover;
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
+    in property <string> favorite-badge;
+    in property <string> hidden-badge;
+    in property <bool> pinned;
+    in property <bool> hidden;
+    in property <bool> steam;
+    // 0 Play, 1 Starting, 2 Running, 3 Stopping.
+    in property <int> run-state;
+    in property <string> line;
+    in property <[ChipData]> statuses;
+    in property <[Tile]> tiles;
+    in property <[Fact]> sessions;
+    in property <[Fact]> recent;
+    in property <[Fact]> details;
+    in property <[Fact]> technical;
+    in property <bool> technical-open;
+
+    callback back();
+    callback play();
+    callback stop();
+    callback toggle-pinned();
+    callback toggle-hidden();
+    callback manage-steam();
+    callback wiki();
+    callback status(int);
+    callback open-path(string);
+    callback toggle-technical();
+}
+
+component Card inherits Rectangle {
+    in property <string> heading;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.m;
+        Text {
+            text: root.heading.to-uppercase();
+            font-size: 14px;
+            font-weight: 700;
+            color: Colors.foreground;
+        }
+        @children
+    }
+}
+
+component FactRow inherits HorizontalLayout {
+    in property <Fact> fact;
+    spacing: Space.s;
+    Text {
+        width: 130px;
+        text: root.fact.label;
+        wrap: word-wrap;
+        color: Colors.dim;
+        vertical-alignment: top;
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Space.s;
+        Text {
+            text: root.fact.value;
+            font-size: root.fact.mono ? 12px : 14px;
+            color: Colors.foreground;
+            wrap: word-wrap;
+        }
+        if root.fact.path: ActionButton {
+            label: Tr.t("files-open-folder");
+            small: true;
+            horizontal-stretch: 0;
+            clicked => { GameData.open-path(root.fact.value); }
+        }
+    }
+}
+
+export component GamePage inherits Rectangle {
+    // The room for the page's content: its width less the margins and the
+    // scroll bar.
+    property <length> inner: root.width - 2 * Space.xl - 12px;
+    ScrollView {
+        VerticalLayout {
+            page := VerticalLayout {
+                padding: Space.xl;
+                spacing: Space.xl;
+                // The back link, then the header over the faint wide art.
+                HorizontalLayout {
+                    alignment: start;
+                    back := Rectangle {
+                        width: back-text.preferred-width;
+                        height: back-text.preferred-height;
+                        back-text := Text {
+                            text: Tr.t("game-back").to-uppercase();
+                            font-size: 13px;
+                            color: back-touch.has-hover ? Colors.accent : Colors.dim;
+                        }
+                        back-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { GameData.back(); }
+                        }
+                    }
+                }
+                header := Rectangle {
+                    height: 360px;
+                    clip: true;
+                    if GameData.has-backdrop: Image {
+                        width: 100%;
+                        height: 100%;
+                        source: GameData.backdrop;
+                        image-fit: cover;
+                        opacity: 0.22;
+                    }
+                    HorizontalLayout {
+                        padding: Space.l;
+                        spacing: Space.xl;
+                        Rectangle {
+                            width: 200px;
+                            height: 300px;
+                            clip: true;
+                            background: Colors.surface;
+                            if GameData.has-cover: Image {
+                                width: 100%;
+                                height: 100%;
+                                source: GameData.cover;
+                                image-fit: cover;
+                            }
+                            if !GameData.has-cover: Text {
+                                x: Space.m;
+                                width: parent.width - 2 * Space.m;
+                                height: parent.height;
+                                text: GameData.title;
+                                font-size: 20px;
+                                wrap: word-wrap;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                color: Colors.foreground;
+                            }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: start;
+                            spacing: Space.s;
+                            Text {
+                                text: GameData.title;
+                                font-size: 34px;
+                                font-weight: 700;
+                                color: Colors.foreground;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: GameData.source-line.to-uppercase();
+                                font-size: 13px;
+                                color: Colors.dim;
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Space.s;
+                                padding-top: Space.s;
+                                if GameData.pinned: ActionButton {
+                                    label: GameData.favorite-badge;
+                                    small: true;
+                                    tint: Colors.accent;
+                                }
+                                if GameData.hidden: ActionButton {
+                                    label: GameData.hidden-badge;
+                                    small: true;
+                                }
+                                ActionButton {
+                                    label: "PCGamingWiki";
+                                    small: true;
+                                    clicked => { GameData.wiki(); }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Play, or Running with Stop; then the less pressed ones.
+                VerticalLayout {
+                    spacing: Space.s;
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: Space.m;
+                        ActionButton {
+                            label: GameData.run-state == 0 ? Tr.t("run-play")
+                                : GameData.run-state == 1 ? Tr.t("run-state-starting")
+                                : Tr.t("run-state-running");
+                            primary: true;
+                            enabled: GameData.run-state == 0;
+                            clicked => { GameData.play(); }
+                        }
+                        if GameData.run-state >= 2: ActionButton {
+                            label: GameData.run-state == 3 ? Tr.t("run-force-stop") : Tr.t("run-stop");
+                            danger: true;
+                            clicked => { GameData.stop(); }
+                        }
+                        ActionButton {
+                            label: GameData.pinned ? Tr.t("game-unfavorite") : Tr.t("game-favorite");
+                            clicked => { GameData.toggle-pinned(); }
+                        }
+                        ActionButton {
+                            label: GameData.hidden ? Tr.t("game-unhide") : Tr.t("game-hide");
+                            clicked => { GameData.toggle-hidden(); }
+                        }
+                        if GameData.steam: ActionButton {
+                            label: Tr.t("game-manage-steam");
+                            clicked => { GameData.manage-steam(); }
+                        }
+                    }
+                    Text {
+                        text: GameData.line;
+                        font-size: 14px;
+                        color: Colors.dim;
+                    }
+                }
+                // The play status: the chosen one is pressed again to clear it.
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: Space.s;
+                    Text {
+                        text: Tr.t("game-status").to-uppercase();
+                        font-size: 12px;
+                        color: Colors.dim;
+                        vertical-alignment: center;
+                    }
+                    for chip in GameData.statuses: ChipButton {
+                        label: chip.label;
+                        chosen: chip.chosen;
+                        clicked => { GameData.status(chip.id); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: Space.m;
+                    for tile in GameData.tiles: Rectangle {
+                        horizontal-stretch: 1;
+                        background: Colors.surface;
+                        border-width: 1px;
+                        border-color: Colors.line;
+                        VerticalLayout {
+                            padding: Space.l;
+                            spacing: Space.s;
+                            Text {
+                                text: tile.label.to-uppercase();
+                                font-size: 12px;
+                                color: Colors.dim;
+                            }
+                            Text {
+                                text: tile.value;
+                                font-size: 22px;
+                                font-weight: 700;
+                                color: Colors.foreground;
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: Space.xl;
+                    if GameData.sessions.length > 0: VerticalLayout {
+                        width: (root.inner - Space.xl) * 0.6;
+                        alignment: start;
+                        spacing: Space.xl;
+                        Card {
+                            heading: Tr.t("stats-game-title");
+                            VerticalLayout {
+                                spacing: Space.l;
+                                HorizontalLayout {
+                                    spacing: Space.xl;
+                                    for fact in GameData.sessions: VerticalLayout {
+                                        spacing: Space.xs;
+                                        Text {
+                                            text: fact.label.to-uppercase();
+                                            font-size: 12px;
+                                            color: Colors.dim;
+                                        }
+                                        Text {
+                                            text: fact.value;
+                                            font-size: 18px;
+                                            font-weight: 700;
+                                            color: Colors.foreground;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    spacing: Space.xs;
+                                    for fact in GameData.recent: HorizontalLayout {
+                                        spacing: Space.l;
+                                        Text {
+                                            width: 110px;
+                                            text: fact.label;
+                                            font-size: 13px;
+                                            color: Colors.dim;
+                                        }
+                                        Text {
+                                            text: fact.value;
+                                            font-size: 13px;
+                                            color: Colors.foreground;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        width: GameData.sessions.length > 0 ? (root.inner - Space.xl) * 0.4 : root.inner;
+                        alignment: start;
+                        spacing: Space.xl;
+                        Card {
+                            heading: Tr.t("game-details");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                for fact in GameData.details: FactRow { fact: fact; }
+                            }
+                        }
+                        Card {
+                            heading: Tr.t("game-technical");
+                            VerticalLayout {
+                                spacing: Space.m;
+                                ActionButton {
+                                    label: GameData.technical-open ? "−" : "+";
+                                    small: true;
+                                    horizontal-stretch: 0;
+                                    clicked => { GameData.toggle-technical(); }
+                                }
+                                if GameData.technical-open: VerticalLayout {
+                                    spacing: Space.m;
+                                    for fact in GameData.technical: FactRow { fact: fact; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
