@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/zendo", "crates/zendo-core"]
+members = ["crates/zendo", "crates/zendo-core", "crates/zendo-shell"]
 
 [workspace.package]
 edition = "2024"
@@ -51,6 +51,7 @@ webkit2gtk = "=2.0.2"
 # needs none to embed it.
 wry = { version = "0.57.1", default-features = false, features = ["os-webview"] }
 zendo-core = { path = "crates/zendo-core" }
+zendo-shell = { path = "crates/zendo-shell" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

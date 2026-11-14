@@ -84,6 +84,7 @@ fn name_of(store: Store) -> &'static str {
 
 /// `zendo sign-in-window <store> <url>`: shows the page until the sign-in
 /// ends or the window is closed.
+#[must_use]
 pub fn main(store: &str, url: &str) -> ExitCode {
     let shown = match store {
         "steam" => steam::show(false, url),
@@ -118,6 +119,7 @@ pub fn main(store: &str, url: &str) -> ExitCode {
 /// `zendo nexus-window <url> <folder>`: shows a page of Nexus Mods until it
 /// gives a mod manager link or downloads a file into `folder`, then writes
 /// the link, or `file:` and the file's path.
+#[must_use]
 pub fn nexus_main(url: &str, folder: &Path) -> ExitCode {
     match nexus_site::show(url, folder) {
         Ok(Some(found)) => {
@@ -166,7 +168,7 @@ pub fn open_nexus(url: &str, folder: &Path, handle: &Handle) -> anyhow::Result<O
 fn show(store: Store, url: &str) -> anyhow::Result<Option<String>> {
     // GTK takes the window's application id (Wayland) or class (X11) from
     // the program's name: Zendo's, as its main window has.
-    gtk::glib::set_prgname(Some(crate::app::APP_ID));
+    gtk::glib::set_prgname(Some(crate::APP_ID));
     gtk::glib::set_application_name("Zendo");
     gtk::init().context("could not start GTK")?;
     crate::i18n::set_from_settings();
@@ -459,7 +461,7 @@ window.addEventListener('DOMContentLoaded', () => {
     /// `None` when the window was closed or, renewing, Steam's page is not
     /// signed in.
     pub fn show(renew: bool, url: &str) -> anyhow::Result<Option<String>> {
-        gtk::glib::set_prgname(Some(crate::app::APP_ID));
+        gtk::glib::set_prgname(Some(crate::APP_ID));
         gtk::glib::set_application_name("Zendo");
         gtk::init().context("could not start GTK")?;
         crate::i18n::set_from_settings();
@@ -568,7 +570,7 @@ mod nexus_site {
     }
 
     pub fn show(url: &str, folder: &Path) -> anyhow::Result<Option<String>> {
-        gtk::glib::set_prgname(Some(crate::app::APP_ID));
+        gtk::glib::set_prgname(Some(crate::APP_ID));
         gtk::glib::set_application_name("Zendo");
         gtk::init().context("could not start GTK")?;
         crate::i18n::set_from_settings();

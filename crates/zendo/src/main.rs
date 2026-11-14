@@ -2,13 +2,10 @@
 //! a terminal or a keybind.
 
 mod app;
-mod file_dialog;
-mod gamepad;
-mod i18n;
-mod links;
-mod presence;
-mod sign_in_window;
-mod tray;
+
+// The toolkit-free parts live in `zendo-shell`; the window's code refers to
+// them as `crate::i18n`, `crate::tray` and so on.
+pub(crate) use zendo_shell::{file_dialog, gamepad, i18n, links, presence, sign_in_window, tray};
 
 use std::process::ExitCode;
 

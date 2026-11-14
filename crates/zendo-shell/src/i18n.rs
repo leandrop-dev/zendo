@@ -27,6 +27,7 @@ impl Language {
     pub const ALL: [Self; 2] = [Self::English, Self::Portuguese];
 
     /// Its tag, as `config.toml`'s `language` writes it.
+    #[must_use]
     pub fn tag(self) -> &'static str {
         match self {
             Self::English => "en",
@@ -35,6 +36,7 @@ impl Language {
     }
 
     /// Its name in its own words, as Settings lists it.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::English => "English",
@@ -44,6 +46,7 @@ impl Language {
 
     /// The language a tag asks for: `en`, `en_GB.UTF-8`, `pt-PT`. Any
     /// Portuguese gets Portugal's, the only one there is [tentative].
+    #[must_use]
     pub fn from_tag(tag: &str) -> Option<Self> {
         let language = tag
             .split(['-', '_', '.', '@'])
@@ -59,6 +62,7 @@ impl Language {
 
     /// The system's: the first of its languages the window speaks, else
     /// English.
+    #[must_use]
     pub fn system() -> Self {
         sys_locale::get_locales()
             .find_map(|tag| Self::from_tag(&tag))
@@ -126,6 +130,7 @@ pub fn set(language: Language) {
 }
 
 /// A message in the window's language. Use [`t!`].
+#[must_use]
 pub fn tr(id: &str, args: Option<&FluentArgs>) -> String {
     format_in(current(), id, args)
         .or_else(|| format_in(Language::English, id, args))
@@ -133,6 +138,7 @@ pub fn tr(id: &str, args: Option<&FluentArgs>) -> String {
 }
 
 /// A message in a language, when that language has it.
+#[must_use]
 pub fn format_in(language: Language, id: &str, args: Option<&FluentArgs>) -> Option<String> {
     let bundle = &BUNDLES[language.index()];
     let pattern = bundle.get_message(id)?.value()?;
@@ -146,17 +152,18 @@ pub fn format_in(language: Language, id: &str, args: Option<&FluentArgs>) -> Opt
 
 /// A message in the window's language: `t!("id")`, or with values that
 /// the message uses as `{ $name }`: `t!("id", name = value, count = 3)`.
+#[macro_export]
 macro_rules! t {
     ($id:literal) => {
         $crate::i18n::tr($id, None)
     };
     ($id:literal, $($name:ident = $value:expr),+ $(,)?) => {{
-        let mut args = ::fluent_bundle::FluentArgs::new();
-        $(args.set(stringify!($name), ::fluent_bundle::FluentValue::from($value));)+
+        let mut args = $crate::fluent_bundle::FluentArgs::new();
+        $(args.set(stringify!($name), $crate::fluent_bundle::FluentValue::from($value));)+
         $crate::i18n::tr($id, Some(&args))
     }};
 }
-pub(crate) use t;
+pub use crate::t;
 
 #[cfg(test)]
 mod tests {
@@ -249,8 +256,14 @@ mod tests {
     #[test]
     fn every_message_used_exists() {
         let english = messages(Language::English.source());
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut files = vec![src.clone()];
+        // The `src` of every crate in the workspace: the window's code is
+        // in more than one.
+        let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut files: Vec<_> = fs::read_dir(&crates)
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("src"))
+            .filter(|src| src.is_dir())
+            .collect();
         let mut unknown = Vec::new();
         let mut used = BTreeSet::new();
         while let Some(path) = files.pop() {

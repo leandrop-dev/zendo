@@ -1,13 +1,11 @@
-//! Controllers, through gilrs, as a stream of the same moves the keyboard
-//! makes. gilrs blocks while it waits for events, so it runs on a thread of
-//! its own and hands them over a channel.
+//! Controllers, through gilrs, as the same moves the keyboard makes. gilrs
+//! blocks while it waits for events, so it runs on a thread of its own and
+//! hands them to a closure.
 
 use std::thread;
 use std::time::Duration;
 
 use gilrs::{Axis, Button, EventType, Gilrs};
-use iced::futures::channel::mpsc;
-use iced::futures::{SinkExt, Stream, StreamExt};
 
 /// What a controller asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,27 +32,21 @@ pub enum Pad {
 const PRESS: f32 = 0.6;
 const RELEASE: f32 = 0.3;
 
-pub fn events() -> impl Stream<Item = Pad> {
-    iced::stream::channel(32, async |mut output| {
-        let (sender, mut receiver) = mpsc::unbounded();
-        thread::spawn(move || poll(&sender));
-        while let Some(pad) = receiver.next().await {
-            if output.send(pad).await.is_err() {
-                break;
-            }
-        }
-    })
+/// Hands what controllers ask for to `sink`, from a thread of its own, until
+/// `sink` returns `false`.
+pub fn events(sink: impl FnMut(Pad) -> bool + Send + 'static) {
+    thread::spawn(move || poll(sink));
 }
 
-/// Reads controllers until the window side of the channel goes away. With no
-/// access to input devices gilrs fails to start, and the window simply works
+/// Reads controllers until `sink` says no one is listening. With no access
+/// to input devices gilrs fails to start, and the window simply works
 /// without controllers.
-fn poll(sender: &mpsc::UnboundedSender<Pad>) {
+fn poll(mut sink: impl FnMut(Pad) -> bool) {
     let Ok(mut gilrs) = Gilrs::new() else {
         return;
     };
     let mut stick = Stick::default();
-    while !sender.is_closed() {
+    loop {
         let Some(event) = gilrs.next_event_blocking(Some(Duration::from_millis(500))) else {
             continue;
         };
@@ -63,8 +55,10 @@ fn poll(sender: &mpsc::UnboundedSender<Pad>) {
             EventType::AxisChanged(axis, value, _) => stick.lean(axis, value),
             _ => None,
         };
-        if let Some(pad) = pad {
-            let _ = sender.unbounded_send(pad);
+        if let Some(pad) = pad
+            && !sink(pad)
+        {
+            return;
         }
     }
 }

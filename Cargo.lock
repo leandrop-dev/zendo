@@ -6981,19 +6981,11 @@ name = "zendo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "discord-rich-presence",
- "fluent-bundle",
- "gilrs",
- "gtk",
  "iced",
  "image",
  "serde_json",
- "sys-locale",
- "tray-icon",
- "unic-langid",
- "webkit2gtk",
- "wry",
  "zendo-core",
+ "zendo-shell",
 ]
 
 [[package]]
@@ -7013,6 +7005,25 @@ dependencies = [
  "toml 1.2.0+spec-1.1.0",
  "ureq",
  "x11rb",
+]
+
+[[package]]
+name = "zendo-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "discord-rich-presence",
+ "fluent-bundle",
+ "gilrs",
+ "gtk",
+ "image",
+ "serde_json",
+ "sys-locale",
+ "tray-icon",
+ "unic-langid",
+ "webkit2gtk",
+ "wry",
+ "zendo-core",
 ]
 
 [[package]]

@@ -3471,3 +3471,64 @@ bus). Nothing in the repo changed.
 - **Left open**: whether Fedora and COPR accept the Royalty-free licence (see
   its row); a like-for-like Iced and Slint comparison of build time and size
   (it needs the same screens in both).
+
+## Item 46, the Slint licence and `zendo-shell` (2026-11-14)
+
+The user chose a full port to Slint after item 45, first under Slint's
+Royalty-free licence, with the plan to check Fedora and COPR first.
+
+- **The licence check.** COPR's terms (`docs.copr.fedorainfracloud.org`,
+  "What I can build in Copr?", read 2026-11-14) say a user must not upload
+  material "governed in whole or in part by a license not contained in the
+  list of acceptable licenses for Fedora". Neither
+  `docs.fedoraproject.org/en-US/legal/allowed-licenses/` nor
+  `.../not-allowed-licenses/` names Slint (0 matches in each); GPL-3.0-only is on
+  the allowed list (9 matches). `packaging/fedora/zendo.spec` uploads a
+  vendored source tarball, so Slint's source would be in the SRPM. Not found:
+  any Fedora statement about `LicenseRef-Slint-Royalty-free-2.0`, so not being
+  listed is not a recorded rejection, only not allowed by the list's wording.
+  `dnf repoquery` finds no `slint` package in the enabled repositories. Slint's
+  FAQ (`FAQ.md`) says the combined product under GPLv3 is GPLv3 as a whole and
+  MIT files stay MIT. **Decision (the user, shown the COPR text): Slint under
+  GPLv3.** The spec's `License:` (now `MIT AND OFL-1.1`) gains
+  `AND GPL-3.0-only` at the cut-over (item 54); no `AboutSlint` widget is
+  required.
+- **`crates/zendo-shell`** (new library, workspace member, `zendo-shell` in
+  `[workspace.dependencies]`): `i18n.rs` with `i18n/en.ftl` and `i18n/pt-PT.ftl`,
+  `links.rs`, `presence.rs`, `file_dialog.rs`, `sign_in_window.rs`, `tray.rs`
+  (with `tray-icon.png`) and `gamepad.rs`, moved with `git mv` out of
+  `crates/zendo`, plus `APP_ID`. What used to be an Iced stream is now a function
+  that takes a closure and spawns its thread: `links::listen(sink)`,
+  `gamepad::events(sink)`, `tray::events(sink)`, where `sink` returns `false`
+  once nobody wants the events and the thread then ends. The `t!` macro is
+  `#[macro_export]` and expands through `$crate::fluent_bundle`, so a crate that
+  calls it needs no Fluent dependency. `crates/zendo` re-exports the modules at
+  its root (`pub(crate) use zendo_shell::{...}`, so `crate::i18n` and the rest
+  still resolve) and adapts the three sources with one function,
+  `forwarded` in `app.rs`, which turns such a closure into an Iced stream.
+  `crates/zendo` no longer depends on `discord-rich-presence`, `fluent-bundle`,
+  `gilrs`, `gtk`, `sys-locale`, `tray-icon`, `unic-langid`, `webkit2gtk` or `wry`.
+- **Tests.** The count of `#[test]` is 170 before and after, plus one new, for
+  `forwarded` (a source's events arrive in order and its thread ends when the
+  stream is dropped): `cargo test --workspace` gives 160 in `zendo`, 276 in
+  `zendo-core` (25 ignored, as before) and 11 in `zendo-shell`. The i18n test
+  that every `t!("…")` names an English message, and every message is used,
+  now reads the `src/` of every crate in the workspace. `cargo clippy
+  --workspace --all-targets` has no warnings (the library's public items
+  needed ten `#[must_use]`, applied with `clippy --fix`). `cargo fmt --check`
+  still lists `app/steam_facts.rs` and `zendo-core/src/achievements.rs`, which
+  it listed at HEAD too, and nothing of this item's.
+- **Checked on screen** (throwaway home, no session bus, a private runtime
+  folder `/tmp/zr46`, since a socket path over 108 characters fails): the
+  Iced window opened with the 24 seeded games and the window class `zendo`;
+  `links.sock` was created under the runtime folder (the link listener runs);
+  with the real DualSense, three presses of D-pad right moved the cursor from
+  the first card to the fourth (`Test Game 01`), through the moved gamepad code and
+  `forwarded`. **Not checked**: the tray (no session bus, so no
+  StatusNotifierItem to see), a link handed to the open window (`zendo
+  nxm://…`), the sign-in window, the file dialog and Discord's presence (their
+  code moved, with only the `APP_ID` path changed, and was not run).
+- Left uncommitted with item 45's docs; one commit per item when asked.
+- Not run: an RPM mock build. `packaging/fedora/zendo.spec` and the PKGBUILD name
+  no path that moved (`crates/zendo/fonts/OFL.txt` and `crates/zendo/Cargo.toml`
+  stay), and the new crate is a workspace library, but the spec was not built.

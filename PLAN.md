@@ -12,7 +12,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | what is next, what is on hold, and a table of items 27 to 44 | starting new work |
+| `docs/backlog.md` | what is next, what is on hold, and a table of items 27 to 45 | starting new work |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38 and 41 to 44 are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38 and 41 to 46 are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -33,17 +33,20 @@ list and details views, OptiScaler and recompiled games are on hold.
 - Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44 (41 to 44 were
   checked together on screen with the user at the PC; `docs/history.md` says
   what was not).
-- The user is weighing a move from Iced to Slint [tentative]. They asked for
-  an evaluation (item 45, a spike); a port is not decided. Keep logic in
-  `zendo-core` and the window thin.
+- **The window is moving from Iced to Slint** [firm, decided 2026-11-14]. The
+  spike (item 45) found translucency (any alpha), blur (by window class, as
+  in Iced), a bundled font, SVG icons, the KDE scheme through `zendo-core`,
+  arrow keys and a real DualSense through gilrs all working; scrolling needs a
+  hand-built row model. Licence: Slint under **GPLv3**, because COPR forbids
+  sources under a licence outside Fedora's allowed list and Slint's
+  Royalty-free licence is on neither list (item 46); the binary is GPLv3, the
+  source files stay MIT. Staging: a new crate `crates/zendo-slint` beside the
+  Iced `crates/zendo`, shared toolkit-free code in `crates/zendo-shell`, the
+  Iced crate deleted at parity (items 47 to 54). Keep logic in `zendo-core`.
 
 ## Next
 
-From the user's notes of 2026-11-13, items 41 to 44 are built. Left:
-
-- 45: a Slint spike of the Library grid (evaluation only, no port).
-
-`docs/backlog.md` has the detail and lists what is on hold.
+Items 47 to 54, the port: `docs/backlog.md` has them, and what is on hold.
 
 ## Direction [firm]
 

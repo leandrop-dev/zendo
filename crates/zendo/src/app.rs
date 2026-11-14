@@ -126,7 +126,7 @@ fn key_id() -> Id {
 }
 
 /// Zendo's windows' application id (Wayland) or class (X11): `zendo`.
-pub const APP_ID: &str = "zendo";
+pub use zendo_shell::APP_ID;
 
 /// Opens the window; `link` is an `nxm://` link it was started for.
 pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
@@ -1661,7 +1661,7 @@ impl Zendo {
         };
         // The tray's clicks and menu, listened to only while it is there.
         let tray = if self.tray.is_some() {
-            Subscription::run(tray::events).map(Message::Tray)
+            Subscription::run(tray_events).map(Message::Tray)
         } else {
             Subscription::none()
         };
@@ -1677,10 +1677,9 @@ impl Zendo {
             tray,
             watch,
             event::listen_with(on_event),
-            Subscription::run(gamepad::events).map(Message::Pad),
+            Subscription::run(pad_events).map(Message::Pad),
             window::close_requests().map(|_| Message::CloseRequested),
-            Subscription::run(crate::links::listen)
-                .map(|link| Message::Nexus(NexusMessage::Link(link))),
+            Subscription::run(link_events).map(|link| Message::Nexus(NexusMessage::Link(link))),
         ])
     }
 
@@ -1811,6 +1810,35 @@ fn scan() -> Task<Message> {
 }
 
 /// A tick every [`WATCH`], for the launchers' file watch.
+/// A source from `zendo-shell`, which hands its events to a closure on a
+/// thread of its own, as an Iced stream. The closure says `false` once the
+/// stream is gone, which ends the thread.
+fn forwarded<T: Send + 'static>(
+    start: impl FnOnce(Box<dyn FnMut(T) -> bool + Send>) + Send + 'static,
+) -> impl Stream<Item = T> {
+    iced::stream::channel(32, async move |mut output| {
+        let (sender, mut receiver) = mpsc::unbounded();
+        start(Box::new(move |item| sender.unbounded_send(item).is_ok()));
+        while let Some(item) = receiver.next().await {
+            if output.send(item).await.is_err() {
+                break;
+            }
+        }
+    })
+}
+
+fn tray_events() -> impl Stream<Item = TrayMessage> {
+    forwarded(tray::events)
+}
+
+fn pad_events() -> impl Stream<Item = Pad> {
+    forwarded(gamepad::events)
+}
+
+fn link_events() -> impl Stream<Item = String> {
+    forwarded(crate::links::listen)
+}
+
 fn watch_ticks() -> impl Stream<Item = ()> {
     iced::stream::channel(1, async move |mut output| {
         let (sender, mut receiver) = mpsc::unbounded();
@@ -2084,6 +2112,34 @@ mod tests {
         );
         let none: Vec<u8> = iced::futures::executor::block_on(blocking(|| panic!("again")));
         assert_eq!(none, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn a_shell_source_becomes_a_stream_and_ends_with_it() {
+        use std::sync::mpsc as std_mpsc;
+        use std::time::Duration;
+
+        let (stopped, wait) = std_mpsc::channel();
+        let stream = forwarded(move |mut sink: Box<dyn FnMut(u32) -> bool + Send>| {
+            std::thread::spawn(move || {
+                assert!(sink(1));
+                assert!(sink(2));
+                // Keeps going until the stream is gone.
+                while sink(3) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                let _ = stopped.send(());
+            });
+        });
+        let mut stream = Box::pin(stream);
+        let first_two =
+            iced::futures::executor::block_on(async { (stream.next().await, stream.next().await) });
+        assert_eq!(first_two, (Some(1), Some(2)));
+        drop(stream);
+        assert!(
+            wait.recv_timeout(Duration::from_secs(5)).is_ok(),
+            "the source ends when its stream does"
+        );
     }
 
     fn zendo_with(count: usize, columns: usize) -> Zendo {

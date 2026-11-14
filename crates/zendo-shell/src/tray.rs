@@ -9,8 +9,6 @@
 use std::thread;
 use std::time::Duration;
 
-use iced::futures::channel::mpsc;
-use iced::futures::{SinkExt, Stream, StreamExt};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem};
 use tray_icon::{Icon, MouseButton, TrayIconBuilder, TrayIconEvent};
 
@@ -66,37 +64,30 @@ impl Tray {
     }
 }
 
-/// The tray's messages, as they come: left clicks and the menu's items.
-pub fn events() -> impl Stream<Item = TrayMessage> {
-    iced::stream::channel(8, async move |mut output| {
-        let (sender, mut receiver) = mpsc::unbounded();
-        thread::spawn(move || {
-            loop {
-                if let Ok(TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    ..
-                }) = TrayIconEvent::receiver().try_recv()
-                    && sender.unbounded_send(TrayMessage::Toggle).is_err()
-                {
-                    return;
-                }
-                if let Ok(event) = MenuEvent::receiver().try_recv() {
-                    let message = match event.id().as_ref() {
-                        "open" => TrayMessage::Open,
-                        "quit" => TrayMessage::Quit,
-                        _ => continue,
-                    };
-                    if sender.unbounded_send(message).is_err() {
-                        return;
-                    }
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
-        });
-        while let Some(message) = receiver.next().await {
-            if output.send(message).await.is_err() {
+/// Hands the tray's messages, as they come (left clicks and the menu's
+/// items), to `sink` from a thread of its own, until `sink` returns `false`.
+pub fn events(mut sink: impl FnMut(TrayMessage) -> bool + Send + 'static) {
+    thread::spawn(move || {
+        loop {
+            if let Ok(TrayIconEvent::Click {
+                button: MouseButton::Left,
+                ..
+            }) = TrayIconEvent::receiver().try_recv()
+                && !sink(TrayMessage::Toggle)
+            {
                 return;
             }
+            if let Ok(event) = MenuEvent::receiver().try_recv() {
+                let message = match event.id().as_ref() {
+                    "open" => TrayMessage::Open,
+                    "quit" => TrayMessage::Quit,
+                    _ => continue,
+                };
+                if !sink(message) {
+                    return;
+                }
+            }
+            thread::sleep(Duration::from_millis(100));
         }
-    })
+    });
 }

@@ -39,6 +39,7 @@ impl Kind {
         }
     }
 
+    #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         [Self::Program, Self::Mod, Self::Installer, Self::Folder]
             .into_iter()
@@ -73,7 +74,7 @@ const ARCHIVES: [&str; 9] = [
 /// chosen.
 pub fn main(kind: Kind, title: &str) -> ExitCode {
     crate::i18n::set_from_settings();
-    gtk::glib::set_prgname(Some(crate::app::APP_ID));
+    gtk::glib::set_prgname(Some(crate::APP_ID));
     gtk::glib::set_application_name("Zendo");
     if let Err(err) = gtk::init() {
         eprintln!("zendo: could not start GTK: {err}");

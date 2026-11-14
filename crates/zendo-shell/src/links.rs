@@ -11,9 +11,6 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use iced::futures::channel::mpsc;
-use iced::futures::{SinkExt, Stream, StreamExt};
-
 /// The longest link taken; Nexus's are far shorter.
 const LONGEST: u64 = 4096;
 
@@ -25,6 +22,7 @@ fn socket() -> Option<PathBuf> {
 }
 
 /// Hands a link to the open window; `false` when there is none.
+#[must_use]
 pub fn send(link: &str) -> bool {
     socket().is_some_and(|path| send_to(&path, link))
 }
@@ -37,22 +35,15 @@ fn send_to(path: &Path, link: &str) -> bool {
     stream.write_all(format!("{link}\n").as_bytes()).is_ok()
 }
 
-/// The links other `zendo` processes hand over while the window is open.
+/// Hands the links other `zendo` processes pass over while the window is
+/// open to `sink`, from a thread of its own, until `sink` returns `false`.
 /// When another window already listens, this one takes none.
-pub fn listen() -> impl Stream<Item = String> {
-    iced::stream::channel(8, async |mut output| {
-        let (sender, mut receiver) = mpsc::unbounded();
-        thread::spawn(move || {
-            if let Some(listener) = socket().and_then(|path| bind(&path)) {
-                accept(&listener, &sender);
-            }
-        });
-        while let Some(link) = receiver.next().await {
-            if output.send(link).await.is_err() {
-                break;
-            }
+pub fn listen(mut sink: impl FnMut(String) -> bool + Send + 'static) {
+    thread::spawn(move || {
+        if let Some(listener) = socket().and_then(|path| bind(&path)) {
+            accept(&listener, &mut sink);
         }
-    })
+    });
 }
 
 fn bind(path: &Path) -> Option<UnixListener> {
@@ -82,11 +73,8 @@ fn bind(path: &Path) -> Option<UnixListener> {
     UnixListener::bind(path).ok()
 }
 
-fn accept(listener: &UnixListener, sender: &mpsc::UnboundedSender<String>) {
+fn accept(listener: &UnixListener, sink: &mut impl FnMut(String) -> bool) {
     for stream in listener.incoming() {
-        if sender.is_closed() {
-            break;
-        }
         let Ok(stream) = stream else {
             continue;
         };
@@ -97,8 +85,8 @@ fn accept(listener: &UnixListener, sender: &mpsc::UnboundedSender<String>) {
             .is_ok()
         {
             let received = line.trim();
-            if !received.is_empty() {
-                let _ = sender.unbounded_send(received.to_owned());
+            if !received.is_empty() && !sink(received.to_owned()) {
+                break;
             }
         }
     }
@@ -125,10 +113,10 @@ mod tests {
             .mode();
         assert_eq!(mode & 0o777, 0o700);
         assert!(bind(&path).is_none(), "a second window takes no links");
-        let (sender, mut receiver) = mpsc::unbounded();
-        thread::spawn(move || accept(&listener, &sender));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        thread::spawn(move || accept(&listener, &mut |link| sender.send(link).is_ok()));
         assert!(send_to(&path, "nxm://catquest/mods/1/files/2"));
-        let got = iced::futures::executor::block_on(receiver.next());
+        let got = receiver.recv_timeout(Duration::from_secs(5)).ok();
         assert_eq!(got.as_deref(), Some("nxm://catquest/mods/1/files/2"));
 
         // A socket left by a window that ended is taken over.
