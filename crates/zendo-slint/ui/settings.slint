@@ -75,7 +75,9 @@ component Section inherits Rectangle {
             font-weight: 700;
             color: Colors.foreground;
         }
+        // An explicit width: a wrapped text's height is measured at it.
         Text {
+            width: root.width - 2 * Space.l;
             text: root.about;
             font-size: 13px;
             color: Colors.dim;
@@ -134,6 +136,9 @@ component Note inherits Text {
 }
 
 export component SettingsPage inherits Rectangle {
+    // The room inside a card: the column's width less the page's padding
+    // and the card's own.
+    property <length> inner: min(960px, root.width - 12px) - 2 * Space.xl - 2 * Space.l;
     VerticalLayout {
         FlexboxLayout {
             vertical-stretch: 0;
@@ -240,11 +245,13 @@ export component SettingsPage inherits Rectangle {
                             Rectangle {
                                 height: get-key.preferred-height;
                                 get-key := Text {
+                                    x: 0;
                                     text: Tr.t("steamgriddb-get-key");
                                     font-size: 13px;
                                     color: get-touch.has-hover ? Colors.accent : Colors.foreground;
                                 }
                                 get-touch := TouchArea {
+                                    x: 0;
                                     mouse-cursor: pointer;
                                     width: get-key.preferred-width;
                                     clicked => { SettingsData.key-get(); }
@@ -334,7 +341,7 @@ export component SettingsPage inherits Rectangle {
                                     wrap: word-wrap;
                                 }
                                 Text {
-                                    horizontal-stretch: 1;
+                                    width: root.inner - 220px - Space.m;
                                     text: source.value;
                                     font-size: source.tone == 2 ? 13px : 14px;
                                     color: source.tone == 2 ? Colors.bad : source.tone == 3 ? Colors.dim : Colors.foreground;
@@ -360,7 +367,7 @@ export component SettingsPage inherits Rectangle {
                                     wrap: word-wrap;
                                 }
                                 Text {
-                                    horizontal-stretch: 1;
+                                    width: root.inner - 160px - 110px - 2 * Space.m;
                                     text: file.value;
                                     font-size: 13px;
                                     color: Colors.foreground;

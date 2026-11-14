@@ -81,16 +81,14 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   time played after a session; the Cloud saves row before, during and after a
   real sync (Epic too).
 - **Settings (50a)**, with `cargo run -p zendo-slint` (it writes your real
-  `config.toml`; Claude has not seen this page on screen): open it with the
-  gear or Ctrl+5. Language chips switch every text at once, and back; the tray
-  switch puts the icon in the tray and takes it out (close the window with it
-  on: hides; with it off: quits; turning it off while hidden brings the window
-  back); Opaque makes the window solid and back; SteamGridDB: paste a good key
-  (Check, then Save keeps it), a wrong one (rejected, not saved), Show/Hide,
-  an empty field plus Save removes it, "Get a key" opens the site; covers
-  switch, Download now, workers chips; the sources' counts; Diagnostics: each
-  Open folder, Copy report (needs wl-clipboard or xclip) and Open logs; the
-  switches survive a restart.
+  `config.toml`). Claude already clicked through language, Opaque, a rejected
+  key, the Library switches and Copy report (`docs/history.md`, item 50a).
+  What needs you: the tray switch (needs the session bus: close the window
+  with it on: hides; with it off: quits; turning it off while hidden brings
+  the window back); a good SteamGridDB key (Check, then Save keeps it, and
+  it is in the keyring), removing a key with an empty field plus Save, "Get
+  a key" opening the site; Download now with a key; Open folder and Open
+  logs on each row; the switches surviving a restart.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

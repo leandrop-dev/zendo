@@ -3941,6 +3941,21 @@ Diagnostics, as chips; Engines and Proton come with 50b.
   (rejected: not saved; an answer for another key: let go; accepted: saved,
   and the Save button goes dim), moves between groups and counts the files
   and sources.
-- **Not checked.** Not looked at on screen (the user was away: the virtual
-  mouse and keyboard are for when they are there). Everything is in the
-  user's list in `docs/backlog.md`.
+- **Checked on screen** (2026-11-14, throwaway home, no session bus, the user
+  watching): Ctrl+5 opens the page; the Portuguese chip changed every text
+  at once and wrote `language = "pt-PT"`, English put it back; Opaque made
+  the window solid (`opaque = true`) and off again; Keys: typing shows dots,
+  Show/Hide, Check reached the real SteamGridDB, which turned a made-up key
+  down, Save said "so it was not saved" and stored nothing; Library: covers
+  and update switches and workers 4 landed in `config.toml`, the sources'
+  counts; Diagnostics: Copy report put the 63-line report on the clipboard
+  with a green note (the clipboard was empty before and was cleared after).
+- **Found and fixed on screen**: the Files card was measured too short and
+  the last row drew under the next card (wrapped texts need explicit widths:
+  the card's inner width less the other columns); the "Get a free key" link
+  was centred (a child of a plain `Rectangle` is centred unless `x: 0`).
+- **Not checked.** The tray switch (no session bus in a throwaway run), Open
+  folder and Open logs (they start Dolphin), Get a key (the browser), a good
+  key's Save, removing a key, Download now with a real key, the keyring (the
+  throwaway run has none: the page said so in red), the switches surviving a
+  restart, a narrower window.
