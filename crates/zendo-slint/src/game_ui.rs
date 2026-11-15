@@ -306,7 +306,9 @@ impl Glue {
             .as_deref()
             .is_some_and(|id| self.browser.borrow().game(id).is_none());
         if gone {
+            // Back to the Library, with a word on why, as Iced says on the page.
             self.close_game();
+            self.say(t!("game-gone"));
         } else {
             self.show_game();
         }

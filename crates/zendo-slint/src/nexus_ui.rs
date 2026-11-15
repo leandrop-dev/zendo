@@ -120,7 +120,7 @@ impl Glue {
         let weak = self.window.clone();
         std::thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
-                .unwrap_or_else(|_| Err(t!("panicked")));
+                .unwrap_or_else(|payload| Err(super::panicked_note(&*payload)));
             let _ = weak.upgrade_in_event_loop(move |_| with_glue(|glue| arrived(glue, result)));
         });
     }
@@ -402,7 +402,7 @@ impl Glue {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 shell::fetch(&game, &key, &link, remember, &stop, &mut progress)
             }))
-            .unwrap_or_else(|_| Err(t!("panicked")));
+            .unwrap_or_else(|payload| Err(super::panicked_note(&*payload)));
             let _ = weak.upgrade_in_event_loop(move |_| {
                 with_glue(|glue| glue.nexus_finished(number, &game_id, result));
             });

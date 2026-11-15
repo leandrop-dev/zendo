@@ -316,6 +316,10 @@ impl Glue {
         let glue = Rc::clone(self);
         data.on_covers_download(move || {
             glue.download_images();
+            if glue.persist && glue.images_left.get() == 0 {
+                // Nothing was missing, so nothing started.
+                glue.say(t!("images-none"));
+            }
             glue.show_settings();
         });
         let glue = Rc::clone(self);
@@ -865,13 +869,13 @@ impl Glue {
             }
         })
         .collect();
-        if browser.problems() > 0 {
-            rows.push(row(
-                "",
-                t!("footer-unreadable", count = browser.problems()),
-                2,
-            ));
-        }
+        // One line for each source the scan could not read, as in Iced.
+        rows.extend(
+            browser
+                .problems()
+                .iter()
+                .map(|problem| row("", t!("sources-unreadable", problem = problem.as_str()), 2)),
+        );
         rows
     }
 }

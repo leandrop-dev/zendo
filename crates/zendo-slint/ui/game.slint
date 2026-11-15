@@ -128,6 +128,9 @@ export global GameData {
     in property <image> backdrop;
     in property <bool> has-backdrop;
     in property <string> favorite-badge;
+    // "UPDATE AVAILABLE" while the queue has an update for this game; empty
+    // otherwise.
+    in property <string> update-badge;
     in property <string> hidden-badge;
     in property <bool> pinned;
     in property <bool> hidden;
@@ -1004,6 +1007,11 @@ export component GamePage inherits Rectangle {
                                     label: badge.label;
                                     small: true;
                                     tint: badge.good ? Colors.good : Colors.dim;
+                                }
+                                if GameData.update-badge != "": ActionButton {
+                                    label: GameData.update-badge;
+                                    small: true;
+                                    tint: Colors.accent;
                                 }
                                 if GameData.pinned: ActionButton {
                                     label: GameData.favorite-badge;

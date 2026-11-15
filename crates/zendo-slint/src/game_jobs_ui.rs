@@ -193,6 +193,11 @@ impl Glue {
             }
             .into(),
         );
+        data.set_update_badge(if update {
+            t!("badge-update").into()
+        } else {
+            slint::SharedString::new()
+        });
         data.set_update_on(job.is_none());
         let steam = super::game::steam_app(game);
         data.set_has_more(managed || steam.is_some());

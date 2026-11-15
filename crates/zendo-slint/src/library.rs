@@ -145,7 +145,8 @@ pub struct Browser {
     /// `false` while the first scan runs.
     loaded: bool,
     games: Vec<Game>,
-    problems: usize,
+    /// What the last scan could not read, one line each.
+    problems: Vec<String>,
     categories: Vec<Category>,
     saved: Vec<SavedFilter>,
     filter: Filter,
@@ -179,7 +180,7 @@ impl Browser {
         Self {
             loaded: false,
             games: Vec::new(),
-            problems: 0,
+            problems: Vec::new(),
             categories: Vec::new(),
             saved: Vec::new(),
             filter: Filter::default(),
@@ -227,8 +228,8 @@ impl Browser {
     }
 
     #[must_use]
-    pub fn problems(&self) -> usize {
-        self.problems
+    pub fn problems(&self) -> &[String] {
+        &self.problems
     }
 
     #[must_use]
@@ -521,7 +522,7 @@ impl Browser {
             self.filter.sort = sort;
         }
         self.loaded = true;
-        self.problems = library.problems.len();
+        self.problems = library.problems.clone();
         self.games = library.games;
         self.categories = categories;
         self.saved = saved;

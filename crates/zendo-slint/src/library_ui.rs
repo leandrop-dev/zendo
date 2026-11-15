@@ -102,6 +102,20 @@ thread_local! {
 }
 
 /// Runs `then` with the page's glue, when there is one.
+/// What the window says when work on a thread hit a bug: the panic's own
+/// words when it carried any, as in Iced.
+fn panicked_note(payload: &(dyn std::any::Any + Send)) -> String {
+    let said = payload.downcast_ref::<String>().cloned().or_else(|| {
+        payload
+            .downcast_ref::<&str>()
+            .map(|text| (*text).to_owned())
+    });
+    match said {
+        Some(said) if !said.is_empty() => t!("panicked-with", error = said),
+        _ => t!("panicked"),
+    }
+}
+
 fn with_glue(then: impl FnOnce(&Rc<Glue>)) {
     let glue = GLUE.with(|cell| cell.borrow().clone());
     if let Some(glue) = glue {
@@ -643,8 +657,8 @@ impl Glue {
             status.to_owned()
         } else if let Some(summary) = self.queue_summary() {
             summary
-        } else if browser.problems() > 0 {
-            t!("footer-unreadable", count = browser.problems())
+        } else if !browser.problems().is_empty() {
+            t!("footer-unreadable", count = browser.problems().len())
         } else {
             String::new()
         }
@@ -700,12 +714,12 @@ impl Glue {
         self.sync();
         let window = self.window.clone();
         std::thread::spawn(move || {
-            let scanned = std::panic::catch_unwind(scan).unwrap_or_else(|_| {
+            let scanned = std::panic::catch_unwind(scan).unwrap_or_else(|payload| {
+                let note = panicked_note(&*payload);
                 let library = Library {
-                    problems: vec![t!("panicked")],
+                    problems: vec![note.clone()],
                     ..Library::default()
                 };
-                let note = t!("panicked");
                 (library, Sort::default(), Vec::new(), Vec::new(), Err(note))
             });
             let _ = window.upgrade_in_event_loop(move |_| with_glue(|glue| glue.scanned(scanned)));
@@ -1383,6 +1397,46 @@ mod tests {
         assert_eq!(window.get_library_count(), "2");
         data.invoke_card_marked("desktop:1".into());
         assert_eq!(data.get_hints(), t!("hints-selection"));
+    }
+
+    #[test]
+    fn a_panic_says_its_own_words_when_it_had_any() {
+        assert_eq!(
+            panicked_note(&"a bug in the work"),
+            t!("panicked-with", error = "a bug in the work")
+        );
+        assert_eq!(
+            panicked_note(&String::from("owned words")),
+            t!("panicked-with", error = "owned words")
+        );
+        assert_eq!(panicked_note(&42_u8), t!("panicked"));
+    }
+
+    #[test]
+    fn a_game_that_leaves_while_its_page_is_open_closes_it_and_says_so() {
+        let (window, glue) = page(3);
+        window
+            .global::<LibraryData>()
+            .invoke_card_clicked("desktop:1".into());
+        assert!(window.global::<GameData>().get_open());
+        // A rescan without it, and with a source it could not read.
+        let library = Library {
+            games: vec![game(0), game(2)],
+            problems: vec!["a.desktop: no Exec".to_owned()],
+        };
+        let outcome =
+            glue.browser
+                .borrow_mut()
+                .loaded(library, Some(Sort::Title), Vec::new(), Vec::new());
+        glue.apply(outcome);
+        glue.sync();
+        glue.refresh_game();
+        assert!(!window.global::<GameData>().get_open());
+        assert_eq!(window.global::<LibraryData>().get_status(), t!("game-gone"));
+        assert_eq!(
+            glue.browser.borrow().problems(),
+            ["a.desktop: no Exec".to_owned()]
+        );
     }
 
     #[test]

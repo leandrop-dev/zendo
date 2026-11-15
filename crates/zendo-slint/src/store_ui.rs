@@ -1045,6 +1045,10 @@ impl Glue {
             (browser.owned(&id).cloned(), browser.is_installed(&id))
         };
         let Some(owned) = owned else {
+            // The list lost the game while its page was open: back to the
+            // Store, with a word on why.
+            self.close_game();
+            self.say(t!("owned-gone"));
             return;
         };
         let now = running::now();

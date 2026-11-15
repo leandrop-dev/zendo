@@ -5145,3 +5145,28 @@ and `meta_line`); the Slint side is `ui/game_mode.slint` (`GameModeScreen`,
   removed, so their state survives a visit to the screen. With 11 games all 11
   tiles showed at 2560 px; a narrower window shows an odd number around the
   hero.
+
+## Item 54a, the parity checklist and its fixes (2026-11-15)
+
+`docs/parity-checklist.md` is the gate before the Iced crate goes. Every
+Fluent message id (996) was looked up in the Iced crate and in the rest: 11
+were Iced's only. Of those, `about-*` and `run-open` needed nothing, and the
+rest were ported to `zendo-slint`: the "UPDATE AVAILABLE" badge on the game
+page (`update-badge`), the note when an open game or store game leaves its list
+(the page closes and the footer says it), one line per unreadable source in
+Settings → Library (`Browser` keeps the lines, not a count), "No images to
+download" after Download now, the panic's own words (`panicked_note`), and the
+Stats page's key hint, which was missing. "Reading mods…" was not ported on
+purpose: a card that grows after the page is laid out left the page's height
+short (52c1).
+
+Checked: `cargo test -p zendo-slint` 168 passed, rustfmt and clippy clean. On
+screen, in two throwaway homes with keys and clicks guarded by the window's
+pid: the Stats footer, the game-gone note, the unreadable file in the footer
+and in Settings (red, with path and reason) and "No images to download". Not
+seen: the update badge, the store game's gone note, the panic text. Page keys:
+Ctrl+3 Downloads, 4 Accounts, 5 Settings, 6 About, 7 Stats. On Settings a click
+on the scrollbar track and Page Down did not scroll; dragging the thumb did.
+A helper that read `kdotool getmouselocation --shell` clobbered its own `X` and
+`Y` (the output names are `X`, `Y`, `WINDOW`); it aborted on the pid check
+before any click.

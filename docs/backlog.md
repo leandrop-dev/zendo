@@ -100,7 +100,10 @@ to `zendo-core` when that page is ported. Ask before building any other page
   summary, a light scheme. Item 54's parity checklist must go through 53.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
-  GPL-3.0-only`), README, docs, COPR resubmit.
+  GPL-3.0-only`), README, docs, COPR resubmit. Sliced with the user
+  2026-11-15: **54a** the checklist, written (`docs/parity-checklist.md`; not
+  yet signed off; its differences from Iced were ported or decided 2026-11-15; all but the update badge seen on screen), then **54b** the rename, the deletion and
+  the packaging, after the sign-off. The COPR resubmit stays the user's.
 
 The full plan, with files and risks, is `~/.claude/plans/drifting-hugging-scone.md`
 (outside the repo).

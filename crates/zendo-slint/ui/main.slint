@@ -164,6 +164,7 @@ export component MainWindow inherits Window {
                         : OptionsData.open ? Tr.t("hints-sheet")
                         : root.page == Page.library ? (GameData.open ? Tr.t("hints-game") : LibraryData.hints)
                         : root.page == Page.store ? (GameData.open ? Tr.t("hints-owned") : Tr.t("hints-store"))
+                        : root.page == Page.stats ? Tr.t("hints-stats")
                         : root.page == Page.downloads && DownloadsData.asking ? Tr.t("hints-closing")
                         : Tr.t("hints-other");
                     font-size: 13px;
