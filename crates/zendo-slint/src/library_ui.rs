@@ -68,6 +68,8 @@ mod runtimes;
 mod search;
 #[path = "settings_ui.rs"]
 mod settings;
+#[path = "stats_ui.rs"]
+mod stats;
 #[path = "steam_ui.rs"]
 mod steam;
 #[path = "steam_installs_ui.rs"]
@@ -237,6 +239,8 @@ struct Glue {
     store: store::StoreState,
     /// The Downloads page and the queue (`downloads_ui.rs`).
     downloads: downloads::DownloadsState,
+    /// The Stats page (`stats_ui.rs`).
+    stats: stats::StatsState,
     /// Steam's installs (`steam_installs_ui.rs`) and what an installed game's
     /// page does with the queue (`game_jobs_ui.rs`).
     steam_installs: steam_installs::SteamInstallState,
@@ -350,6 +354,7 @@ impl Glue {
             covers,
             store,
             downloads: downloads::DownloadsState::new(),
+            stats: stats::StatsState::new(),
             steam_installs: steam_installs::SteamInstallState::new(),
             jobs: jobs::JobsState::new(),
             steam: steam::SteamState::default(),
@@ -457,6 +462,7 @@ impl Glue {
         self.connect_collections(window);
         self.connect_accounts(window);
         self.connect_downloads(window);
+        self.connect_stats(window);
         self.connect_steam(window);
         self.connect_steam_installs(window);
         self.connect_game_jobs(window);
@@ -891,6 +897,12 @@ impl Glue {
                 // Game Mode and its shelves come in item 53.
                 Pad::Back | Pad::ToggleGameMode | Pad::PrevShelf | Pad::NextShelf => false,
             };
+        } else if self.on_stats() {
+            match pad {
+                Pad::Left => self.stats_step(Move::Left),
+                Pad::Right => self.stats_step(Move::Right),
+                _ => false,
+            };
         } else if self.on_store() {
             match pad {
                 Pad::Left => self.store_step(Move::Left),
@@ -967,6 +979,9 @@ impl Glue {
         if page == Page::Settings {
             self.open_settings();
         }
+        if page == Page::Stats {
+            self.show_stats();
+        }
         if page == Page::Accounts {
             // Who is signed in is asked again each time the page opens.
             self.check_accounts();
@@ -1026,6 +1041,9 @@ impl Glue {
         }
         if self.on_store() && !alt && !meta {
             return self.store_key(text, key);
+        }
+        if !alt && !meta && self.on_stats() {
+            return self.stats_key(key);
         }
         if alt || meta || !self.on_library() {
             return false;

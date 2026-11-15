@@ -40,7 +40,7 @@ pub(super) struct GameState {
     /// The games Zendo started and still runs.
     pub(super) running: RefCell<Running>,
     /// Every session watched, for the page's Sessions card.
-    sessions: RefCell<Vec<sessions::Session>>,
+    pub(super) sessions: RefCell<Vec<sessions::Session>>,
     /// Each hero asked for, and the smaller copy drawn instead of it once made.
     backdrops: RefCell<HashMap<PathBuf, Option<PathBuf>>>,
     /// The cover and backdrop the page shows, so a picture arriving that the
@@ -777,6 +777,9 @@ impl Glue {
             self.say(format!("{err:#}"));
         }
         self.game.sessions.borrow_mut().push(session);
+        if self.on_stats() {
+            self.show_stats();
+        }
     }
 }
 

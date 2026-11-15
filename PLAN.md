@@ -90,11 +90,15 @@ list and details views, OptiScaler and recompiled games are on hold.
   `zendo_shell::nexus_search`) and 52c3 is built too (the FOMOD installer sheet,
   whose state is `zendo_shell::installer`, shared with Iced; Options… on a mod;
   the card of mods coming in from Nexus on Downloads), which closes item 52.
-  The Stats page shows its name. Run it as `zendo-slint`.
+  Item 53 is sliced [firm]: 53a is built (the Stats page: period chips, tiles,
+  most played, charts by month and weekday, highlights and the library by
+  status, reading the sessions the game page keeps; arrows change the period).
+  Run it as `zendo-slint`.
 
 ## Next
 
-Items 53 and 54, the port: `docs/backlog.md` has them, and what is on hold.
+53b (Game Mode) and item 54, the port: `docs/backlog.md` has them, and what
+is on hold.
 
 ## Direction [firm]
 

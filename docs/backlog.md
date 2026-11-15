@@ -89,7 +89,12 @@ to `zendo-core` when that page is ported. Ask before building any other page
   read, and on Stardew Valley's page the bottom of the Mods card could not be
   scrolled to once (`docs/history.md`, item 52c1; the pages' content height
   flips on every rebuild, with or without the card).
-- **53** Stats tab and Game Mode.
+- **53** Stats tab and Game Mode, sliced in two [firm]. **53a built
+  2026-11-15**: the Stats page (`ui/stats.slint`, `stats_ui.rs`; the sums and
+  words were already shared). **53b**: Game Mode (F11 and Select enter and
+  leave, the hero and shelves, LB and RB, the menu, `--game-mode` and
+  `--fullscreen`; Iced's is `app/game_mode.rs` and `hero.rs`; the pad hooks
+  `Pad::ToggleGameMode`, `PrevShelf` and `NextShelf` wait in `library_ui.rs`).
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
   GPL-3.0-only`), README, docs, COPR resubmit.

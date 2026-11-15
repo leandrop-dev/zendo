@@ -5017,3 +5017,63 @@ with an installer and said so (`mods-installer-not-yet`).
   Options… opened (the Mods card's busy line; the known page-height flip of
   52c1). A small picture is scaled up to 220 px in Slint and drawn at its own
   size in Iced.
+
+## Item 53a, the Stats page in Slint (2026-11-15)
+
+Item 53 is sliced in two [firm, my call, said in chat before building]: 53a is
+the Stats page and 53b is Game Mode. The user chose to check 53a on screen at
+the PC.
+
+- **Built**: `ui/stats.slint` (`StatsPage`, `StatsData` with `StatBar`,
+  `StatCol` and `StatLine`) and `src/stats_ui.rs` (`StatsState`, a part of the
+  Library's glue like the other pages). Nothing new in `zendo-core` or
+  `zendo-shell`: the sums are `sessions::Summary`, the words are the shared
+  `stats-*` messages and `format::{play_time, month_short, weekday_short,
+  play_status}`, which Iced already used. The page keeps no sessions of its
+  own: it reads the list `GameState` keeps (its field is now `pub(super)`), so
+  a session recorded while the page is open redraws it (`record_session`).
+  Parts: the period chips (the years with sessions, latest first, then all
+  time), four tiles, Most played with bars, By month and By weekday as column
+  charts (value on top, label under; "55m" under an hour, then whole hours),
+  Highlights (games started, longest streak, longest session) and Library by
+  status. No session at all gives the explaining text; a period with none gives
+  "No sessions in this period". Left, Right, Home and End (and the pad's Left
+  and Right) change the period on that page only; Ctrl+7 and the tab were there
+  since item 47.
+- **Checked**: `cargo fmt`, clippy with no warning, 162 tests (4 new: the
+  column values, the page's empty and filled states with the models' row
+  counts, the arrows on Stats only through `key()`, and the keys, Home and End
+  and a chip click moving the period).
+- **On screen** (KDE, 2026-11-15, with the user at the PC, throwaway home
+  `/tmp/zh`, no session bus, a seeded `sessions.jsonl` of ten sessions over
+  2025 and 2026, `ydotoold` with the pid guard before every key and click):
+  every figure was compared by hand with the file: 2026 is 584 min (9 h 44 min)
+  over 7 sessions on 7 days and 3 games, KPat 4 h 49 min, Sleeper 3 h 50 min,
+  Other Game 1 h 5 min; 2025 is 230 min over 3 sessions, 3 days, 2 games, with
+  Thursday, Friday and Wednesday as the played weekdays (1 and 2 May and 31
+  December 2025); all time is 13 h 34 min over 10 sessions, a streak of 2 days
+  and a longest session of 3 h 20 min on 2026-07-04. Clicked once each: the
+  2026, 2025 and ALL TIME chips. Keys: Right twice (stops at ALL TIME), End,
+  Left, Home, Ctrl+1 to the Library and Ctrl+7 back (the period was kept). The
+  wheel scrolled to Highlights and Library by status. A real run: a local game
+  (`sleep 70` in a script) played from its page; with Stats open when it ended
+  the page went to 8 sessions, 9 h 45 min and 4 games with no restart, and the
+  line was in `sessions.jsonl`. The empty page, the "no sessions in this
+  period" text and the whole page in pt-PT were looked at too.
+- **Found and fixed on screen**: the year chips sat at the window's left edge
+  while the cards were a centred column; they are in the column now. The "Library
+  by status" label was a dim 12 px and nearly invisible on the translucent
+  window; it is 13 px in the foreground colour.
+- **Not checked**: a real controller (the pad's Left and Right share the
+  keys' code and no device is here), a light KDE scheme, a window narrower than
+  1100 px, a library with statuses set (the four tiles read 0 in the check; the
+  count is `Game.status`, tested only by its row count), and a game a launcher
+  runs. Known and unchanged from Iced: quit Zendo while a game runs and that
+  session is lost.
+- **Things to know**: the tiles' widths follow their content, so they differ a
+  little between periods (Iced's are equal). A `cargo test` or `clippy` does not
+  rebuild `target/debug/zendo-slint`: the first still showed the old placeholder
+  until `cargo build -p zendo-slint`. The seeded `.desktop` files in
+  `$HOME/.local/share/applications` were not what the library listed (it showed
+  the system's KDE games), so a played game has to be a local one
+  (`~/.config/zendo/local.toml`).

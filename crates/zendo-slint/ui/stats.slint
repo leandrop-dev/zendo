@@ -1,0 +1,267 @@
+// The Stats page: what the play sessions add up to, for a year or for all of
+// them. Rust (src/stats_ui.rs) fills `StatsData`; nothing here counts.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ChipButton } from "components.slint";
+import { ChipData } from "library.slint";
+import { Tile } from "game.slint";
+import { ScrollView } from "std-widgets.slint";
+
+// A game in the most played list: its bar is `share` of the longest.
+export struct StatBar {
+    title: string,
+    value: string,
+    share: float,
+}
+
+// A column of a chart: its label, its value ("55m", "3h", or empty) and its
+// share of the tallest column.
+export struct StatCol {
+    label: string,
+    value: string,
+    share: float,
+}
+
+// A highlight: its name and its value.
+export struct StatLine {
+    label: string,
+    value: string,
+}
+
+export global StatsData {
+    // No session at all: the page explains where they come from.
+    in property <bool> empty;
+    // Sessions, but none in the chosen period.
+    in property <bool> none-period;
+    in property <[ChipData]> periods;
+    in property <[Tile]> tiles;
+    in property <[StatBar]> top;
+    in property <[StatCol]> months;
+    in property <[StatCol]> weekdays;
+    in property <[StatLine]> facts;
+    in property <[Tile]> statuses;
+    callback period(int);
+    // The language changed: the texts Rust builds are asked for again.
+    callback relabel();
+}
+
+component Card inherits Rectangle {
+    in property <string> heading;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    VerticalLayout {
+        padding: Space.l;
+        spacing: Space.m;
+        Text {
+            text: root.heading.to-uppercase();
+            font-size: 14px;
+            font-weight: 700;
+            color: Colors.foreground;
+        }
+        @children
+    }
+}
+
+// A row of number tiles.
+component Tiles inherits HorizontalLayout {
+    in property <[Tile]> tiles;
+    spacing: Space.m;
+    for tile in root.tiles: Rectangle {
+        horizontal-stretch: 1;
+        background: Colors.surface;
+        border-width: 1px;
+        border-color: Colors.line;
+        VerticalLayout {
+            padding: Space.l;
+            spacing: Space.s;
+            Text {
+                text: tile.label.to-uppercase();
+                font-size: 12px;
+                color: Colors.dim;
+                overflow: elide;
+            }
+            Text {
+                text: tile.value;
+                font-size: 22px;
+                font-weight: 700;
+                color: Colors.foreground;
+            }
+        }
+    }
+}
+
+// A column chart: the value on top, the bar at the foot of an area as tall for
+// every column, the label under.
+component Chart inherits Card {
+    in property <[StatCol]> cols;
+    property <length> area: 90px;
+    HorizontalLayout {
+        spacing: Space.s;
+        for col in root.cols: VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 4px;
+            Text {
+                height: 14px;
+                text: col.value;
+                font-size: 11px;
+                color: Colors.dim;
+                horizontal-alignment: center;
+            }
+            Rectangle {
+                height: root.area;
+                Rectangle {
+                    y: parent.height - self.height;
+                    width: 22px;
+                    height: col.value == "" ? 0px : max(2px, root.area * col.share);
+                    background: Colors.accent;
+                }
+            }
+            Text {
+                text: col.label;
+                font-size: 11px;
+                color: Colors.dim;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
+
+export component StatsPage inherits Rectangle {
+    property <length> column: min(1100px, root.width);
+    property <length> inner: root.column - 2 * Space.xl;
+    // The room inside a card.
+    property <length> card-inner: root.inner - 2 * Space.l;
+    property <length> track: 260px;
+
+    if StatsData.empty: VerticalLayout {
+        alignment: center;
+        spacing: Space.s;
+        Text {
+            text: Tr.t("stats-none");
+            font-size: 20px;
+            color: Colors.foreground;
+            horizontal-alignment: center;
+        }
+        HorizontalLayout {
+            alignment: center;
+            Text {
+                width: min(520px, root.width - 2 * Space.xl);
+                text: Tr.t("stats-none-about");
+                color: Colors.dim;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    if !StatsData.empty: VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            alignment: center;
+            HorizontalLayout {
+                width: root.column - 14px;
+                padding: Space.xl;
+                padding-bottom: Space.s;
+                spacing: Space.s;
+                alignment: start;
+                for chip in StatsData.periods: ChipButton {
+                    label: chip.label;
+                    chosen: chip.chosen;
+                    clicked => { StatsData.period(chip.id); }
+                }
+            }
+        }
+        if StatsData.none-period: Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: Tr.t("stats-none-period");
+                color: Colors.dim;
+            }
+        }
+        if !StatsData.none-period: ScrollView {
+            vertical-stretch: 1;
+            HorizontalLayout {
+                alignment: center;
+                VerticalLayout {
+                    width: root.column - 14px;
+                    padding: Space.xl;
+                    spacing: Space.xl;
+                    alignment: start;
+
+                    Tiles { tiles: StatsData.tiles; }
+
+                    Card {
+                        heading: Tr.t("stats-top");
+                        for game in StatsData.top: HorizontalLayout {
+                            spacing: Space.l;
+                            Text {
+                                width: (root.card-inner - 2 * Space.l) * 0.5;
+                                text: game.title;
+                                font-size: 14px;
+                                color: Colors.foreground;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                            Rectangle {
+                                width: root.track;
+                                height: 8px;
+                                background: Colors.raised;
+                                Rectangle {
+                                    x: 0px;
+                                    width: parent.width * max(0.02, min(1.0, game.share));
+                                    background: Colors.accent;
+                                }
+                            }
+                            Text {
+                                text: game.value;
+                                font-size: 13px;
+                                color: Colors.dim;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Chart {
+                        heading: Tr.t("stats-by-month");
+                        cols: StatsData.months;
+                    }
+                    Chart {
+                        heading: Tr.t("stats-by-weekday");
+                        cols: StatsData.weekdays;
+                    }
+
+                    Card {
+                        heading: Tr.t("stats-facts");
+                        for line in StatsData.facts: HorizontalLayout {
+                            spacing: Space.l;
+                            Text {
+                                width: (root.card-inner - Space.l) * 0.25;
+                                text: line.label;
+                                font-size: 13px;
+                                color: Colors.dim;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                width: (root.card-inner - Space.l) * 0.75;
+                                text: line.value;
+                                font-size: 14px;
+                                color: Colors.foreground;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: Space.s;
+                        Text {
+                            text: Tr.t("stats-by-status").to-uppercase();
+                            font-size: 13px;
+                            color: Colors.foreground;
+                        }
+                        Tiles { tiles: StatsData.statuses; }
+                    }
+                }
+            }
+        }
+    }
+}
