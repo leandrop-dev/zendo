@@ -248,6 +248,9 @@ export global GameData {
     callback toggle-technical();
     callback edit();
     callback remove();
+    // The Launch options button: for the games Zendo starts itself.
+    in property <bool> launch-options-shown;
+    callback launch-options();
     callback show-steam-app();
     callback more-achievements();
     callback retry();
@@ -782,6 +785,10 @@ export component GamePage inherits Rectangle {
                             label: GameData.update-label;
                             enabled: GameData.update-on;
                             clicked => { GameData.update(); }
+                        }
+                        if GameData.launch-options-shown: ActionButton {
+                            label: Tr.t("game-launch-options");
+                            clicked => { GameData.launch-options(); }
                         }
                         ActionButton {
                             label: GameData.pinned ? Tr.t("game-unfavorite") : Tr.t("game-favorite");

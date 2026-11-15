@@ -45,6 +45,8 @@ mod gog;
 mod jobs;
 #[path = "local_ui.rs"]
 mod local;
+#[path = "options_ui.rs"]
+mod options;
 #[path = "overlay_ui.rs"]
 mod overlay;
 #[path = "prefix_ui.rs"]
@@ -210,6 +212,8 @@ struct Glue {
     game: game::GameState,
     /// The Add game sheet and Remove (`local_ui.rs`).
     local: local::LocalState,
+    /// The Launch options sheet (`options_ui.rs`).
+    options: options::OptionsState,
     /// The Collections sheet (`collections_ui.rs`).
     collections: collections::CollectionsState,
     /// The Accounts page (`accounts_ui.rs`) and Steam's card on it
@@ -332,6 +336,7 @@ impl Glue {
             open: RefCell::new(None),
             game: game::GameState::new(persist),
             local: local::LocalState::default(),
+            options: options::OptionsState::default(),
             collections: collections::CollectionsState::new(),
             accounts: accounts::AccountsState::new(),
             cards: cards::CardsState::new(),
@@ -410,6 +415,7 @@ impl Glue {
         });
         self.connect_game(window);
         self.connect_local(window);
+        self.connect_options(window);
         self.connect_collections(window);
         self.connect_accounts(window);
         self.connect_downloads(window);
@@ -808,7 +814,7 @@ impl Glue {
         if !focused {
             return;
         }
-        if self.form_open() || self.collections_open() {
+        if self.form_open() || self.collections_open() || self.options_open() {
             // The sheet takes the keyboard; the pad only closes it.
             if pad == Pad::Back {
                 self.back();
@@ -868,7 +874,12 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.stay_open() || self.collections_back() || self.close_form() || self.close_game() {
+        if self.options_back()
+            || self.stay_open()
+            || self.collections_back()
+            || self.close_form()
+            || self.close_game()
+        {
             return;
         }
         if self.on_store() {
@@ -909,6 +920,9 @@ impl Glue {
     /// A key the focused field did not use. Says whether it was taken.
     fn key(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
         // Over a sheet, the fields have the keys.
+        if self.options_open() {
+            return self.options_key(text);
+        }
         if self.form_open() || self.collections_open() {
             return false;
         }

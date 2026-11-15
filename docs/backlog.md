@@ -56,9 +56,17 @@ to `zendo-core` when that page is ported. Ask before building any other page
   and the DLC card's Install, Install all and Uninstall (pressed twice). The
   jobs held while a game runs were 51b's. Item 54's parity checklist must go
   through all of 51.
-- **52** Mods, Nexus, Nexus search, the FOMOD installer sheet (Iced
-  `app/installer.rs`, opened from a mod's install; moved here from 51b), the
-  mods' card on Downloads, launch options (and gamescope), artwork.
+- **52** Sliced with the user into three [firm, 2026-11-15]. **52a built
+  2026-11-15**: launch options with gamescope (the form is
+  `zendo_shell::launch_options`, shared with Iced; the Slint sheet is
+  `ui/launch_options.slint` and `options_ui.rs`; the lists are chips, not
+  dropdowns). **52b**: the artwork chooser (Change cover and backdrop, Iced
+  `app/artwork.rs`, `backdrops.rs`). **52c**: Mods, Nexus, Nexus search, the
+  FOMOD installer sheet (Iced `app/installer.rs`, opened from a mod's install;
+  moved here from 51b) and the mods' card on Downloads. Item 54's parity
+  checklist must go through all of 52; for 52a: a failed save on a field that
+  is scrolled out of sight says nothing at the footer (Iced's sheet is the
+  same).
 - **53** Stats tab and Game Mode.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
@@ -186,6 +194,19 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   look at: `move_game` (`zendo-core` `downloads.rs`), shared with Iced, deletes
   the old folder when the record already names the new one without checking
   that the new folder exists; I could only reach it with a broken fake.
+- **Launch options (52a)**, same run. It writes your real `games.toml` for the
+  games you save. Claude already clicked every control against four seeded
+  games and read the options file (`docs/history.md`, item 52a), and opened and
+  saved Iced's sheet once. What needs you: a game started with the options
+  (a real Proton run with MangoHud, GameMode, gamescope with a size and a
+  filter, FSR, a frame cap, arguments, environment and scripts before and
+  after: does each do what it says); a real sync with Sync now, Upload and
+  Download on an Epic or GOG game with cloud saves; Browse with the real file
+  dialog on a game of yours; a Steam Linux Runtime and a Proton you installed
+  in the lists; the sheet in pt-PT and with a light KDE scheme and with a
+  controller (the pad only closes it). One thing from the check: a Save that
+  fails on a field out of sight (the gamescope sizes, with the form scrolled to
+  the bottom) says nothing at the footer, as in Iced.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

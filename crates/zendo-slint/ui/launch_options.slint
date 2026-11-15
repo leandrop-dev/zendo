@@ -1,0 +1,531 @@
+// The Launch options sheet, over the window: a card with a scrolling form and
+// a footer with Cancel and Save. The Rust side (src/options_ui.rs) holds the
+// form and what each control does; nothing here keeps an option.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton, TextField, Toggle, ChipButton, Note } from "components.slint";
+import { ChipData } from "library.slint";
+import { ScrollView } from "std-widgets.slint";
+
+// One switch, with the words under it. `enabled` is false for a switch that
+// cannot be used here (its program is missing) unless it is already on.
+export struct OptSwitch {
+    id: int,
+    label: string,
+    about: string,
+    on: bool,
+    enabled: bool,
+}
+
+export global OptionsData {
+    in-out property <bool> open;
+    in property <string> title;
+    // The sections the game has.
+    in property <bool> windows;
+    // 0 no store, 1 GOG, 2 Epic.
+    in property <int> store;
+    in property <bool> has-tasks;
+    in property <bool> gamescope-on;
+    in property <bool> fsr-on;
+    in property <bool> sharpens;
+    in property <bool> native;
+    // Close was pressed with changes.
+    in property <bool> confirm-close;
+    // An error beside Save, and the ones under their fields.
+    in property <string> error;
+    in property <string> arguments-error;
+    in property <string> environment-error;
+    in property <string> gamescope-error;
+    in property <bool> picking;
+
+    // The switches, by where they sit in the form.
+    in property <[OptSwitch]> start-switches;
+    in property <[OptSwitch]> saves-switch;
+    in property <[OptSwitch]> tool-switches;
+    in property <[OptSwitch]> offload-switch;
+    in property <[OptSwitch]> proton-a;
+    in property <[OptSwitch]> proton-b;
+    in property <[OptSwitch]> proton-c;
+    // The lists of choices: Proton, the way to start, the runtime, FSR's
+    // sharpening, gamescope's window, scaler, filter and sharpness.
+    in property <[ChipData]> protons;
+    in property <[ChipData]> tasks;
+    in property <[ChipData]> runtimes;
+    in property <[ChipData]> fsr-sharpening;
+    in property <[ChipData]> windows-kinds;
+    in property <[ChipData]> scalers;
+    in property <[ChipData]> filters;
+    in property <[ChipData]> sharpness;
+    // The sync buttons' words: Sync now, Upload, Download.
+    in property <[string]> sync-labels;
+    in property <bool> syncing;
+    in property <string> saves-note;
+    in property <bool> saves-note-good;
+
+    // The fields.
+    in-out property <string> executable;
+    in-out property <string> language;
+    in-out property <string> width;
+    in-out property <string> height;
+    in-out property <string> frame-cap;
+    in-out property <string> game-width;
+    in-out property <string> game-height;
+    in-out property <string> fps;
+    in-out property <string> more;
+    in-out property <string> arguments;
+    in-out property <string> environment;
+    in-out property <string> before;
+    in-out property <string> after;
+
+    callback toggled(int, bool);
+    // A choice: the list (0 Proton, 1 task, 2 runtime, 3 FSR sharpening,
+    // 4 window, 5 scaler, 6 filter, 7 sharpness) and the chip's id.
+    callback choose(int, int);
+    // A field was typed in: 0 executable, 1 language, 2 width, 3 height,
+    // 4 frame cap, 5 game width, 6 game height, 7 fps, 8 more, 9 arguments,
+    // 10 environment, 11 before, 12 after.
+    callback edited(int, string);
+    callback sync(int);
+    callback browse();
+    callback save();
+    // Cancel, Escape and a click outside.
+    callback close();
+    callback discard();
+    callback keep-editing();
+}
+
+// A heading and the words under it, over what @children puts.
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> about;
+    in property <length> inner;
+    spacing: Space.s;
+    Text {
+        text: root.label.to-uppercase();
+        font-size: 12px;
+        color: Colors.dim;
+    }
+    Text {
+        width: root.inner;
+        height: self.text == "" ? 0px : self.preferred-height;
+        text: root.about;
+        font-size: 13px;
+        color: Colors.dim;
+        wrap: word-wrap;
+    }
+    @children
+}
+
+// A row of switches, each with its words under it.
+component Switches inherits VerticalLayout {
+    in property <[OptSwitch]> rows;
+    in property <length> inner;
+    spacing: Space.l;
+    for row in root.rows: VerticalLayout {
+        spacing: 4px;
+        Toggle {
+            label: row.label;
+            on: row.on;
+            opacity: row.enabled ? 1.0 : 0.55;
+            toggled(on) => {
+                if row.enabled {
+                    OptionsData.toggled(row.id, on);
+                }
+            }
+        }
+        Text {
+            width: root.inner;
+            text: row.about;
+            font-size: 13px;
+            color: Colors.dim;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// A list of choices as chips.
+component Choices inherits VerticalLayout {
+    in property <[ChipData]> chips;
+    in property <int> list;
+    FlexboxLayout {
+        vertical-stretch: 0;
+        cross-axis-alignment: start;
+        cross-axis-line-alignment: start;
+        spacing: Space.s;
+        for chip in root.chips: ChipButton {
+            label: chip.label;
+            chosen: chip.chosen;
+            clicked => { OptionsData.choose(root.list, chip.id); }
+        }
+    }
+}
+
+// A setting with its name before it, for gamescope's.
+component Named inherits VerticalLayout {
+    in property <string> label;
+    spacing: Space.s;
+    Text {
+        text: root.label;
+        font-size: 14px;
+        color: Colors.dim;
+    }
+    @children
+}
+
+component SizeRow inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> first;
+    in-out property <string> second;
+    in property <int> first-id;
+    alignment: start;
+    spacing: Space.m;
+    Text {
+        width: 110px;
+        text: root.label;
+        font-size: 14px;
+        color: Colors.dim;
+        vertical-alignment: center;
+    }
+    TextField {
+        width: 90px;
+        text <=> root.first;
+        placeholder: Tr.t("options-width");
+        edited(text) => { OptionsData.edited(root.first-id, text); }
+        accepted => { OptionsData.save(); }
+    }
+    Text {
+        text: "×";
+        font-size: 14px;
+        color: Colors.dim;
+        vertical-alignment: center;
+    }
+    TextField {
+        width: 90px;
+        text <=> root.second;
+        placeholder: Tr.t("options-height");
+        edited(text) => { OptionsData.edited(root.first-id + 1, text); }
+        accepted => { OptionsData.save(); }
+    }
+}
+
+export component OptionsSheet inherits Rectangle {
+    background: #000000.with-alpha(0.6);
+    // Nothing behind the sheet hears a click; one outside the card closes it.
+    TouchArea {
+        clicked => { OptionsData.close(); }
+    }
+
+    private property <length> inner: card.width - 2 * Space.xl - 14px;
+
+    card := Rectangle {
+        width: min(660px, root.width - 2 * Space.xl);
+        height: min(root.height - 2 * Space.xl, content.preferred-height);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Colors.background;
+        border-width: 1px;
+        border-color: Colors.line;
+        // Clicks inside the card stay in it.
+        TouchArea { }
+
+        content := VerticalLayout {
+            padding: Space.xl;
+            spacing: Space.l;
+            Text {
+                text: Tr.with("options-title", "title", OptionsData.title).to-uppercase();
+                font-size: 18px;
+                font-weight: 700;
+                color: Colors.foreground;
+                overflow: elide;
+            }
+            // The form scrolls; the footer stays where Save is.
+            ScrollView {
+                min-height: min(form.preferred-height, 120px);
+                preferred-height: form.preferred-height;
+                vertical-stretch: 1;
+                form := VerticalLayout {
+                    width: root.inner;
+                    x: 0px;
+                    spacing: Space.l;
+                    if OptionsData.windows: Field {
+                        label: "Proton";
+                        about: Tr.t("options-proton-about");
+                        inner: root.inner;
+                        Choices { chips: OptionsData.protons; list: 0; }
+                    }
+                    if OptionsData.store != 0: Field {
+                        label: Tr.t("options-task");
+                        about: Tr.t("options-task-about");
+                        inner: root.inner;
+                        if OptionsData.has-tasks: Choices { chips: OptionsData.tasks; list: 1; }
+                        if !OptionsData.has-tasks: Text {
+                            text: Tr.t("options-task-none");
+                            font-size: 14px;
+                            color: Colors.dim;
+                        }
+                    }
+                    if OptionsData.store != 0: Field {
+                        label: Tr.t("options-executable");
+                        about: Tr.t("options-executable-about");
+                        inner: root.inner;
+                        HorizontalLayout {
+                            spacing: Space.m;
+                            TextField {
+                                horizontal-stretch: 1;
+                                text <=> OptionsData.executable;
+                                placeholder: Tr.t("options-executable-empty");
+                                edited(text) => { OptionsData.edited(0, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                            ActionButton {
+                                label: OptionsData.picking ? Tr.t("choosing") : Tr.t("options-executable-browse");
+                                enabled: !OptionsData.picking;
+                                clicked => { OptionsData.browse(); }
+                            }
+                        }
+                    }
+                    if OptionsData.store == 2: Field {
+                        label: Tr.t("options-language");
+                        about: Tr.t("options-language-about");
+                        inner: root.inner;
+                        TextField {
+                            width: 200px;
+                            text <=> OptionsData.language;
+                            placeholder: Tr.t("options-language-empty");
+                            edited(text) => { OptionsData.edited(1, text); }
+                            accepted => { OptionsData.save(); }
+                        }
+                    }
+                    Switches { rows: OptionsData.start-switches; inner: root.inner; }
+                    if OptionsData.store != 0 && OptionsData.windows: VerticalLayout {
+                        spacing: Space.m;
+                        Switches { rows: OptionsData.saves-switch; inner: root.inner; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Space.m;
+                            for label[index] in OptionsData.sync-labels: ActionButton {
+                                label: label;
+                                enabled: !OptionsData.syncing;
+                                clicked => { OptionsData.sync(index); }
+                            }
+                        }
+                        if OptionsData.syncing: Text {
+                            text: Tr.t("saves-syncing");
+                            font-size: 13px;
+                            color: Colors.dim;
+                        }
+                        if !OptionsData.syncing && OptionsData.saves-note != "": Note {
+                            width: root.inner;
+                            text: OptionsData.saves-note;
+                            tone: OptionsData.saves-note-good ? 1 : 2;
+                        }
+                    }
+                    Switches { rows: OptionsData.tool-switches; inner: root.inner; }
+                    if OptionsData.gamescope-on: VerticalLayout {
+                        spacing: Space.l;
+                        Named {
+                            label: Tr.t("options-gamescope-shows");
+                            Choices { chips: OptionsData.windows-kinds; list: 4; }
+                        }
+                        VerticalLayout {
+                            spacing: Space.s;
+                            SizeRow {
+                                label: Tr.t("options-output-size");
+                                first-id: 2;
+                                first <=> OptionsData.width;
+                                second <=> OptionsData.height;
+                            }
+                            SizeRow {
+                                label: Tr.t("options-game-size");
+                                first-id: 5;
+                                first <=> OptionsData.game-width;
+                                second <=> OptionsData.game-height;
+                            }
+                            Text {
+                                width: root.inner;
+                                text: Tr.t("options-sizes-about");
+                                font-size: 13px;
+                                color: Colors.dim;
+                                wrap: word-wrap;
+                            }
+                            Note {
+                                width: root.inner;
+                                height: self.text == "" ? 0px : self.preferred-height;
+                                text: OptionsData.gamescope-error;
+                                tone: 2;
+                            }
+                        }
+                        Named {
+                            label: Tr.t("options-scaler");
+                            Choices { chips: OptionsData.scalers; list: 5; }
+                        }
+                        Named {
+                            label: Tr.t("options-filter");
+                            Choices { chips: OptionsData.filters; list: 6; }
+                        }
+                        if OptionsData.sharpens: Named {
+                            label: Tr.t("options-fsr-sharpening");
+                            Choices { chips: OptionsData.sharpness; list: 7; }
+                        }
+                        Named {
+                            label: Tr.t("options-gamescope-fps");
+                            TextField {
+                                width: 200px;
+                                text <=> OptionsData.fps;
+                                placeholder: Tr.t("options-gamescope-fps-empty");
+                                edited(text) => { OptionsData.edited(7, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                        }
+                        Field {
+                            label: Tr.t("options-gamescope-more");
+                            about: Tr.t("options-gamescope-more-about");
+                            inner: root.inner;
+                            TextField {
+                                text <=> OptionsData.more;
+                                placeholder: "--adaptive-sync";
+                                edited(text) => { OptionsData.edited(8, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                        }
+                    }
+                    if OptionsData.native: Field {
+                        label: Tr.t("options-runtime");
+                        about: Tr.t("options-runtime-about");
+                        inner: root.inner;
+                        Choices { chips: OptionsData.runtimes; list: 2; }
+                    }
+                    Switches { rows: OptionsData.offload-switch; inner: root.inner; }
+                    if OptionsData.windows: VerticalLayout {
+                        spacing: Space.l;
+                        Text {
+                            text: Tr.t("options-proton-switches").to-uppercase();
+                            font-size: 12px;
+                            color: Colors.dim;
+                        }
+                        Switches { rows: OptionsData.proton-a; inner: root.inner; }
+                        if OptionsData.fsr-on: Named {
+                            label: Tr.t("options-fsr-sharpening");
+                            Choices { chips: OptionsData.fsr-sharpening; list: 3; }
+                        }
+                        Switches { rows: OptionsData.proton-b; inner: root.inner; }
+                        Field {
+                            label: Tr.t("options-frame-cap");
+                            about: Tr.t("options-frame-cap-about");
+                            inner: root.inner;
+                            TextField {
+                                width: 160px;
+                                text <=> OptionsData.frame-cap;
+                                placeholder: Tr.t("options-frame-cap-empty");
+                                edited(text) => { OptionsData.edited(4, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                        }
+                        Switches { rows: OptionsData.proton-c; inner: root.inner; }
+                    }
+                    VerticalLayout {
+                        spacing: Space.xs;
+                        Field {
+                            label: Tr.t("local-arguments");
+                            about: Tr.t("options-arguments-about");
+                            inner: root.inner;
+                            TextField {
+                                text <=> OptionsData.arguments;
+                                placeholder: "-windowed";
+                                edited(text) => { OptionsData.edited(9, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                        }
+                        Note {
+                            width: root.inner;
+                            height: self.text == "" ? 0px : self.preferred-height;
+                            text: OptionsData.arguments-error;
+                            tone: 2;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Space.xs;
+                        Field {
+                            label: Tr.t("options-environment");
+                            about: Tr.t("options-environment-about");
+                            inner: root.inner;
+                            TextField {
+                                text <=> OptionsData.environment;
+                                placeholder: "DXVK_HUD=fps";
+                                edited(text) => { OptionsData.edited(10, text); }
+                                accepted => { OptionsData.save(); }
+                            }
+                        }
+                        Note {
+                            width: root.inner;
+                            height: self.text == "" ? 0px : self.preferred-height;
+                            text: OptionsData.environment-error;
+                            tone: 2;
+                        }
+                    }
+                    Field {
+                        label: Tr.t("options-before");
+                        about: Tr.t("options-before-about");
+                        inner: root.inner;
+                        TextField {
+                            text <=> OptionsData.before;
+                            placeholder: "notify-send 'Starting'";
+                            edited(text) => { OptionsData.edited(11, text); }
+                            accepted => { OptionsData.save(); }
+                        }
+                    }
+                    Field {
+                        label: Tr.t("options-after");
+                        about: Tr.t("options-after-about");
+                        inner: root.inner;
+                        TextField {
+                            text <=> OptionsData.after;
+                            placeholder: "~/bin/back-up-saves";
+                            edited(text) => { OptionsData.edited(12, text); }
+                            accepted => { OptionsData.save(); }
+                        }
+                    }
+                }
+            }
+            // The error stays beside Save, where the user is looking.
+            HorizontalLayout {
+                spacing: Space.m;
+                if OptionsData.confirm-close: Text {
+                    horizontal-stretch: 1;
+                    text: Tr.t("options-discard-ask");
+                    font-size: 13px;
+                    color: Colors.bad;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                if !OptionsData.confirm-close: Text {
+                    horizontal-stretch: 1;
+                    text: OptionsData.error;
+                    font-size: 13px;
+                    color: Colors.bad;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                if OptionsData.confirm-close: ActionButton {
+                    label: Tr.t("options-keep-editing");
+                    clicked => { OptionsData.keep-editing(); }
+                }
+                if OptionsData.confirm-close: ActionButton {
+                    label: Tr.t("options-discard");
+                    danger: true;
+                    clicked => { OptionsData.discard(); }
+                }
+                if !OptionsData.confirm-close: ActionButton {
+                    label: Tr.t("cancel");
+                    clicked => { OptionsData.close(); }
+                }
+                if !OptionsData.confirm-close: ActionButton {
+                    label: Tr.t("save");
+                    primary: true;
+                    clicked => { OptionsData.save(); }
+                }
+            }
+        }
+    }
+}

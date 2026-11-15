@@ -4535,3 +4535,106 @@ The last slice of item 51.
 - **Side effects**: only the scratch home (5 MB, left in the session's folder);
   nothing opened a browser; `ydotoold` and the sockets were stopped and
   removed, and the clipboard, empty before, was cleared again.
+
+## Item 52a, launch options and gamescope in Slint (2026-11-15)
+
+The first slice of item 52 (sliced with the user: 52a launch options, 52b the
+artwork chooser, 52c Mods, Nexus, Nexus search, the FOMOD sheet and the mods
+card on Downloads).
+
+- **The form is shared, as the queue is.** `zendo_shell::launch_options` holds
+  `Sheet` (was Iced's), its lists (`ProtonChoice`, `TaskChoice`, `Pick`,
+  `Sharpening`, the runtimes), `Tools::find`, `build_for`, `kept_program`,
+  `number` and `digits`, and gamescope's `Fields`, `WindowKind` and lists in
+  `launch_options/gamescope.rs`. The methods are the ones the two windows
+  need: `Sheet::open(game, persist)` (also moves an Epic task saved by name to
+  its number before `original` is copied), `build`, `changed`, `close` (true
+  when the sheet may go; otherwise `confirm_close` is set), `save(persist)`,
+  `set_proton`, `set_fsr_strength`, `set_gamescope`, `noted` (the "the build
+  ignores" words), `keep_picked_program`, and `Saves::press` / `synced` (Upload
+  and Download ask once more). With `persist` false nothing is read from the
+  computer: no saved options, no `Tools::find`, no installed Protons or
+  runtimes, no store lists. Iced was switched to it first: its
+  `launch_options.rs` lost the model (about 400 lines) and its `gamescope.rs`
+  the lists; its seven tests still go through its messages, the pure ones
+  moved to the shell (9 tests there).
+- **Slint, `ui/launch_options.slint` and `options_ui.rs`.** The Launch options
+  button sits on the game page of any game `applies` says Zendo starts
+  (`GameData.launch-options-shown`; false on a store game's page). The sheet
+  is a child of the window's `FocusScope`: a card with a scrolling form and a
+  footer outside the scroll, Cancel and Save, and the question (Keep editing,
+  Discard) in the footer's place. Switches are flat `OptSwitch` rows in
+  models by place in the form; a switch that cannot be used is dimmed and its
+  click does nothing unless it is already on. The eight lists of Iced's pick
+  lists are chip rows (`ChipData`, the chip's id its place in the list), so no
+  menu has to draw over the scroll. Fields are `in-out` strings with an
+  `edited(field, text)`; the five digit fields are filtered in Rust and
+  written back only when the filter changed the text. Escape, Cancel and a
+  click outside all go through `options_back`, first in `back()`'s order; with
+  the sheet open Enter saves and every other key and the pad do nothing.
+  Save asks `cloud_reload` and `show_game`, so the Details cloud row follows.
+  Sync runs `cloud_saves::sync` on a thread; Browse runs the file dialog on a
+  thread, as the Add game sheet does.
+- **Checked** (2026-11-15, a throwaway home with no session bus, four seeded
+  games: a GOG Windows game, an Epic one, a local `.exe` and a local native
+  script; empty `mangohud`, `mangoapp`, `gamemoderun` and `gamescope` files on
+  `PATH`; one empty Proton build): 150 Iced, 50 shell and 120 Slint tests
+  green, clippy and fmt clean. On screen, with stills and by the options file
+  (`games.toml`): the button shows on the four games and the sheet's sections
+  differ right (Epic: language, Offline, the update switch; GOG: the cloud part
+  and Browse; the Windows ones: Proton and its switches; native: the runtime
+  list and no Proton); every switch was clicked (the NVIDIA offload, Epic's
+  overlay and "without umu" are not usable here: a click left them off, and
+  the file has none of them); the Proton chip, the window kind (the last one,
+  borderless, is what the file has), the scaler, the filter, the sharpness,
+  FSR's sharpening, the width and height (`19x20` became `1920`), the frame
+  cap (`6o0` became `60`), fps, the extra gamescope words, arguments, the
+  environment, before and after; Browse (the dialog's answer became
+  `bin/x.exe`, relative to the game's folder); Sync now, Upload (asked, then
+  ran) and Download (asked); Save with a bad environment line (the error under
+  its field, the sheet open), with a width and no height (the error under the
+  sizes, the sheet open and nothing written), then with a good form (the file
+  has every value, the page says "Saved …'s launch options"); Cancel with
+  changes (asks), Keep editing, Escape with changes (asks), Discard (the file
+  untouched, then Ctrl+P worked on the page), a click outside and Escape
+  with no changes (both close), Enter with no field focused (saves).
+- **Second run, after a review**: the button moved to Iced's place (after Play
+  and Update, before Favorite) and opened the sheet; a seeded
+  `goggame-<id>.info` with a second FileTask made the GOG sheet list "Config
+  (bin/cfg.exe)", the chip was clicked and the file has `task = 'bin\cfg.exe'`;
+  a seeded `SteamLinuxRuntime_sniper/_v2-entry-point` made Local Linux's list
+  offer "Steam Linux Runtime 3.0 (sniper)", clicked, and the file has
+  `steam_runtime = "sniper"`. Then Iced's own window (`target/debug/zendo`, the
+  same home): its sheet opened on the values the Slint run had saved, Cloud
+  saves was switched off and Save wrote one line, `cloud_saves = false`, with
+  the page saying "Saved …'s launch options". A glue test also pushes a task
+  and a runtime into the form and chooses them.
+- **Not done**: a real Proton run with the options; the Upload and Download
+  sync against a real store (Sync now answered "start 1423049311 once first:
+  its saves are found in its prefix", the engine's or Zendo's own line, whose
+  cause was not looked into); the pad; pt-PT; a light KDE scheme; the "Epic
+  does not approve offline play" note; Iced's sheet beyond the one switch
+  (its Browse, Sync and gamescope part were not clicked after the refactor,
+  only its seven tests).
+- **Found on screen**: `ScrollView` does not report its content's height as its
+  preferred height, so the card was 120 px tall until the form's was given as
+  `preferred-height`. The second field of a size row was pushed to the card's
+  edge until the row had `alignment: start`. A save that fails on a field
+  scrolled out of sight (the gamescope sizes, when the user is at the bottom)
+  shows nothing at the footer: Iced's sheet does the same, and it is left for
+  the parity pass.
+- **Check recipe**: window at 596,115, screen = still + (586, 105). Relative
+  pointer moves land at about twice the distance asked on this session, so
+  `zclick.sh` reads `kdotool getmouselocation` and corrects until within a
+  pixel or two. Launch options at screen (992, 673) on a game's page; the
+  sheet's Cancel at (1431, 934), Save (1534, 934); the wheel (`ydotool
+  mousemove -w -x 0 -y -7` after a `HOVER=1` move into the form) scrolls
+  about 400 px for 7. `ydotool type` mangles `-` and `=` (US layout): paste
+  those through `wl-copy` and Ctrl+V. The file dialog is Zendo's child: let
+  `zguard.sh` accept it only with a parent pid of Zendo's and `pick-file` in
+  its command line.
+- **Side effects**: only the scratch home (about 2 MB, left in the session's
+  folder, with its `games.toml`); no `xdg-open` was called (the fake's log was
+  never written); `ydotoold` and the sockets were stopped and removed, and
+  the clipboard, empty before, was cleared again (it held the pasted path
+  once after the Browse check and was cleared at the end).

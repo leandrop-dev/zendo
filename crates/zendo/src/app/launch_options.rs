@@ -9,8 +9,7 @@
 
 mod gamescope;
 
-use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use iced::widget::{
     button, center, column, container, mouse_area, opaque, pick_list, row, scrollable, space, text,
@@ -19,322 +18,17 @@ use iced::widget::{
 use iced::{Alignment, Background, Color, Element, Length, Task};
 use zendo_core::cloud_saves::{self, Done, How};
 use zendo_core::launch_options::{self, LaunchOptions};
-use zendo_core::steam_runtime::{self, Runtime};
-use zendo_core::store_tasks::{self, StoreTask};
-use zendo_core::{Game, Launch, Source, launch, proton};
+use zendo_core::steam_runtime::Runtime;
+use zendo_shell::launch_options::{
+    Field, Pick, Press, ProtonChoice, Sharpening, StoreKind, TaskChoice, digits,
+};
+pub use zendo_shell::launch_options::{Sheet, applies};
 
 use super::style::{
     self, BOLD, BUTTON, BUTTON_LARGE, SPACE_L, SPACE_M, SPACE_XL, button_text, colors,
 };
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
-
-#[derive(Debug)]
-pub struct Sheet {
-    id: String,
-    title: String,
-    /// A Windows game Zendo installed: Proton and its controller switch
-    /// apply.
-    windows: bool,
-    options: LaunchOptions,
-    width: String,
-    height: String,
-    frame_cap: String,
-    protons: Vec<ProtonChoice>,
-    /// The build the game would run with, and the switches' variables its
-    /// script never reads.
-    build: Option<(String, Vec<&'static str>)>,
-    tools: Tools,
-    /// An Epic or GOG game: its engine runs another program when asked,
-    /// and its store may list other ways to start it.
-    store: Option<StoreKind>,
-    /// The game's folder, which a program picked is kept relative to.
-    folder: Option<PathBuf>,
-    executable: String,
-    /// The store's own way first.
-    tasks: Vec<TaskChoice>,
-    picking: bool,
-    language: String,
-    /// Whether Epic approves the game for offline play, when it says.
-    offline_approved: Option<bool>,
-    saves: Saves,
-    gamescope: gamescope::Fields,
-    /// For a native game: none, then the runtimes installed.
-    runtimes: Vec<Pick<Runtime>>,
-    error: Option<(Field, String)>,
-    /// The options as they were when the sheet opened, to tell whether
-    /// closing would discard anything.
-    original: LaunchOptions,
-    /// Close was pressed with changes: ask before discarding them.
-    confirm_close: bool,
-}
-
-/// The part of the form an error belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Field {
-    Arguments,
-    Environment,
-    Gamescope,
-    Other,
-}
-
-impl Sheet {
-    /// The options the form would save, and the field at fault when it
-    /// cannot.
-    fn build(&self) -> Result<LaunchOptions, (Field, String)> {
-        let mut options = self.options.clone();
-        options.gamescope_width = number(&self.width);
-        options.gamescope_height = number(&self.height);
-        options.frame_cap = number(&self.frame_cap);
-        options.executable = Some(self.executable.trim().to_owned())
-            .filter(|program| self.store.is_some() && !program.is_empty());
-        options.language = Some(self.language.trim().to_owned())
-            .filter(|language| self.store == Some(StoreKind::Epic) && !language.is_empty());
-        options
-            .arguments()
-            .map_err(|err| (Field::Arguments, format!("{err:#}")))?;
-        options
-            .environment()
-            .map_err(|err| (Field::Environment, format!("{err:#}")))?;
-        self.gamescope
-            .keep(&mut options)
-            .map_err(|err| (Field::Gamescope, err))?;
-        if options.gamescope_width.is_some() != options.gamescope_height.is_some() {
-            return Err((Field::Gamescope, t!("options-size-both")));
-        }
-        options
-            .check()
-            .map_err(|err| (Field::Other, format!("{err:#}")))?;
-        Ok(options)
-    }
-}
-
-/// The cloud saves part: the sync running, the Upload or Download pressed
-/// once, and how the last went.
-#[derive(Debug, Default)]
-struct Saves {
-    syncing: bool,
-    confirm: Option<How>,
-    note: Option<(String, bool)>,
-}
-
-/// The stores whose engines take a program and list other ways to start
-/// a game; legendary takes a language too.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StoreKind {
-    Epic,
-    Gog,
-}
-
-/// An entry of a list whose first entry leaves the setting unset.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pick<T> {
-    value: Option<T>,
-    label: String,
-}
-
-impl<T> fmt::Display for Pick<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.label)
-    }
-}
-
-impl<T: Copy + PartialEq> Pick<T> {
-    /// `none` first, then each value with its label.
-    fn list(none: String, values: impl IntoIterator<Item = (T, String)>) -> Vec<Self> {
-        let mut list = vec![Self {
-            value: None,
-            label: none,
-        }];
-        list.extend(values.into_iter().map(|(value, label)| Self {
-            value: Some(value),
-            label,
-        }));
-        list
-    }
-
-    /// The entry for the value set.
-    fn chosen(list: &[Self], value: Option<T>) -> Option<Self> {
-        list.iter().find(|pick| pick.value == value).cloned()
-    }
-}
-
-/// The runtimes for a native game: none, those installed, and the one
-/// chosen when it is not.
-fn runtime_choices(installed: &[Runtime], chosen: Option<Runtime>) -> Vec<Pick<Runtime>> {
-    let mut list = Pick::list(
-        t!("options-runtime-none"),
-        installed
-            .iter()
-            .map(|runtime| (*runtime, runtime.label().to_owned())),
-    );
-    if let Some(chosen) = chosen
-        && !installed.contains(&chosen)
-    {
-        list.push(Pick {
-            value: Some(chosen),
-            label: t!("options-runtime-missing", name = chosen.label()),
-        });
-    }
-    list
-}
-
-/// An entry of the list of ways to start the game: the store's own
-/// (`None`) or another it lists, by its key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskChoice {
-    key: Option<String>,
-    label: String,
-}
-
-impl fmt::Display for TaskChoice {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.label)
-    }
-}
-
-/// The store's own way, then the others it lists, then the one chosen
-/// when the store no longer lists it.
-fn task_choices(listed: Vec<StoreTask>, chosen: Option<&str>) -> Vec<TaskChoice> {
-    let mut choices = vec![TaskChoice {
-        key: None,
-        label: t!("options-task-default"),
-    }];
-    choices.extend(listed.into_iter().map(|task| TaskChoice {
-        label: if task.detail.is_empty() {
-            task.name
-        } else {
-            format!("{} ({})", task.name, task.detail)
-        },
-        key: Some(task.key),
-    }));
-    if let Some(chosen) = chosen
-        && !choices
-            .iter()
-            .any(|choice| choice.key.as_deref() == Some(chosen))
-    {
-        choices.push(TaskChoice {
-            key: Some(chosen.to_owned()),
-            label: t!("options-task-gone", name = chosen),
-        });
-    }
-    choices
-}
-
-/// A program picked, as kept: relative to the game's folder when in it.
-fn kept_program(folder: Option<&Path>, picked: &Path) -> String {
-    folder
-        .and_then(|folder| picked.strip_prefix(folder).ok())
-        .unwrap_or(picked)
-        .to_string_lossy()
-        .into_owned()
-}
-
-/// The variables of Proton's switches its script reads, checked against
-/// the build chosen; the others (DXVK's, Wine's) the builds share.
-const CHECKED: [&str; 5] = [
-    "PROTON_PREFER_SDL",
-    "PROTON_NO_ESYNC",
-    "PROTON_NO_FSYNC",
-    "PROTON_ENABLE_WAYLAND",
-    "PROTON_USE_WOW64",
-];
-
-/// The build a choice runs, and what of [`CHECKED`] it ignores; none when
-/// umu would download its own.
-fn build_for(choice: Option<&str>) -> Option<(String, Vec<&'static str>)> {
-    let proton = choice.and_then(proton::named).or_else(proton::default)?;
-    let ignored = proton.ignores(&CHECKED);
-    Some((proton.name, ignored))
-}
-
-/// FSR's sharpening, as the list offers it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Sharpening(u8);
-
-impl Sharpening {
-    fn all() -> Vec<Self> {
-        (0..=launch_options::MOST_SOFT).map(Self).collect()
-    }
-}
-
-impl fmt::Display for Sharpening {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let label = match self.0 {
-            0 => t!("options-fsr-sharpest"),
-            launch_options::MOST_SOFT => t!("options-fsr-softest"),
-            launch_options::WINE_SHARPENING => t!("options-fsr-default"),
-            n => n.to_string(),
-        };
-        f.write_str(&label)
-    }
-}
-
-/// Whether the computer has an NVIDIA card's driver and another card,
-/// which render offload needs.
-fn offload_possible() -> bool {
-    let cards = std::fs::read_dir("/sys/class/drm").map_or(0, |entries| {
-        entries
-            .flatten()
-            .filter(|entry| {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                name.strip_prefix("card")
-                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-            })
-            .count()
-    });
-    cards > 1 && std::path::Path::new("/sys/module/nvidia").is_dir()
-}
-
-/// Which of the wrappers are installed.
-#[derive(Debug, Clone, Copy, Default)]
-#[expect(clippy::struct_excessive_bools, reason = "one per program")]
-struct Tools {
-    mangohud: bool,
-    mangoapp: bool,
-    gamemode: bool,
-    gamescope: bool,
-    /// Not a program: an NVIDIA card beside another.
-    offload: bool,
-    /// Steam Linux Runtime 4.0, which Proton runs in without umu.
-    runtime_4: bool,
-    /// Epic's EOS overlay, installed in Settings.
-    eos_overlay: bool,
-}
-
-impl Tools {
-    fn find() -> Self {
-        Self {
-            mangohud: on_path("mangohud"),
-            mangoapp: on_path("mangoapp"),
-            gamemode: on_path("gamemoderun"),
-            gamescope: on_path("gamescope"),
-            offload: offload_possible(),
-            runtime_4: Runtime::Four.find().is_some(),
-            eos_overlay: zendo_core::eos_overlay::installed(),
-        }
-    }
-}
-
-fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()))
-}
-
-/// An entry of the Proton list: a build by name, or `None` for the
-/// default.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProtonChoice {
-    name: Option<String>,
-    label: String,
-}
-
-impl fmt::Display for ProtonChoice {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.label)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum SheetMessage {
@@ -380,47 +74,6 @@ pub enum SheetMessage {
     KeepEditing,
 }
 
-/// Whether the game has launch options Zendo applies.
-pub fn applies(game: &Game) -> bool {
-    matches!(
-        game.launch,
-        Launch::Engine { .. } | Launch::Command { .. } | Launch::Local { .. }
-    )
-}
-
-/// The Proton list: the default first, then each one installed, and the
-/// one chosen even when it is gone.
-fn proton_choices(chosen: Option<&str>) -> Vec<ProtonChoice> {
-    let installed = proton::installed();
-    let default = match proton::default() {
-        Some(default) => t!("options-proton-default", name = default.name.as_str()),
-        None => t!("options-proton-default-umu"),
-    };
-    let mut choices = vec![ProtonChoice {
-        name: None,
-        label: default,
-    }];
-    choices.extend(installed.into_iter().map(|proton| ProtonChoice {
-        label: proton.name.clone(),
-        name: Some(proton.name),
-    }));
-    if let Some(chosen) = chosen
-        && !choices
-            .iter()
-            .any(|choice| choice.name.as_deref() == Some(chosen))
-    {
-        choices.push(ProtonChoice {
-            name: Some(chosen.to_owned()),
-            label: t!("options-proton-missing", name = chosen),
-        });
-    }
-    choices
-}
-
-fn number(field: &str) -> Option<u32> {
-    field.trim().parse().ok().filter(|&n| n > 0)
-}
-
 impl Zendo {
     pub(super) fn update_sheet(&mut self, message: SheetMessage) -> Task<Message> {
         if let SheetMessage::Open = message {
@@ -432,10 +85,7 @@ impl Zendo {
         let options = &mut sheet.options;
         match message {
             SheetMessage::Open => {}
-            SheetMessage::Proton(choice) => {
-                sheet.build = build_for(choice.name.as_deref());
-                sheet.options.proton = choice.name;
-            }
+            SheetMessage::Proton(choice) => sheet.set_proton(choice.name, self.persist),
             SheetMessage::MangoHud(on) => options.mangohud = on,
             SheetMessage::GameMode(on) => options.gamemode = on,
             SheetMessage::Gamescope(on) => options.gamescope = on,
@@ -450,25 +100,17 @@ impl Zendo {
             }
             SheetMessage::SteamRuntime(pick) => options.steam_runtime = pick.value,
             SheetMessage::Language(language) => sheet.language = language,
-            SheetMessage::Width(width) => {
-                sheet.width = width.chars().filter(char::is_ascii_digit).collect();
-            }
-            SheetMessage::Height(height) => {
-                sheet.height = height.chars().filter(char::is_ascii_digit).collect();
-            }
+            SheetMessage::Width(width) => sheet.width = digits(&width),
+            SheetMessage::Height(height) => sheet.height = digits(&height),
             SheetMessage::XboxControllers(on) => options.xbox_controllers = on,
             SheetMessage::NoSync(on) => options.no_sync = on,
             SheetMessage::Wayland(on) => options.wayland = on,
             SheetMessage::Hdr(on) => options.hdr = on,
             SheetMessage::Fsr(on) => options.fsr = on,
-            SheetMessage::FsrSharpening(Sharpening(n)) => {
-                options.fsr_strength = (n != launch_options::WINE_SHARPENING).then_some(n);
-            }
+            SheetMessage::FsrSharpening(Sharpening(n)) => sheet.set_fsr_strength(n),
             SheetMessage::Wow64(on) => options.wow64 = on,
             SheetMessage::FpsCounter(on) => options.fps_counter = on,
-            SheetMessage::FrameCap(cap) => {
-                sheet.frame_cap = cap.chars().filter(char::is_ascii_digit).collect();
-            }
+            SheetMessage::FrameCap(cap) => sheet.frame_cap = digits(&cap),
             SheetMessage::NvidiaOffload(on) => options.nvidia_offload = on,
             SheetMessage::Arguments(arguments) => options.arguments = arguments,
             SheetMessage::Environment(environment) => options.environment = environment,
@@ -483,12 +125,7 @@ impl Zendo {
                 let Some(sheet) = self.sheet.as_mut() else {
                     return Task::none();
                 };
-                if sheet
-                    .build()
-                    .map_or(true, |options| options != sheet.original)
-                {
-                    sheet.confirm_close = true;
-                } else {
+                if sheet.close() {
                     self.sheet = None;
                 }
             }
@@ -516,20 +153,13 @@ impl Zendo {
         let saves = &mut sheet.saves;
         match message {
             SheetMessage::SyncSaves(how) => {
-                if saves.syncing {
+                if saves.press(how) != Press::Start {
                     return Task::none();
                 }
-                let forced = matches!(how, How::ForceUpload | How::ForceDownload);
-                if forced && saves.confirm != Some(how) {
-                    saves.confirm = Some(how);
-                    return Task::none();
-                }
-                saves.confirm = None;
-                saves.note = None;
                 let Some(game) = game else {
+                    saves.syncing = false;
                     return Task::none();
                 };
-                saves.syncing = true;
                 if !self.persist {
                     return Task::none();
                 }
@@ -541,21 +171,11 @@ impl Zendo {
                 );
             }
             SheetMessage::SavesSynced(result) => {
-                saves.syncing = false;
-                saves.note = Some(match result {
-                    Ok(Done::Synced) => (t!("saves-synced"), true),
-                    Ok(Done::NoCloudSaves) => (
-                        t!(
-                            "cloud-none",
-                            store = game
-                                .as_ref()
-                                .map(|game| super::format::source(game.source))
-                                .unwrap_or_default()
-                        ),
-                        true,
-                    ),
-                    Err(err) => (err, false),
-                });
+                let store = game
+                    .as_ref()
+                    .map(|game| super::format::source(game.source))
+                    .unwrap_or_default();
+                saves.synced(result, &store);
                 self.cloud.reload();
             }
             _ => {}
@@ -590,9 +210,7 @@ impl Zendo {
             SheetMessage::Browsed(result) => {
                 sheet.picking = false;
                 match result {
-                    Ok(Some(path)) => {
-                        sheet.executable = kept_program(sheet.folder.as_deref(), &path);
-                    }
+                    Ok(Some(path)) => sheet.keep_picked_program(&path),
                     Ok(None) => {}
                     Err(err) => sheet.error = Some((Field::Other, err)),
                 }
@@ -637,85 +255,10 @@ impl Zendo {
         else {
             return Task::none();
         };
-        let mut options = if self.persist {
-            match LaunchOptions::load(&game.id) {
-                Ok(options) => options,
-                Err(err) => {
-                    self.status = Some(format!("{err:#}"));
-                    return Task::none();
-                }
-            }
-        } else {
-            LaunchOptions::default()
-        };
-        let windows = matches!(game.launch, Launch::Engine { .. } | Launch::Local { .. })
-            && launch::needs_proton(&game);
-        let store = match (&game.launch, game.source) {
-            (Launch::Engine { .. }, Source::Epic) => Some(StoreKind::Epic),
-            (Launch::Engine { .. }, Source::Gog) => Some(StoreKind::Gog),
-            _ => None,
-        };
-        let listed = if store.is_some() {
-            let listed = store_tasks::listed(&game);
-            // Epic's options are keyed by their number now: a task saved
-            // as a display name moves to its number and is written back.
-            if let Some(saved) = options.task.as_deref()
-                && !listed.iter().any(|task| task.key == saved)
-                && let Some(task) = listed.iter().find(|task| task.name == saved)
-            {
-                options.task = Some(task.key.clone());
-            }
-            listed
-        } else {
-            Vec::new()
-        };
-        self.sheet = Some(Sheet {
-            id: game.id.clone(),
-            title: game.title.clone(),
-            windows,
-            width: options
-                .gamescope_width
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            height: options
-                .gamescope_height
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            frame_cap: options.frame_cap.map(|n| n.to_string()).unwrap_or_default(),
-            protons: if windows {
-                proton_choices(options.proton.as_deref())
-            } else {
-                Vec::new()
-            },
-            build: if windows {
-                build_for(options.proton.as_deref())
-            } else {
-                None
-            },
-            store,
-            folder: game.details.install_path.clone(),
-            executable: options.executable.clone().unwrap_or_default(),
-            tasks: if store.is_some() {
-                task_choices(listed, options.task.as_deref())
-            } else {
-                Vec::new()
-            },
-            picking: false,
-            language: options.language.clone().unwrap_or_default(),
-            offline_approved: store_tasks::epic_offline(&game),
-            saves: Saves::default(),
-            gamescope: gamescope::Fields::of(&options),
-            runtimes: if windows {
-                Vec::new()
-            } else {
-                runtime_choices(&steam_runtime::installed(), options.steam_runtime)
-            },
-            original: options.clone(),
-            options,
-            tools: Tools::find(),
-            error: None,
-            confirm_close: false,
-        });
+        match Sheet::open(&game, self.persist) {
+            Ok(sheet) => self.sheet = sheet,
+            Err(err) => self.status = Some(err),
+        }
         Task::none()
     }
 
@@ -723,25 +266,10 @@ impl Zendo {
         let Some(sheet) = self.sheet.as_mut() else {
             return Task::none();
         };
-        let options = match sheet.build() {
-            Ok(options) => options,
-            Err((field, err)) => {
-                sheet.error = Some((field, err));
-                return Task::none();
-            }
-        };
-        let saved = if self.persist {
-            options.save(&sheet.id)
-        } else {
-            options.check()
-        };
-        match saved {
-            Ok(()) => {
-                self.status = Some(t!("options-saved", title = sheet.title.as_str()));
-                self.sheet = None;
-                self.cloud.reload();
-            }
-            Err(err) => sheet.error = Some((Field::Other, format!("{err:#}"))),
+        if sheet.save(self.persist) {
+            self.status = Some(t!("options-saved", title = sheet.title.as_str()));
+            self.sheet = None;
+            self.cloud.reload();
         }
         Task::none()
     }
@@ -932,26 +460,7 @@ fn sheet_card(sheet: &Sheet) -> Element<'_, Message> {
 /// The switches Proton, Wine and DXVK read, for a Windows game.
 fn proton_switches(sheet: &Sheet) -> Element<'_, Message> {
     let options = &sheet.options;
-    // What the chosen build does not read, said under its switch.
-    let ignored = |names: &[&str]| -> Option<String> {
-        let (build, ignored) = sheet.build.as_ref()?;
-        let unread: Vec<&str> = names
-            .iter()
-            .copied()
-            .filter(|name| ignored.contains(name))
-            .collect();
-        (!unread.is_empty()).then(|| {
-            t!(
-                "options-build-ignores",
-                build = build.as_str(),
-                names = unread.join(", ")
-            )
-        })
-    };
-    let note = |about: String, names: &[&str]| match ignored(names) {
-        Some(unread) => format!("{about} {unread}"),
-        None => about,
-    };
+    let note = |about: String, names: &[&str]| sheet.noted(about, names);
     let mut switches = column![
         style::subheading(t!("options-proton-switches")),
         switch(
@@ -1379,7 +888,8 @@ fn size_input<'a>(
 mod tests {
     use super::*;
     use crate::app::Page;
-    use zendo_core::Source;
+    use zendo_core::{Game, Launch, Source};
+    use zendo_shell::launch_options::runtime_choices;
 
     fn zendo_with(game: Game) -> Zendo {
         let (mut zendo, _) = Zendo::boot();
@@ -1518,33 +1028,6 @@ mod tests {
         }
         let _ = zendo.update(Message::Activate);
         assert!(zendo.sheet.is_none(), "saved");
-
-        let listed = vec![StoreTask {
-            key: "bin\\x64\\game.exe".into(),
-            name: "Game".into(),
-            detail: "bin/x64/game.exe".into(),
-        }];
-        let choices = task_choices(listed, Some("old.exe"));
-        let labels: Vec<String> = choices.iter().map(ToString::to_string).collect();
-        assert_eq!(
-            labels,
-            [
-                "The store's own",
-                "Game (bin/x64/game.exe)",
-                "old.exe (no longer listed; the store's own runs)"
-            ]
-        );
-        assert_eq!(
-            kept_program(
-                Some(Path::new("/games/Sugar")),
-                Path::new("/games/Sugar/bin/sugar")
-            ),
-            "bin/sugar"
-        );
-        assert_eq!(
-            kept_program(Some(Path::new("/games/Sugar")), Path::new("/opt/x")),
-            "/opt/x"
-        );
     }
 
     #[test]

@@ -408,6 +408,7 @@ impl Glue {
         data.set_hidden(false);
         data.set_steam(false);
         data.set_local(false);
+        data.set_launch_options_shown(false);
         data.set_confirm_remove(false);
         data.set_run_state(0);
         let mut images = self.show_art(&data, parts.cover.as_deref(), parts.hero.as_deref());
@@ -449,6 +450,7 @@ impl Glue {
         data.set_hidden(game.hidden);
         data.set_steam(steam_app(&game).is_some());
         data.set_local(game.source == Source::Local);
+        data.set_launch_options_shown(zendo_shell::launch_options::applies(&game));
         data.set_confirm_remove(
             self.local.confirm_remove.borrow().as_deref() == Some(game.id.as_str()),
         );
