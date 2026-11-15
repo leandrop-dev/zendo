@@ -471,21 +471,17 @@ impl Zendo {
                 )
         });
         let update = self.mod_update(id, &info.id).map(|file| {
-            let label = match file
-                .version
-                .as_deref()
-                .filter(|version| !version.is_empty())
-            {
-                Some(version) => t!("mods-update-to", version = version),
-                None => t!("mods-update"),
-            };
-            button(text(label).size(13).color(colors().good))
-                .padding(style::BUTTON_SMALL)
-                .style(style::secondary)
-                .on_press(Message::Nexus(NexusMessage::Update(
-                    game.clone(),
-                    mod_id.clone(),
-                )))
+            button(
+                text(zendo_shell::nexus::update_label(file))
+                    .size(13)
+                    .color(colors().good),
+            )
+            .padding(style::BUTTON_SMALL)
+            .style(style::secondary)
+            .on_press(Message::Nexus(NexusMessage::Update(
+                game.clone(),
+                mod_id.clone(),
+            )))
         });
         row![
             checkbox(info.enabled)

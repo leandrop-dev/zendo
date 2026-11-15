@@ -288,6 +288,7 @@ impl Glue {
         self.reset_game_jobs();
         let was_store = self.close_owned();
         self.mods_clear();
+        self.nexus_clear();
         let was_open = was_library || was_store;
         if was_open && let Some(window) = self.window.upgrade() {
             let data = window.global::<GameData>();

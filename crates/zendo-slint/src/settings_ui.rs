@@ -62,6 +62,11 @@ pub(super) enum Setting {
     GogGalaxy(bool),
     /// Zendo's Steam sign-in, as the keyring keeps it (`Session::to_text`).
     SteamSession(Option<String>),
+    /// The Nexus Mods key; `then` is what the page says once it is written.
+    NexusKey {
+        key: Option<String>,
+        then: zendo_shell::nexus::Then,
+    },
 }
 
 /// What the page says once the `SteamGridDB` key is written.
@@ -91,6 +96,7 @@ impl Setting {
             Self::GogPlaytime(on) => config.gog_playtime = *on,
             Self::GogGalaxy(on) => config.gog_galaxy = *on,
             Self::SteamSession(session) => config.steam_session.clone_from(session),
+            Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
         }
     }
 }
@@ -476,6 +482,7 @@ impl Glue {
                         Some((t!("key-saved-unchecked", error = error.as_str()), false));
                 }
             },
+            Setting::NexusKey { then, .. } => self.nexus_key_stored(then),
             Setting::MinimizeToTray(on) => {
                 if self.persist
                     && let Some(window) = self.window.upgrade()
@@ -703,6 +710,7 @@ impl Glue {
         data.set_key_kept(kept.into());
         data.set_key_kept_bad(bad);
         drop(key);
+        self.show_nexus_settings();
         self.show_library_and_files(&data, &config);
         self.show_engines(&data, &config);
         self.show_runtimes(&data);

@@ -17,6 +17,7 @@ use zendo_core::config::Config;
 use zendo_core::covers::{Artwork, Fetcher, Kind};
 use zendo_core::{Category, Library, SavedFilter, Sort, State};
 use zendo_shell::gamepad::{self, Pad};
+use zendo_shell::links;
 use zendo_shell::presence::PresenceHandle;
 use zendo_shell::t;
 
@@ -49,6 +50,8 @@ mod jobs;
 mod local;
 #[path = "mods_ui.rs"]
 mod mods;
+#[path = "nexus_ui.rs"]
+mod nexus;
 #[path = "options_ui.rs"]
 mod options;
 #[path = "overlay_ui.rs"]
@@ -241,6 +244,8 @@ struct Glue {
     compat: compat::CompatState,
     /// The Mods card (`mods_ui.rs`).
     mods: mods::ModsUiState,
+    /// Nexus Mods: the key, links and downloads (`nexus_ui.rs`).
+    nexus: nexus::NexusUiState,
     /// The Wine prefix card (`prefix_ui.rs`).
     prefix: prefix::PrefixState,
     /// GOG's changelog and total time played (`gog_ui.rs`).
@@ -263,7 +268,7 @@ struct Glue {
 }
 
 /// Puts the Library in the window and starts reading the games.
-pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
+pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>, link: Option<String>) {
     let glue = Glue::new(window, true, themes);
     glue.connect(window);
     glue.start_presence();
@@ -272,6 +277,17 @@ pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
     let weak = window.as_weak();
     gamepad::events(move |pad| {
         weak.upgrade_in_event_loop(move |_| with_glue(|glue| glue.pad(pad)))
+            .is_ok()
+    });
+    // `nxm://` links: the one the window was started for waits for the
+    // library, and the ones other `zendo` processes pass over while it is
+    // open arrive on a thread of their own.
+    if let Some(link) = link {
+        glue.nexus_link(&link);
+    }
+    let weak = window.as_weak();
+    links::listen(move |text| {
+        weak.upgrade_in_event_loop(move |_| with_glue(|glue| glue.nexus_link(&text)))
             .is_ok()
     });
     glue.sync();
@@ -351,6 +367,7 @@ impl Glue {
             cards: cards::CardsState::new(),
             compat: compat::CompatState::new(persist),
             mods: mods::ModsUiState::new(),
+            nexus: nexus::NexusUiState::new(),
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
             settings: settings::SettingsState::new(),
@@ -437,6 +454,7 @@ impl Glue {
         self.connect_cards(window);
         self.connect_compat(window);
         self.connect_mods(window);
+        self.connect_nexus(window);
         self.connect_prefix(window);
         self.connect_gog(window);
         self.connect_settings(window);
@@ -674,6 +692,7 @@ impl Glue {
         self.apply(outcome);
         self.sync();
         self.store_scanned();
+        self.nexus_scanned();
         self.refresh_game();
         self.after_scan();
         self.check_new_updates();
@@ -826,7 +845,11 @@ impl Glue {
         if !focused {
             return;
         }
-        if self.form_open() || self.collections_open() || self.options_open() || self.art_open_now()
+        if self.form_open()
+            || self.collections_open()
+            || self.options_open()
+            || self.art_open_now()
+            || self.nexus_choosing()
         {
             // The sheet takes the keyboard; the pad only closes it.
             if pad == Pad::Back {
@@ -887,7 +910,8 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.art_back()
+        if self.nexus_back()
+            || self.art_back()
             || self.options_back()
             || self.stay_open()
             || self.collections_back()
@@ -940,7 +964,7 @@ impl Glue {
         if self.options_open() {
             return self.options_key(text);
         }
-        if self.form_open() || self.collections_open() {
+        if self.form_open() || self.collections_open() || self.nexus_choosing() {
             return false;
         }
         let mut chars = text.chars();

@@ -10,7 +10,6 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length, Task};
 use zendo_core::config::{Config, Kept};
 use zendo_core::covers::{self, KeyCheck};
-use zendo_core::nexus::User;
 use zendo_core::secrets::Key;
 use zendo_core::{Size, Source, State, launch, report};
 
@@ -103,14 +102,7 @@ pub(super) enum KeyThen {
 
 /// What the Settings page says once the Nexus key is written, and whose
 /// key it is.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum NexusThen {
-    Removed,
-    /// Saved after Nexus accepted it, as this account.
-    Saved(String, User),
-    /// Saved although the check could not reach Nexus.
-    Unchecked(String),
-}
+pub(super) use zendo_shell::nexus::Then as NexusThen;
 
 impl Setting {
     fn apply(&self, config: &mut Config) {

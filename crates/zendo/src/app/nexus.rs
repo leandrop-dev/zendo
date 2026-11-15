@@ -1,11 +1,12 @@
 //! Nexus Mods in the window: the key on the Settings page, `nxm://` links
 //! arriving (from the browser, through `links.rs`), the game each one is
 //! for, its download into the game's mods, and updates to mods that came
-//! from Nexus. The calls are `zendo_core::nexus`'.
+//! from Nexus. The state and the transitions are `zendo_shell::nexus`'
+//! (shared with the Slint window); this file draws them and runs the work
+//! on threads.
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 
 use iced::futures::channel::mpsc;
@@ -13,9 +14,13 @@ use iced::futures::{SinkExt, Stream, StreamExt};
 use iced::widget::{button, column, container, progress_bar, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::Game;
-use zendo_core::mods::{self, Added, Overview};
-use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link, User};
+use zendo_core::mods::Overview;
+use zendo_core::nexus::{self, FileInfo, Handler, KeyCheck, Link};
 use zendo_core::secrets::Key;
+use zendo_shell::nexus::{
+    self as shell, Arrived, Checked, Choosing, Download, Finished, KeyStep, Matched, Matching,
+    Update,
+};
 
 use super::launch_options::{frame, overlay};
 use super::settings::{NexusThen, kept_note, section};
@@ -23,60 +28,8 @@ use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
 
-/// The newer files of a game's mods, and the mods whose file list could
-/// not be asked.
-type UpdateList = (Vec<(String, FileInfo)>, Vec<String>);
-
-#[derive(Debug, Default)]
-pub struct NexusState {
-    key: KeyField,
-    /// Whose key it is, once Nexus said.
-    user: Option<User>,
-    /// What opens `nxm://` links, once asked.
-    handler: Option<Handler>,
-    /// Links that came before the library was read.
-    pending: Vec<String>,
-    /// A link no single game matched: the user says which game.
-    choosing: Option<Choosing>,
-    pub downloads: Vec<ModDownload>,
-    next: u64,
-    /// Newer files for a game's mods, by game and mod.
-    updates: HashMap<String, HashMap<String, FileInfo>>,
-    /// Games whose mods were checked this session.
-    checked: HashSet<String>,
-}
-
-#[derive(Debug, Default)]
-pub(super) struct KeyField {
-    pub(super) value: String,
-    pub(super) shown: bool,
-    /// The key Nexus is being asked about.
-    pub(super) checking: Option<String>,
-    pub(super) save_after_check: bool,
-    pub(super) note: Option<(String, bool)>,
-}
-
-#[derive(Debug, Clone)]
-struct Choosing {
-    link: Link,
-    /// Nexus's name for the game.
-    name: String,
-    games: Vec<(String, String)>,
-    /// No game matched, so every installed one is offered.
-    all: bool,
-}
-
-#[derive(Debug)]
-pub struct ModDownload {
-    id: u64,
-    pub game: String,
-    /// The file on Nexus.
-    file: u64,
-    pub name: String,
-    pub done: u64,
-    pub total: Option<u64>,
-    stop: Arc<AtomicBool>,
-}
+pub use shell::NexusState;
+use shell::UpdateList;
 
 #[derive(Debug, Clone)]
 pub enum NexusMessage {
@@ -92,45 +45,27 @@ pub enum NexusMessage {
     Link(String),
     /// The games a link's game matched, the installed ones, and Nexus's
     /// name for it.
-    Matched(Link, Vec<(String, String)>, Vec<(String, String)>, String),
+    Matched(Matched),
     /// Something to say on the status line.
     Note(String),
     Choose(String),
     CancelChoose,
     Progress(u64, u64, Option<u64>),
-    Finished(u64, String, Result<(Added, String), String>),
+    Finished(
+        u64,
+        String,
+        Result<(zendo_core::mods::Added, String), String>,
+    ),
     Stop(u64),
     Updates(String, Result<UpdateList, String>),
     Update(String, String),
-}
-
-impl NexusState {
-    /// Says in the Settings page what became of the key once it was
-    /// written, and whose key Zendo now has.
-    pub(super) fn key_stored(&mut self, then: NexusThen) {
-        match then {
-            NexusThen::Removed => {
-                self.user = None;
-                self.key.note = Some((t!("key-removed"), true));
-            }
-            NexusThen::Saved(who, user) => {
-                self.user = Some(user);
-                // Updates are asked again with the new key.
-                self.checked.clear();
-                self.key.note = Some((t!("nexus-key-saved", who = who), true));
-            }
-            NexusThen::Unchecked(error) => {
-                self.key.note = Some((t!("key-saved-unchecked", error = error), false));
-            }
-        }
-    }
 }
 
 impl Zendo {
     /// After the settings are read: whose key it is, what opens links, and
     /// the links that came while the library was read.
     pub(super) fn nexus_loaded(&mut self) -> Task<Message> {
-        self.nexus.key.value = self.config.nexus_key.clone().unwrap_or_default();
+        self.nexus.loaded(self.config.nexus_key.as_deref());
         if !self.persist {
             return Task::none();
         }
@@ -140,11 +75,7 @@ impl Zendo {
         if let Some(key) = self.config.nexus_key.clone() {
             let asking = key.clone();
             tasks.push(Task::perform(
-                blocking(move || {
-                    // Nexus's games, for the games it has by title; weekly.
-                    let _ = nexus::refresh_games(&key);
-                    nexus::check_key(&key).map_err(|err| format!("{err:#}"))
-                }),
+                blocking(move || shell::check_key(&key, true)),
                 move |result| Message::Nexus(NexusMessage::KeyChecked(asking.clone(), result)),
             ));
         }
@@ -156,7 +87,7 @@ impl Zendo {
 
     /// Whether the key's account has Premium; `None` before Nexus said.
     pub(super) fn nexus_premium(&self) -> Option<bool> {
-        self.nexus.user.as_ref().map(|user| user.is_premium)
+        self.nexus.premium()
     }
 
     /// Downloads a file of a mod into a game's mods, as a Premium account
@@ -172,64 +103,39 @@ impl Zendo {
 
     pub(super) fn update_nexus(&mut self, message: NexusMessage) -> Task<Message> {
         match message {
-            NexusMessage::Link(text) => self.link_arrived(text),
+            NexusMessage::Link(text) => self.link_arrived(&text),
             NexusMessage::Note(note) => {
                 self.status = Some(note);
                 Task::none()
             }
-            NexusMessage::Matched(link, matched, installed, name) => {
-                if let [(id, _)] = matched.as_slice() {
-                    return self.download_mod(id, link, false);
+            NexusMessage::Matched(found) => match self.nexus.matched(found) {
+                Matching::Download(id, link) => self.download_mod(&id, link, false),
+                Matching::Say(note) => {
+                    self.status = Some(note);
+                    Task::none()
                 }
-                if installed.is_empty() {
-                    self.status = Some(t!("nexus-no-game", name = name.as_str()));
-                    return Task::none();
-                }
-                let all = matched.is_empty();
-                self.nexus.choosing = Some(Choosing {
-                    link,
-                    name,
-                    games: if all { installed } else { matched },
-                    all,
-                });
-                Task::none()
-            }
-            NexusMessage::Choose(id) => match self.nexus.choosing.take() {
-                Some(choosing) => self.download_mod(&id, choosing.link, choosing.all),
+                Matching::Choose => Task::none(),
+            },
+            NexusMessage::Choose(id) => match self.nexus.choose(&id) {
+                Some((id, link, remember)) => self.download_mod(&id, link, remember),
                 None => Task::none(),
             },
             NexusMessage::CancelChoose => {
-                self.nexus.choosing = None;
+                self.nexus.cancel_choose();
                 Task::none()
             }
             NexusMessage::Progress(id, done, total) => {
-                if let Some(download) = self.nexus.downloads.iter_mut().find(|d| d.id == id) {
-                    download.done = done;
-                    download.total = total;
-                }
+                self.nexus.progress(id, done, total);
                 Task::none()
             }
             NexusMessage::Finished(id, game, result) => self.mod_downloaded(id, game, result),
             NexusMessage::Stop(id) => {
-                if let Some(download) = self.nexus.downloads.iter().find(|d| d.id == id) {
-                    download.stop.store(true, Ordering::Relaxed);
-                }
+                self.nexus.stop(id);
                 Task::none()
             }
             NexusMessage::Updates(game, result) => {
-                match result {
-                    Ok((found, problems)) => {
-                        self.nexus.updates.insert(game, found.into_iter().collect());
-                        // One mod's file list failing does not hide the
-                        // others' updates, but it is still said.
-                        if !problems.is_empty() {
-                            self.status =
-                                Some(t!("nexus-updates-failed", error = problems.join("; ")));
-                        }
-                    }
-                    Err(err) => {
-                        self.status = Some(t!("nexus-updates-failed", error = err));
-                    }
+                if let Some(note) = self.nexus.updates_found(&game, result) {
+                    self.status = Some(note);
                 }
                 Task::none()
             }
@@ -242,196 +148,81 @@ impl Zendo {
     fn update_nexus_key(&mut self, message: NexusMessage) -> Task<Message> {
         match message {
             NexusMessage::KeyInput(value) => {
-                self.nexus.key.value = value;
-                self.nexus.key.note = None;
+                self.nexus.edit_key(value);
                 Task::none()
             }
             NexusMessage::ToggleShown => {
-                self.nexus.key.shown = !self.nexus.key.shown;
+                self.nexus.toggle_shown();
                 Task::none()
             }
-            NexusMessage::SaveKey => {
-                let key = self.nexus.key.value.trim().to_owned();
-                self.nexus.key.value.clone_from(&key);
-                if key.is_empty() {
-                    return self.save_setting(super::settings::Setting::NexusKey {
-                        key: None,
-                        then: super::settings::NexusThen::Removed,
-                    });
+            NexusMessage::SaveKey => match self.nexus.save_key(self.persist) {
+                KeyStep::Remove => self.save_setting(super::settings::Setting::NexusKey {
+                    key: None,
+                    then: NexusThen::Removed,
+                }),
+                KeyStep::Check(key) => check_nexus_key(key),
+                KeyStep::Nothing => Task::none(),
+            },
+            NexusMessage::CheckKey => match self.nexus.check_key(self.persist) {
+                KeyStep::Check(key) => check_nexus_key(key),
+                KeyStep::Nothing | KeyStep::Remove => Task::none(),
+            },
+            NexusMessage::KeyChecked(checked, result) => {
+                let stored = self.config.nexus_key.clone();
+                match self.nexus.key_checked(&checked, result, stored.as_deref()) {
+                    Checked::Save(key, then) => {
+                        self.save_setting(super::settings::Setting::NexusKey {
+                            key: Some(key),
+                            then,
+                        })
+                    }
+                    Checked::Nothing => Task::none(),
                 }
-                self.nexus.key.save_after_check = true;
-                self.check_nexus_key(key)
             }
-            NexusMessage::CheckKey => {
-                self.nexus.key.save_after_check = false;
-                let key = self.nexus.key.value.trim().to_owned();
-                self.check_nexus_key(key)
-            }
-            NexusMessage::KeyChecked(checked, result) => self.nexus_key_checked(checked, result),
             NexusMessage::Handler(handler) => {
-                self.nexus.handler = Some(handler);
+                self.nexus.handler_known(handler);
                 Task::none()
             }
             NexusMessage::BecomeHandler => {
                 if !self.persist {
                     return Task::none();
                 }
-                Task::perform(
-                    blocking(|| {
-                        let exe = std::env::current_exe()
-                            .map_err(|err| t!("nexus-no-exe", error = err.to_string()))?;
-                        nexus::become_handler(&exe)
-                            .map(|_| exe.display().to_string())
-                            .map_err(|err| format!("{err:#}"))
-                    }),
-                    |result| Message::Nexus(NexusMessage::BecameHandler(result)),
-                )
+                Task::perform(blocking(shell::become_handler), |result| {
+                    Message::Nexus(NexusMessage::BecameHandler(result))
+                })
             }
             NexusMessage::BecameHandler(result) => {
-                match result {
-                    Ok(exe) => {
-                        self.nexus.handler = Some(Handler::Zendo);
-                        self.status = Some(t!("nexus-links-open-in", exe = exe));
-                    }
-                    Err(err) => self.status = Some(err),
-                }
+                self.status = Some(self.nexus.became_handler(result));
                 Task::none()
             }
             _ => Task::none(),
         }
     }
 
-    fn check_nexus_key(&mut self, key: String) -> Task<Message> {
-        if key.is_empty() {
-            self.nexus.key.note = Some((t!("key-paste-first"), false));
-            return Task::none();
-        }
-        self.nexus.key.checking = Some(key.clone());
-        self.nexus.key.note = None;
-        if !self.persist {
-            return Task::none();
-        }
-        let asking = key.clone();
-        Task::perform(
-            blocking(move || nexus::check_key(&key).map_err(|err| format!("{err:#}"))),
-            move |result| Message::Nexus(NexusMessage::KeyChecked(asking.clone(), result)),
-        )
-    }
-
-    fn nexus_key_checked(
-        &mut self,
-        key: String,
-        result: Result<KeyCheck, String>,
-    ) -> Task<Message> {
-        match self.nexus.key.checking.as_deref() {
-            // The check at start, with nothing typed: it is the stored key.
-            None => {
-                if let Ok(KeyCheck::Accepted(user)) = result {
-                    self.nexus.user = Some(user);
-                }
-                return Task::none();
-            }
-            Some(checking) if checking == key => {}
-            // An answer about a key the field has moved on from.
-            Some(_) => return Task::none(),
-        }
-        self.nexus.key.checking = None;
-        let save = std::mem::take(&mut self.nexus.key.save_after_check);
-        // The check proves the key in the field. That is Zendo's key only
-        // when it is the one stored, and only then does its account tell
-        // whether Premium applies.
-        let stored = self.config.nexus_key.as_deref() == Some(key.as_str());
-        match result {
-            Ok(KeyCheck::Accepted(user)) => {
-                let who = signed_in(&user);
-                if save {
-                    return self.save_setting(super::settings::Setting::NexusKey {
-                        key: Some(key),
-                        then: super::settings::NexusThen::Saved(who, user),
-                    });
-                }
-                if stored {
-                    self.nexus.user = Some(user);
-                    // Updates are asked again with the new key.
-                    self.nexus.checked.clear();
-                }
-                self.nexus.key.note = Some((t!("nexus-key-accepted", who = who), true));
-            }
-            Ok(KeyCheck::Rejected) => {
-                let note = if save {
-                    t!("nexus-key-rejected-unsaved")
-                } else {
-                    t!("nexus-key-rejected")
-                };
-                self.nexus.key.note = Some((note, false));
-            }
-            Err(err) if save => {
-                return self.save_setting(super::settings::Setting::NexusKey {
-                    key: Some(key),
-                    then: super::settings::NexusThen::Unchecked(err),
-                });
-            }
-            Err(err) => self.nexus.key.note = Some((err, false)),
-        }
-        Task::none()
-    }
-
     /// A link from the browser: which game it is for, asked on a thread.
-    fn link_arrived(&mut self, text: String) -> Task<Message> {
-        let link = match Link::parse(&text) {
-            Ok(link) => link,
-            Err(err) => {
-                self.status = Some(format!("{err:#}"));
+    fn link_arrived(&mut self, text: &str) -> Task<Message> {
+        let key = self.config.nexus_key.clone();
+        let library = self.library.is_some();
+        let (link, note) = match self.nexus.link_arrived(text, library, key.is_some()) {
+            Arrived::Say(note) => {
+                self.status = Some(note);
                 return Task::none();
             }
+            Arrived::Wait => return Task::none(),
+            Arrived::Ask(link, note) => (link, note),
         };
-        let Some(library) = &self.library else {
-            self.nexus.pending.push(text);
-            return Task::none();
-        };
-        let Some(key) = self.config.nexus_key.clone() else {
-            self.status = Some(t!("nexus-needs-key"));
+        let (Some(key), Some(library)) = (key, &self.library) else {
             return Task::none();
         };
         if !self.persist {
             return Task::none();
         }
-        let games: Vec<Game> = library
-            .games
-            .iter()
-            .filter(|game| {
-                game.details
-                    .install_path
-                    .as_ref()
-                    .is_some_and(|dir| dir.is_dir())
-            })
-            .cloned()
-            .collect();
-        self.status = Some(t!("nexus-mod-arrived"));
+        let games = shell::with_folders(&library.games);
+        self.status = Some(note);
         Task::perform(
-            blocking({
-                let domain = link.domain.clone();
-                move || {
-                    // Nexus's list of games, to match titles, at most weekly.
-                    let _ = nexus::refresh_games(&key);
-                    let name = nexus::game_name(&domain, &nexus::cached_games());
-                    let pair = |game: &Game| (game.id.clone(), game.title.clone());
-                    let matched = games
-                        .iter()
-                        .filter(|game| mods::nexus_domain(game).as_deref() == Some(&domain))
-                        .map(pair)
-                        .collect();
-                    let installed = games.iter().map(pair).collect();
-                    Ok((matched, installed, name))
-                }
-            }),
-            move |found: Result<_, String>| match found {
-                Ok((matched, installed, name)) => Message::Nexus(NexusMessage::Matched(
-                    link.clone(),
-                    matched,
-                    installed,
-                    name,
-                )),
+            blocking(move || Ok::<_, String>(shell::match_games(&key, &link, &games))),
+            |found| match found {
+                Ok(found) => Message::Nexus(NexusMessage::Matched(found)),
                 Err(err) => Message::Nexus(NexusMessage::Note(err)),
             },
         )
@@ -444,36 +235,15 @@ impl Zendo {
         else {
             return Task::none();
         };
-        if self
-            .nexus
-            .downloads
-            .iter()
-            .any(|download| download.game == id && download.file == link.file_id)
-        {
+        let Some(started) = self.nexus.begin(&game, &link) else {
             return Task::none();
-        }
-        self.nexus.next += 1;
-        let number = self.nexus.next;
-        let stop = Arc::new(AtomicBool::new(false));
-        self.nexus.downloads.push(ModDownload {
-            id: number,
-            game: id.to_owned(),
-            file: link.file_id,
-            name: t!(
-                "nexus-download-name",
-                title = game.title.as_str(),
-                file = link.file_id
-            ),
-            done: 0,
-            total: None,
-            stop: Arc::clone(&stop),
-        });
-        self.status = Some(t!("nexus-downloading", title = game.title.as_str()));
+        };
+        self.status = Some(started.note);
         if !self.persist {
             return Task::none();
         }
         Task::run(
-            fetch_mod(number, game, key, link, remember, stop),
+            fetch_mod(started.id, game, key, link, remember, started.stop),
             Message::Nexus,
         )
     }
@@ -482,39 +252,16 @@ impl Zendo {
         &mut self,
         id: u64,
         game: String,
-        result: Result<(Added, String), String>,
+        result: Result<(zendo_core::mods::Added, String), String>,
     ) -> Task<Message> {
-        let stopped = self
-            .nexus
-            .downloads
-            .iter()
-            .find(|download| download.id == id)
-            .is_some_and(|download| download.stop.load(Ordering::Relaxed));
-        self.nexus.downloads.retain(|download| download.id != id);
-        match result {
-            Ok((Added::Choose(pending), _)) => self.open_installer(game, pending),
-            Ok((Added::Done(overview), note)) => {
-                // An update found before is done once its file is in.
-                if let Some(updates) = self.nexus.updates.get_mut(&game) {
-                    updates.retain(|mod_id, file| {
-                        !overview.mods.iter().any(|info| {
-                            &info.id == mod_id
-                                && info
-                                    .nexus
-                                    .as_ref()
-                                    .is_some_and(|nexus| nexus.file_id == file.file_id)
-                        })
-                    });
-                }
+        match self.nexus.finished(id, &game, result) {
+            Finished::Choose(pending) => self.open_installer(game, pending),
+            Finished::Done(overview, note) => {
                 self.status = Some(note);
                 self.mods_ready(game, *overview)
             }
-            Err(_) if stopped => {
-                self.status = Some(t!("nexus-download-stopped"));
-                Task::none()
-            }
-            Err(err) => {
-                self.status = Some(t!("nexus-download-failed", error = err));
+            Finished::Say(note) => {
+                self.status = Some(note);
                 Task::none()
             }
         }
@@ -522,45 +269,19 @@ impl Zendo {
 
     /// Asks Nexus, once a session, for newer files of a game's mods.
     pub(super) fn check_mod_updates(&mut self, game: &str, overview: &Overview) -> Task<Message> {
-        let Some(key) = self.config.nexus_key.clone() else {
+        let key = self.config.nexus_key.clone();
+        let Some(job) = self
+            .nexus
+            .want_updates(game, overview, key.is_some(), self.persist)
+        else {
             return Task::none();
         };
-        let sources: Vec<(String, mods::NexusSource)> = overview
-            .mods
-            .iter()
-            .filter_map(|info| info.nexus.clone().map(|nexus| (info.id.clone(), nexus)))
-            .collect();
-        if sources.is_empty() || !self.persist || !self.nexus.checked.insert(game.to_owned()) {
+        let Some(key) = key else {
             return Task::none();
-        }
-        let game = game.to_owned();
+        };
+        let game = job.game;
         Task::perform(
-            blocking(move || {
-                let mut found = Vec::new();
-                let mut problems = Vec::new();
-                let mut asked: HashMap<(String, u64), nexus::Files> = HashMap::new();
-                for (mod_id, source) in sources {
-                    let wanted = (source.domain.clone(), source.mod_id);
-                    let files = match asked.entry(wanted) {
-                        std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-                        std::collections::hash_map::Entry::Vacant(entry) => {
-                            match nexus::files(&key, &source.domain, source.mod_id) {
-                                Ok(files) => entry.insert(files),
-                                Err(err) => {
-                                    // One mod's file list failing is not
-                                    // the whole game's.
-                                    problems.push(format!("{}: {err:#}", source.domain));
-                                    continue;
-                                }
-                            }
-                        }
-                    };
-                    if let Some(newer) = files.newest(source.file_id) {
-                        found.push((mod_id, newer.clone()));
-                    }
-                }
-                Ok((found, problems))
-            }),
+            blocking(move || Ok::<_, String>(shell::ask_updates(&key, job.sources))),
             move |result| Message::Nexus(NexusMessage::Updates(game.clone(), result)),
         )
     }
@@ -568,49 +289,29 @@ impl Zendo {
     /// Update on a mod: downloaded straight away with Premium; otherwise
     /// the file's page opens, for the site's button to send it back.
     fn update_from_nexus(&mut self, game: &str, mod_id: &str) -> Task<Message> {
-        let Some(file) = self
-            .nexus
-            .updates
-            .get(game)
-            .and_then(|updates| updates.get(mod_id))
-            .cloned()
-        else {
-            return Task::none();
-        };
-        let Some(source) = self
+        let update = self
             .mods_overview(game)
-            .and_then(|overview| overview.mods.iter().find(|info| info.id == mod_id))
-            .and_then(|info| info.nexus.clone())
-        else {
-            return Task::none();
-        };
-        let link = Link {
-            domain: source.domain,
-            mod_id: source.mod_id,
-            file_id: file.file_id,
-            key: None,
-            expires: None,
-        };
-        if self.nexus.user.as_ref().is_some_and(|user| user.is_premium) {
-            return self.download_mod(game, link, false);
+            .and_then(|overview| self.nexus.update(game, mod_id, overview));
+        match update {
+            Some(Update::Download(link)) => self.download_mod(game, link, false),
+            Some(Update::Page(url, note)) => {
+                self.status = Some(note);
+                Task::done(Message::Open(url))
+            }
+            None => Task::none(),
         }
-        self.status = Some(t!("nexus-press-mod-manager"));
-        Task::done(Message::Open(link.page()))
     }
 
     /// The newer file Nexus has for a mod, when one was found.
     pub(super) fn mod_update(&self, game: &str, mod_id: &str) -> Option<&FileInfo> {
-        self.nexus.updates.get(game)?.get(mod_id)
+        self.nexus.update_for(game, mod_id)
     }
 
     pub(super) fn nexus_downloads_for<'a>(
         &'a self,
         game: &'a str,
-    ) -> impl Iterator<Item = &'a ModDownload> + 'a {
-        self.nexus
-            .downloads
-            .iter()
-            .filter(move |download| download.game == game)
+    ) -> impl Iterator<Item = &'a Download> + 'a {
+        self.nexus.downloads_for(game)
     }
 
     /// The Downloads page's card of mods downloading from Nexus.
@@ -669,18 +370,7 @@ impl Zendo {
     /// What opens Mod manager download links, and the button to make it
     /// this Zendo.
     fn handler_row(&self) -> Element<'_, Message> {
-        let (handler, is_zendo) = match &self.nexus.handler {
-            Some(Handler::Zendo) => (t!("nexus-handler-zendo"), true),
-            Some(Handler::Other(other)) => {
-                (t!("nexus-handler-other", other = other.as_str()), false)
-            }
-            Some(Handler::OtherZendo(program)) => (
-                t!("nexus-handler-other-zendo", program = program.as_str()),
-                false,
-            ),
-            Some(Handler::Nothing) => (t!("nexus-handler-nothing"), false),
-            None => (String::new(), false),
-        };
+        let (handler, is_zendo, can) = self.nexus.handler_row();
         row![
             text(handler)
                 .size(13)
@@ -693,10 +383,7 @@ impl Zendo {
             button(style::button_text(t!("nexus-become-handler")))
                 .padding(style::BUTTON_SMALL)
                 .style(style::secondary)
-                .on_press_maybe(
-                    (!is_zendo && self.nexus.handler.is_some())
-                        .then_some(Message::Nexus(NexusMessage::BecomeHandler)),
-                ),
+                .on_press_maybe(can.then_some(Message::Nexus(NexusMessage::BecomeHandler))),
         ]
         .spacing(style::SPACE_M)
         .align_y(Alignment::Center)
@@ -755,7 +442,7 @@ impl Zendo {
                 body = body.push(text(t!("key-none")).size(13).color(colors().dim));
             }
             (None, Some(user)) => {
-                body = body.push(text(signed_in(user)).size(13).color(colors().good));
+                body = body.push(text(shell::signed_in(user)).size(13).color(colors().good));
             }
             (None, None) => {}
         }
@@ -771,42 +458,19 @@ impl Zendo {
     }
 }
 
-fn signed_in(user: &User) -> String {
-    if user.is_premium {
-        t!("nexus-known-as-premium", name = user.name.as_str())
-    } else {
-        t!("nexus-known-as", name = user.name.as_str())
-    }
+/// Asks Nexus about the key in the field, on a thread.
+fn check_nexus_key(key: String) -> Task<Message> {
+    let asking = key.clone();
+    Task::perform(
+        blocking(move || shell::check_key(&key, false)),
+        move |result| Message::Nexus(NexusMessage::KeyChecked(asking.clone(), result)),
+    )
 }
 
 /// One download's row, for the Mods card and the Downloads page.
-pub(super) fn download_row(download: &ModDownload) -> Element<'_, Message> {
-    let mib = |bytes: u64| {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "shown to one decimal; the precision lost is far below"
-        )]
-        let mib = bytes as f32 / (1024.0 * 1024.0);
-        mib
-    };
-    let (bar, words) = match download.total {
-        Some(total) if total > 0 => (
-            mib(download.done) / mib(total).max(f32::MIN_POSITIVE),
-            t!(
-                "nexus-progress",
-                done = format!("{:.1}", mib(download.done)),
-                total = format!("{:.1}", mib(total))
-            ),
-        ),
-        _ => (
-            0.0,
-            t!(
-                "nexus-progress-unknown",
-                done = format!("{:.1}", mib(download.done))
-            ),
-        ),
-    };
-    let stopping = download.stop.load(Ordering::Relaxed);
+pub(super) fn download_row(download: &Download) -> Element<'_, Message> {
+    let (bar, words) = download.progress();
+    let stopping = download.stopping();
     row![
         column![
             text(&download.name).size(14),
@@ -876,17 +540,7 @@ fn fetch_mod(
             let mut progress = move |done, total| {
                 let _ = progress_sender.unbounded_send(NexusMessage::Progress(id, done, total));
             };
-            let result = (|| {
-                if remember {
-                    mods::set_nexus(&game, &link.domain)?;
-                }
-                let folder = mods::downloads_dir(&game)?;
-                let fetched = nexus::fetch(&key, &link, &folder, &stop, &mut progress)?;
-                let (added, updated) =
-                    mods::add_from_nexus(&game, &fetched, &link.domain, link.mod_id)?;
-                anyhow::Ok((added, added_note(updated, &fetched, &game.title)))
-            })()
-            .map_err(|err| format!("{err:#}"));
+            let result = shell::fetch(&game, &key, &link, remember, &stop, &mut progress);
             let _ = sender.unbounded_send(NexusMessage::Finished(id, game_id, result));
         });
         while let Some(message) = receiver.next().await {
@@ -900,6 +554,7 @@ fn fetch_mod(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zendo_core::nexus::User;
 
     #[test]
     fn a_saved_key_is_checked_first_and_a_bad_link_says_so() {
@@ -937,54 +592,17 @@ mod tests {
     }
 
     #[test]
-    fn one_mods_failed_file_list_keeps_the_others_updates() {
-        let (mut zendo, _) = Zendo::boot();
-        zendo.persist = false;
-        let file = FileInfo {
-            file_id: 2,
-            name: "New".into(),
-            version: Some("2".into()),
-            file_name: "a.zip".into(),
-            size_kb: None,
-            category_name: None,
-            uploaded_timestamp: 0,
-        };
-        let _ = zendo.update(Message::Nexus(NexusMessage::Updates(
-            "game:1".into(),
-            Ok((
-                vec![("mod-a".to_owned(), file)],
-                vec!["mod-b: offline".to_owned()],
-            )),
-        )));
-        assert!(
-            zendo
-                .nexus
-                .updates
-                .get("game:1")
-                .is_some_and(|updates| updates.contains_key("mod-a")),
-            "the rest stays"
-        );
-        assert!(
-            zendo
-                .status
-                .as_deref()
-                .is_some_and(|status| status.contains("mod-b")),
-            "the failure is said"
-        );
-    }
-
-    #[test]
-    fn a_link_for_no_known_game_asks_which() {
+    fn a_link_for_no_known_game_asks_which_and_back_closes_it() {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
         let link = Link::parse("nxm://catquest/mods/1/files/2").unwrap();
         let installed = vec![("epic:cat".to_owned(), "Cat Quest".to_owned())];
-        let _ = zendo.update(Message::Nexus(NexusMessage::Matched(
+        let _ = zendo.update(Message::Nexus(NexusMessage::Matched(Matched {
             link,
-            Vec::new(),
+            matched: Vec::new(),
             installed,
-            "Cat Quest".into(),
-        )));
+            name: "Cat Quest".into(),
+        })));
         let choosing = zendo.nexus.choosing.as_ref().unwrap();
         assert!(choosing.all);
         let _ = zendo.update(Message::Back);

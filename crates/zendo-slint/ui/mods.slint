@@ -4,6 +4,7 @@
 // answers its callbacks; the rows are flat, so a row holds no `if`.
 
 import { ChipData } from "library.slint";
+import { DownloadRow } from "nexus.slint";
 
 // A mod in the order Apply puts them in.
 export struct ModRow {
@@ -16,6 +17,8 @@ export struct ModRow {
     // "Delete", or "Really delete" once pressed.
     delete-label: string,
     asking: bool,
+    // "Update" or "Update to 2" when Nexus has a newer file; else empty.
+    update: string,
 }
 
 // A Bethesda game's plugin in load order.
@@ -43,6 +46,8 @@ export global ModsData {
     in property <bool> free;
     // The game is on Nexus Mods.
     in property <bool> nexus;
+    // The mods coming in from Nexus for this game.
+    in property <[DownloadRow]> downloads;
 
     in property <[ChipData]> profiles;
     in property <string> delete-profile-label;
@@ -82,6 +87,8 @@ export global ModsData {
 
     callback add();
     callback find-nexus();
+    callback stop-download(int);
+    callback update(int);
     callback profile(int);
     callback new-profile();
     callback rename-profile();

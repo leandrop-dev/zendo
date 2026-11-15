@@ -20,11 +20,7 @@ use crate::{Colors, MainWindow, library_ui, tr};
 const LOOK: Duration = Duration::from_secs(2);
 
 /// Opens the window; `fullscreen` is Game Mode's start (item 53) and `link`
-/// an `nxm://` link it was started for (item 52).
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the signature is `cli::RunWindow`'s, and the Nexus pages (item 52) take the link"
-)]
+/// an `nxm://` link it was started for.
 pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     i18n::set_from_settings();
     let config = Config::load_file().ok();
@@ -47,7 +43,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         theme.as_deref(),
         Theme::dir().as_deref(),
     )));
-    library_ui::install(&window, Rc::clone(&themes));
+    library_ui::install(&window, Rc::clone(&themes), link);
     if opaque {
         window.set_translucency(1.0);
     }
@@ -56,9 +52,6 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     if fullscreen {
         window.window().set_fullscreen(true);
     }
-    // Opened by a mod page's `nxm://` link: the Nexus pages come in item 52.
-    let _ = &link;
-
     // The tray is there only when the setting asks for it and it could be
     // made; then closing the window hides it, and the tray brings it back.
     set_tray(&window, hide_to_tray);

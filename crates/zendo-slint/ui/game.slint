@@ -8,6 +8,7 @@ import { ChipButton, ActionButton, RowButton, TextField, CheckBox } from "compon
 import { ScrollView } from "std-widgets.slint";
 import { ChipData } from "library.slint";
 import { ModsData } from "mods.slint";
+import { DownloadLine } from "nexus.slint";
 
 export struct Tile {
     label: string,
@@ -421,6 +422,10 @@ component ModsCard inherits Card {
                 clicked => { ModsData.add(); }
             }
         }
+        for download in ModsData.downloads: DownloadLine {
+            item: download;
+            stop(id) => { ModsData.stop-download(id); }
+        }
         if ModsData.body-kind != 2: Text {
             text: ModsData.message;
             font-size: 13px;
@@ -530,6 +535,11 @@ component ModsCard inherits Card {
                         color: Colors.foreground;
                         vertical-alignment: center;
                         overflow: elide;
+                    }
+                    RowButton {
+                        label: line.update;
+                        primary: true;
+                        clicked => { ModsData.update(index); }
                     }
                     RowButton {
                         label: "↑";

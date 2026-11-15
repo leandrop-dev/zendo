@@ -5,6 +5,7 @@
 import { Colors, Space, Tr } from "style.slint";
 import { ChipButton, ActionButton, TextField, Section, Toggle, Note, RowButton } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
+import { NexusData } from "nexus.slint";
 import { ChipData } from "library.slint";
 import { Fact } from "game.slint";
 
@@ -407,6 +408,82 @@ export component SettingsPage inherits Rectangle {
                                     mouse-cursor: pointer;
                                     width: get-key.preferred-width;
                                     clicked => { SettingsData.key-get(); }
+                                }
+                            }
+                        }
+                    }
+
+                    // Keys: Nexus Mods's, and what opens its download links.
+                    if SettingsData.group == 1: Section {
+                        heading: "Nexus Mods";
+                        about: Tr.t("nexus-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            HorizontalLayout {
+                                spacing: Space.s;
+                                TextField {
+                                    horizontal-stretch: 1;
+                                    placeholder: Tr.t("nexus-paste");
+                                    password: !NexusData.key-shown;
+                                    text <=> NexusData.key-value;
+                                    edited(typed) => { NexusData.key-edited(typed); }
+                                    accepted => { NexusData.key-save(); }
+                                }
+                                ActionButton {
+                                    label: NexusData.key-shown ? Tr.t("key-hide") : Tr.t("key-show");
+                                    horizontal-stretch: 0;
+                                    clicked => { NexusData.key-toggle-shown(); }
+                                }
+                                ActionButton {
+                                    label: NexusData.key-checking ? Tr.t("key-checking") : Tr.t("key-check");
+                                    enabled: !NexusData.key-checking && NexusData.key-value != "";
+                                    horizontal-stretch: 0;
+                                    clicked => { NexusData.key-check(); }
+                                }
+                                ActionButton {
+                                    label: Tr.t("key-save");
+                                    primary: true;
+                                    enabled: NexusData.key-changed;
+                                    horizontal-stretch: 0;
+                                    clicked => { NexusData.key-save(); }
+                                }
+                            }
+                            if NexusData.key-note != "": Note {
+                                text: NexusData.key-note;
+                                tone: NexusData.key-tone;
+                            }
+                            if NexusData.key-kept != "": Note {
+                                text: NexusData.key-kept;
+                                tone: NexusData.key-kept-bad ? 2 : 3;
+                            }
+                            Rectangle {
+                                height: nexus-get-key.preferred-height;
+                                nexus-get-key := Text {
+                                    x: 0;
+                                    text: Tr.t("nexus-get-key");
+                                    font-size: 13px;
+                                    color: nexus-get-touch.has-hover ? Colors.accent : Colors.foreground;
+                                }
+                                nexus-get-touch := TouchArea {
+                                    x: 0;
+                                    mouse-cursor: pointer;
+                                    width: nexus-get-key.preferred-width;
+                                    clicked => { NexusData.key-get(); }
+                                }
+                            }
+                            // The line on its own row, so a long program name
+                            // wraps at the card's width.
+                            Note {
+                                text: NexusData.handler-line;
+                                tone: NexusData.handler-good ? 1 : 3;
+                            }
+                            HorizontalLayout {
+                                alignment: end;
+                                ActionButton {
+                                    label: Tr.t("nexus-become-handler");
+                                    enabled: NexusData.handler-can;
+                                    horizontal-stretch: 0;
+                                    clicked => { NexusData.become-handler(); }
                                 }
                             }
                         }

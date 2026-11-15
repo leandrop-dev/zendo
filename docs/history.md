@@ -4813,3 +4813,79 @@ overwrite row, the folder row, the Apply row, Add mod and Find on Nexus.
   KDE scheme, the pad.
 - **Side effects**: the scratch home was deleted; `ydotoold` was stopped and
   its socket removed.
+
+## Item 52c2a, Nexus in Slint (2026-11-15)
+
+The second slice of item 52c, and the first half of 52c2 (sliced again with the
+user: 52c2a the key, links, downloads and updates; 52c2b Search Nexus). It is
+Iced's `app/nexus.rs` (993 lines) without the search.
+
+- **Shared, as the Mods card was.** New `zendo_shell::nexus`: `NexusState`
+  (the key field, whose key it is, what opens links, links that came before the
+  library, the game chooser, the downloads with their stop flags, the newer
+  files found per game and mod, the games checked this session), the
+  transitions (`save_key`, `check_key`, `key_checked`, `link_arrived`,
+  `matched`, `choose`, `begin`, `finished`, `want_updates`, `updates_found`,
+  `update`), each taking `runnable` where a job would start; the workers for a
+  thread (`match_games`, `fetch` with a progress callback, `ask_updates`,
+  `check_key`, `become_handler`); and the words (`signed_in`, `update_label`,
+  `Download::progress`). `Then` replaces Iced's `NexusThen`. Iced was switched
+  first: its `nexus.rs` keeps its views and messages and calls the shell; its
+  three tests became two plus seven shell tests (148 Iced, 285 core, 67 shell
+  and 139 Slint tests green, clippy clean).
+- **Slint**: `ui/nexus.slint` (`NexusData`, `DownloadRow`, `DownloadLine`,
+  `ChooserSheet`), the Nexus Mods section in the Keys group of Settings, an
+  Update button on each mod's row (`ModRow.update`), the downloads above the
+  card's body (`ModsData.downloads`), and `nexus_ui.rs` (a `#[path]` child of
+  `library_ui.rs`). Links: `links::listen` and the start-up link go to
+  `nexus_link`; one before the first scan waits and is taken at it
+  (`nexus_scanned`, which also asks whose key it is and what opens links). A
+  download's progress reaches the window at most every 150 ms and rewrites its
+  row (`refill`, so the card's height does not change); an archive with a FOMOD
+  installer still goes to `mods_installer_not_yet` (52c3). Escape and the pad's
+  Back close the chooser; `window.rs` no longer carries the `needless_pass_by_value`
+  expectation for `link`.
+- **Checked** (2026-11-15, in two runs with the user at the PC; a throwaway home
+  with no session bus, its own `XDG_RUNTIME_DIR` (`/run/user/1000/zrun`, short
+  enough for the links socket and apart from the user's own window) and
+  `XDG_DATA_HOME`/`XDG_CONFIG_HOME` under it, a fake Nexus key in `config.toml`,
+  five games, two of them local with a folder; the user's own Zendo was not
+  running). **Clicked, with stills and the files on disk**: Check on the fake key
+  (red "Nexus turned this key down"); Show (the key is read, the label becomes
+  Hide); typing a key in the field and Save (the Save button lit, red "turned
+  this key down, so it was not saved", `config.toml` kept the old key); the field
+  emptied and Save (green "Key removed"; core writes `nexus_key = ""` for a
+  removed key when the keyring cannot be asked); the key link (a logging fake
+  `xdg-open` got `https://www.nexusmods.com/users/myaccount?tab=api`); "Open them
+  with Zendo" (the line turned green, the footer named the binary;
+  `zendo-nxm.desktop` and `mimeapps.list` were written under the scratch home
+  only, and the real `mimeapps.list` kept its hash and the real
+  `zendo-nxm.desktop` its time); an `nxm://` link sent by a second process to the
+  open window (with only desktop games: "no installed game takes mods"; with the
+  two local games: the chooser), Escape, Cancel (a still before and after), the
+  first row (the download ran and failed on the fake key: the footer said so,
+  and `nexus = "catquest"` was kept for that game; its page then showed Find mods
+  on Nexus) and the second row (`nexus = "catquest"` kept for the second game
+  only).
+- **Found on screen and fixed**: the handler line sat beside its button in a row
+  with no explicit width; a long foreign program path (a seeded
+  `zendo-nxm.desktop`, which is what the user's real home has from 13 November)
+  would be measured short. It is now a `Note` on its own row above the button,
+  and the second run showed it wrapping at the card's width with the button
+  enabled below it.
+- **Tests added after a review** (7 Slint glue tests in all): progress moves the
+  bar and words of the same row; a finished download removes the row and leaves
+  the card showing the new mods; a failure and a Stop say so (a Stop is not a
+  failure); Update without Premium says to press the site's button, with Premium
+  it adds a download row, and a mod with nothing newer does nothing.
+- **Not checked on screen**: a download's bar and Stop, Update on a mod and the
+  update check (all need real answers from Nexus; the glue tests above cover the
+  rows, `stop_download` and both Update paths), Save after an accepted key (a
+  glue test covers it), an archive with an installer arriving from a download
+  (`Added::Choose` goes to `mods_installer_not_yet`; `Pending` cannot be built
+  outside `zendo-core`, so no test), a Premium account, pt-PT, the pad on the
+  chooser. A page jump when the download rows come and go (52c1 recorded one
+  for the mod rows) was not looked for, since no row appeared. `NexusAdult` is
+  drawn only in the search sheet, so it stays with 52c2b.
+- **Side effects**: the scratch home stays in the scratchpad (tmpfs); `ydotoold` was
+  stopped and its socket, and the scratch runtime folder, removed.

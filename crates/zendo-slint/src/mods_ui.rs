@@ -5,9 +5,10 @@
 //! jobs and the words are `zendo_shell::mods`'; each job runs on a thread
 //! through `Glue::ask`. A part of the Library's glue (`library_ui`).
 //!
-//! What comes with Nexus (the downloads and updates on the card, Search
-//! Nexus) is item 52c2, and the installer sheet (Options…, an archive with a
-//! FOMOD installer) is 52c3; their hooks are marked `// 52c2:` and `// 52c3:`.
+//! The downloads and Update on the card come from `nexus_ui.rs` (item
+//! 52c2a). Search Nexus is item 52c2b, and the installer sheet (Options…, an
+//! archive with a FOMOD installer) is 52c3; their hooks are marked
+//! `// 52c2b:` and `// 52c3:`.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -49,7 +50,7 @@ impl ModsUiState {
 /// Puts `rows` in the model: row by row when the count is the same, so the
 /// rows on the page stay where they are. A reset would empty the card for
 /// a moment, and a page scrolled low is pulled up to the shorter height.
-fn refill<T: Clone + 'static>(model: &VecModel<T>, rows: Vec<T>) {
+pub(super) fn refill<T: Clone + 'static>(model: &VecModel<T>, rows: Vec<T>) {
     if model.row_count() == rows.len() {
         for (index, row) in rows.into_iter().enumerate() {
             model.set_row_data(index, row);
@@ -248,6 +249,16 @@ impl Glue {
         );
     }
 
+    /// A game's mods as the card holds them.
+    pub(super) fn mods_overview(&self, id: &str) -> Option<Overview> {
+        self.mods.state.borrow().overview(id).cloned()
+    }
+
+    /// A game's mods as they now stand, after a download put one in.
+    pub(super) fn mods_ready(&self, id: &str, overview: Overview) {
+        self.mods.state.borrow_mut().ready(id.to_owned(), overview);
+    }
+
     /// The page just opened: reads the game's mods again.
     pub(super) fn mods_want(&self, id: &str) {
         if !self.mods_runnable(id) {
@@ -265,10 +276,11 @@ impl Glue {
         }
         for after in done.after {
             match after {
-                // 52c2: CheckUpdates asks Nexus once a session for newer
-                // files of the mods. 52c3: NextInstaller lets an installer
-                // that waited for the slot open.
-                After::CheckUpdates(_) | After::NextInstaller => {}
+                // Nexus is asked once a session for newer files of the mods.
+                After::CheckUpdates(game) => self.nexus_want_updates(&game),
+                // 52c3: NextInstaller lets an installer that waited for the
+                // slot open.
+                After::NextInstaller => {}
                 After::OpenInstaller(_, pending) => self.mods_installer_not_yet(&pending),
             }
         }
@@ -277,7 +289,7 @@ impl Glue {
 
     /// An archive with a FOMOD installer, whose sheet is item 52c3's: it is
     /// dropped, and the footer says so, so that nothing is lost unseen.
-    fn mods_installer_not_yet(&self, pending: &mods::Pending) {
+    pub(super) fn mods_installer_not_yet(&self, pending: &mods::Pending) {
         if self.persist {
             let pending = pending.clone();
             std::thread::spawn(move || mods::cancel_install(&pending));
@@ -325,6 +337,7 @@ impl Glue {
     }
 
     /// Opens the game's page on Nexus Mods in the browser.
+    // 52c2b: Search Nexus gets its button beside Find mods on Nexus.
     fn mods_find_on_nexus(&self) {
         let Some(id) = self.open.borrow().clone() else {
             return;
@@ -362,6 +375,7 @@ impl Glue {
         let data = window.global::<ModsData>();
         let state = self.mods.state.borrow();
         let id = game.id.as_str();
+        self.show_nexus_downloads();
         data.set_busy(state.busy_for(id).unwrap_or_default().into());
         data.set_free(state.free());
         let (kind, message) = match state.shown(id) {
@@ -439,6 +453,7 @@ impl Glue {
                     down: index < last,
                     delete_label: shell::delete_label(asking).into(),
                     asking,
+                    update: self.nexus_update_label(id, &info.id).into(),
                 }
             })
             .collect();

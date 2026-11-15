@@ -67,9 +67,15 @@ to `zendo-core` when that page is ported. Ask before building any other page
   **52c1 built 2026-11-15**: the Mods card on a game's page (the state, the
   jobs and the words are `zendo_shell::mods`, shared with Iced; the Slint card
   is `ModsCard` in `game.slint`, `ui/mods.slint` and `mods_ui.rs`).
-  **52c2**: Nexus (sign-in, links, downloads, the chooser; the downloads and
-  Update buttons on the card; the update check after a read; Search Nexus) and
-  Nexus search; the hooks are marked `// 52c2:`. **52c3**: the FOMOD
+  **52c2** is sliced again [firm, 2026-11-15]: **52c2a built 2026-11-15**:
+  Nexus (the key and the link handler in Settings; `nxm://` links, the game
+  chooser, downloads with progress and Stop, Update on a mod and the update
+  check after a read; the state, transitions, workers and words are
+  `zendo_shell::nexus`, shared with Iced; the Slint side is `ui/nexus.slint`
+  and `nexus_ui.rs`). **52c2b**: Search Nexus (Iced `app/nexus_search.rs`:
+  the sheet, results, file lists, the site window, `NexusAdult`); its hook is
+  marked `// 52c2b:` in `mods_ui.rs`, and `download_nexus_file` and
+  `nexus_premium` are what Iced's search already calls. **52c3**: the FOMOD
   installer sheet (Iced `app/installer.rs`, opened from a mod's install;
   moved here from 51b; Options… on a mod; the slot for a waiting installer;
   remove the string `mods-installer-not-yet`) and the mods' card on
