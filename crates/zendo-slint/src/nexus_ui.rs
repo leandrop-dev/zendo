@@ -5,9 +5,7 @@
 //! The state, the transitions and the words are `zendo_shell::nexus`'; the
 //! work that waits on the network runs on a thread. A part of the Library's
 //! glue (`library_ui`).
-//!
-//! Search Nexus is item 52c2b; its hook is marked `// 52c2b:` in
-//! `mods_ui.rs`.
+//! Search Nexus is `search_ui.rs`.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -32,7 +30,7 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(150);
 
 /// What the window remembers of Nexus, and the models its rows come from.
 pub(super) struct NexusUiState {
-    state: RefCell<NexusState>,
+    pub(super) state: RefCell<NexusState>,
     /// The settings were read and the library scanned: links can be taken.
     ready: Cell<bool>,
     downloads: Rc<VecModel<DownloadRow>>,
@@ -117,7 +115,7 @@ impl Glue {
         });
     }
 
-    fn nexus_key(&self) -> Option<String> {
+    pub(super) fn nexus_key(&self) -> Option<String> {
         self.config
             .borrow()
             .as_ref()
@@ -424,6 +422,8 @@ impl Glue {
         }
         self.show_nexus_downloads();
         self.show_game();
+        // The sheet marks the mods that are in now.
+        self.show_search();
     }
 
     /// Writes the open game's downloads for the card: row by row when the
@@ -519,6 +519,11 @@ impl Glue {
             }
             None => {}
         }
+    }
+
+    /// Whether the key's account has Premium (false until Nexus said).
+    pub(super) fn nexus_premium(&self) -> bool {
+        self.nexus.state.borrow().premium() == Some(true)
     }
 
     /// The page closed: the card's rows go with it.

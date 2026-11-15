@@ -519,9 +519,6 @@ fn chooser_card(choosing: &Choosing) -> Element<'_, Message> {
     frame(&t!("nexus-choose-title"), games, footer, 560.0, false)
 }
 
-/// What the status line says of a file from Nexus taken in.
-pub(super) use zendo_shell::mods::added_note;
-
 /// Downloads a file from Nexus and adds it to the game's mods, on a thread,
 /// saying how far it got.
 fn fetch_mod(

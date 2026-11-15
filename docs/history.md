@@ -4889,3 +4889,54 @@ Iced's `app/nexus.rs` (993 lines) without the search.
   drawn only in the search sheet, so it stays with 52c2b.
 - **Side effects**: the scratch home stays in the scratchpad (tmpfs); `ydotoold` was
   stopped and its socket, and the scratch runtime folder, removed.
+
+## Item 52c2b, Search Nexus in Slint (2026-11-15)
+
+The second half of 52c2: Iced's `app/nexus_search.rs` (868 lines), a sheet
+opened from the Mods card of a game that Nexus knows by a name.
+
+- **Shared.** New `zendo_shell::nexus_search`: `Search` (the words, the order,
+  the results a page at a time, each search's number so a late answer is
+  dropped, the mod whose files are open) with `restart`, `more`, `found`,
+  `toggle_files`, `got_files`, `link`, `footer`; and the words and rules
+  (`site_url` with the `nmm=1` flag, `have`, `offered`, `file_facts`, `byline`,
+  `numbers`, `order_name`, `file_kind`, `count`). `add_from_site` and a
+  `Work::AddFromSite` job moved into `zendo_shell::mods`. Iced was switched
+  first: its `Search` holds the shared one (through `Deref`) plus its
+  pictures, thumbnail tasks and the site window's handle; its tests are one
+  plus six shell tests (146 Iced, 285 core, 73 shell, 148 Slint green, clippy
+  clean).
+- **Slint**: `ui/nexus_search.slint` (`SearchData`, flat `SearchRow`s of kind
+  mod, file or note, `SearchSheet`), a Search Nexus button on the Mods card,
+  `search_ui.rs` (a `#[path]` child of `library_ui.rs`), `Setting::NexusAdult`.
+  Pictures are fetched and decoded on worker threads as the art picker's are
+  (stopped on a new search or Close). The sheet is window-tall, Escape and the
+  pad's Back close it, a click outside closes it, the field takes the keyboard
+  and Enter searches. A free account's Get on Nexus and a mod's Page on Nexus
+  open Zendo's Nexus window (`sign_in_window::open_nexus`) and what it gives
+  goes to `nexus_download` (a link) or `Work::AddFromSite` (a file); Premium
+  downloads straight away.
+- **Checked** (2026-11-15, with the user at the PC; a throwaway home as for
+  52c2a, with the game's Nexus name set to `stardewvalley` in its `mods.toml`
+  and the fake key): on screen, against Nexus's real public search, with
+  stills: the sheet opening from the card with 20 of 34,179 mods and their
+  pictures; Files (the fake key's red error under the mod; the button becomes
+  Hide files, and Hide files closes it); Most downloaded (the order changed);
+  Adult mods (the count changed, `nexus_adult = true` written to the scratch
+  config); typing `smapi` in the field and Enter (36 mods); scrolling to the
+  bottom and Show more ("36 of 36 mods", the scroll position held); Close
+  with the button; Escape (the sheet closed and the game's page stayed).
+- **Found on screen and fixed**: the "Without Premium…" line ran past the
+  card's padding (`parent.width` of an element in a layout includes the
+  layout's padding); it now has `parent.width - 2 * Space.xl` and wraps inside.
+- **A slip of mine**: one click was aimed at still coordinates, outside the
+  card, which closed the sheet; the typed letters and Enter then went to the
+  game's page and started the seeded `exit 0` game once (its "started from
+  Zendo 1 time" is in the scratch home only).
+- **Not checked on screen**: Page on Nexus and Get on Nexus (they open Nexus's
+  site in a window of Zendo's, which needs the user's login), a file list from
+  a real key, the Download button for Premium, what Nexus's window gives (a
+  link, a file), the "In your mods" mark on a real result (a glue test covers
+  it), pt-PT, the pad. The glue tests (8) cover the rows, the late answer, the
+  file lists and their failure, the files already in the mods, the free and
+  Premium download, the adult switch and Escape and Close.

@@ -3,21 +3,22 @@
 //! files, downloaded into the game's mods with Premium, or else got on the
 //! mod's page in Zendo's Nexus window ([`crate::sign_in_window`]): the
 //! Mod manager download's link or the manual download's file is taken
-//! into the game's mods.
-
-use std::collections::HashSet;
+//! into the game's mods. The state is `zendo_shell::nexus_search`'
+//! (shared with the Slint window).
 
 use iced::widget::{
     Id, button, column, container, image, operation, row, scrollable, space, text, text_input,
 };
 use iced::{Alignment, Element, Length, Task};
-use zendo_core::nexus::{self, FileInfo, Files, Link};
-use zendo_core::nexus_search::{self, Found, Hit, Order, Query};
-use zendo_core::{Size, mods};
+use std::collections::HashSet;
+use zendo_core::mods;
+use zendo_core::nexus::{self, Files, Link};
+use zendo_core::nexus_search::{self, Found, Hit, Order};
+use zendo_shell::mods::add_from_site;
+use zendo_shell::nexus_search::{self as shell, FilesState, FilesStep};
 
 use super::artwork::thumbnails;
 use super::launch_options::overlay;
-use super::nexus::added_note;
 use super::style::{self, BOLD, colors};
 use super::{Message, Zendo, blocking};
 use crate::i18n::t;
@@ -27,27 +28,29 @@ fn input_id() -> Id {
     Id::new("nexus-search")
 }
 
-/// The sheet, open over a game's page.
+/// The sheet, open over a game's page: the shared state, and what is
+/// Iced's own.
 pub struct Search {
-    /// The game's id in Zendo, its title, and its name on Nexus.
-    game: String,
-    title: String,
-    domain: String,
-    words: String,
-    order: Order,
-    hits: Vec<Hit>,
-    total: u64,
-    /// Each search's number: a late answer to an earlier one is dropped.
-    generation: u64,
-    asking: bool,
-    error: Option<String>,
+    state: shell::Search,
     thumbs: std::collections::HashMap<u64, image::Handle>,
-    /// The mod whose files are shown, and them once Nexus said.
-    open: Option<(u64, FilesState)>,
     /// The thumbnails coming; dropped with the sheet, they stop.
     downloading: Vec<iced::task::Handle>,
     /// Nexus's window, while a mod's page is open in it.
     site: Option<Handle>,
+}
+
+impl std::ops::Deref for Search {
+    type Target = shell::Search;
+
+    fn deref(&self) -> &shell::Search {
+        &self.state
+    }
+}
+
+impl std::ops::DerefMut for Search {
+    fn deref_mut(&mut self) -> &mut shell::Search {
+        &mut self.state
+    }
 }
 
 impl std::fmt::Debug for Search {
@@ -58,14 +61,6 @@ impl std::fmt::Debug for Search {
             .field("hits", &self.hits.len())
             .finish_non_exhaustive()
     }
-}
-
-#[derive(Debug)]
-enum FilesState {
-    Asking,
-    /// The files offered.
-    Got(Vec<FileInfo>),
-    Failed(String),
 }
 
 /// A mod's page asked of Nexus's window: for which game and mod.
@@ -127,35 +122,23 @@ impl Zendo {
                 search.order = order;
                 return self.run_search(false);
             }
-            SearchMessage::More if !search.asking && (search.hits.len() as u64) < search.total => {
-                return self.run_search(true);
-            }
-            SearchMessage::Found(generation, result) if generation == search.generation => {
-                search.asking = false;
-                match result {
-                    Ok(found) => {
-                        search.total = found.total;
-                        let wanted: Vec<(u64, String)> = found
-                            .hits
-                            .iter()
-                            .filter_map(|hit| Some((hit.mod_id, hit.thumbnail.clone()?)))
-                            .collect();
-                        search.hits.extend(found.hits);
-                        if wanted.is_empty() || !self.persist {
-                            return Task::none();
-                        }
-                        let (task, handle) = Task::run(
-                            thumbnails(wanted, move |id, bytes| {
-                                Message::NexusSearch(SearchMessage::Thumb(generation, id, bytes))
-                            }),
-                            |message| message,
-                        )
-                        .abortable();
-                        search.downloading.push(handle.abort_on_drop());
-                        return task;
-                    }
-                    Err(err) => search.error = Some(err),
+            SearchMessage::More => return self.run_search(true),
+            SearchMessage::Found(generation, result) => {
+                let Some(wanted) = search.found(generation, result) else {
+                    return Task::none();
+                };
+                if wanted.is_empty() || !self.persist {
+                    return Task::none();
                 }
+                let (task, handle) = Task::run(
+                    thumbnails(wanted, move |id, bytes| {
+                        Message::NexusSearch(SearchMessage::Thumb(generation, id, bytes))
+                    }),
+                    |message| message,
+                )
+                .abortable();
+                search.downloading.push(handle.abort_on_drop());
+                return task;
             }
             SearchMessage::Thumb(generation, id, Some(bytes))
                 if generation == search.generation =>
@@ -163,16 +146,7 @@ impl Zendo {
                 search.thumbs.insert(id, image::Handle::from_bytes(bytes));
             }
             SearchMessage::Files(mod_id) => return self.toggle_files(mod_id),
-            SearchMessage::GotFiles(mod_id, result) => {
-                if let Some((open, state)) = search.open.as_mut()
-                    && *open == mod_id
-                {
-                    *state = match result {
-                        Ok(files) => FilesState::Got(offered(files)),
-                        Err(err) => FilesState::Failed(err),
-                    };
-                }
-            }
+            SearchMessage::GotFiles(mod_id, result) => search.got_files(mod_id, result),
             SearchMessage::Close => self.mod_search = None,
             _ => {}
         }
@@ -186,16 +160,11 @@ impl Zendo {
         let Some(search) = self.mod_search.as_mut() else {
             return Task::none();
         };
-        if search
-            .open
-            .as_ref()
-            .is_some_and(|(open, _)| *open == mod_id)
-        {
-            search.open = None;
+        let askable = key.is_some() && persist;
+        if search.toggle_files(mod_id, askable) == FilesStep::Nothing {
             return Task::none();
         }
-        search.open = Some((mod_id, FilesState::Asking));
-        let (Some(key), true) = (key, persist) else {
+        let Some(key) = key else {
             return Task::none();
         };
         let domain = search.domain.clone();
@@ -216,18 +185,8 @@ impl Zendo {
             .game(id)
             .map_or_else(|| domain.clone(), |game| game.title.clone());
         self.mod_search = Some(Search {
-            game: id.to_owned(),
-            title,
-            domain,
-            words: String::new(),
-            order: Order::default(),
-            hits: Vec::new(),
-            total: 0,
-            generation: 0,
-            asking: false,
-            error: None,
+            state: shell::Search::new(id, title, domain),
             thumbs: std::collections::HashMap::new(),
-            open: None,
             downloading: Vec::new(),
             site: None,
         });
@@ -242,27 +201,21 @@ impl Zendo {
         let Some(search) = self.mod_search.as_mut() else {
             return Task::none();
         };
-        if !more {
-            search.generation += 1;
-            search.hits.clear();
+        let ask = if more {
+            let Some(ask) = search.more(adult) else {
+                return Task::none();
+            };
+            ask
+        } else {
             search.thumbs.clear();
             search.downloading.clear();
-            search.total = 0;
-            search.open = None;
-        }
-        search.asking = true;
-        search.error = None;
-        let query = Query {
-            domain: search.domain.clone(),
-            words: search.words.clone(),
-            order: search.order,
-            adult,
-            offset: u32::try_from(search.hits.len()).unwrap_or(u32::MAX),
+            search.restart(adult)
         };
         if !persist {
             return Task::none();
         }
-        let generation = search.generation;
+        let generation = ask.generation;
+        let query = ask.query;
         Task::perform(
             blocking(move || nexus_search::search(&query).map_err(|err| format!("{err:#}"))),
             move |result| Message::NexusSearch(SearchMessage::Found(generation, result)),
@@ -276,13 +229,7 @@ impl Zendo {
             return Task::none();
         };
         if self.nexus_premium() == Some(true) {
-            let link = Link {
-                domain: search.domain.clone(),
-                mod_id,
-                file_id,
-                key: None,
-                expires: None,
-            };
+            let link = search.link(mod_id, file_id);
             let game = search.game.clone();
             self.status = Some(t!("search-downloading"));
             return self.download_nexus_file(&game, link);
@@ -306,10 +253,7 @@ impl Zendo {
         }) else {
             return Task::none();
         };
-        let mut url = nexus::mod_page_url(&search.domain, mod_id, file_id);
-        if file_id.is_some() {
-            url.push_str("&nmm=1");
-        }
+        let url = shell::site_url(&search.domain, mod_id, file_id);
         if let Some(open) = search.site.take() {
             open.close();
         }
@@ -398,24 +342,7 @@ impl Zendo {
         let Some(search) = &self.mod_search else {
             return page;
         };
-        let mut have = HashSet::new();
-        let mut have_files = HashSet::new();
-        for info in self
-            .mods_overview(&search.game)
-            .map(|overview| overview.mods.as_slice())
-            .unwrap_or_default()
-        {
-            match &info.nexus {
-                Some(source) if source.domain == search.domain => {
-                    have.insert(source.mod_id);
-                    have_files.insert((source.mod_id, source.file_id));
-                }
-                Some(_) => {}
-                // Added by hand from an archive Nexus named: its name says
-                // the mod.
-                None => have.extend(nexus::ids_in_name(&info.name).first()),
-            }
-        }
+        let (have, have_files) = shell::have(self.mods_overview(&search.game), &search.domain);
         let sheet = Sheet {
             search,
             have,
@@ -426,50 +353,6 @@ impl Zendo {
         };
         overlay(page, sheet.card())
     }
-}
-
-/// A file Nexus's window downloaded: the mod's file it is, by its name,
-/// with the key; else a mod of its own. The download goes either way.
-fn add_from_site(
-    game: &zendo_core::Game,
-    key: Option<&str>,
-    domain: &str,
-    mod_id: u64,
-    archive: &std::path::Path,
-) -> anyhow::Result<(mods::Added, String)> {
-    // A failed lookup is not "the name carries no ids": the caller says
-    // what went wrong instead of adding the mod without its identity.
-    let identified = match key {
-        Some(key) => nexus::identify(key, domain, archive, Some(mod_id))?,
-        None => None,
-    };
-    if let Some((mod_id, fetched)) = identified {
-        let (added, updated) = mods::add_from_nexus(game, &fetched, domain, mod_id)?;
-        return Ok((added, added_note(updated, &fetched, &game.title)));
-    }
-    let name = archive
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let added = mods::add(game, archive);
-    let _ = std::fs::remove_file(archive);
-    Ok((added?, t!("mods-added", name = name)))
-}
-
-/// The files worth offering, newest first: those the author keeps current.
-fn offered(files: Files) -> Vec<FileInfo> {
-    let mut files: Vec<FileInfo> = files
-        .files
-        .into_iter()
-        .filter(|file| {
-            !matches!(
-                file.category_name.as_deref(),
-                Some("OLD_VERSION" | "ARCHIVED" | "DELETED" | "REMOVED")
-            )
-        })
-        .collect();
-    files.sort_by_key(|file| std::cmp::Reverse(file.uploaded_timestamp));
-    files
 }
 
 /// What the sheet shows, with what it needs from the rest of the window.
@@ -504,7 +387,7 @@ impl<'a> Sheet<'a> {
         let mut chips = row![].spacing(style::SPACE_S).align_y(Alignment::Center);
         for order in Order::ALL {
             chips = chips.push(
-                button(style::button_text(order_name(order)))
+                button(style::button_text(shell::order_name(order)))
                     .padding(style::BUTTON_SMALL)
                     .style(style::chip(search.order == order))
                     .on_press(Message::NexusSearch(SearchMessage::Order(order))),
@@ -587,20 +470,6 @@ impl<'a> Sheet<'a> {
         if hit.adult {
             name = name.push(style::badge(t!("search-adult-badge"), colors().bad));
         }
-        let mut byline = vec![t!("search-by", author = hit.author.as_str())];
-        if let Some(category) = &hit.category {
-            byline.push(category.clone());
-        }
-        if !hit.updated.is_empty() {
-            byline.push(t!("search-updated", date = hit.updated.as_str()));
-        }
-        let mut numbers = vec![
-            t!("search-endorsements", count = count(hit.endorsements)),
-            t!("search-downloads", count = count(hit.downloads)),
-        ];
-        if let Some(bytes) = hit.size {
-            numbers.push(Size::Bytes(bytes).to_string());
-        }
         let open = self
             .search
             .open
@@ -628,9 +497,9 @@ impl<'a> Sheet<'a> {
         );
         let facts = column![
             name.wrap(),
-            text(byline.join(" · ")).size(12).color(colors().dim),
+            text(shell::byline(hit)).size(12).color(colors().dim),
             text(&hit.summary).size(13),
-            text(numbers.join(" · ")).size(12).color(colors().dim),
+            text(shell::numbers(hit)).size(12).color(colors().dim),
         ]
         .spacing(style::SPACE_XS)
         .width(Length::Fill);
@@ -664,16 +533,6 @@ impl<'a> Sheet<'a> {
             FilesState::Got(files) => {
                 let mut list = column![].spacing(style::SPACE_S);
                 for file in files {
-                    let mut facts = Vec::new();
-                    if let Some(version) = file.version.as_deref().filter(|v| !v.is_empty()) {
-                        facts.push(version.to_owned());
-                    }
-                    if let Some(category) = &file.category_name {
-                        facts.push(file_kind(category));
-                    }
-                    if let Some(kb) = file.size_kb {
-                        facts.push(Size::Bytes(kb * 1024).to_string());
-                    }
                     let label = if self.premium {
                         t!("search-download")
                     } else {
@@ -698,7 +557,7 @@ impl<'a> Sheet<'a> {
                     list = list.push(
                         row![
                             text(&file.name).size(14).width(Length::Fill),
-                            text(facts.join(" · ")).size(12).color(colors().dim),
+                            text(shell::file_facts(file)).size(12).color(colors().dim),
                             action,
                         ]
                         .spacing(style::SPACE_M)
@@ -743,67 +602,10 @@ impl<'a> Sheet<'a> {
     }
 }
 
-fn order_name(order: Order) -> String {
-    match order {
-        Order::Endorsed => t!("search-order-endorsed"),
-        Order::Downloaded => t!("search-order-downloaded"),
-        Order::Updated => t!("search-order-updated"),
-    }
-}
-
-/// Nexus's file categories, in words.
-fn file_kind(category: &str) -> String {
-    match category {
-        "MAIN" => t!("search-file-main"),
-        "OPTIONAL" => t!("search-file-optional"),
-        "UPDATE" => t!("search-file-update"),
-        "MISCELLANEOUS" => t!("search-file-misc"),
-        other => other.to_lowercase(),
-    }
-}
-
-/// "950", "12k", "4.5M".
-fn count(n: u64) -> String {
-    match n {
-        0..=999 => n.to_string(),
-        1_000..=999_999 => format!("{}k", n / 1_000),
-        _ => format!("{}.{}M", n / 1_000_000, n % 1_000_000 / 100_000),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn counts_read_short() {
-        assert_eq!(count(950), "950");
-        assert_eq!(count(12_345), "12k");
-        assert_eq!(count(4_560_000), "4.5M");
-    }
-
-    #[test]
-    fn offers_the_current_files_newest_first() {
-        let file = |id: u64, category: &str, at: i64| FileInfo {
-            file_id: id,
-            name: format!("file {id}"),
-            version: None,
-            file_name: String::new(),
-            size_kb: None,
-            category_name: Some(category.into()),
-            uploaded_timestamp: at,
-        };
-        let files = Files {
-            files: vec![
-                file(1, "MAIN", 10),
-                file(2, "OLD_VERSION", 30),
-                file(3, "OPTIONAL", 20),
-            ],
-            file_updates: Vec::new(),
-        };
-        let ids: Vec<u64> = offered(files).iter().map(|file| file.file_id).collect();
-        assert_eq!(ids, [3, 1]);
-    }
+    use zendo_core::nexus_search::Hit;
 
     #[test]
     fn opens_for_a_game_on_nexus_and_closes() {
@@ -814,19 +616,15 @@ mod tests {
             "steam:413150".into(),
         )));
         assert!(zendo.mod_search.is_none());
+        let mut state = shell::Search::new(
+            "steam:413150",
+            "Stardew Valley".into(),
+            "stardewvalley".into(),
+        );
+        let ask = state.restart(false);
         zendo.mod_search = Some(Search {
-            game: "steam:413150".into(),
-            title: "Stardew Valley".into(),
-            domain: "stardewvalley".into(),
-            words: String::new(),
-            order: Order::Endorsed,
-            hits: Vec::new(),
-            total: 0,
-            generation: 1,
-            asking: true,
-            error: None,
+            state,
             thumbs: std::collections::HashMap::new(),
-            open: None,
             downloading: Vec::new(),
             site: None,
         });
@@ -849,11 +647,14 @@ mod tests {
         };
         // An answer to an earlier search is dropped.
         let _ = zendo.update(Message::NexusSearch(SearchMessage::Found(
-            0,
+            ask.generation + 1,
             Ok(found.clone()),
         )));
         assert_eq!(zendo.mod_search.as_ref().unwrap().hits.len(), 0);
-        let _ = zendo.update(Message::NexusSearch(SearchMessage::Found(1, Ok(found))));
+        let _ = zendo.update(Message::NexusSearch(SearchMessage::Found(
+            ask.generation,
+            Ok(found),
+        )));
         let search = zendo.mod_search.as_ref().unwrap();
         assert_eq!(
             (search.hits.len(), search.total, search.asking),

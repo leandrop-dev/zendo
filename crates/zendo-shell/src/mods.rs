@@ -67,6 +67,9 @@ pub enum Work {
     /// Add an archive; the Nexus key, if set, lets one Nexus named be
     /// followed for updates.
     Add(PathBuf, Option<String>),
+    /// Add a file Nexus's window downloaded for a mod: the key, the game's
+    /// name on Nexus and the mod.
+    AddFromSite(PathBuf, Option<String>, String, u64),
 }
 
 /// A [`Work`] for a game.
@@ -399,6 +402,20 @@ impl ModsState {
         self.start(id, t!("mods-unpacking"), work, runnable)
     }
 
+    /// Adds the file Nexus's window downloaded for a mod.
+    pub fn add_from_site(
+        &mut self,
+        id: &str,
+        archive: PathBuf,
+        key: Option<String>,
+        domain: String,
+        mod_id: u64,
+        runnable: bool,
+    ) -> Option<Job> {
+        let work = Work::AddFromSite(archive, key, domain, mod_id);
+        self.start(id, t!("mods-unpacking"), work, runnable)
+    }
+
     /// A job ended: the state it leaves, and what the window does next.
     pub fn done(&mut self, id: &str, result: Result<Outcome, String>) -> Done {
         let mut done = Done::default();
@@ -516,8 +533,44 @@ fn run_inner(work: Work, game: &Game) -> anyhow::Result<Outcome> {
                 };
             return Ok(Outcome::Added(added, note));
         }
+        Work::AddFromSite(archive, key, domain, mod_id) => {
+            let (added, note) = add_from_site(game, key.as_deref(), &domain, mod_id, &archive)?;
+            return Ok(Outcome::Added(added, note));
+        }
     };
     Ok(Outcome::Changed(overview, note))
+}
+
+/// A file Nexus's window downloaded: the mod's file it is, by its name,
+/// with the key; else a mod of its own. The download goes either way.
+///
+/// # Errors
+///
+/// When Nexus could not be asked, or the mod could not be added.
+pub fn add_from_site(
+    game: &Game,
+    key: Option<&str>,
+    domain: &str,
+    mod_id: u64,
+    archive: &Path,
+) -> anyhow::Result<(Added, String)> {
+    // A failed lookup is not "the name carries no ids": the caller says
+    // what went wrong instead of adding the mod without its identity.
+    let identified = match key {
+        Some(key) => nexus::identify(key, domain, archive, Some(mod_id))?,
+        None => None,
+    };
+    if let Some((mod_id, fetched)) = identified {
+        let (added, updated) = mods::add_from_nexus(game, &fetched, domain, mod_id)?;
+        return Ok((added, added_note(updated, &fetched, &game.title)));
+    }
+    let name = archive
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let added = mods::add(game, archive);
+    let _ = std::fs::remove_file(archive);
+    Ok((added?, t!("mods-added", name = name)))
 }
 
 /// What a change to the profiles says.

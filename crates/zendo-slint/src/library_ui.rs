@@ -62,6 +62,8 @@ mod prefix;
 mod protons;
 #[path = "runtimes_ui.rs"]
 mod runtimes;
+#[path = "search_ui.rs"]
+mod search;
 #[path = "settings_ui.rs"]
 mod settings;
 #[path = "steam_ui.rs"]
@@ -246,6 +248,8 @@ struct Glue {
     mods: mods::ModsUiState,
     /// Nexus Mods: the key, links and downloads (`nexus_ui.rs`).
     nexus: nexus::NexusUiState,
+    /// Search Nexus (`search_ui.rs`).
+    search: search::SearchUiState,
     /// The Wine prefix card (`prefix_ui.rs`).
     prefix: prefix::PrefixState,
     /// GOG's changelog and total time played (`gog_ui.rs`).
@@ -368,6 +372,7 @@ impl Glue {
             compat: compat::CompatState::new(persist),
             mods: mods::ModsUiState::new(),
             nexus: nexus::NexusUiState::new(),
+            search: search::SearchUiState::new(),
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
             settings: settings::SettingsState::new(),
@@ -455,6 +460,7 @@ impl Glue {
         self.connect_compat(window);
         self.connect_mods(window);
         self.connect_nexus(window);
+        self.connect_search(window);
         self.connect_prefix(window);
         self.connect_gog(window);
         self.connect_settings(window);
@@ -850,6 +856,7 @@ impl Glue {
             || self.options_open()
             || self.art_open_now()
             || self.nexus_choosing()
+            || self.search_is_open()
         {
             // The sheet takes the keyboard; the pad only closes it.
             if pad == Pad::Back {
@@ -911,6 +918,7 @@ impl Glue {
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
         if self.nexus_back()
+            || self.search_back()
             || self.art_back()
             || self.options_back()
             || self.stay_open()
@@ -964,7 +972,11 @@ impl Glue {
         if self.options_open() {
             return self.options_key(text);
         }
-        if self.form_open() || self.collections_open() || self.nexus_choosing() {
+        if self.form_open()
+            || self.collections_open()
+            || self.nexus_choosing()
+            || self.search_is_open()
+        {
             return false;
         }
         let mut chars = text.chars();

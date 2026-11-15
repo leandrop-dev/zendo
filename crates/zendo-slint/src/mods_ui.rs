@@ -6,9 +6,9 @@
 //! through `Glue::ask`. A part of the Library's glue (`library_ui`).
 //!
 //! The downloads and Update on the card come from `nexus_ui.rs` (item
-//! 52c2a). Search Nexus is item 52c2b, and the installer sheet (Options…, an
-//! archive with a FOMOD installer) is 52c3; their hooks are marked
-//! `// 52c2b:` and `// 52c3:`.
+//! 52c2a) and Search Nexus from `search_ui.rs` (52c2b). The installer sheet
+//! (Options…, an archive with a FOMOD installer) is item 52c3; its hooks are
+//! marked `// 52c3:`.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -285,6 +285,7 @@ impl Glue {
             }
         }
         self.show_game();
+        self.show_search();
     }
 
     /// An archive with a FOMOD installer, whose sheet is item 52c3's: it is
@@ -336,8 +337,23 @@ impl Glue {
         self.show_game();
     }
 
+    /// Adds the file Nexus's window downloaded for a mod of the game.
+    pub(super) fn mods_add_from_site(&self, id: &str, archive: PathBuf, domain: &str, mod_id: u64) {
+        let key = self.nexus_key();
+        let ok = self.mods_runnable(id);
+        let job = self.mods.state.borrow_mut().add_from_site(
+            id,
+            archive,
+            key,
+            domain.to_owned(),
+            mod_id,
+            ok,
+        );
+        self.mods_run(job);
+        self.show_game();
+    }
+
     /// Opens the game's page on Nexus Mods in the browser.
-    // 52c2b: Search Nexus gets its button beside Find mods on Nexus.
     fn mods_find_on_nexus(&self) {
         let Some(id) = self.open.borrow().clone() else {
             return;

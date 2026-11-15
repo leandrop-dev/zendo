@@ -84,14 +84,16 @@ list and details views, OptiScaler and recompiled games are on hold.
   Nexus; its state and words are `zendo_shell::mods`, shared with Iced), 52c2
   is sliced again [firm]: 52c2a is built (the Nexus key and link handler in
   Settings, `nxm://` links and the game chooser, downloads with Stop and
-  Update on the Mods card, the update check; shared as `zendo_shell::nexus`),
-  and 52c2b (Search Nexus) and 52c3 (the FOMOD sheet and the mods card on
-  Downloads) are next. The Stats page shows its name. Run it as
+  Update on the Mods card, the update check; shared as `zendo_shell::nexus`)
+  and 52c2b is built too (Search Nexus: the sheet with results, pictures,
+  file lists, Page on Nexus and Get on Nexus; shared as
+  `zendo_shell::nexus_search`); 52c3 (the FOMOD sheet and the mods card on
+  Downloads) is next. The Stats page shows its name. Run it as
   `zendo-slint`.
 
 ## Next
 
-Items 52c2b, 52c3, 53 and 54, the port: `docs/backlog.md` has them, and what
+Items 52c3, 53 and 54, the port: `docs/backlog.md` has them, and what
 is on hold.
 
 ## Direction [firm]

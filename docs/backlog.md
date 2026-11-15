@@ -72,10 +72,11 @@ to `zendo-core` when that page is ported. Ask before building any other page
   chooser, downloads with progress and Stop, Update on a mod and the update
   check after a read; the state, transitions, workers and words are
   `zendo_shell::nexus`, shared with Iced; the Slint side is `ui/nexus.slint`
-  and `nexus_ui.rs`). **52c2b**: Search Nexus (Iced `app/nexus_search.rs`:
-  the sheet, results, file lists, the site window, `NexusAdult`); its hook is
-  marked `// 52c2b:` in `mods_ui.rs`, and `download_nexus_file` and
-  `nexus_premium` are what Iced's search already calls. **52c3**: the FOMOD
+  and `nexus_ui.rs`). **52c2b built 2026-11-15**: Search Nexus (the shared
+  state and words are `zendo_shell::nexus_search`, with Iced switched first;
+  the Slint sheet is `ui/nexus_search.slint` and `search_ui.rs`; Page on
+  Nexus, Get on Nexus and a Premium Download were not seen on screen).
+  **52c3**: the FOMOD
   installer sheet (Iced `app/installer.rs`, opened from a mod's install;
   moved here from 51b; Options… on a mod; the slot for a waiting installer;
   remove the string `mods-installer-not-yet`) and the mods' card on

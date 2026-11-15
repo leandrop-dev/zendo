@@ -63,6 +63,8 @@ pub(super) enum Setting {
     /// Zendo's Steam sign-in, as the keyring keeps it (`Session::to_text`).
     SteamSession(Option<String>),
     /// The Nexus Mods key; `then` is what the page says once it is written.
+    /// Whether Nexus's adult mods are searched.
+    NexusAdult(bool),
     NexusKey {
         key: Option<String>,
         then: zendo_shell::nexus::Then,
@@ -97,6 +99,7 @@ impl Setting {
             Self::GogGalaxy(on) => config.gog_galaxy = *on,
             Self::SteamSession(session) => config.steam_session.clone_from(session),
             Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
+            Self::NexusAdult(on) => config.nexus_adult = *on,
         }
     }
 }
@@ -506,7 +509,8 @@ impl Glue {
             | Setting::Theme(_)
             | Setting::Opaque(_)
             | Setting::GogPlaytime(_)
-            | Setting::GogGalaxy(_) => {}
+            | Setting::GogGalaxy(_)
+            | Setting::NexusAdult(_) => {}
         }
         self.show_settings();
     }

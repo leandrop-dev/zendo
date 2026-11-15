@@ -19,6 +19,7 @@ pub mod launch_options;
 pub mod links;
 pub mod mods;
 pub mod nexus;
+pub mod nexus_search;
 pub mod open;
 pub mod presence;
 pub mod queue;

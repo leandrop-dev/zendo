@@ -1,0 +1,324 @@
+// Search Nexus, over the window: a field and the order to search in, the mods
+// found a page at a time with their pictures, and each mod's files when it
+// is opened. Rust (src/search_ui.rs) holds the state and fills `SearchData`;
+// the rows are flat (a mod, a file of it, a line about its files), so a row
+// is drawn from its kind and the callbacks take the row's index.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton, ChipButton, RowButton, TextField } from "components.slint";
+import { ChipData } from "library.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct SearchRow {
+    // 0 a mod found, 1 one of its files, 2 a line about its files.
+    kind: int,
+    // A mod's name, a file's name, or the line's words.
+    name: string,
+    version: string,
+    byline: string,
+    summary: string,
+    numbers: string,
+    // "In your mods" / "Adult" marks.
+    have: string,
+    adult: string,
+    thumb: image,
+    thumb-ready: bool,
+    // Files / Hide files; empty when Nexus cannot be asked for them.
+    files-label: string,
+    page-label: string,
+    // A file: its facts, its button (empty when it is in the mods already),
+    // and what stands in the button's place then.
+    file-facts: string,
+    file-action: string,
+    file-have: string,
+    // A line of kind 2 is a failure.
+    bad: bool,
+}
+
+export global SearchData {
+    in-out property <bool> open;
+    in property <string> title;
+    in-out property <string> words;
+    in property <[ChipData]> orders;
+    in property <bool> adult;
+    // Why searching is limited (no key, no Premium); empty when it is not.
+    in property <string> limit;
+    in property <[SearchRow]> rows;
+    in property <bool> more;
+    in property <bool> asking;
+    in property <string> footer;
+    in property <bool> footer-bad;
+    // Rust counts this up to put the keyboard in the field again.
+    in property <int> focus-tick;
+
+    callback close();
+    callback search();
+    callback words-edited(string);
+    callback order(int);
+    callback toggle-adult();
+    callback show-more();
+    callback files(int);
+    callback page(int);
+    callback download(int);
+}
+
+// A mod found: its picture, facts and buttons.
+component FoundMod inherits Rectangle {
+    in property <SearchRow> item;
+    in property <int> index;
+    // The room for the facts: the row, less the picture, the buttons and
+    // the gaps.
+    property <length> facts-width: root.width - 2 * Space.m - 160px - 150px - 2 * Space.l;
+    background: Colors.surface;
+    border-width: 1px;
+    border-color: Colors.line;
+    height: body.preferred-height + 2 * Space.m;
+    body := HorizontalLayout {
+        x: Space.m;
+        y: Space.m;
+        width: parent.width - 2 * Space.m;
+        spacing: Space.l;
+        alignment: start;
+        Rectangle {
+            width: 160px;
+            height: 90px;
+            background: Colors.raised;
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.item.thumb;
+                image-fit: cover;
+                visible: root.item.thumb-ready;
+            }
+        }
+        VerticalLayout {
+            width: root.facts-width;
+            spacing: Space.xs;
+            alignment: start;
+            HorizontalLayout {
+                spacing: Space.s;
+                alignment: start;
+                Text {
+                    text: root.item.name;
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: Colors.foreground;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.item.version;
+                    font-size: 13px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.item.have;
+                    font-size: 12px;
+                    color: Colors.good;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.item.adult;
+                    font-size: 12px;
+                    color: Colors.bad;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                width: parent.width;
+                text: root.item.byline;
+                font-size: 12px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            Text {
+                width: parent.width;
+                text: root.item.summary;
+                font-size: 13px;
+                color: Colors.foreground;
+                wrap: word-wrap;
+            }
+            Text {
+                width: parent.width;
+                text: root.item.numbers;
+                font-size: 12px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            width: 150px;
+            spacing: Space.s;
+            alignment: start;
+            RowButton {
+                label: root.item.files-label;
+                clicked => { SearchData.files(root.index); }
+            }
+            RowButton {
+                label: root.item.page-label;
+                clicked => { SearchData.page(root.index); }
+            }
+        }
+    }
+}
+
+// One of a mod's files, under it.
+component FoundFile inherits HorizontalLayout {
+    in property <SearchRow> item;
+    in property <int> index;
+    spacing: Space.m;
+    padding-left: 176px;
+    height: 32px;
+    Text {
+        horizontal-stretch: 1;
+        text: root.item.name;
+        font-size: 14px;
+        color: Colors.foreground;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        text: root.item.file-facts;
+        font-size: 12px;
+        color: Colors.dim;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.item.file-have;
+        font-size: 13px;
+        color: Colors.good;
+        vertical-alignment: center;
+    }
+    RowButton {
+        label: root.item.file-action;
+        primary: true;
+        clicked => { SearchData.download(root.index); }
+    }
+}
+
+export component SearchSheet inherits Rectangle {
+    background: #000000.with-alpha(0.6);
+    // Nothing behind the sheet hears a click; one outside the card closes it.
+    TouchArea {
+        clicked => { SearchData.close(); }
+    }
+    init => { field.focus-field(); }
+    property <int> tick: SearchData.focus-tick;
+    changed tick => { field.focus-field(); }
+
+    card := Rectangle {
+        width: min(980px, root.width - 2 * Space.xl);
+        // Window-tall from the start, so it stays put as results come.
+        height: root.height - 2 * Space.xl;
+        x: (root.width - self.width) / 2;
+        y: Space.xl;
+        background: Colors.background;
+        border-width: 1px;
+        border-color: Colors.line;
+        // Clicks inside the card stay in it.
+        TouchArea { }
+        VerticalLayout {
+            padding: Space.xl;
+            spacing: Space.l;
+            Text {
+                text: SearchData.title.to-uppercase();
+                font-size: 18px;
+                font-weight: 700;
+                color: Colors.foreground;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                spacing: Space.m;
+                field := TextField {
+                    horizontal-stretch: 1;
+                    text <=> SearchData.words;
+                    placeholder: Tr.t("search-placeholder");
+                    edited(typed) => { SearchData.words-edited(typed); }
+                    accepted => { SearchData.search(); }
+                }
+                ActionButton {
+                    label: Tr.t("art-search");
+                    horizontal-stretch: 0;
+                    clicked => { SearchData.search(); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.s;
+                alignment: start;
+                for chip in SearchData.orders: ChipButton {
+                    label: chip.label;
+                    chosen: chip.chosen;
+                    clicked => { SearchData.order(chip.id); }
+                }
+                Rectangle { width: Space.l; }
+                ChipButton {
+                    label: Tr.t("search-adult");
+                    chosen: SearchData.adult;
+                    clicked => { SearchData.toggle-adult(); }
+                }
+            }
+            Text {
+                height: SearchData.limit == "" ? 0px : self.preferred-height;
+                // The layout's padding is inside its width.
+                width: parent.width - 2 * Space.xl;
+                text: SearchData.limit;
+                font-size: 13px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            ScrollView {
+                vertical-stretch: 1;
+                list := VerticalLayout {
+                    // Room at the right for the scrollbar.
+                    x: 0px;
+                    width: parent.width - 14px;
+                    alignment: start;
+                    spacing: Space.s;
+                    for row[index] in SearchData.rows: VerticalLayout {
+                        if row.kind == 0: FoundMod {
+                            item: row;
+                            index: index;
+                        }
+                        if row.kind == 1: FoundFile {
+                            item: row;
+                            index: index;
+                        }
+                        if row.kind == 2: Text {
+                            x: 176px;
+                            width: parent.width - 176px;
+                            text: row.name;
+                            font-size: 13px;
+                            color: row.bad ? Colors.bad : Colors.dim;
+                            wrap: word-wrap;
+                        }
+                    }
+                    if SearchData.more: HorizontalLayout {
+                        alignment: start;
+                        ActionButton {
+                            label: Tr.t("art-show-more");
+                            enabled: !SearchData.asking;
+                            horizontal-stretch: 0;
+                            clicked => { SearchData.show-more(); }
+                        }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.m;
+                Text {
+                    horizontal-stretch: 1;
+                    text: SearchData.footer;
+                    font-size: 13px;
+                    color: SearchData.footer-bad ? Colors.bad : Colors.dim;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                ActionButton {
+                    label: Tr.t("close");
+                    horizontal-stretch: 0;
+                    clicked => { SearchData.close(); }
+                }
+            }
+        }
+    }
+}

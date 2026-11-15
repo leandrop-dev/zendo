@@ -411,6 +411,11 @@ component ModsCard inherits Card {
             spacing: Space.s;
             alignment: end;
             if ModsData.nexus: ActionButton {
+                label: Tr.t("mods-search-nexus");
+                small: true;
+                clicked => { ModsData.search-nexus(); }
+            }
+            if ModsData.nexus: ActionButton {
                 label: Tr.t("mods-find-on-nexus");
                 small: true;
                 clicked => { ModsData.find-nexus(); }
