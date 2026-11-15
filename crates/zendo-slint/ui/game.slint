@@ -251,6 +251,8 @@ export global GameData {
     // The Launch options button: for the games Zendo starts itself.
     in property <bool> launch-options-shown;
     callback launch-options();
+    // Change cover (0) or Change backdrop (1): opens the art picker.
+    callback change-art(int);
     callback show-steam-app();
     callback more-achievements();
     callback retry();
@@ -585,7 +587,7 @@ export component GamePage inherits Rectangle {
                 header := Rectangle {
                     // Above what follows, so a pill's words draw over it.
                     z: 1;
-                    height: 360px;
+                    height: 400px;
                     clip: true;
                     if GameData.has-backdrop: Image {
                         width: 100%;
@@ -597,6 +599,10 @@ export component GamePage inherits Rectangle {
                     HorizontalLayout {
                         padding: Space.l;
                         spacing: Space.xl;
+                        VerticalLayout {
+                            width: 200px;
+                            alignment: start;
+                            spacing: Space.s;
                         Rectangle {
                             width: 200px;
                             height: 300px;
@@ -618,6 +624,19 @@ export component GamePage inherits Rectangle {
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                                 color: Colors.foreground;
+                            }
+                        }
+                            ActionButton {
+                                label: Tr.t("game-change-cover");
+                                small: true;
+                                width: 200px;
+                                clicked => { GameData.change-art(0); }
+                            }
+                            ActionButton {
+                                label: Tr.t("game-change-backdrop");
+                                small: true;
+                                width: 200px;
+                                clicked => { GameData.change-art(1); }
                             }
                         }
                         VerticalLayout {

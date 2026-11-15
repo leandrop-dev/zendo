@@ -380,6 +380,13 @@ impl StoreBrowser {
 
     /// A game's image was downloaded. Only a cover changes a card.
     pub fn set_image(&mut self, id: &str, kind: Kind, path: &Path) -> Outcome {
+        self.put_image(id, kind, Some(path))
+    }
+
+    /// A game's image is now this one, or none: the art picker's "Use the
+    /// automatic one" puts back the one found by itself, which may not be
+    /// there.
+    pub fn put_image(&mut self, id: &str, kind: Kind, path: Option<&Path>) -> Outcome {
         let mut found = false;
         // Both copies of the list: the flat one the page reads, and the
         // stores' own, which is kept.
@@ -391,8 +398,8 @@ impl StoreBrowser {
         for game in both {
             found = true;
             match kind {
-                Kind::Cover => game.cover = Some(path.to_path_buf()),
-                Kind::Hero => game.hero = Some(path.to_path_buf()),
+                Kind::Cover => game.cover = path.map(Path::to_path_buf),
+                Kind::Hero => game.hero = path.map(Path::to_path_buf),
             }
         }
         match self.place_of(id).filter(|_| found && kind == Kind::Cover) {

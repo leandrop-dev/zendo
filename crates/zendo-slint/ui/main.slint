@@ -10,6 +10,7 @@ import { StorePage, StoreData } from "store.slint";
 import { DownloadsPage, DownloadsData, JobRow, SteamRow } from "downloads.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
 import { OptionsSheet, OptionsData, OptSwitch } from "launch_options.slint";
+import { ArtSheet, ArtData, ArtThumb } from "artwork.slint";
 import { CollectionsSheet, CollectionsData, CollRow } from "collections.slint";
 import { SettingsPage, SettingsData, SetRow, Bar } from "settings.slint";
 import { AboutPage, AboutData } from "about.slint";
@@ -17,7 +18,7 @@ import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, AccountsData, AccountCard, SteamCardData }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -150,7 +151,8 @@ export component MainWindow inherits Window {
                     overflow: elide;
                 }
                 Text {
-                    text: OptionsData.open ? Tr.t("hints-sheet")
+                    text: ArtData.open ? Tr.t("hints-art")
+                        : OptionsData.open ? Tr.t("hints-sheet")
                         : root.page == Page.library ? (GameData.open ? Tr.t("hints-game") : LibraryData.hints)
                         : root.page == Page.store ? (GameData.open ? Tr.t("hints-owned") : Tr.t("hints-store"))
                         : root.page == Page.downloads && DownloadsData.asking ? Tr.t("hints-closing")
@@ -170,6 +172,10 @@ export component MainWindow inherits Window {
             height: 100%;
         }
         if OptionsData.open: OptionsSheet {
+            width: 100%;
+            height: 100%;
+        }
+        if ArtData.open: ArtSheet {
             width: 100%;
             height: 100%;
         }

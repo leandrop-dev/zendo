@@ -200,16 +200,25 @@ impl Covers {
 /// Reads and decodes a cover, made smaller when it is bigger than a card
 /// needs.
 fn decode(path: &Path, max: u32) -> Decoded {
-    let mut decoded = image::open(path).ok()?;
+    Some(shrink(image::open(path).ok()?, max))
+}
+
+/// The same for an image already in memory: a thumbnail the art picker
+/// downloaded. Meant for a worker thread, like [`decode`].
+pub fn decode_bytes(bytes: &[u8], max: u32) -> Decoded {
+    Some(shrink(image::load_from_memory(bytes).ok()?, max))
+}
+
+fn shrink(mut decoded: image::DynamicImage, max: u32) -> SharedPixelBuffer<Rgba8Pixel> {
     if decoded.width() > max {
         decoded = decoded.resize(max, u32::MAX, image::imageops::FilterType::Triangle);
     }
     let pixels = decoded.into_rgba8();
-    Some(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+    SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
         pixels.as_raw(),
         pixels.width(),
         pixels.height(),
-    ))
+    )
 }
 
 #[cfg(test)]

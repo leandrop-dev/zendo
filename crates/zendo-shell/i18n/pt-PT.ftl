@@ -146,6 +146,7 @@ status-unpinned = { $title } deixou de ser um favorito
 hints-library = Enter abrir · Tab ordenar · Ctrl+P favorito · Ctrl+Space marcar · Del ocultar · Ctrl+H ocultos · F11 Modo de Jogo
 hints-selection = Enter abre · Esc limpa as marcas · F11 Modo de Jogo
 hints-sheet = Enter guardar · Esc cancelar
+hints-art = Enter pesquisar · Esc fechar
 hints-game = Enter jogar · Esc voltar · Ctrl+P favorito · Del ocultar · F11 Modo de Jogo
 hints-store = Enter abrir · escreva para pesquisar · Esc limpar · F11 Modo de Jogo
 hints-owned = Enter instalar ou abrir · Esc voltar · F11 Modo de Jogo

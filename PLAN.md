@@ -77,13 +77,14 @@ list and details views, OptiScaler and recompiled games are on hold.
   Repair, Move and Uninstall, and the DLC card's Install and Uninstall).
   Item 52 is sliced [firm]: 52a is built (the Launch options sheet with
   gamescope, whose form is `zendo_shell::launch_options`, shared with Iced),
-  and 52b (the artwork chooser) and 52c (Mods, Nexus, Nexus search, the FOMOD
-  sheet, the mods card on Downloads) are next. The
+  52b is built (the artwork chooser: Change cover and Change backdrop, whose
+  picker is `zendo_shell::artwork`, shared with Iced), and 52c (Mods, Nexus,
+  Nexus search, the FOMOD sheet, the mods card on Downloads) is next. The
   Stats page shows its name. Run it as `zendo-slint`.
 
 ## Next
 
-Items 52b, 52c, 53 and 54, the port: `docs/backlog.md` has them, and what is
+Items 52c, 53 and 54, the port: `docs/backlog.md` has them, and what is
 on hold.
 
 ## Direction [firm]

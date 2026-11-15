@@ -4638,3 +4638,91 @@ card on Downloads).
   never written); `ydotoold` and the sockets were stopped and removed, and
   the clipboard, empty before, was cleared again (it held the pasted path
   once after the Browse check and was cleared at the end).
+
+## Item 52b, the artwork chooser in Slint (2026-11-15)
+
+The second slice of item 52: Change cover and Change backdrop on a game's page.
+Slint already drew the backdrop (item 49), so Iced's `backdrops.rs` needed no
+port; what was missing was the two buttons, the sheet and its glue.
+
+- **The picker is shared, as the launch options form is.** `zendo_shell::artwork`
+  holds `Art` (the picker and a generation counter that lives across opens),
+  `Picker`, `Effect` (`Search`, `List`, `Thumbs`, `Choose`), `Automatic`, and
+  the words' helpers (`game_label`, `thumb_about`, `kind_name`). Each handler
+  changes the state and returns the effect the window runs; with `persist`
+  false the state changes the same and no effect comes back, and
+  `covers::chosen` is not read. The counter is `Art`'s, not the picker's, so a
+  late answer for a closed picker cannot match the next one (a test opens,
+  closes and reopens). `needs_key` is a flag now; Iced compared the note with
+  the translated words. Iced was switched first: its `artwork.rs` keeps the
+  sheet, the `thumbnails` stream (which `nexus_search.rs` also uses) and the
+  thumbnail handles, and maps each `Effect` to a `Task`; its one test moved to
+  the shell (5 tests there) and a thin one stayed (Play does nothing under the
+  picker, Escape closes it).
+- **Slint, `ui/artwork.slint` and `artwork_ui.rs`.** Two small buttons under
+  the cover on the installed and the store game's page (`GameData.change-art`;
+  the header grew from 360 to 400 px). The sheet is a child of the window's
+  `FocusScope`: Cover and Wide image chips, the search field (it takes the
+  keyboard on open) and Search, the games found as chips (the chip id is the
+  index in the list), the images in a scrolling `FlexboxLayout` of flat
+  `ArtThumb` rows (120 by 180 for covers, 288 by 93 for wide images), Show
+  more, and a footer with the status or note, Open Settings (only when the
+  note asks for a key), the Use the automatic one button (only when the game
+  has one chosen by hand) and Close. What is under the pointer shows as a line
+  above the footer. Searches and lists run on a thread each; thumbnails on
+  four threads, decoded on the worker (`covers::decode_bytes`) and put in their
+  row with `set_row_data`; a new search or list sets a stop flag the workers
+  read before each download, and a later page shares the flag. Choosing
+  downloads on a thread, then `store_image`, the library's `set_image` and
+  `show_game`; the sheet closes only when it is still that game's. Use the
+  automatic one deletes the choice, puts `covers::cached` (which may be none)
+  back on the store's copies through the new `StoreBrowser::put_image`, and for
+  a library game says the note through `after_scan` and rescans. Open Settings
+  closes the sheet and opens Settings on the Keys group. Escape, Close and a
+  click outside all go through `art_back`, first in `back()`'s order; with the
+  sheet open Enter searches and every other key and the pad do nothing.
+- **Checked** (2026-11-15, with the user at the PC; a throwaway home with no
+  session bus, four seeded desktop games with art and six Epic store games
+  from the real cache; the user typed their own SteamGridDB key into Settings
+  → Keys of that run, and the search, the images and the thumbnails went to
+  the real SteamGridDB): 150 Iced, 55 shell and 126 Slint tests green, clippy
+  and fmt clean. On screen, with stills: both buttons render; with no key the
+  sheet says so and Open Settings lands on the Keys group; with the key,
+  search by Enter and by the Search button, the games found as chips, a
+  second chip (it lists that game's images), thumbnails filling in, the
+  hover line, a cover chosen (page and footer note change, and the grid card
+  after Escape), a second cover chosen in a row (one file left in
+  `covers/chosen/cover`), Wide image chosen (the backdrop changed), Use the
+  automatic wide image and Use the automatic cover (the seeded pictures came
+  back, the chosen folders were empty, the notes said so), the Wide image and
+  Cover tabs, Show more on Portal 2 (a second page joined the 50 images and
+  its thumbnails filled in), Close, Escape on the sheet (the page stayed) then
+  Escape again (the Library), a click outside (closed). After a click outside,
+  Close and Escape, and after a choice on a store game, Escape on the page
+  went back, so the page had the keyboard; that was not tried after Use the
+  automatic one, a choice on a library game or Open Settings. A store
+  game's page (Absolute Drift): the sheet opened on its title, a cover was
+  chosen (page and store grid card changed) and Use the automatic cover put
+  the seeded one back. Iced's own window (same home): the sheet opened,
+  searched through the shared picker and Close closed it.
+- **Found on screen**: the line under the pointer was drawn only while it had
+  text, so the sheet's footer moved by a line when the pointer came and went
+  and a click on Show more landed where the button had been; the line now has a
+  fixed height. Search empties the list, the card shrinks and re-centres: a
+  click aimed at the tall card then hit outside it and closed the sheet (take a
+  still between a search and the next click).
+- **Not done**: Change backdrop on a store game's page (the same callback was
+  clicked on library games); pt-PT; a light KDE scheme; the pad; Iced's sheet
+  beyond opening and closing it (its choose and automatic paths were not
+  clicked after the refactor, only its test); a failed save on screen (a glue
+  test covers it).
+- **Side effects**: the scratch home, with the user's key in its `config.toml`,
+  was deleted afterwards; `ydotoold` and its socket were stopped and removed;
+  no `xdg-open` was called; nothing in the user's own files was written (the
+  real cache was only read, to seed the home). The seeded store games' covers
+  and the pictures chosen came from SteamGridDB over the network.
+- **Check recipe**: window at 596,115, screen = still + (586, 105). Change
+  cover is at screen (739, 601) and Change backdrop at (739, 628) on a game's
+  page; the library's first card at (754, 441). With results the sheet is
+  window-tall (tabs at y 204, Close at (1710, 938)); with none it is short and
+  centred, so take a still before each click.

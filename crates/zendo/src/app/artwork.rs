@@ -2,6 +2,9 @@
 //! searches `SteamGridDB` for the game's title and shows the covers, or the
 //! wide images, of the game chosen; a click makes one the game's own,
 //! before Steam's and the stores'. "Use the automatic one" goes back.
+//!
+//! The rules are `zendo_shell::artwork`, shared with the Slint window; this
+//! draws the sheet, runs its effects as tasks and keeps the thumbnails.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,39 +18,31 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Length, Task};
 use zendo_core::covers::{self, Kind};
-use zendo_core::steamgriddb::{self, Found, Page as ImagePage};
+use zendo_core::steamgriddb::{self, Found};
+use zendo_shell::artwork::{self as shared, Art, Effect, GAMES_SHOWN, Picker, WORKERS};
 
 use super::launch_options::overlay;
 use super::style::{self, colors};
 use super::{Message, Page, Zendo, blocking};
 use crate::i18n::t;
 
-/// Thumbnails downloaded at once.
-const WORKERS: usize = 4;
-/// Games found shown to choose from.
-const GAMES_SHOWN: usize = 8;
-
-/// The picker, open over a game's page.
-pub struct Picker {
-    id: String,
-    title: String,
-    kind: Kind,
-    query: String,
-    games: Vec<Found>,
-    game: Option<u64>,
-    images: Vec<steamgriddb::Image>,
+/// The picker and the thumbnails it shows.
+pub struct Pictures {
+    art: Art,
     thumbs: HashMap<u64, image::Handle>,
-    page: u32,
-    more: bool,
-    busy: Option<String>,
-    note: Option<String>,
-    /// Whether the game has an image of this kind chosen by hand.
-    chosen: bool,
-    /// Bumped with each new search or list, so late answers are dropped.
-    generation: u64,
     /// The thumbnails being downloaded, a page each; dropping them stops
     /// them.
     downloading: Vec<iced::task::Handle>,
+}
+
+impl Pictures {
+    pub fn new(persist: bool) -> Self {
+        Self {
+            art: Art::new(persist),
+            thumbs: HashMap::new(),
+            downloading: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +56,7 @@ pub enum ArtMessage {
     Search,
     Found(u64, Result<Vec<Found>, String>),
     Game(u64),
-    Listed(u64, Result<ImagePage, String>),
+    Listed(u64, Result<steamgriddb::Page, String>),
     More,
     Thumb(u64, u64, Option<Vec<u8>>),
     Choose(u64),
@@ -71,269 +66,152 @@ pub enum ArtMessage {
     Close,
 }
 
-/// The kind, as the messages choose their words by: `cover` or `hero`.
-fn kind_name(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Cover => "cover",
-        Kind::Hero => "hero",
-    }
-}
-
 impl Zendo {
     pub(super) fn update_art(&mut self, message: ArtMessage) -> Task<Message> {
+        self.pictures.art.persist = self.persist;
         if let ArtMessage::Open(id) = message {
-            return self.open_picker(id, Kind::Cover);
+            return self.open_picker(&id, Kind::Cover);
         }
         if let ArtMessage::OpenHero(id) = message {
-            return self.open_picker(id, Kind::Hero);
+            return self.open_picker(&id, Kind::Hero);
         }
         if let ArtMessage::Chosen(id, kind, result) = message {
             return self.art_chosen(&id, kind, result);
         }
-        let Some(picker) = self.picker.as_mut() else {
+        if self.pictures.art.picker.is_none() {
             return Task::none();
-        };
-        match message {
-            ArtMessage::Kind(kind) if kind != picker.kind => {
-                picker.kind = kind;
-                picker.chosen = self.persist && covers::chosen(&picker.id, kind).is_some();
-                if let Some(game) = picker.game {
-                    return self.list_images(game, 0);
-                }
+        }
+        let art = &mut self.pictures.art;
+        let effect = match message {
+            ArtMessage::Kind(kind) => art.set_kind(kind),
+            ArtMessage::Query(query) => {
+                art.set_query(query);
+                None
             }
-            ArtMessage::Query(query) => picker.query = query,
-            ArtMessage::Search => return self.search_art(None),
-            ArtMessage::Found(generation, result) if generation == picker.generation => {
-                picker.busy = None;
-                match result {
-                    Ok(games) if games.is_empty() => {
-                        picker.games.clear();
-                        picker.note = Some(t!("art-no-game", query = picker.query.trim()));
-                    }
-                    Ok(games) => {
-                        let first = games[0].id;
-                        picker.games = games;
-                        return self.list_images(first, 0);
-                    }
-                    Err(err) => picker.note = Some(err),
-                }
+            ArtMessage::Search => art.search_typed(),
+            ArtMessage::Found(generation, result) => art.found(generation, result),
+            ArtMessage::Game(game) => art.pick_game(game),
+            ArtMessage::More => art.more(),
+            ArtMessage::Listed(generation, result) => art.listed(generation, result),
+            ArtMessage::Thumb(generation, id, Some(bytes)) if art.wants(generation) => {
+                self.pictures
+                    .thumbs
+                    .insert(id, image::Handle::from_bytes(bytes));
+                None
             }
-            ArtMessage::Game(game) if picker.game != Some(game) => {
-                return self.list_images(game, 0);
-            }
-            ArtMessage::More if picker.more && picker.busy.is_none() => {
-                if let Some(game) = picker.game {
-                    let page = picker.page + 1;
-                    return self.list_images(game, page);
-                }
-            }
-            ArtMessage::Listed(generation, result) if generation == picker.generation => {
-                picker.busy = None;
-                match result {
-                    Ok(page) => {
-                        picker.more = page.more;
-                        let wanted: Vec<(u64, String)> = page
-                            .images
-                            .iter()
-                            .map(|image| (image.id, image.thumb.clone()))
-                            .collect();
-                        picker.images.extend(page.images);
-                        if picker.images.is_empty() {
-                            picker.note = Some(t!("art-no-images", kind = kind_name(picker.kind)));
-                        }
-                        return self.download_thumbs(wanted);
-                    }
-                    Err(err) => picker.note = Some(err),
-                }
-            }
-            ArtMessage::Thumb(generation, id, Some(bytes)) if generation == picker.generation => {
-                picker.thumbs.insert(id, image::Handle::from_bytes(bytes));
-            }
-            ArtMessage::Choose(image) if picker.busy.is_none() => {
-                return self.choose_art(image);
-            }
+            ArtMessage::Choose(image) => art.choose(image),
             ArtMessage::Automatic => return self.automatic_art(),
             ArtMessage::Settings => {
-                self.picker = None;
+                art.close();
                 // The key is what the picker is asking for.
                 self.settings_group = super::settings::Group::Keys;
                 return self.navigate(Page::Settings);
             }
-            ArtMessage::Close => self.picker = None,
-            _ => {}
-        }
-        Task::none()
+            ArtMessage::Close => {
+                art.close();
+                None
+            }
+            _ => None,
+        };
+        self.run_art(effect)
     }
 
-    fn open_picker(&mut self, id: String, kind: Kind) -> Task<Message> {
-        let title = match (self.game(&id), self.store.owned(&id)) {
+    fn open_picker(&mut self, id: &str, kind: Kind) -> Task<Message> {
+        let title = match (self.game(id), self.store.owned(id)) {
             (Some(game), _) => game.title.clone(),
             (None, Some(owned)) => owned.title.clone(),
             (None, None) => return Task::none(),
         };
-        let chosen = self.persist && covers::chosen(&id, kind).is_some();
-        let steam = id.strip_prefix("steam:").map(str::to_owned);
-        self.picker = Some(Picker {
-            id,
-            query: title.clone(),
-            title,
-            kind,
-            games: Vec::new(),
-            game: None,
-            images: Vec::new(),
-            thumbs: HashMap::new(),
-            page: 0,
-            more: false,
-            busy: None,
-            note: None,
-            chosen,
-            generation: 0,
-            downloading: Vec::new(),
-        });
-        if self.config.steamgriddb_key.is_none() {
-            if let Some(picker) = self.picker.as_mut() {
-                picker.note = Some(t!("art-needs-key"));
+        let key = self.config.steamgriddb_key.clone();
+        self.pictures.thumbs.clear();
+        self.pictures.downloading.clear();
+        let effect = self.pictures.art.open(id, &title, kind, key);
+        self.run_art(effect)
+    }
+
+    /// Starts what the picker asked for.
+    fn run_art(&mut self, effect: Option<Effect>) -> Task<Message> {
+        match effect {
+            None => Task::none(),
+            Some(Effect::Search {
+                generation,
+                key,
+                query,
+                steam,
+            }) => {
+                self.pictures.downloading.clear();
+                self.pictures.thumbs.clear();
+                Task::perform(
+                    blocking(move || {
+                        let mut found = Vec::new();
+                        if let Some(app) = steam
+                            && let Some(game) = steamgriddb::steam_game(&key, &app)?
+                        {
+                            found.push(game);
+                        }
+                        for game in steamgriddb::search(&key, &query)? {
+                            if !found.iter().any(|kept: &Found| kept.id == game.id) {
+                                found.push(game);
+                            }
+                        }
+                        Ok(found)
+                    }),
+                    move |result: anyhow::Result<Vec<Found>>| {
+                        Message::Art(ArtMessage::Found(
+                            generation,
+                            result.map_err(|err| format!("{err:#}")),
+                        ))
+                    },
+                )
             }
-            return Task::none();
-        }
-        self.search_art(steam)
-    }
-
-    /// Searches by the title typed; a Steam game's own entry comes first.
-    fn search_art(&mut self, steam: Option<String>) -> Task<Message> {
-        let key = self.config.steamgriddb_key.clone();
-        let Some(picker) = self.picker.as_mut() else {
-            return Task::none();
-        };
-        let Some(key) = key else {
-            return Task::none();
-        };
-        picker.generation += 1;
-        picker.downloading.clear();
-        picker.games.clear();
-        picker.game = None;
-        picker.images.clear();
-        picker.thumbs.clear();
-        picker.note = None;
-        picker.busy = Some(t!("art-searching"));
-        if !self.persist {
-            return Task::none();
-        }
-        let generation = picker.generation;
-        let query = picker.query.clone();
-        Task::perform(
-            blocking(move || {
-                let mut found = Vec::new();
-                if let Some(app) = steam
-                    && let Some(game) = steamgriddb::steam_game(&key, &app)?
-                {
-                    found.push(game);
+            Some(Effect::List {
+                generation,
+                key,
+                game,
+                kind,
+                page,
+            }) => {
+                if page == 0 {
+                    self.pictures.downloading.clear();
+                    self.pictures.thumbs.clear();
                 }
-                for game in steamgriddb::search(&key, &query)? {
-                    if !found.iter().any(|kept: &Found| kept.id == game.id) {
-                        found.push(game);
-                    }
-                }
-                Ok(found)
-            }),
-            move |result: anyhow::Result<Vec<Found>>| {
-                Message::Art(ArtMessage::Found(
-                    generation,
-                    result.map_err(|err| format!("{err:#}")),
-                ))
-            },
-        )
-    }
-
-    /// A page of the game's images of the picker's kind; page 0 starts over.
-    fn list_images(&mut self, game: u64, page: u32) -> Task<Message> {
-        let key = self.config.steamgriddb_key.clone();
-        let Some(picker) = self.picker.as_mut() else {
-            return Task::none();
-        };
-        let Some(key) = key else {
-            return Task::none();
-        };
-        // Only a fresh list invalidates the answers and thumbnails already
-        // on their way; a later page joins them.
-        if page == 0 {
-            picker.generation += 1;
-            picker.downloading.clear();
-            picker.images.clear();
-            picker.thumbs.clear();
+                Task::perform(
+                    blocking(move || steamgriddb::images(&key, game, kind, page)),
+                    move |result| {
+                        Message::Art(ArtMessage::Listed(
+                            generation,
+                            result.map_err(|err| format!("{err:#}")),
+                        ))
+                    },
+                )
+            }
+            Some(Effect::Thumbs { generation, wanted }) => {
+                let (task, handle) = Task::run(
+                    thumbnails(wanted, move |id, bytes| {
+                        Message::Art(ArtMessage::Thumb(generation, id, bytes))
+                    }),
+                    |message| message,
+                )
+                .abortable();
+                // A later page's thumbnails join the earlier ones still
+                // coming.
+                self.pictures.downloading.push(handle.abort_on_drop());
+                task
+            }
+            Some(Effect::Choose { id, kind, image }) => Task::perform(
+                blocking({
+                    let id = id.clone();
+                    move || covers::choose(&id, kind, &image)
+                }),
+                move |result| {
+                    Message::Art(ArtMessage::Chosen(
+                        id.clone(),
+                        kind,
+                        result.map_err(|err| format!("{err:#}")),
+                    ))
+                },
+            ),
         }
-        picker.game = Some(game);
-        picker.page = page;
-        picker.more = false;
-        picker.note = None;
-        picker.busy = Some(t!("art-looking"));
-        if !self.persist {
-            return Task::none();
-        }
-        let generation = picker.generation;
-        let kind = picker.kind;
-        Task::perform(
-            blocking(move || steamgriddb::images(&key, game, kind, page)),
-            move |result| {
-                Message::Art(ArtMessage::Listed(
-                    generation,
-                    result.map_err(|err| format!("{err:#}")),
-                ))
-            },
-        )
-    }
-
-    fn download_thumbs(&mut self, wanted: Vec<(u64, String)>) -> Task<Message> {
-        let Some(picker) = self.picker.as_mut() else {
-            return Task::none();
-        };
-        if wanted.is_empty() || !self.persist {
-            return Task::none();
-        }
-        let generation = picker.generation;
-        let (task, handle) = Task::run(
-            thumbnails(wanted, move |id, bytes| {
-                Message::Art(ArtMessage::Thumb(generation, id, bytes))
-            }),
-            |message| message,
-        )
-        .abortable();
-        // A later page's thumbnails join the earlier ones still coming.
-        picker.downloading.push(handle.abort_on_drop());
-        task
-    }
-
-    fn choose_art(&mut self, image: u64) -> Task<Message> {
-        let Some(picker) = self.picker.as_mut() else {
-            return Task::none();
-        };
-        let Some(chosen) = picker
-            .images
-            .iter()
-            .find(|found| found.id == image)
-            .cloned()
-        else {
-            return Task::none();
-        };
-        picker.busy = Some(t!("saving"));
-        picker.note = None;
-        let (id, kind) = (picker.id.clone(), picker.kind);
-        if !self.persist {
-            return Task::none();
-        }
-        Task::perform(
-            blocking({
-                let id = id.clone();
-                move || covers::choose(&id, kind, &chosen)
-            }),
-            move |result| {
-                Message::Art(ArtMessage::Chosen(
-                    id.clone(),
-                    kind,
-                    result.map_err(|err| format!("{err:#}")),
-                ))
-            },
-        )
     }
 
     fn art_chosen(
@@ -348,21 +226,13 @@ impl Zendo {
                 // The picker may have been closed and opened for another
                 // game while the file was written.
                 let title = self
-                    .picker
-                    .take_if(|picker| picker.id == id)
+                    .pictures
+                    .art
+                    .take_for(id)
                     .map_or_else(|| id.to_owned(), |picker| picker.title);
-                self.status = Some(t!(
-                    "art-new",
-                    kind = kind_name(kind),
-                    title = title.as_str()
-                ));
+                self.status = Some(Art::new_note(kind, &title));
             }
-            Err(err) => {
-                if let Some(picker) = self.picker.as_mut().filter(|picker| picker.id == id) {
-                    picker.busy = None;
-                    picker.note = Some(err);
-                }
-            }
+            Err(err) => self.pictures.art.choose_failed(id, err),
         }
         Task::none()
     }
@@ -370,22 +240,10 @@ impl Zendo {
     /// Deletes the image chosen by hand and reads the library again, which
     /// puts the one found by itself back, or downloads it.
     fn automatic_art(&mut self) -> Task<Message> {
-        let Some(picker) = self.picker.as_ref() else {
+        let Some(done) = self.pictures.art.automatic() else {
             return Task::none();
         };
-        let (id, kind) = (picker.id.clone(), picker.kind);
-        if self.persist
-            && let Err(err) = covers::forget_choice(&id, kind)
-        {
-            if let Some(picker) = self.picker.as_mut() {
-                picker.note = Some(format!("{err:#}"));
-            }
-            return Task::none();
-        }
-        let title = self
-            .picker
-            .take()
-            .map_or_else(|| id.clone(), |picker| picker.title);
+        let (id, kind) = (done.id, done.kind);
         if self.persist {
             for owned in self.store.each_mut(&id) {
                 let image = covers::cached(&id, kind);
@@ -395,11 +253,7 @@ impl Zendo {
                 }
             }
         }
-        let note = t!(
-            "art-back-to-automatic",
-            kind = kind_name(kind),
-            title = title.as_str()
-        );
+        let note = Art::automatic_note(kind, &done.title);
         self.status = Some(note.clone());
         if self.game(&id).is_none() {
             return Task::none();
@@ -411,7 +265,7 @@ impl Zendo {
     /// While the picker is open, Escape closes it, Enter searches, and the
     /// page's own keys and the controller do nothing.
     pub(super) fn picker_takes(&mut self, message: &Message) -> Option<Task<Message>> {
-        self.picker.as_ref()?;
+        self.pictures.art.picker.as_ref()?;
         match message {
             Message::Back => Some(self.update_art(ArtMessage::Close)),
             Message::Activate => Some(self.update_art(ArtMessage::Search)),
@@ -433,14 +287,13 @@ impl Zendo {
     }
 
     pub(super) fn with_picker<'a>(&'a self, page: Element<'a, Message>) -> Element<'a, Message> {
-        match &self.picker {
-            Some(picker) => overlay(page, picker_card(picker)),
+        match &self.pictures.art.picker {
+            Some(picker) => overlay(page, picker_card(&self.pictures, picker)),
             None => page,
         }
     }
 }
 
-/// Downloads thumbnails a few at a time, each sent as it comes.
 /// Downloads images a few at a time, each into the message `made` makes of
 /// its id and bytes (`None` when it could not be had); dropped, it stops.
 pub(super) fn thumbnails(
@@ -479,7 +332,7 @@ pub(super) fn thumbnails(
     })
 }
 
-fn picker_card(picker: &Picker) -> Element<'_, Message> {
+fn picker_card<'a>(pictures: &'a Pictures, picker: &'a Picker) -> Element<'a, Message> {
     let tabs = row![
         button(style::button_text(t!("art-cover")))
             .padding([6, 14])
@@ -519,11 +372,7 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
 
     if !picker.games.is_empty() {
         let games = picker.games.iter().take(GAMES_SHOWN).map(|game| {
-            let label = match game.year() {
-                Some(year) => format!("{} ({year})", game.name),
-                None => game.name.clone(),
-            };
-            button(style::button_text(label))
+            button(style::button_text(shared::game_label(game)))
                 .padding(style::BUTTON_SMALL)
                 .style(style::chip(picker.game == Some(game.id)))
                 .on_press(Message::Art(ArtMessage::Game(game.id)))
@@ -537,7 +386,10 @@ fn picker_card(picker: &Picker) -> Element<'_, Message> {
         );
     }
 
-    let thumbs = picker.images.iter().map(|found| thumb(picker, found));
+    let thumbs = picker
+        .images
+        .iter()
+        .map(|found| thumb(pictures, picker, found));
     body = body.push(
         row(thumbs)
             .spacing(style::SPACE_M)
@@ -585,11 +437,7 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
         footer = footer.push(text(note).size(13).color(colors().bad));
     }
     footer = footer.push(space::horizontal());
-    if picker
-        .note
-        .as_deref()
-        .is_some_and(|note| *note == t!("art-needs-key"))
-    {
+    if picker.needs_key {
         footer = footer.push(
             button(style::button_text(t!("art-open-settings")))
                 .padding(style::BUTTON)
@@ -599,13 +447,10 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
     }
     if picker.chosen {
         footer = footer.push(
-            button(style::button_text(t!(
-                "art-use-automatic",
-                kind = kind_name(picker.kind)
-            )))
-            .padding(style::BUTTON)
-            .style(style::secondary)
-            .on_press(Message::Art(ArtMessage::Automatic)),
+            button(style::button_text(Art::automatic_label(picker.kind)))
+                .padding(style::BUTTON)
+                .style(style::secondary)
+                .on_press(Message::Art(ArtMessage::Automatic)),
         );
     }
     footer = footer.push(
@@ -619,12 +464,16 @@ fn picker_footer(picker: &Picker) -> Element<'_, Message> {
 }
 
 /// One image to choose: its thumbnail, or a grey box while it comes.
-fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, Message> {
+fn thumb<'a>(
+    pictures: &'a Pictures,
+    picker: &'a Picker,
+    found: &'a steamgriddb::Image,
+) -> Element<'a, Message> {
     let (width, height) = match picker.kind {
         Kind::Cover => (120.0, 180.0),
         Kind::Hero => (288.0, 93.0),
     };
-    let shown: Element<'_, Message> = match picker.thumbs.get(&found.id) {
+    let shown: Element<'_, Message> = match pictures.thumbs.get(&found.id) {
         Some(handle) => image(handle.clone())
             .width(width)
             .height(height)
@@ -637,13 +486,6 @@ fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, M
             .style(style::placeholder)
             .into(),
     };
-    let mut about = format!("{}x{}", found.width, found.height);
-    if !found.style.is_empty() {
-        about = format!("{about}, {}", found.style);
-    }
-    if let Some(author) = &found.author {
-        about = t!("art-by", about = about, author = author.name.as_str());
-    }
     tooltip(
         button(shown).padding(0).style(style::link).on_press_maybe(
             picker
@@ -651,7 +493,7 @@ fn thumb<'a>(picker: &'a Picker, found: &'a steamgriddb::Image) -> Element<'a, M
                 .is_none()
                 .then_some(Message::Art(ArtMessage::Choose(found.id))),
         ),
-        container(text(about).size(12))
+        container(text(shared::thumb_about(found)).size(12))
             .padding([4, 8])
             .style(style::card),
         tooltip::Position::Bottom,
@@ -664,7 +506,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn asks_for_a_key_and_drops_late_answers() {
+    fn the_picker_swallows_play_and_closes_on_escape() {
         let (mut zendo, _) = Zendo::boot();
         zendo.persist = false;
         zendo.library = Some(zendo_core::Library {
@@ -676,48 +518,24 @@ mod tests {
             )],
             problems: Vec::new(),
         });
+        zendo.config.steamgriddb_key = None;
         let _ = zendo.update(Message::Art(ArtMessage::Open("steam:620".into())));
-        let note = zendo.picker.as_ref().and_then(|picker| picker.note.clone());
+        let note = zendo
+            .pictures
+            .art
+            .picker
+            .as_ref()
+            .and_then(|picker| picker.note.clone());
         assert!(note.is_some_and(|note| note.contains("Settings")));
         let _ = zendo.update(Message::Back);
-        assert!(zendo.picker.is_none());
+        assert!(zendo.pictures.art.picker.is_none());
 
         zendo.config.steamgriddb_key = Some("key".into());
         let _ = zendo.update(Message::Art(ArtMessage::Open("steam:620".into())));
-        let generation = zendo.picker.as_ref().map(|picker| picker.generation);
-        assert_eq!(
-            zendo
-                .picker
-                .as_ref()
-                .and_then(|picker| picker.busy.as_deref()),
-            Some("Searching…")
-        );
-        // An answer to an earlier search is dropped.
-        let late = Found {
-            id: 1,
-            name: "Portal".into(),
-            release_date: None,
-        };
-        let _ = zendo.update(Message::Art(ArtMessage::Found(0, Ok(vec![late]))));
-        assert!(
-            zendo
-                .picker
-                .as_ref()
-                .is_some_and(|picker| picker.games.is_empty())
-        );
-        let portal = Found {
-            id: 17830,
-            name: "Portal 2".into(),
-            release_date: Some(1_303_084_800),
-        };
-        let _ = zendo.update(Message::Art(ArtMessage::Found(
-            generation.unwrap(),
-            Ok(vec![portal]),
-        )));
-        let picker = zendo.picker.as_ref().unwrap();
-        assert_eq!(picker.game, Some(17830));
-        assert_eq!(picker.busy.as_deref(), Some("Looking for images…"));
         let _ = zendo.update(Message::Play);
-        assert!(zendo.picker.is_some(), "Play does nothing under the picker");
+        assert!(
+            zendo.pictures.art.picker.is_some(),
+            "Play does nothing under the picker"
+        );
     }
 }

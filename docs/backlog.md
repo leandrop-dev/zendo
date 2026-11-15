@@ -60,8 +60,10 @@ to `zendo-core` when that page is ported. Ask before building any other page
   2026-11-15**: launch options with gamescope (the form is
   `zendo_shell::launch_options`, shared with Iced; the Slint sheet is
   `ui/launch_options.slint` and `options_ui.rs`; the lists are chips, not
-  dropdowns). **52b**: the artwork chooser (Change cover and backdrop, Iced
-  `app/artwork.rs`, `backdrops.rs`). **52c**: Mods, Nexus, Nexus search, the
+  dropdowns). **52b built 2026-11-15**: the artwork chooser (Change cover and
+  Change backdrop; the picker is `zendo_shell::artwork`, shared with Iced; the
+  Slint sheet is `ui/artwork.slint` and `artwork_ui.rs`; Iced's `backdrops.rs`
+  needed no port, Slint already drew the backdrop). **52c**: Mods, Nexus, Nexus search, the
   FOMOD installer sheet (Iced `app/installer.rs`, opened from a mod's install;
   moved here from 51b) and the mods' card on Downloads. Item 54's parity
   checklist must go through all of 52; for 52a: a failed save on a field that

@@ -144,6 +144,7 @@ status-unpinned = { $title } is no longer a favorite
 hints-library = Enter open · Tab sort · Ctrl+P favorite · Ctrl+Space mark · Del hide · Ctrl+H hidden · F11 Game Mode
 hints-selection = Enter open · Esc clear the marks · F11 Game Mode
 hints-sheet = Enter save · Esc cancel
+hints-art = Enter search · Esc close
 hints-game = Enter play · Esc back · Ctrl+P favorite · Del hide · F11 Game Mode
 hints-store = Enter open · type to search · Esc clear · F11 Game Mode
 hints-owned = Enter install or open · Esc back · F11 Game Mode

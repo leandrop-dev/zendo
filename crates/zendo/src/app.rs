@@ -70,7 +70,7 @@ use crate::i18n::{self, Language, t};
 use crate::presence::PresenceHandle;
 use crate::tray::{self, Tray, TrayMessage};
 use accounts::{AccountMessage, Accounts};
-use artwork::{ArtMessage, Picker};
+use artwork::{ArtMessage, Pictures};
 use collections::CollectionsMessage;
 use downloads::{DownloadMessage, Queue};
 use engines::{EngineMessage, Engines};
@@ -468,7 +468,7 @@ struct Zendo {
     /// The Stats page: the period it shows.
     stats: StatsState,
     /// The art picker, open over a game's page.
-    picker: Option<Picker>,
+    pictures: Pictures,
     /// The Nexus search, open over a game's page.
     mod_search: Option<Search>,
     /// Each game's mods, on its page.
@@ -562,7 +562,7 @@ impl Zendo {
             filters: Vec::new(),
             sessions: Vec::new(),
             stats: StatsState::default(),
-            picker: None,
+            pictures: Pictures::new(true),
             mod_search: None,
             mods: ModsState::default(),
             nexus: NexusState::default(),

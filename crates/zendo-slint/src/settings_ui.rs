@@ -350,6 +350,11 @@ impl Glue {
         data.on_relabel(move || glue.show_settings());
     }
 
+    /// The page opens on the Keys group, where the art picker sends the user.
+    pub(super) fn show_keys_group(&self) {
+        self.settings.group.set(KEYS);
+    }
+
     /// The page opens: looks for the folders it can open, and shows itself.
     pub(super) fn open_settings(&self) {
         let config = self.config.borrow();

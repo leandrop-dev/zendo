@@ -27,6 +27,8 @@ use crate::{Card, CardRow, ChipData, LibraryData, MainWindow, Page};
 
 #[path = "accounts_ui.rs"]
 mod accounts;
+#[path = "artwork_ui.rs"]
+mod artwork;
 #[path = "cards_ui.rs"]
 mod cards;
 #[path = "collections_ui.rs"]
@@ -214,6 +216,8 @@ struct Glue {
     local: local::LocalState,
     /// The Launch options sheet (`options_ui.rs`).
     options: options::OptionsState,
+    /// The art picker (`artwork_ui.rs`).
+    art: artwork::ArtState,
     /// The Collections sheet (`collections_ui.rs`).
     collections: collections::CollectionsState,
     /// The Accounts page (`accounts_ui.rs`) and Steam's card on it
@@ -337,6 +341,7 @@ impl Glue {
             game: game::GameState::new(persist),
             local: local::LocalState::default(),
             options: options::OptionsState::default(),
+            art: artwork::ArtState::new(persist),
             collections: collections::CollectionsState::new(),
             accounts: accounts::AccountsState::new(),
             cards: cards::CardsState::new(),
@@ -416,6 +421,7 @@ impl Glue {
         self.connect_game(window);
         self.connect_local(window);
         self.connect_options(window);
+        self.connect_art(window);
         self.connect_collections(window);
         self.connect_accounts(window);
         self.connect_downloads(window);
@@ -814,7 +820,8 @@ impl Glue {
         if !focused {
             return;
         }
-        if self.form_open() || self.collections_open() || self.options_open() {
+        if self.form_open() || self.collections_open() || self.options_open() || self.art_open_now()
+        {
             // The sheet takes the keyboard; the pad only closes it.
             if pad == Pad::Back {
                 self.back();
@@ -874,7 +881,8 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.options_back()
+        if self.art_back()
+            || self.options_back()
             || self.stay_open()
             || self.collections_back()
             || self.close_form()
@@ -920,6 +928,9 @@ impl Glue {
     /// A key the focused field did not use. Says whether it was taken.
     fn key(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
         // Over a sheet, the fields have the keys.
+        if self.art_open_now() {
+            return self.art_key(text);
+        }
         if self.options_open() {
             return self.options_key(text);
         }
