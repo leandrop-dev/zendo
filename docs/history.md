@@ -4940,3 +4940,80 @@ opened from the Mods card of a game that Nexus knows by a name.
   it), pt-PT, the pad. The glue tests (8) cover the rows, the late answer, the
   file lists and their failure, the files already in the mods, the free and
   Premium download, the adult switch and Escape and Close.
+
+## Item 52c3, the FOMOD installer sheet in Slint (2026-11-15)
+
+The last slice of item 52: Iced's `app/installer.rs` (578 lines) in Slint, with
+Options… on a mod, the slot for an installer that has to wait, and the mods
+coming in from Nexus as a card on Downloads. Until now Slint dropped an archive
+with an installer and said so (`mods-installer-not-yet`).
+
+- **Shared.** New `zendo_shell::installer`: `InstallerState` holds the open
+  sheet and the installers that wait, and is the whole state machine:
+  `open` (says `Waits`, `Shown(status)` or `InstallNow` when no step is
+  visible), `next_waiting` (only when no sheet is open and mods are free, and
+  in order), `pick` (a radio clicked again clears a group that may have none),
+  `back`, `advance` (on the last step it closes the sheet and hands the mod
+  over), `focus`, `pick_focused`, `activate` (Enter: pick the focused option,
+  else go on), `cancel`, and `view`, which flattens the sheet for drawing
+  (title, the step line, the warning, groups with options that say `single`,
+  `on`, `enabled`, `dim`, `focused`, the picture and description). New
+  `Work::Install` and `ModsState::install` in `zendo_shell::mods`; Iced's two
+  `change_mods` closures and `change_mods` itself are gone. Iced was switched
+  first: its sheet draws from `View`, and its two tests became nine shell tests
+  (and one for `ModsState::install`) plus one thin Iced test.
+- **One change of behaviour, in both windows**: a finished add
+  (`Added::Done`) now asks for the next waiting installer too. Before, an
+  installer that waited behind an add stayed waiting until some other change
+  ended.
+- **Slint**: `ui/installer.slint` (`InstallerData`, flat `InstallerRow`s of
+  kind group, radio or box, `InstallerSheet`), `installer_ui.rs` (a `#[path]`
+  child of `library_ui.rs`, methods prefixed `installer_*`), `ModRow.options`
+  and `ModsData.options` (the Options… button, which runs the mod's kept
+  installer again through `ModsState::reinstall`), and on Downloads
+  `DownloadsData.mods-show`, `mods-rows` and `stop-mod` (every Nexus download,
+  not only the open game's, drawn with `DownloadLine`; the page's invitation to
+  the Store is off while one is coming in; the tab's count stays without them,
+  as in Iced). The sheet is the last child of the window's `FocusScope`, so it
+  draws over the search sheet and the chooser; it takes every key (arrows move
+  the cursor, Enter picks or goes on, Right is Next, Left is Back, Escape
+  cancels, letters and Ctrl shortcuts do nothing) and the pad's presses the
+  same way. A click outside it does nothing: closing drops the unpacked mod, so
+  only Cancel and Escape close it. The picture of the option described is read
+  and decoded on a thread under a generation number, so a late one does not land
+  on another option. `mods_installer_not_yet` and its string are removed.
+- **Checked** (2026-11-15, with the user at the PC; a throwaway home with no
+  session bus, a seeded local game titled Stardew Valley and a zip with a
+  FOMOD config of two steps, the second shown only for the Strong body): 145
+  Iced, 285 core, 83 shell and 158 Slint tests green, clippy and fmt clean. On
+  screen, with stills and the files on disk: Add mod through the file dialog
+  opened the sheet; each control by name: the Slim and Strong radios (choosing
+  Slim hid step 2: "Step 1 of 1" and the button became Install), Maybe one,
+  Maybe one's group radio cleared by a second click, Zz extra, the unusable
+  option (no change), the picture and description following the last click
+  (the mod's own picture when the option has none), Next (the required Big
+  was ticked), Back (the choices were kept), Small, Install by click (the mod
+  was built: `core.txt`, `body/strong.txt`, `docs/z.txt`, `maybe.txt`,
+  `big.txt`, `small.txt`; the card said "6 files" and the footer "Installed
+  fancy"); Options… (the earlier choices ticked), Down, Down, Enter (Zz extra
+  off), Right (step 2, Small still ticked), Enter as Install (`docs/z.txt`
+  gone, "5 files", `mods.toml` lists the four choices); a letter, Ctrl+3 and a
+  click on the dimmed backdrop (the sheet and the page did not change); Escape
+  ("fancy was not installed", the page stayed, the files stayed), then Ctrl+3
+  straight after (the Downloads page: the keys were alive); a second add and
+  Cancel by click (the `files/.adding-fancy-2` folder was there while the sheet
+  was open and gone after). Iced's sheet was opened once through Options… and
+  closed with Cancel (it drew as before the refactor).
+- **Not seen on screen** (covered by glue or shell tests, which say what they
+  pin): an installer waiting behind another or behind a mods change and
+  opening when the slot is free; the Downloads card with mods coming in from
+  Nexus, and Stop there (needs a real Nexus download); the pad on the sheet
+  (no controller; the test drives `installer_pad`); pt-PT; a light KDE scheme;
+  an installer with no visible step installing at once; a picture that comes
+  late for another option.
+- **Things to know**: with nothing touched the cursor counts as on the first
+  option, so the first Down lands on the second (Iced does the same, and a
+  shell test pins it). The page behind the sheet moved by about 150 px when
+  Options… opened (the Mods card's busy line; the known page-height flip of
+  52c1). A small picture is scaled up to 220 px in Slint and drawn at its own
+  size in Iced.

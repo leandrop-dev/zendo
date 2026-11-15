@@ -6,9 +6,9 @@
 //! through `Glue::ask`. A part of the Library's glue (`library_ui`).
 //!
 //! The downloads and Update on the card come from `nexus_ui.rs` (item
-//! 52c2a) and Search Nexus from `search_ui.rs` (52c2b). The installer sheet
-//! (Options…, an archive with a FOMOD installer) is item 52c3; its hooks are
-//! marked `// 52c3:`.
+//! 52c2a) and Search Nexus from `search_ui.rs` (52c2b). An archive with a
+//! FOMOD installer, and Options… on a mod, open the sheet of
+//! `installer_ui.rs` (52c3).
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -16,10 +16,11 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use zendo_core::Game;
-use zendo_core::mods::{self, Overview};
+use zendo_core::mods::Overview;
 use zendo_core::nexus;
 use zendo_core::plugins::{self, Rank};
 use zendo_shell::file_dialog::{self, Kind};
+use zendo_shell::installer::Ready;
 use zendo_shell::mods::{self as shell, After, Confirm, Job, ModsState, Outcome, Shown, Tone};
 use zendo_shell::open;
 use zendo_shell::t;
@@ -30,7 +31,7 @@ use crate::{ChipData, MainWindow, ModRow, ModsData, PluginRow};
 
 /// The card's state and the models its rows come from.
 pub(super) struct ModsUiState {
-    state: RefCell<ModsState>,
+    pub(super) state: RefCell<ModsState>,
     rows: Rc<VecModel<ModRow>>,
     plugins: Rc<VecModel<PluginRow>>,
     profiles: Rc<VecModel<ChipData>>,
@@ -144,6 +145,13 @@ impl Glue {
             });
         });
         let glue = Rc::clone(self);
+        data.on_options(move |index| {
+            glue.mods_act(|state, id, ok, _| {
+                let mod_id = state.overview(id)?.mods.get(at(index)?)?.id.clone();
+                state.reinstall(id, &mod_id, ok)
+            });
+        });
+        let glue = Rc::clone(self);
         data.on_step(move |index, up| {
             glue.mods_act(|state, id, ok, _| {
                 let mod_id = state.overview(id)?.mods.get(at(index)?)?.id.clone();
@@ -200,7 +208,7 @@ impl Glue {
 
     /// Whether work on the game's mods can run: it is in the library, and
     /// this is not a test.
-    fn mods_runnable(&self, id: &str) -> bool {
+    pub(super) fn mods_runnable(&self, id: &str) -> bool {
         self.persist && self.browser.borrow().game(id).is_some()
     }
 
@@ -233,7 +241,7 @@ impl Glue {
     }
 
     /// Runs a job on a thread.
-    fn mods_run(&self, job: Option<Job>) {
+    pub(super) fn mods_run(&self, job: Option<Job>) {
         let Some(Job { id, work }) = job else {
             return;
         };
@@ -278,24 +286,35 @@ impl Glue {
             match after {
                 // Nexus is asked once a session for newer files of the mods.
                 After::CheckUpdates(game) => self.nexus_want_updates(&game),
-                // 52c3: NextInstaller lets an installer that waited for the
-                // slot open.
-                After::NextInstaller => {}
-                After::OpenInstaller(_, pending) => self.mods_installer_not_yet(&pending),
+                // An installer that waited for the slot may open.
+                After::NextInstaller => self.installer_next_waiting(),
+                // An archive with a FOMOD installer: its options are chosen.
+                After::OpenInstaller(game, pending) => self.installer_open(game, pending),
             }
         }
         self.show_game();
         self.show_search();
     }
 
-    /// An archive with a FOMOD installer, whose sheet is item 52c3's: it is
-    /// dropped, and the footer says so, so that nothing is lost unseen.
-    pub(super) fn mods_installer_not_yet(&self, pending: &mods::Pending) {
-        if self.persist {
-            let pending = pending.clone();
-            std::thread::spawn(move || mods::cancel_install(&pending));
-        }
-        self.say(t!("mods-installer-not-yet", name = pending.name.as_str()));
+    /// No change to any game's mods is in flight.
+    pub(super) fn mods_free(&self) -> bool {
+        self.mods.state.borrow().free()
+    }
+
+    /// Builds a mod from its installer with the options chosen.
+    pub(super) fn mods_install(&self, ready: Ready) {
+        let Ready {
+            game,
+            pending,
+            selection,
+        } = ready;
+        let ok = self.mods_runnable(&game);
+        let job = self
+            .mods
+            .state
+            .borrow_mut()
+            .install(&game, pending, selection, ok);
+        self.mods_run(job);
     }
 
     /// Asks which archive to add, then adds it.
@@ -470,6 +489,11 @@ impl Glue {
                     delete_label: shell::delete_label(asking).into(),
                     asking,
                     update: self.nexus_update_label(id, &info.id).into(),
+                    options: if info.installer {
+                        t!("mods-options").into()
+                    } else {
+                        "".into()
+                    },
                 }
             })
             .collect();
@@ -542,7 +566,7 @@ impl Glue {
 #[cfg(test)]
 mod tests {
     use slint::Model;
-    use zendo_core::mods::{Applied, ModInfo};
+    use zendo_core::mods::{self, Applied, ModInfo};
     use zendo_core::plugins::Rank;
 
     use super::super::tests::page;
@@ -688,38 +712,6 @@ mod tests {
             glue.browser.borrow().status(),
             Some("Applied 2 mods to Game 00")
         );
-    }
-
-    #[test]
-    fn an_archive_with_an_installer_is_dropped_and_said_not_lost_unseen() {
-        let (_window, glue) = page(1);
-        let installer = zendo_core::fomod::Installer {
-            name: "Fancy".into(),
-            image: None,
-            needs: None,
-            required: Vec::new(),
-            steps: Vec::new(),
-            conditional: Vec::new(),
-        };
-        let pending = mods::test_pending("Fancy", installer);
-        glue.mods_arrived(
-            "desktop:0",
-            Ok(Outcome::Added(
-                mods::Added::Choose(Box::new(pending)),
-                String::new(),
-            )),
-        );
-        let status = glue
-            .browser
-            .borrow()
-            .status()
-            .map(str::to_owned)
-            .unwrap_or_default();
-        assert!(
-            status.contains("Fancy") && status.contains("installer"),
-            "{status}"
-        );
-        assert!(glue.mods.state.borrow().free());
     }
 
     #[test]

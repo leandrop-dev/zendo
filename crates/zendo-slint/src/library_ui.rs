@@ -44,6 +44,8 @@ mod engines;
 mod game;
 #[path = "gog_ui.rs"]
 mod gog;
+#[path = "installer_ui.rs"]
+mod installer;
 #[path = "game_jobs_ui.rs"]
 mod jobs;
 #[path = "local_ui.rs"]
@@ -246,6 +248,8 @@ struct Glue {
     compat: compat::CompatState,
     /// The Mods card (`mods_ui.rs`).
     mods: mods::ModsUiState,
+    /// A mod's FOMOD installer sheet (`installer_ui.rs`).
+    installer: installer::InstallerUiState,
     /// Nexus Mods: the key, links and downloads (`nexus_ui.rs`).
     nexus: nexus::NexusUiState,
     /// Search Nexus (`search_ui.rs`).
@@ -371,6 +375,7 @@ impl Glue {
             cards: cards::CardsState::new(),
             compat: compat::CompatState::new(persist),
             mods: mods::ModsUiState::new(),
+            installer: installer::InstallerUiState::new(),
             nexus: nexus::NexusUiState::new(),
             search: search::SearchUiState::new(),
             prefix: prefix::PrefixState::new(),
@@ -459,6 +464,7 @@ impl Glue {
         self.connect_cards(window);
         self.connect_compat(window);
         self.connect_mods(window);
+        self.connect_installer(window);
         self.connect_nexus(window);
         self.connect_search(window);
         self.connect_prefix(window);
@@ -851,6 +857,10 @@ impl Glue {
         if !focused {
             return;
         }
+        if self.installer_is_open() {
+            self.installer_pad(pad);
+            return;
+        }
         if self.form_open()
             || self.collections_open()
             || self.options_open()
@@ -917,7 +927,9 @@ impl Glue {
 
     /// Escape: a game's page closes, then the marks go, then the search.
     fn back(&self) {
-        if self.nexus_back()
+        // The installer is over everything, so it hears Escape first.
+        if self.installer_back()
+            || self.nexus_back()
             || self.search_back()
             || self.art_back()
             || self.options_back()
@@ -965,6 +977,10 @@ impl Glue {
 
     /// A key the focused field did not use. Says whether it was taken.
     fn key(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, meta: bool) -> bool {
+        // The installer takes every key, Ctrl shortcuts included.
+        if self.installer_is_open() {
+            return self.installer_key(text);
+        }
         // Over a sheet, the fields have the keys.
         if self.art_open_now() {
             return self.art_key(text);

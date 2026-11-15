@@ -19,6 +19,8 @@ export struct ModRow {
     asking: bool,
     // "Update" or "Update to 2" when Nexus has a newer file; else empty.
     update: string,
+    // "Options…" when an installer built it, to choose again; else empty.
+    options: string,
 }
 
 // A Bethesda game's plugin in load order.
@@ -90,6 +92,8 @@ export global ModsData {
     callback search-nexus();
     callback stop-download(int);
     callback update(int);
+    // Run the mod's installer again.
+    callback options(int);
     callback profile(int);
     callback new-profile();
     callback rename-profile();

@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38, 41 to 51 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 52 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -76,12 +76,14 @@ to `zendo-core` when that page is ported. Ask before building any other page
   state and words are `zendo_shell::nexus_search`, with Iced switched first;
   the Slint sheet is `ui/nexus_search.slint` and `search_ui.rs`; Page on
   Nexus, Get on Nexus and a Premium Download were not seen on screen).
-  **52c3**: the FOMOD
-  installer sheet (Iced `app/installer.rs`, opened from a mod's install;
-  moved here from 51b; Options… on a mod; the slot for a waiting installer;
-  remove the string `mods-installer-not-yet`) and the mods' card on
-  Downloads; the hooks are marked `// 52c3:`. Item 54's parity checklist must
-  go through all of 52; for 52a: a failed save on a field that is scrolled
+  **52c3 built 2026-11-15**: the
+  FOMOD installer sheet (the state, the rules and the words are
+  `zendo_shell::installer`, shared with Iced, with a `Work::Install` in
+  `zendo_shell::mods`; the Slint sheet is `ui/installer.slint` and
+  `installer_ui.rs`), Options… on a mod, the slot for a waiting installer, and
+  the card of mods coming in from Nexus on Downloads. Not seen on screen: the
+  waiting slot, the Downloads card, the pad, pt-PT (tests cover the first
+  three). Item 54's parity checklist must go through all of 52; for 52a: a failed save on a field that is scrolled
   out of sight says nothing at the footer (Iced's sheet is the same); for
   52c1: Iced shows "Reading mods…" while Slint draws no card until they are
   read, and on Stardew Valley's page the bottom of the Mods card could not be

@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use zendo_core::Game;
+use zendo_core::fomod::Selection;
 use zendo_core::mods::{self, Added, Applied, ModInfo, Overview, Plugins, ProfileChange};
 use zendo_core::nexus;
 use zendo_core::plugins::{Plugin, Rank, Style};
@@ -64,6 +65,8 @@ pub enum Work {
     Restore,
     /// Run a mod's installer again.
     Reinstall(String),
+    /// Build a mod from its installer with the options chosen.
+    Install(Box<mods::Pending>, Selection),
     /// Add an archive; the Nexus key, if set, lets one Nexus named be
     /// followed for updates.
     Add(PathBuf, Option<String>),
@@ -376,6 +379,18 @@ impl ModsState {
         self.start(id, t!("mods-reading-installer"), work, runnable)
     }
 
+    /// Builds a mod from its installer with the options chosen.
+    pub fn install(
+        &mut self,
+        id: &str,
+        pending: Box<mods::Pending>,
+        selection: Selection,
+        runnable: bool,
+    ) -> Option<Job> {
+        let work = Work::Install(pending, selection);
+        self.start(id, t!("installer-installing"), work, runnable)
+    }
+
     /// The file dialog for an archive is open: nothing else changes.
     pub fn choosing(&mut self, id: &str, runnable: bool) -> bool {
         if self.busy.is_some() || !runnable {
@@ -444,6 +459,8 @@ impl ModsState {
                 done.status = Some(note);
                 self.shown.insert(id.to_owned(), Shown::Ready(*overview));
                 done.after.push(After::CheckUpdates(id.to_owned()));
+                // An installer that came while this was adding waited for it.
+                done.after.push(After::NextInstaller);
             }
             Ok(Outcome::Added(Added::Choose(pending), _)) => {
                 self.finished();
@@ -512,6 +529,13 @@ fn run_inner(work: Work, game: &Game) -> anyhow::Result<Outcome> {
             let overview = mods::restore(game)?;
             let note = applied_note(&overview, &game.title);
             (overview, note)
+        }
+        Work::Install(pending, selection) => {
+            let overview = mods::install(game, &pending, &selection)?;
+            (
+                overview,
+                t!("installer-installed", name = pending.name.as_str()),
+            )
         }
         Work::Reinstall(mod_id) => {
             let pending = mods::reinstall(game, &mod_id)?;
@@ -917,6 +941,38 @@ mod tests {
             profile_note(&ProfileChange::Delete("Default".into()), &light),
             "Deleted Default; now in Light; Apply puts it in the game"
         );
+    }
+
+    #[test]
+    fn installing_is_one_change_and_needs_a_game_to_run_on() {
+        use zendo_core::fomod::Installer;
+        let installer = Installer::parse(
+            br#"<config><moduleName>T</moduleName><installSteps order="Explicit">
+            </installSteps></config>"#,
+        )
+        .unwrap();
+        let pending = Box::new(mods::test_pending("T", installer));
+        let selection = pending
+            .installer
+            .selection_from(&pending.chosen, &pending.present);
+        let mut state = ModsState::default();
+        assert!(
+            state
+                .install("g", pending.clone(), selection.clone(), false)
+                .is_none(),
+            "not runnable: no job and nothing busy"
+        );
+        assert!(state.free());
+        let job = state.install("g", pending.clone(), selection.clone(), true);
+        assert!(matches!(
+            job,
+            Some(Job {
+                work: Work::Install(..),
+                ..
+            })
+        ));
+        assert_eq!(state.busy_for("g"), Some("Installing…"));
+        assert!(state.install("g", pending, selection, true).is_none());
     }
 
     #[test]

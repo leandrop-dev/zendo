@@ -9,6 +9,7 @@ import { GamePage, GameData, Tile, Fact, OwnedBadge, DlcRow } from "game.slint";
 import { ModsData, ModRow, PluginRow } from "mods.slint";
 import { NexusData, DownloadRow, ChooserSheet } from "nexus.slint";
 import { SearchSheet, SearchData, SearchRow } from "nexus_search.slint";
+import { InstallerSheet, InstallerData, InstallerRow } from "installer.slint";
 import { StorePage, StoreData } from "store.slint";
 import { DownloadsPage, DownloadsData, JobRow, SteamRow } from "downloads.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
@@ -21,7 +22,7 @@ import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow, NexusData, DownloadRow, SearchData, SearchRow }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow, NexusData, DownloadRow, SearchData, SearchRow, InstallerData, InstallerRow }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -68,6 +69,7 @@ export component MainWindow inherits Window {
         DownloadsData.relabel();
         SettingsData.relabel();
         CollectionsData.relabel();
+        InstallerData.relabel();
         AccountsData.relabel();
     }
 
@@ -187,6 +189,12 @@ export component MainWindow inherits Window {
             height: 100%;
         }
         if NexusData.choosing: ChooserSheet {
+            width: 100%;
+            height: 100%;
+        }
+        // Last, so it draws over the search and the chooser: a download that
+        // ends on another page can bring an installer up at any time.
+        if InstallerData.open: InstallerSheet {
             width: 100%;
             height: 100%;
         }

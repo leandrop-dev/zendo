@@ -57,12 +57,12 @@ pub enum ModsMessage {
 impl Zendo {
     /// Whether work on the game's mods can run: it is in the library, and
     /// this is not a test.
-    fn mods_runnable(&self, id: &str) -> bool {
+    pub(super) fn mods_runnable(&self, id: &str) -> bool {
         self.persist && self.game(id).is_some()
     }
 
     /// Runs a job on a thread.
-    fn run_job(&self, job: Option<Job>) -> Task<Message> {
+    pub(super) fn run_job(&self, job: Option<Job>) -> Task<Message> {
         let Some(Job { id, work }) = job else {
             return Task::none();
         };
@@ -269,33 +269,6 @@ impl Zendo {
             blocking(move || {
                 work(&game)
                     .map(|(added, note)| Outcome::Added(added, note))
-                    .map_err(|err| format!("{err:#}"))
-            }),
-            move |result| Message::Mods(ModsMessage::Done(id.clone(), Box::new(result))),
-        )
-    }
-
-    /// Runs a change on a thread, one at a time.
-    pub(super) fn change_mods(
-        &mut self,
-        id: String,
-        busy: String,
-        work: impl FnOnce(&Game) -> anyhow::Result<(Overview, String)> + Send + 'static,
-    ) -> Task<Message> {
-        if self.mods.busy.is_some() {
-            return Task::none();
-        }
-        let Some(game) = self.game(&id).cloned() else {
-            return Task::none();
-        };
-        if !self.persist {
-            return Task::none();
-        }
-        self.mods.busy = Some((id.clone(), busy));
-        Task::perform(
-            blocking(move || {
-                work(&game)
-                    .map(|(overview, note)| Outcome::Changed(overview, note))
                     .map_err(|err| format!("{err:#}"))
             }),
             move |result| Message::Mods(ModsMessage::Done(id.clone(), Box::new(result))),

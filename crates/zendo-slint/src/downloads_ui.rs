@@ -545,7 +545,10 @@ impl Glue {
             .collect();
         data.set_empty(queue.queue.is_empty() && queue.finished.is_empty());
         data.set_invite(
-            queue.queue.is_empty() && queue.finished.is_empty() && !self.steam_active(),
+            queue.queue.is_empty()
+                && queue.finished.is_empty()
+                && !self.steam_active()
+                && !self.nexus_downloading(),
         );
         self.show_steam_card(&data);
         // As in Iced, the running job counts as waiting its turn's end.

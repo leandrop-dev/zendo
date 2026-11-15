@@ -547,6 +547,11 @@ component ModsCard inherits Card {
                         clicked => { ModsData.update(index); }
                     }
                     RowButton {
+                        label: line.options;
+                        enabled: ModsData.free;
+                        clicked => { ModsData.options(index); }
+                    }
+                    RowButton {
                         label: "↑";
                         enabled: ModsData.free && line.up;
                         clicked => { ModsData.step(index, true); }

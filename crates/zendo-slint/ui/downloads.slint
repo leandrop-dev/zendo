@@ -5,6 +5,7 @@
 import { Colors, Space, Tr } from "style.slint";
 import { ActionButton, RowButton } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
+import { DownloadRow, DownloadLine } from "nexus.slint";
 
 // A job in a list. Rust fills every text; an empty one is not drawn.
 export struct JobRow {
@@ -50,6 +51,10 @@ export global DownloadsData {
     in property <[SteamRow]> steam-rows;
     callback steam-forget(string);
     callback steam-open();
+    // Mods coming in from Nexus, for any game: their card, with Stop.
+    in property <bool> mods-show;
+    in property <[DownloadRow]> mods-rows;
+    callback stop-mod(int);
     // The counts, as tiles.
     in property <string> up-next-count;
     in property <string> paused-count;
@@ -324,6 +329,28 @@ export component DownloadsPage inherits Rectangle {
                         wrap: word-wrap;
                     }
                     for item in DownloadsData.steam-rows: SteamLine { item: item; }
+                }
+            }
+
+            // Mods coming in from Nexus, for any game.
+            if DownloadsData.mods-show: Rectangle {
+                background: Colors.surface;
+                border-width: 1px;
+                border-color: Colors.line;
+                height: mods-card.preferred-height;
+                mods-card := VerticalLayout {
+                    padding: Space.l;
+                    spacing: Space.m;
+                    Text {
+                        text: Tr.t("nexus-downloads-title").to-uppercase();
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: Colors.foreground;
+                    }
+                    for item in DownloadsData.mods-rows: DownloadLine {
+                        item: item;
+                        stop(id) => { DownloadsData.stop-mod(id); }
+                    }
                 }
             }
 

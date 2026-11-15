@@ -22,7 +22,7 @@ use zendo_shell::t;
 
 use super::settings::{Setting, kept_text};
 use super::{Glue, with_glue};
-use crate::{DownloadRow, MainWindow, ModsData, NexusData};
+use crate::{DownloadRow, DownloadsData, MainWindow, ModsData, NexusData};
 
 /// How often a download's progress reaches the window: more would only
 /// redraw the card for nothing.
@@ -34,6 +34,8 @@ pub(super) struct NexusUiState {
     /// The settings were read and the library scanned: links can be taken.
     ready: Cell<bool>,
     downloads: Rc<VecModel<DownloadRow>>,
+    /// Every download, for the Downloads page's card.
+    all_downloads: Rc<VecModel<DownloadRow>>,
     choices: Rc<VecModel<SharedString>>,
 }
 
@@ -43,6 +45,7 @@ impl NexusUiState {
             state: RefCell::default(),
             ready: Cell::new(false),
             downloads: Rc::new(VecModel::default()),
+            all_downloads: Rc::new(VecModel::default()),
             choices: Rc::new(VecModel::default()),
         }
     }
@@ -90,14 +93,21 @@ impl Glue {
 
         let mods = window.global::<ModsData>();
         let glue = Rc::clone(self);
-        mods.on_stop_download(move |id| {
-            if let Ok(id) = u64::try_from(id) {
-                glue.nexus.state.borrow_mut().stop(id);
-                glue.show_nexus_downloads();
-            }
-        });
+        mods.on_stop_download(move |id| glue.nexus_stop(id));
+        let glue = Rc::clone(self);
+        let downloads = window.global::<DownloadsData>();
+        downloads.set_mods_rows(ModelRc::from(Rc::clone(&self.nexus.all_downloads)));
+        downloads.on_stop_mod(move |id| glue.nexus_stop(id));
         let glue = Rc::clone(self);
         mods.on_update(move |index| glue.nexus_update(index));
+    }
+
+    /// Stop on a download, on the card or on the Downloads page.
+    fn nexus_stop(&self, id: i32) {
+        if let Ok(id) = u64::try_from(id) {
+            self.nexus.state.borrow_mut().stop(id);
+            self.show_nexus_downloads();
+        }
     }
 
     /// Runs `work` on a thread and hands its answer to `arrived` on the
@@ -412,7 +422,7 @@ impl Glue {
     ) {
         let finished = self.nexus.state.borrow_mut().finished(id, game, result);
         match finished {
-            Finished::Choose(pending) => self.mods_installer_not_yet(&pending),
+            Finished::Choose(pending) => self.installer_open(game.to_owned(), pending),
             Finished::Done(overview, note) => {
                 self.say(note);
                 self.mods_ready(game, *overview);
@@ -429,26 +439,44 @@ impl Glue {
     /// Writes the open game's downloads for the card: row by row when the
     /// count is the same, so the card does not move.
     pub(super) fn show_nexus_downloads(&self) {
+        self.show_mods_downloads_card();
         let Some(id) = self.open.borrow().clone() else {
             self.nexus.downloads.set_vec(Vec::new());
             return;
         };
         let state = self.nexus.state.borrow();
-        let rows: Vec<DownloadRow> = state
-            .downloads_for(&id)
-            .map(|download| {
-                let (fraction, words) = download.progress();
-                DownloadRow {
-                    id: i32::try_from(download.id).unwrap_or(i32::MAX),
-                    name: download.name.as_str().into(),
-                    words: words.into(),
-                    fraction,
-                    stopping: download.stopping(),
-                }
-            })
-            .collect();
+        let rows: Vec<DownloadRow> = state.downloads_for(&id).map(download_row).collect();
         drop(state);
         super::mods::refill(&self.nexus.downloads, rows);
+    }
+
+    /// The Downloads page's card: every mod coming in, for any game. When
+    /// the first one starts or the last one ends the page is drawn again, for
+    /// its invitation to the Store.
+    fn show_mods_downloads_card(&self) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let rows: Vec<DownloadRow> = self
+            .nexus
+            .state
+            .borrow()
+            .downloads
+            .iter()
+            .map(download_row)
+            .collect();
+        let show = !rows.is_empty();
+        super::mods::refill(&self.nexus.all_downloads, rows);
+        let data = window.global::<DownloadsData>();
+        if data.get_mods_show() != show {
+            data.set_mods_show(show);
+            self.show_downloads();
+        }
+    }
+
+    /// Whether a mod is coming in from Nexus, for any game.
+    pub(super) fn nexus_downloading(&self) -> bool {
+        !self.nexus.state.borrow().downloads.is_empty()
     }
 
     // Updates.
@@ -529,6 +557,18 @@ impl Glue {
     /// The page closed: the card's rows go with it.
     pub(super) fn nexus_clear(&self) {
         self.nexus.downloads.set_vec(Vec::new());
+    }
+}
+
+/// A download as the card draws it.
+fn download_row(download: &zendo_shell::nexus::Download) -> DownloadRow {
+    let (fraction, words) = download.progress();
+    DownloadRow {
+        id: i32::try_from(download.id).unwrap_or(i32::MAX),
+        name: download.name.as_str().into(),
+        words: words.into(),
+        fraction,
+        stopping: download.stopping(),
     }
 }
 
@@ -714,6 +754,47 @@ mod tests {
             .row_data(0)
             .expect("a row")
             .id
+    }
+
+    #[test]
+    fn the_downloads_page_lists_every_mod_coming_in_and_stop_works_there() {
+        let (window, glue) = page(2);
+        let downloads = window.global::<DownloadsData>();
+        assert!(!downloads.get_mods_show());
+        glue.show_downloads();
+        assert!(downloads.get_invite(), "nothing going on: the Store invite");
+
+        let id = download_started(&glue, &window);
+        glue.nexus_download(
+            "desktop:1",
+            Link::parse("nxm://catquest/mods/3/files/4").unwrap(),
+            false,
+        );
+        assert!(downloads.get_mods_show());
+        assert_eq!(downloads.get_mods_rows().row_count(), 2, "both games'");
+        assert_eq!(
+            window.global::<ModsData>().get_downloads().row_count(),
+            1,
+            "the card on a game's page keeps to that game"
+        );
+        assert!(!downloads.get_invite(), "something is coming in");
+        assert!(glue.nexus_downloading());
+
+        downloads.invoke_stop_mod(id);
+        assert!(
+            downloads
+                .get_mods_rows()
+                .iter()
+                .any(|row| row.id == id && row.stopping)
+        );
+
+        let id = u64::try_from(id).unwrap();
+        glue.nexus_finished(id, "desktop:0", Err("cut".into()));
+        assert_eq!(downloads.get_mods_rows().row_count(), 1);
+        let other = u64::try_from(downloads.get_mods_rows().row_data(0).unwrap().id).unwrap();
+        glue.nexus_finished(other, "desktop:1", Err("cut".into()));
+        assert!(!downloads.get_mods_show(), "the card goes with the last");
+        assert!(downloads.get_invite());
     }
 
     #[test]

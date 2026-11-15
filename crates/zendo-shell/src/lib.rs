@@ -15,6 +15,7 @@ pub mod file_dialog;
 pub mod format;
 pub mod gamepad;
 pub mod i18n;
+pub mod installer;
 pub mod launch_options;
 pub mod links;
 pub mod mods;
