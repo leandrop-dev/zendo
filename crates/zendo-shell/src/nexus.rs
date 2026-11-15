@@ -1,7 +1,7 @@
 //! Nexus Mods in the window, without a toolkit: the key on the Settings page
 //! and what opens `nxm://` links, a link that arrives (which game it is for,
 //! the download into that game's mods), the newer files found for a game's
-//! mods and the Update on a mod. The Iced window and the Slint one each draw
+//! mods and the Update on a mod. The window draws
 //! it; the work that waits on the network runs on a thread through the
 //! functions at the end ([`match_games`], [`fetch`], [`ask_updates`],
 //! [`check_key`], [`become_handler`]).

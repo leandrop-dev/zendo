@@ -5,8 +5,8 @@
 //! the same way. What Steam does by itself is followed too (its own
 //! downloads, updates and uninstalls); pausing and cancelling stay in Steam.
 //!
-//! The state and its transitions are here, with no toolkit, so the Iced and
-//! the Slint windows share them. Each method says what the window must do
+//! The state and its transitions are here, with no toolkit (the window is Slint).
+//! Each method says what the window must do
 //! about what happened: a line to say and whether the library is read again.
 
 use std::collections::{HashMap, HashSet};

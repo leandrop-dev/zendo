@@ -2,7 +2,7 @@
 
 A game launcher for Linux: every game in one library, in a normal window with
 a full-screen mode for the couch, launched with the right tools, and mods
-later. MIT. Developed on Fedora with KDE Plasma next to
+later. Source files MIT, the binary GPLv3 (Slint). Developed on Fedora with KDE Plasma next to
 [plasmonk-kde](../plasmonk-kde); it began as a sister project of hyprmonk.
 
 ## Documents
@@ -12,94 +12,50 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | what is next, what is on hold, and a table of items 27 to 45 | starting new work |
+| `docs/backlog.md` | what is next, what is on hold, and a table of the built items 27 to 54 | starting new work |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
-## Where it stands (2026-11-13)
+## Where it stands (2026-11-15)
 
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38, 41 to 53 are built, with tests green (`docs/backlog.md` has the table,
-`docs/history.md` the detail and what was checked). Item 37 (emulation), the
-list and details views, OptiScaler and recompiled games are on hold.
+to 36, 38 and 41 to 54 are built, with tests green (`docs/backlog.md` has the
+table, `docs/history.md` the detail and what was checked). Item 37 (emulation),
+the list and details views, OptiScaler and recompiled games are on hold.
 
-- Tray: hiding closes the window and the tray opens a new one
-  (`iced::daemon`), because on Wayland an app cannot unminimise itself.
-- The Fedora RPM builds on COPR `leandrop/zendo`; the user resubmits `main`
-  after the redesign is done.
-- Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44 (41 to 44 were
-  checked together on screen with the user at the PC; `docs/history.md` says
-  what was not).
-- **The window is moving from Iced to Slint** [firm, decided 2026-11-14]. The
-  spike (item 45) found translucency (any alpha), blur (by window class, as
-  in Iced), a bundled font, SVG icons, the KDE scheme through `zendo-core`,
-  arrow keys and a real DualSense through gilrs all working; scrolling needs a
-  hand-built row model. Licence: Slint under **GPLv3**, because COPR forbids
-  sources under a licence outside Fedora's allowed list and Slint's
-  Royalty-free licence is on neither list (item 46); the binary is GPLv3, the
-  source files stay MIT. Staging: a new crate `crates/zendo-slint` beside the
-  Iced `crates/zendo`, shared toolkit-free code in `crates/zendo-shell` (words,
-  tray, controller, links, sign-in window, file dialog and the command line),
-  the Iced crate deleted at parity (items 47 to 54). Keep logic in
-  `zendo-core`. `zendo-slint` exists since item 47: it opens, follows themes
-  and the KDE scheme, switches pages and hides to the tray; since item 48 its
-  Library page is real (grid, chips, search, sort, marks, bulk actions,
-  keyboard and pad cursor, cover downloads), the grid's logic is
-  `zendo_core::browse` and the labels are `zendo_shell::format`, both shared
-  with Iced. On 2,700 distinct covers it scrolls at 61 to 75 fps where Iced
-  holds 3 to 9 (`docs/history.md`, item 48). Item 49, the game page, is built:
-  49a (a card opens the game page with Play and Stop, the running badge,
-  status, favorite, hide, tiles, sessions and details, local games with the
-  Add game sheet; the run logic is shared in `zendo_shell::running`), 49b (the
-  ProtonDB pill, Steam's description and facts, screenshots, requirements,
-  achievements, DLC installed, the Steam app id) and 49c (Anti-cheat, the Steam
-  Deck pill, the cloud saves row, the Wine prefix card, GOG's changelog and
-  total time played). Item 50 is built: 50a (the Settings page's General,
-  Keys, Library and Diagnostics groups), 50b (the Engines and Proton groups,
-  the Theme choices and the Discord switch) and 50c (the Accounts page for Epic,
-  GOG and Amazon, About, and the Collections sheet with its chips and the game
-  page's collections row). Item 51 is sliced: 51a is built (the Store page
-  with its chips, sorts, keys, Refresh and errors; a store game's page, which
-  is the game page in an owned mode; Steam's sign-in card on Accounts, with
-  its list and achievements; the shared rules moved to `zendo-core` and
-  `zendo-shell`), and 51b is built (the Downloads page and the job queue, whose
-  rules are `zendo_shell::queue`, shared with Iced; Install, Import, "Also
-  install its DLC" and See downloads on a store game's page; the question
-  about closing while a job runs; the update checks and the updates by
-  themselves). The FOMOD installer sheet, listed under 51b, is a mod installer
-  and moved to 52. 51c is built (Steam's installs, followed from Zendo and
-  shared with Iced as `zendo_shell::steam_installs`: Install with Steam, its
-  progress and the card on Downloads, Verify and Uninstall with Steam; and the
-  installed game's page: Update, the job line, More with Check for updates,
-  Repair, Move and Uninstall, and the DLC card's Install and Uninstall).
-  Item 52 is sliced [firm]: 52a is built (the Launch options sheet with
-  gamescope, whose form is `zendo_shell::launch_options`, shared with Iced),
-  52b is built (the artwork chooser: Change cover and Change backdrop, whose
-  picker is `zendo_shell::artwork`, shared with Iced), and 52c is sliced
-  [firm]: 52c1 is built (the Mods card on a game's page: profiles, mods in
-  order, plugins, the folder, Apply and Back to vanilla, Add mod and Find on
-  Nexus; its state and words are `zendo_shell::mods`, shared with Iced), 52c2
-  is sliced again [firm]: 52c2a is built (the Nexus key and link handler in
-  Settings, `nxm://` links and the game chooser, downloads with Stop and
-  Update on the Mods card, the update check; shared as `zendo_shell::nexus`)
-  and 52c2b is built too (Search Nexus: the sheet with results, pictures,
-  file lists, Page on Nexus and Get on Nexus; shared as
-  `zendo_shell::nexus_search`) and 52c3 is built too (the FOMOD installer sheet,
-  whose state is `zendo_shell::installer`, shared with Iced; Options… on a mod;
-  the card of mods coming in from Nexus on Downloads), which closes item 52.
-  Item 53 is built [firm, sliced in two]: 53a (the Stats page: period chips,
-  tiles, most played, charts by month and weekday, highlights and the library
-  by status, reading the sessions the game page keeps; arrows change the
-  period) and 53b (Game Mode: F11 and Select, the hero and carousel, shelves,
-  the Start menu, `--game-mode`; its rules are `zendo_shell::game_mode`). Run
-  it as `zendo-slint`.
+- **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
+  (item 54)]. It replaced the Iced window after a spike (item 45) that found
+  translucency, blur (by window class), a bundled font, SVG icons, the KDE
+  scheme through `zendo-core`, arrow keys and a real DualSense through gilrs
+  all working. On 2,700 distinct covers it scrolls at 61 to 75 fps where Iced
+  held 3 to 9 (`docs/history.md`, item 48). Licence: Slint under **GPLv3**,
+  because COPR forbids sources under a licence outside Fedora's allowed list
+  and Slint's Royalty-free licence is on neither list (item 46): the binary is
+  GPLv3, the source files stay MIT. The Iced crate is gone; it is in git
+  history before the cut-over commit.
+- Crates: `crates/zendo` (the binary and the Slint window), `crates/zendo-shell`
+  (toolkit-free: words, tray, controller, links, the sign-in window, the file
+  dialog, the command line, and the state of each page's sheets and jobs) and
+  `crates/zendo-core` (everything else: library scan, launching, state,
+  stores, mods). Keep logic in `zendo-core` or `zendo-shell`.
+- Tray: hiding closes to the tray and the tray brings the window back.
+- The parity checklist that gated the cut-over is `docs/parity-checklist.md`
+  (signed off by the user 2026-11-15).
+- The Fedora RPM builds on COPR `leandrop/zendo`; the spec's licence is now
+  `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
+  (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
+  resubmits `main` (`docs/backlog.md`, "Waiting on the user").
+- Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44, and the
+  Slint window with real accounts and engines (`docs/backlog.md` lists what to
+  try).
 
 ## Next
 
-Item 54, the cut-over: `docs/backlog.md` has it, and what is on hold.
+The COPR resubmit, then whatever the user chooses from `docs/backlog.md`
+(what is on hold is there).
 
 ## Direction [firm]
 
@@ -131,7 +87,7 @@ docs/backlog.md]:
 - The theme follows the active KDE colour scheme (`~/.config/kdeglobals`),
   which plasmonk sets. Zendo keeps its own colours elsewhere.
 - A complete redesign in the style of
-  [omakade](https://github.com/btsouth/omakade), built in Iced: a top bar
+  [omakade](https://github.com/btsouth/omakade), first built in Iced, now in Slint: a top bar
   with tabs instead of the sidebar, a translucent window, monospace type,
   Home and a controller-first Game Mode. omakade is GPL-3.0-or-later, so
   its ideas and look only, no code and no assets (`docs/design.md`). Qt/QML
@@ -157,8 +113,10 @@ docs/backlog.md]:
 
 ## Stack
 
-Rust, one `zendo` binary with an [Iced](https://iced.rs) window [firm].
-Chosen over:
+Rust, one `zendo` binary with a [Slint](https://slint.dev) window [firm, since
+2026-11-15; Iced before that]. Slint was chosen after the item 45 spike over
+staying on Iced (3 to 9 fps on 2,700 covers against Slint's 61 to 75). Also
+rejected:
 
 - Quickshell: a toolkit for desktop shells, not apps. Users would need it
   installed, the UI and the command would be two processes talking over a
@@ -167,18 +125,22 @@ Chosen over:
   and input would all be ours to write.
 - Qt/QML through cxx-qt: a heavier build and a Qt dependency.
 
-Controller input through the `gilrs` crate; the KDE colour scheme becomes an
-Iced theme.
+Controller input through the `gilrs` crate; the KDE colour scheme, read by
+`zendo-core`, becomes the window's colours. Slint 1.18, with its
+`unstable-winit-030` feature for the window's class and full-screen. The
+window's words are Fluent, handed to Slint through a `Tr` global.
 
-Layout [tentative], built this way: `crates/zendo-core` (library scan,
-launching, state, config and covers) and `crates/zendo` (the Iced app, plus
-`list`, `launch`, `hide`, `unhide` and `covers` commands for keybinds and scripts).
+Layout: `crates/zendo-core` (library scan, launching, state, config, covers,
+stores, mods), `crates/zendo-shell` (what needs no toolkit: words, tray,
+controller, links, the helper windows, the command line, and the state and
+words of each page's sheets and jobs) and `crates/zendo` (the Slint window,
+and the binary, whose `list`, `launch`, `hide`, `unhide`, `covers` and other
+commands serve keybinds and scripts).
 
-Iced has not reached 1.0 and its API changes between releases. Pinned at
-0.14.0 and gilrs at 0.11.2 (the current releases on 2026-11-05). Iced 0.14
-has a `Grid` widget, but the grid is laid out as rows of fixed-size cards so
-the arrow keys know the column count; the selection is Zendo's own, not
-Iced's widget focus, so keyboard and controller move the same cursor.
+Slint's `ListView` is vertical and virtual only, so the Library's grid is rows
+of fixed-size cards, and the arrow keys know the column count from
+`zendo_core::browse`. The selection is Zendo's own, not the toolkit's focus, so
+keyboard and controller move the same cursor.
 
 Call the tools that already exist instead of writing them again:
 `steam` (`steam://rungameid/ID`), Heroic's engines legendary (Epic), gogdl

@@ -1,8 +1,8 @@
 //! The art picker, without a toolkit: "Change cover" and "Change backdrop"
 //! on a game's page open a sheet that searches `SteamGridDB` for the game's
 //! title and lists the covers, or the wide images, of the game chosen; a
-//! click makes one the game's own, before Steam's and the stores'. The Iced
-//! window and the Slint one each draw it and run its [`Effect`]s.
+//! click makes one the game's own, before Steam's and the stores'. The window
+//! draws it and runs its [`Effect`]s.
 //!
 //! Every answer carries the generation it was asked in, and the counter
 //! lives in [`Art`] across opens, so a late answer for a picker that was

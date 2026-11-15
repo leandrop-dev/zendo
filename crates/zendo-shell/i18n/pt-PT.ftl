@@ -111,9 +111,7 @@ about-report-problem = Comunicar um problema
 about-version = Versão { $version }
 about-intro = Todos os jogos deste computador numa só biblioteca: Steam, Epic, GOG, Amazon e os restantes, cada um iniciado como o seu próprio lançador o faria.
 about-licence = Licença
-about-licence-text = MIT. O Zendo lê os ficheiros dos lançadores e nunca escreve neles.
 about-built-on = Feito com
-about-built-iced = Iced, a janela e tudo o que nela está
 about-built-slint = Slint (sob a GPLv3), a janela e tudo o que nela está
 about-licence-text-slint = Os ficheiros do próprio Zendo são MIT. O programa é feito com o Slint sob a GPLv3, pelo que, no seu todo, é GPLv3. O Zendo lê os ficheiros dos lançadores e nunca escreve neles.
 about-built-gilrs = gilrs, para os comandos
@@ -366,7 +364,6 @@ mods-added = { $name } adicionado
 mods-unpacking = A extrair…
 mods-switching = A mudar…
 mods-close-game-first = Feche primeiro o jogo: os seus ficheiros estão em uso
-mods-reading = A ler…
 mods-add = Adicionar mod…
 mods-title = Mods
 mods-find-on-nexus = Procurar mods no Nexus
@@ -567,7 +564,6 @@ run-stop = Parar
 run-force-stop = Forçar paragem
 run-wine-prefix = Prefixo Wine
 run-last-log = Registo do último lançamento
-run-open = Abrir
 
 ## ProtonDB
 

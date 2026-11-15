@@ -1,7 +1,7 @@
 //! The sign-in window: a store's login page in a small window of Zendo's
 //! own, so signing in needs nothing copied. It runs as a second process,
 //! `zendo sign-in-window <store> <url>`, because the web view needs GTK's
-//! own loop, apart from Iced's.
+//! own loop, apart from the window's.
 //!
 //! Steam's is different ([`steam`]): its store page gives a signed-in user
 //! a Web API token, which the window writes instead of a code. Its cookies

@@ -7,17 +7,22 @@ pkgrel=1
 pkgdesc="Every game in one library: Steam, Epic, GOG, Amazon and your own, with Proton and mods"
 arch=('x86_64')
 url="https://github.com/leandrop-dev/zendo"
-license=('MIT')
+license=('GPL-3.0-only' 'MIT' 'OFL-1.1')
 depends=(
+  'fontconfig'
   'gcc-libs'
   'glib2'
   'glibc'
   'gtk3'
   'hicolor-icon-theme'
+  'libglvnd'
   'libsoup3'
+  'libx11'
+  'libxcursor'
+  'libxi'
   'libxkbcommon'
+  'libxkbcommon-x11'
   'systemd-libs'
-  'vulkan-icd-loader'
   'wayland'
   'webkit2gtk-4.1'
 )

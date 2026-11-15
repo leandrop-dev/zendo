@@ -112,9 +112,7 @@ about-report-problem = Report a problem
 about-version = Version { $version }
 about-intro = Every game on this machine in one library: Steam, Epic, GOG, Amazon and the rest, each started the way its own launcher would.
 about-licence = Licence
-about-licence-text = MIT. Zendo reads the launchers' files and never writes to them.
 about-built-on = Built on
-about-built-iced = Iced, the window and everything in it
 about-built-slint = Slint (under the GPLv3), the window and everything in it
 about-licence-text-slint = Zendo's own files are MIT. The program is built with Slint under the GPLv3, so as a whole it is GPLv3. Zendo reads the launchers' files and never writes to them.
 about-built-gilrs = gilrs, for controllers
@@ -361,7 +359,6 @@ mods-added = Added { $name }
 mods-unpacking = Unpacking…
 mods-switching = Switching…
 mods-close-game-first = Close the game first: its files are in use
-mods-reading = Reading…
 mods-add = Add mod…
 mods-title = Mods
 mods-find-on-nexus = Find mods on Nexus
@@ -559,7 +556,6 @@ run-stop = Stop
 run-force-stop = Force stop
 run-wine-prefix = Wine prefix
 run-last-log = Last launch's log
-run-open = Open
 
 ## ProtonDB
 

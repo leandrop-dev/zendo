@@ -1,6 +1,6 @@
 //! The Launch options sheet over a game's page, for the games Zendo starts
 //! itself. The form, its lists and what closing asks are
-//! `zendo_shell::launch_options`, shared with Iced; this draws them. A part
+//! `zendo_shell::launch_options`; this draws them. A part
 //! of the Library's glue (`library_ui`), which owns the open game.
 
 use std::cell::RefCell;

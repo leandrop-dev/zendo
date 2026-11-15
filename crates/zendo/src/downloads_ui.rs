@@ -1,5 +1,5 @@
 //! The Downloads page and the queue behind it, in the window. The queue's
-//! state and rules are `zendo_shell::queue`'s (shared with the Iced window);
+//! state and rules are `zendo_shell::queue`'s;
 //! what is here carries its effects out (the job's thread, the files it
 //! keeps, the lines it says) and writes what the page shows. A part of the
 //! Library's glue (`library_ui`), which owns the games and the stores.

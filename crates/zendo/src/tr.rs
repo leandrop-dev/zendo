@@ -1,5 +1,5 @@
 //! The window's words in Slint: the `Tr` global's lookups, answered from the
-//! Fluent bundles in `zendo-shell`. The same messages the Iced window shows.
+//! Fluent bundles in `zendo-shell`. The messages are `zendo-shell`'s.
 
 use slint::ComponentHandle;
 use zendo_shell::fluent_bundle::{FluentArgs, FluentValue};

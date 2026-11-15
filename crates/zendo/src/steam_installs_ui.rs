@@ -2,7 +2,7 @@
 //! page, what Steam is doing (read from its manifests every few seconds), the
 //! Steam card on Downloads, and Verify and Uninstall on an installed Steam
 //! game's page. What is followed, and how, is `zendo_shell::steam_installs`,
-//! shared with the Iced window; this part carries it to the Slint models and
+//! the toolkit-free part; this part carries it to the Slint models and
 //! asks Steam on the window's behalf. A part of the Library's glue
 //! (`library_ui`).
 

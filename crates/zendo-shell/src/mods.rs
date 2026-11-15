@@ -1,7 +1,7 @@
 //! The Mods card on a game's page, without a toolkit: the profile in use,
 //! the mods Zendo keeps for the game in order, a Bethesda game's plugins,
-//! the folder they go in, Apply and Back to vanilla. The Iced window and the
-//! Slint one each draw it and run its [`Job`]s on a thread through [`run`],
+//! the folder they go in, Apply and Back to vanilla. The window
+//! draws it and runs its [`Job`]s on a thread through [`run`],
 //! which calls `zendo_core::mods`.
 //!
 //! [`ModsState`] holds what the card remembers (what was read, the change in

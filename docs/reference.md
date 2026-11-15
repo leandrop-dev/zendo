@@ -179,7 +179,7 @@ Stores (phase 4), read from legendary, gogdl and nile's source and Heroic
   leaves unprocessed and then skips the game (Cat Quest II), so Zendo
   works that folder out itself and passes `sync-saves --save-path`.
 
-Covers are kept at the size the store serves them. Iced decodes each to
+Covers are kept at the size the store serves them. The old Iced window decoded each to
 full-size RGBA (the Amazon one is about 6 MB in memory), which is fine for a
 few dozen games; for large libraries, scale them down when saving [re-evaluate
 once someone has a few hundred games].

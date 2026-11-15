@@ -5,7 +5,7 @@
 //!
 //! [`InstallerState`] holds the sheet and the queue and says, for each press,
 //! what the window does next; [`InstallerState::view`] flattens the sheet for
-//! drawing, so the Iced window and the Slint one show the same words. The work
+//! drawing. The work
 //! itself is `zendo_core::mods`' and `zendo_core::fomod`'s; building the mod
 //! runs as `mods::Work::Install`.
 

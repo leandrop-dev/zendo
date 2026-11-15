@@ -4,7 +4,7 @@ Zendo's new look is modelled on [omakade](https://github.com/btsouth/omakade)
 (a Qt/QML and C++ game library for Omarchy, GPL-3.0-or-later). Ideas and look
 only, no code and no assets, as with Quiver. Written 2026-11-12 from omakade's
 README, `docs/GUIDE.md`, `docs/GAME-MODE.md`, its library and game page
-screenshots and both demo videos. Built in Iced (backlog items 31 to 34).
+screenshots and both demo videos. Built first in Iced (backlog items 31 to 34), now in Slint (items 45 to 54).
 
 ## Look
 

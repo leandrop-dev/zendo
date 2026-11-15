@@ -94,8 +94,8 @@ static CURRENT: AtomicU8 = AtomicU8::new(0);
 fn bundle(language: Language) -> FluentBundle<FluentResource> {
     let tag: LanguageIdentifier = language.tag().parse().unwrap_or_default();
     let mut bundle = FluentBundle::new_concurrent(vec![tag]);
-    // Iced draws the marks Fluent puts around values for right-to-left
-    // text as boxes; neither language needs them.
+    // The old Iced window drew the marks Fluent puts around values for
+    // right-to-left text as boxes; neither language needs them.
     bundle.set_use_isolating(false);
     // A file with mistakes still gives the messages it could read; the
     // tests keep both free of them.

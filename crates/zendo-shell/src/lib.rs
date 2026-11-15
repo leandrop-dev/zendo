@@ -1,5 +1,5 @@
-//! The parts of Zendo's window that need no toolkit, so the Iced window and
-//! the Slint one can share them: the window's words ([`i18n`]), the tray,
+//! The parts of Zendo's window that need no toolkit, kept apart from the
+//! Slint code that draws it: the window's words ([`i18n`]), the tray,
 //! controllers, `nxm://` links, Discord's presence, and the two helper
 //! windows that run as processes of their own (the sign-in window and the
 //! file dialog, which need GTK's loop apart from the toolkit's).

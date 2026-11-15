@@ -5170,3 +5170,37 @@ on the scrollbar track and Page Down did not scroll; dragging the thumb did.
 A helper that read `kdotool getmouselocation --shell` clobbered its own `X` and
 `Y` (the output names are `X`, `Y`, `WINDOW`); it aborted on the pid check
 before any click.
+
+## Item 54b, the cut-over from Iced to Slint (2026-11-15)
+
+The user signed off `docs/parity-checklist.md`, and the Iced window went.
+
+- `crates/zendo/src` (`app.rs`, `app/`) and its `Cargo.toml` were deleted; the
+  Slint crate's `src/`, `ui/`, `build.rs` and `Cargo.toml` moved into
+  `crates/zendo` (git sees renames), next to the `fonts/`, `icons/` and
+  `themes/` folders that were already there. The package is named `zendo`; the
+  asset paths became `../fonts`, `../icons` and `../themes`. `iced` left the
+  workspace dependencies (the only one nothing else used); the comments that
+  named it were reworded.
+- `zendo-shell`'s test that every message is used failed once, naming four
+  messages only Iced used (`about-built-iced`, `about-licence-text`,
+  `mods-reading`, `run-open`); they were removed from both `.ftl` files.
+- `packaging/fedora/zendo.spec`: licence `MIT AND OFL-1.1 AND GPL-3.0-only`;
+  `vulkan-loader` replaced by `libglvnd-egl`, `libglvnd-glx` and `fontconfig`,
+  and `libwayland-egl`, `libX11`, `libXcursor` and `libXi` added. The list
+  came from the libraries the built binary loads (`grep -a` for `lib*.so` in
+  it: EGL, GL, Wayland, xkbcommon, fontconfig, X11, no Vulkan) and each name
+  was looked up with `rpm -qf` on this Fedora. `packaging/arch/zendo-git/PKGBUILD`:
+  the same change with Arch's package names (`libglvnd`, `fontconfig`, `libx11`,
+  `libxcursor`, `libxi`, `libxkbcommon-x11`), written from knowledge, not
+  checked on Arch.
+- README (badge, layout table, credits, licence), `PLAN.md` (where it stands,
+  stack), `CLAUDE.md`, `docs/backlog.md` and the module comments in
+  `zendo-shell` and `zendo` were brought up to date.
+
+Checked: `cargo build`, `cargo test --workspace` (168, 285 and 91 passed,
+25 ignored), `cargo clippy --workspace --all-targets` clean. `cargo fmt
+--check` still reports one old diff in `zendo-core/src/achievements.rs`, which
+this item did not touch. A launch after the rename (throwaway home) showed the
+font, icons and covers. Not done: an RPM mock build and the COPR resubmit (the
+user's).

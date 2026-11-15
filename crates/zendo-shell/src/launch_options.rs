@@ -1,6 +1,6 @@
 //! A game's launch options sheet, without a toolkit: what the form holds,
 //! the lists it offers, what its fields build and what closing it asks. The
-//! Iced window and the Slint one each draw it.
+//! window draws it.
 //!
 //! The Proton it runs with, `MangoHud`, `GameMode`, gamescope, NVIDIA
 //! offload, Proton's switches, the game's arguments and environment, and

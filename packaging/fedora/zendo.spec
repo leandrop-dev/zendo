@@ -7,7 +7,7 @@ Name:           zendo
 Version:        0.1.0^%{snapdate}git%{shortcommit}
 Release:        1%{?dist}
 Summary:        Every game in one library: Steam, Epic, GOG, Amazon and your own
-License:        MIT AND OFL-1.1
+License:        MIT AND OFL-1.1 AND GPL-3.0-only
 URL:            https://github.com/leandrop-dev/zendo
 Source0:        zendo-%{shortcommit}.tar.gz
 # cargo vendor --locked, made by .copr/Makefile (the build itself has no network)
@@ -30,11 +30,17 @@ BuildRequires:  bsdtar
 BuildRequires:  7zip
 BuildRequires:  coreutils
 
-# Loaded at run time by Iced (winit, wgpu), so rpm cannot see them
-Requires:       vulkan-loader
+# Loaded at run time by the window (Slint, on winit and EGL), so rpm cannot see them
+Requires:       libglvnd-egl
+Requires:       libglvnd-glx
+Requires:       fontconfig
 Requires:       libxkbcommon
 Requires:       libxkbcommon-x11
+Requires:       libX11
+Requires:       libXcursor
+Requires:       libXi
 Requires:       libwayland-client
+Requires:       libwayland-egl
 Requires:       hicolor-icon-theme
 # Settings -> Engines downloads and unpacks the engines and Protons
 Requires:       python3

@@ -5,9 +5,9 @@ where it stands. It is short, and it is the only file to read up front.
 
 The rest is read on demand, never all at once:
 
-- `docs/backlog.md`: what is next (items 53 and 54, the port to Slint), what is
-  on hold, and a table of the built items 27 to 48. Read it when starting new
-  work.
+- `docs/backlog.md`: what is next, what is on hold, the list of what to try
+  in the Slint window, and a table of the built items 27 to 54. Read it when
+  starting new work.
 - `docs/design.md`: the redesign (omakade's ideas, no code). Read it before
   working on the window's look or pages.
 - `docs/history.md`: what was built, when, and what was checked. Read it when

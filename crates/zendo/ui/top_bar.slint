@@ -155,14 +155,14 @@ export component TopBar inherits Rectangle {
                 }
             }
             IconButton {
-                icon: @image-url("../../zendo/icons/download.svg");
+                icon: @image-url("../icons/download.svg");
                 label: Tr.t("page-downloads");
                 count: root.downloads-count;
                 current: root.page == Page.downloads;
                 clicked => { root.navigate(Page.downloads); }
             }
             IconButton {
-                icon: @image-url("../../zendo/icons/settings.svg");
+                icon: @image-url("../icons/settings.svg");
                 label: Tr.t("page-settings");
                 current: root.page == Page.settings || root.page == Page.accounts || root.page == Page.about;
                 clicked => { root.navigate(Page.settings); }

@@ -4,7 +4,7 @@
 //! Windows program for a game's prefix, from `~/Downloads`) or `folder`
 //! (a folder to move a game into, from `~/Games`);
 //! a second process like the sign-in window, since GTK needs its own loop
-//! apart from Iced's. GTK's native chooser goes through the desktop portal
+//! apart from the window's. GTK's native chooser goes through the desktop portal
 //! when there is one, so it is the dialog every other app shows. The path
 //! chosen goes to stdout; closing it writes nothing.
 

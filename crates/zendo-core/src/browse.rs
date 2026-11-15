@@ -1,7 +1,7 @@
 //! What a library grid shows and how its cursor moves, with no toolkit: the
 //! games a [`Filter`] lets through, in order, the cursor's steps over rows of
 //! cards, where to scroll to keep the cursor in view, and the bulk changes to
-//! the marked games. Both windows (Iced's and Slint's) use it.
+//! the marked games. The window uses it.
 
 use std::collections::BTreeSet;
 

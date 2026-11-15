@@ -1,5 +1,5 @@
 //! The art picker over a game's page: Change cover and Change backdrop. Its
-//! rules, lists and effects are `zendo_shell::artwork`, shared with Iced;
+//! rules, lists and effects are `zendo_shell::artwork`;
 //! this draws the sheet, runs the effects on threads and keeps the
 //! thumbnails. A part of the Library's glue (`library_ui`), which owns the
 //! open game and the covers.

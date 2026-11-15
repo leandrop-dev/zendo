@@ -1,7 +1,7 @@
 //! Searching Nexus Mods from a game's Mods card, without a toolkit: the
 //! sheet's state (the words, the order, the results a page at a time, each
-//! mod's files), its transitions, and the words it shows. The Iced window and
-//! the Slint one each draw it. What waits on the network runs on a thread
+//! mod's files), its transitions, and the words it shows. The window
+//! draws it. What waits on the network runs on a thread
 //! through [`nexus_search::search`] and [`zendo_core::nexus::files`]; the
 //! pictures and Nexus's window are the toolkits' own business.
 //!

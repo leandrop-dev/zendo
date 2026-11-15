@@ -1,5 +1,5 @@
 //! The window: opened with Zendo's class, painted from the theme, hidden to
-//! the tray and brought back from it. What the Iced window's `app::run` and
+//! the tray and brought back from it. What the old Iced window's `app::run` and
 //! its tray handling do, in Slint.
 
 use std::cell::{Cell, RefCell};

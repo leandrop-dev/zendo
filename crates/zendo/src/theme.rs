@@ -1,7 +1,7 @@
 //! The window's colours: a theme file (Zendo's own by default, or one of the
 //! user's), or the KDE colour scheme in use, followed as it changes.
 //!
-//! The same rules as the Iced window's `app/style.rs` and `app/themes.rs`,
+//! The rules of the old Iced window's `app/style.rs` and `app/themes.rs`,
 //! without the toolkit: the built-in themes are the files in
 //! `crates/zendo/themes/`, the user's are read from `~/.config/zendo/themes/`
 //! (see [`zendo_core::theme`]), and one named as a built-in replaces it.
@@ -18,7 +18,7 @@ use zendo_core::theme::{Rgb, Theme};
 use zendo_shell::t;
 
 /// The themes built into Zendo: each file's name and text.
-const BUILT_IN: &[(&str, &str)] = &[("zendo", include_str!("../../zendo/themes/zendo.toml"))];
+const BUILT_IN: &[(&str, &str)] = &[("zendo", include_str!("../themes/zendo.toml"))];
 
 /// The theme used when none is chosen, or the one chosen is gone.
 const DEFAULT: &str = "zendo";

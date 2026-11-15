@@ -1,9 +1,9 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38, 41 to 53 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 54 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
-## Next: the port from Iced to Slint
+## The port from Iced to Slint (built 2026-11-14 to 2026-11-15)
 
 Decided by the user on 2026-11-14 after item 45's spike (`docs/history.md`,
 "Item 45, the Slint spike"): a **full port**, Slint under **GPLv3** (COPR
@@ -98,12 +98,20 @@ to `zendo-core` when that page is ported. Ask before building any other page
   switched to it and go at the cut-over), the Slint side is `ui/game_mode.slint`
   and `game_mode_ui.rs`). Not seen: a real controller, a hero with a Steam
   summary, a light scheme. Item 54's parity checklist must go through 53.
-- **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
-  crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
-  GPL-3.0-only`), README, docs, COPR resubmit. Sliced with the user
-  2026-11-15: **54a** the checklist, written (`docs/parity-checklist.md`; not
-  yet signed off; its differences from Iced were ported or decided 2026-11-15; all but the update badge seen on screen), then **54b** the rename, the deletion and
-  the packaging, after the sign-off. The COPR resubmit stays the user's.
+- **54 built 2026-11-15** Cut-over, sliced in two with the user. **54a**: the
+  parity checklist (`docs/parity-checklist.md`: the 11 messages only Iced used
+  and what the Slint side did for each; the update badge, the "game gone"
+  notes, the per-source library problems, "No images to download", the panic
+  text and the Stats hint were ported, "Reading mods…" left out on purpose;
+  seen on screen except the update badge). **54b** (signed off by the user): the
+  Slint crate became `crates/zendo` (the old `zendo-slint`), the Iced
+  `app.rs` and `app/` were deleted with `iced` from the workspace, the four
+  messages nothing used were dropped from both `.ftl` files, the spec's
+  licence became `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries
+  and the PKGBUILD's became Slint's (EGL, GL, fontconfig, Wayland, xkbcommon,
+  X11; no Vulkan), and the README, PLAN.md and the module comments were
+  brought up to date. Left: the COPR resubmit (the user's, below) and an RPM
+  mock build, which was not run.
 
 The full plan, with files and risks, is `~/.claude/plans/drifting-hugging-scone.md`
 (outside the repo).
@@ -117,9 +125,9 @@ items 28 and 29. Not looked at on screen: a light KDE colour scheme (item
 31), pt-PT for item 38, the Store grid, signed-in Accounts, mods and Nexus
 (item 33), and a real controller (item 34).
 
-**For the user to try, `zendo-slint` items 49a to 49c** (checked by Claude only
+**For the user to try, the Slint window's items 49a to 49c** (checked by Claude only
 in a throwaway home; what was not checked is in `docs/history.md`). Run
-`cargo run -p zendo-slint` with your real library and tick off:
+`cargo run -p zendo` with your real library and tick off:
 
 - Game page: Play and Stop on a real game, the running badge, a status chip,
   Favorite and Hide, Add game with the real file dialog (an `.exe` and a
@@ -139,7 +147,7 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
 - GOG (signed in): the Changelog card and Show earlier updates; GOG's total
   time played after a session; the Cloud saves row before, during and after a
   real sync (Epic too).
-- **Settings (50a)**, with `cargo run -p zendo-slint` (it writes your real
+- **Settings (50a)**, with `cargo run -p zendo` (it writes your real
   `config.toml`). Claude already clicked through language, Opaque, a rejected
   key, the Library switches and Copy report (`docs/history.md`, item 50a).
   What needs you: the tray switch (needs the session bus: close the window
@@ -164,7 +172,7 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   through every new control against fake engines (`docs/history.md`, item 50c);
   not tried: Add game's Cancel keeping the keys after it closes (fixed like the
   others), and a Collections sheet with a controller.
-  What needs you, with `cargo run -p zendo-slint` and your real engines: a real
+  What needs you, with `cargo run -p zendo` and your real engines: a real
   sign-in to Epic, GOG and Amazon (the window loads the store's page and hands
   the code back by itself; Use my browser instead, then paste the page or
   address; Amazon's page is made by nile), a code pasted with Ctrl+V anywhere on
@@ -187,7 +195,7 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   latest version); the Store in pt-PT; the pad on the grid (A opens, Y sorts);
   Ctrl+F, Ctrl+V and Ctrl+R on the Store.
 - **Downloads, Install and Import (51b)**, same run. **Careful: a real
-  `cargo run -p zendo-slint` now resumes the queue left in
+  `cargo run -p zendo` now resumes the queue left in
   `~/.local/state/zendo/downloads.json` (jobs not paused start at once), asks
   your stores about the games Zendo installed, and, with "Update games by
   themselves" on (the default), queues and runs the updates it finds.** Claude
@@ -208,7 +216,7 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   closed"); Downloads in pt-PT and with a light KDE scheme. The game page's
   Update, Check, Move and Uninstall are 51c's, below.
 - **Steam installs and the game page's jobs (51c)**, same run. **Careful: a
-  real `cargo run -p zendo-slint` asks your real Steam client** (Install with
+  real `cargo run -p zendo` asks your real Steam client** (Install with
   Steam opens Steam's own dialog, Verify and Uninstall with Steam ask Steam;
   Uninstall with Steam and a game's Uninstall, Repair and Move touch real
   files). Claude already clicked every new control against fakes of `steam`,
@@ -298,5 +306,6 @@ history.md and the commits.
 | 46 | Slint licence checked against COPR (GPLv3 chosen); the toolkit-free modules moved to `zendo-shell` | 2026-11-14 |
 | 47 | `zendo-slint` skeleton: window, themes, `Tr`, top bar, tray with size kept, `--game-mode`; the command line moved to `zendo-shell` | 2026-11-14 |
 | 48 | The Library in Slint: grid, chips, search, sort, marks, bulk actions, keyboard and pad cursor, cover downloads, file watch; the grid's logic in `zendo_core::browse` | 2026-11-14 |
+| 49 to 54 | The rest of the Slint window (game page, Settings, Accounts, Store, Downloads, mods, Stats, Game Mode), and the cut-over: `zendo-slint` became `zendo`, the Iced crate deleted, licence and packaging updated | 2026-11-14 to 2026-11-15 |
 
 Item 37 (emulation) is on hold above.

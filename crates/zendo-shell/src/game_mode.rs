@@ -3,8 +3,8 @@
 //! shelf. What it holds is the shelf, the game in the hero and the Start
 //! menu; the window draws it and starts the game.
 //!
-//! The same rules as Iced's `app/game_mode.rs` and `hero.rs`, which stay
-//! until the cut-over (item 54).
+//! These rules came from the Iced window's `app/game_mode.rs` and `hero.rs`,
+//! deleted at the cut-over (item 54).
 
 use zendo_core::Game;
 use zendo_core::browse::Move;
