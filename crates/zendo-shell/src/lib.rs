@@ -17,6 +17,7 @@ pub mod gamepad;
 pub mod i18n;
 pub mod launch_options;
 pub mod links;
+pub mod mods;
 pub mod open;
 pub mod presence;
 pub mod queue;

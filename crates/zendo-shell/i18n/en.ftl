@@ -350,6 +350,8 @@ mods-applied-count = { $count ->
 mods-vanilla = { $title } is back to vanilla
 mods-applied = Applied to { $title }
 mods-choosing = Choosing a mod…
+# Removed with item 52c3, when this window runs a mod's installer itself.
+mods-installer-not-yet = { $name } has an installer, which this window cannot run yet, so it was not added
 mods-choose = Choose a mod
 mods-deleted = Mod deleted
 mods-new-folder = Mods go to the new folder

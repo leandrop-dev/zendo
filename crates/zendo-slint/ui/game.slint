@@ -7,6 +7,7 @@ import { Colors, Space, Tr } from "style.slint";
 import { ChipButton, ActionButton, RowButton, TextField, CheckBox } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
 import { ChipData } from "library.slint";
+import { ModsData } from "mods.slint";
 
 export struct Tile {
     label: string,
@@ -396,6 +397,326 @@ component AntiCheatCard inherits Card {
     }
 }
 
+// The game's mods: the profile, each mod in order with its box and its
+// buttons, a Bethesda game's plugins, the folder they go in, and Apply.
+// Every control is dimmed while a change is in flight (`ModsData.free`).
+component ModsCard inherits Card {
+    heading: Tr.t("mods-title");
+    // The room for a wrapped line: the card's, less its padding and the box.
+    property <length> wide: root.width - 2 * Space.l - 28px;
+    body := VerticalLayout {
+        spacing: Space.m;
+        HorizontalLayout {
+            spacing: Space.s;
+            alignment: end;
+            if ModsData.nexus: ActionButton {
+                label: Tr.t("mods-find-on-nexus");
+                small: true;
+                clicked => { ModsData.find-nexus(); }
+            }
+            ActionButton {
+                label: Tr.t("mods-add");
+                small: true;
+                enabled: ModsData.free;
+                clicked => { ModsData.add(); }
+            }
+        }
+        if ModsData.body-kind != 2: Text {
+            text: ModsData.message;
+            font-size: 13px;
+            color: ModsData.body-kind == 1 ? Colors.bad : Colors.dim;
+            wrap: word-wrap;
+        }
+        if ModsData.body-kind == 2: VerticalLayout {
+            spacing: Space.m;
+            // The profile in use, to switch; or the name being typed.
+            if !ModsData.naming: HorizontalLayout {
+                spacing: Space.s;
+                Text {
+                    text: Tr.t("mods-profile");
+                    font-size: 14px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                    width: 90px;
+                }
+                FlexboxLayout {
+                    horizontal-stretch: 1;
+                    vertical-stretch: 0;
+                    cross-axis-alignment: start;
+                    cross-axis-line-alignment: start;
+                    spacing: Space.s;
+                    for chip in ModsData.profiles: ChipButton {
+                        label: chip.label;
+                        chosen: chip.chosen;
+                        clicked => { if ModsData.free { ModsData.profile(chip.id); } }
+                    }
+                }
+                RowButton {
+                    label: Tr.t("mods-profile-new");
+                    enabled: ModsData.free;
+                    clicked => { ModsData.new-profile(); }
+                }
+                RowButton {
+                    label: Tr.t("mods-profile-rename-button");
+                    enabled: ModsData.free;
+                    clicked => { ModsData.rename-profile(); }
+                }
+                RowButton {
+                    label: ModsData.delete-profile-label;
+                    danger: ModsData.delete-profile-asking;
+                    enabled: ModsData.delete-profile-on;
+                    clicked => { ModsData.delete-profile(); }
+                }
+            }
+            if ModsData.naming: HorizontalLayout {
+                spacing: Space.s;
+                Text {
+                    text: Tr.t("mods-profile");
+                    font-size: 14px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                    width: 90px;
+                }
+                name-field := TextField {
+                    horizontal-stretch: 1;
+                    placeholder: ModsData.name-placeholder;
+                    text <=> ModsData.name;
+                    edited(typed) => { ModsData.name-typed(typed); }
+                    accepted => { ModsData.save-name(); }
+                    init => { self.focus-field(); }
+                }
+                RowButton {
+                    label: Tr.t("key-save");
+                    enabled: ModsData.name-ok;
+                    clicked => { ModsData.save-name(); }
+                }
+                RowButton {
+                    label: Tr.t("cancel");
+                    clicked => { ModsData.cancel-name(); }
+                }
+            }
+            Text {
+                text: ModsData.place;
+                font-size: 13px;
+                color: Colors.dim;
+                wrap: word-wrap;
+            }
+            Text {
+                text: ModsData.target;
+                font-size: 13px;
+                color: Colors.foreground;
+                wrap: word-wrap;
+            }
+            if ModsData.mods.length == 0: Text {
+                text: Tr.t("mods-none");
+                font-size: 14px;
+                color: Colors.dim;
+            }
+            // One flat row per mod: its box, its name and buttons, then its
+            // facts under the name.
+            for line[index] in ModsData.mods: VerticalLayout {
+                spacing: 2px;
+                HorizontalLayout {
+                    spacing: Space.s;
+                    CheckBox {
+                        on: line.enabled;
+                        label: line.name;
+                        toggled(on) => { if ModsData.free { ModsData.toggle(index, on); } }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: line.name;
+                        font-size: 14px;
+                        color: Colors.foreground;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    RowButton {
+                        label: "↑";
+                        enabled: ModsData.free && line.up;
+                        clicked => { ModsData.step(index, true); }
+                    }
+                    RowButton {
+                        label: "↓";
+                        enabled: ModsData.free && line.down;
+                        clicked => { ModsData.step(index, false); }
+                    }
+                    RowButton {
+                        label: line.delete-label;
+                        danger: line.asking;
+                        enabled: ModsData.free;
+                        clicked => { ModsData.remove(index); }
+                    }
+                }
+                HorizontalLayout {
+                    Rectangle { width: 28px; }
+                    Text {
+                        width: root.wide;
+                        text: line.facts;
+                        font-size: 12px;
+                        color: Colors.dim;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            if ModsData.plugins-show: VerticalLayout {
+                spacing: Space.s;
+                Text {
+                    text: Tr.t("plugins-title").to-uppercase();
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: Colors.foreground;
+                }
+                Text {
+                    text: ModsData.plugins-note;
+                    font-size: 13px;
+                    color: ModsData.plugins-note-bad ? Colors.bad : Colors.dim;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: ModsData.plugins-file;
+                    font-size: 12px;
+                    color: Colors.dim;
+                    wrap: word-wrap;
+                    max-height: ModsData.plugins-file == "" ? 0px : 1000px;
+                }
+                if ModsData.plugins.length == 0: Text {
+                    text: Tr.t("plugins-none");
+                    font-size: 13px;
+                    color: Colors.dim;
+                }
+                for plugin[index] in ModsData.plugins: VerticalLayout {
+                    spacing: 2px;
+                    HorizontalLayout {
+                        spacing: Space.s;
+                        CheckBox {
+                            on: plugin.enabled;
+                            label: plugin.name;
+                            opacity: plugin.locked ? 0.5 : 1.0;
+                            toggled(on) => {
+                                if ModsData.free && !plugin.locked { ModsData.plugin-toggle(index, on); }
+                            }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: plugin.name;
+                            font-size: 14px;
+                            color: Colors.foreground;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        RowButton {
+                            label: "↑";
+                            enabled: ModsData.free && plugin.up;
+                            clicked => { ModsData.plugin-step(index, true); }
+                        }
+                        RowButton {
+                            label: "↓";
+                            enabled: ModsData.free && plugin.down;
+                            clicked => { ModsData.plugin-step(index, false); }
+                        }
+                    }
+                    HorizontalLayout {
+                        Rectangle { width: 28px; }
+                        Text {
+                            width: root.wide;
+                            text: plugin.facts;
+                            font-size: 12px;
+                            color: Colors.dim;
+                            wrap: word-wrap;
+                        }
+                    }
+                    HorizontalLayout {
+                        max-height: plugin.problems == "" ? 0px : 1000px;
+                        Rectangle { width: 28px; }
+                        Text {
+                            width: root.wide;
+                            text: plugin.problems;
+                            font-size: 12px;
+                            color: Colors.bad;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+            if ModsData.overwrite != "": HorizontalLayout {
+                spacing: Space.m;
+                Text {
+                    horizontal-stretch: 1;
+                    text: ModsData.overwrite;
+                    font-size: 13px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                RowButton {
+                    label: ModsData.overwrite-label;
+                    danger: ModsData.overwrite-asking;
+                    enabled: ModsData.free;
+                    clicked => { ModsData.clear-overwrite(); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.s;
+                Text {
+                    text: Tr.t("mods-folder");
+                    font-size: 14px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                    width: 90px;
+                }
+                TextField {
+                    horizontal-stretch: 1;
+                    placeholder: Tr.t("mods-folder-placeholder");
+                    text <=> ModsData.folder;
+                    read-only: !ModsData.folder-editable;
+                    edited(typed) => { ModsData.folder-typed(typed); }
+                    accepted => { ModsData.save-folder(); }
+                }
+                RowButton {
+                    label: ModsData.folder-save ? Tr.t("key-save") : "";
+                    enabled: ModsData.free;
+                    clicked => { ModsData.save-folder(); }
+                }
+                RowButton {
+                    label: ModsData.folder-known ? Tr.t("mods-folder-known") : "";
+                    enabled: ModsData.free;
+                    clicked => { ModsData.known-folder(); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Space.s;
+                Text {
+                    horizontal-stretch: 1;
+                    text: ModsData.state;
+                    font-size: 13px;
+                    color: ModsData.state-tone == 1 ? Colors.good : ModsData.state-tone == 2 ? Colors.bad : Colors.dim;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                ActionButton {
+                    label: Tr.t("mods-back-to-vanilla");
+                    enabled: ModsData.can-restore;
+                    clicked => { ModsData.restore(); }
+                }
+                ActionButton {
+                    label: Tr.t("mods-apply");
+                    primary: true;
+                    enabled: ModsData.can-apply;
+                    clicked => { ModsData.apply(); }
+                }
+            }
+        }
+        // Always as tall as a line, so it coming and going moves nothing.
+        Text {
+            height: 18px;
+            text: ModsData.busy;
+            font-size: 13px;
+            color: Colors.dim;
+        }
+    }
+}
+
 // The tools that act on the game's Wine prefix, a box to install components
 // and the game's known fixes, with how the last tool went.
 component PrefixCard inherits Card {
@@ -545,7 +866,7 @@ export component GamePage inherits Rectangle {
     property <bool> has-main: GameData.about != "" || GameData.no-match != "" || GameData.shots.length > 0
         || GameData.dlc.length > 0 || GameData.sessions.length > 0 || GameData.ach.length > 0
         || GameData.req.length > 0 || GameData.failures.length > 0 || GameData.ac-show
-        || GameData.prefix-show || GameData.changelog.length > 0;
+        || ModsData.show || GameData.prefix-show || GameData.changelog.length > 0;
     property <int> scroll-request: GameData.scroll-end;
     changed scroll-request => {
         sv.content-y = min(0px, -(sv.content-height - sv.visible-height));
@@ -1102,6 +1423,7 @@ export component GamePage inherits Rectangle {
                                 }
                             }
                         }
+                        if ModsData.show: ModsCard { }
                         if GameData.prefix-show: PrefixCard { }
                         if GameData.changelog.length > 0: Card {
                             heading: Tr.t("changelog-title");

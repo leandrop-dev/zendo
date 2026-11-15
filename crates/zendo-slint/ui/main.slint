@@ -6,6 +6,7 @@ import "../../zendo/fonts/JetBrainsMono-Bold.ttf";
 import { Colors, Space, Tr } from "style.slint";
 import { TopBar, SettingsTabs, Page } from "top_bar.slint";
 import { GamePage, GameData, Tile, Fact, OwnedBadge, DlcRow } from "game.slint";
+import { ModsData, ModRow, PluginRow } from "mods.slint";
 import { StorePage, StoreData } from "store.slint";
 import { DownloadsPage, DownloadsData, JobRow, SteamRow } from "downloads.slint";
 import { LocalSheet, LocalData } from "local_form.slint";
@@ -18,7 +19,7 @@ import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow }
 
 export component MainWindow inherits Window {
     title: "Zendo";

@@ -246,6 +246,8 @@ export component TextField inherits Rectangle {
     in property <string> placeholder;
     // Shows dots in place of the letters, for a key.
     in property <bool> password;
+    // The text shows but takes no typing.
+    in property <bool> read-only;
     // The user changed the text.
     callback edited(string);
     // Enter was pressed in the field.
@@ -280,6 +282,7 @@ export component TextField inherits Rectangle {
         font-size: 14px;
         single-line: true;
         input-type: root.password ? InputType.password : InputType.text;
+        read-only: root.read-only;
         edited => { root.edited(self.text); }
         accepted => { root.accepted(); }
     }

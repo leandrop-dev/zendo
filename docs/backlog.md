@@ -63,12 +63,23 @@ to `zendo-core` when that page is ported. Ask before building any other page
   dropdowns). **52b built 2026-11-15**: the artwork chooser (Change cover and
   Change backdrop; the picker is `zendo_shell::artwork`, shared with Iced; the
   Slint sheet is `ui/artwork.slint` and `artwork_ui.rs`; Iced's `backdrops.rs`
-  needed no port, Slint already drew the backdrop). **52c**: Mods, Nexus, Nexus search, the
-  FOMOD installer sheet (Iced `app/installer.rs`, opened from a mod's install;
-  moved here from 51b) and the mods' card on Downloads. Item 54's parity
-  checklist must go through all of 52; for 52a: a failed save on a field that
-  is scrolled out of sight says nothing at the footer (Iced's sheet is the
-  same).
+  needed no port, Slint already drew the backdrop). **52c** is sliced [firm]:
+  **52c1 built 2026-11-15**: the Mods card on a game's page (the state, the
+  jobs and the words are `zendo_shell::mods`, shared with Iced; the Slint card
+  is `ModsCard` in `game.slint`, `ui/mods.slint` and `mods_ui.rs`).
+  **52c2**: Nexus (sign-in, links, downloads, the chooser; the downloads and
+  Update buttons on the card; the update check after a read; Search Nexus) and
+  Nexus search; the hooks are marked `// 52c2:`. **52c3**: the FOMOD
+  installer sheet (Iced `app/installer.rs`, opened from a mod's install;
+  moved here from 51b; Options… on a mod; the slot for a waiting installer;
+  remove the string `mods-installer-not-yet`) and the mods' card on
+  Downloads; the hooks are marked `// 52c3:`. Item 54's parity checklist must
+  go through all of 52; for 52a: a failed save on a field that is scrolled
+  out of sight says nothing at the footer (Iced's sheet is the same); for
+  52c1: Iced shows "Reading mods…" while Slint draws no card until they are
+  read, and on Stardew Valley's page the bottom of the Mods card could not be
+  scrolled to once (`docs/history.md`, item 52c1; the pages' content height
+  flips on every rebuild, with or without the card).
 - **53** Stats tab and Game Mode.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND

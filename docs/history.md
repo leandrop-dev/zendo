@@ -4726,3 +4726,90 @@ port; what was missing was the two buttons, the sheet and its glue.
   page; the library's first card at (754, 441). With results the sheet is
   window-tall (tabs at y 204, Close at (1710, 938)); with none it is short and
   centred, so take a still before each click.
+
+## Item 52c1, the Mods card in Slint (2026-11-15)
+
+The first slice of item 52c (sliced with the user: 52c1 the Mods card on a
+game's page, 52c2 Nexus and Nexus search, 52c3 the FOMOD installer sheet and
+the mods card on Downloads). It is Iced's `app/mods.rs` (1,162 lines): the
+profile row, the place line, each mod's row, a Bethesda game's plugins, the
+overwrite row, the folder row, the Apply row, Add mod and Find on Nexus.
+
+- **The card is shared, as the launch options form is.** New
+  `zendo_shell::mods`: `ModsState` (what was read per game, the change in
+  flight, a press that asks first, the folder and the profile name being
+  typed), `Work` and `Job` (one change, for a thread), `run` (calls
+  `zendo_core::mods` and builds the note), `Outcome` and `Done` (a line for
+  the footer and the `After`s: `CheckUpdates`, `NextInstaller`,
+  `OpenInstaller`), and every formula the view computed (`place_line`,
+  `mod_facts`, `apply_state` with its `Tone`, `can_apply`, `can_restore`,
+  `plugins_note`, `plugin_facts`, `plugin_problems`, `delete_label`, the
+  folder and profile rules). `add_as_from_nexus` and `added_note` moved here
+  too (Iced's `nexus.rs` re-exports `added_note`). Each transition takes
+  `runnable`; with it false the state moves the same and no job comes back,
+  so tests need no user files. Iced was switched first: its messages `Read`
+  and `Added` and `Done` became one `Done(id, Box<Outcome>)`, and its two
+  tests became six shell tests plus one thin Iced test; `add_mods` and
+  `change_mods` stayed, as the installer and Nexus still call them.
+- **Slint**: `ui/mods.slint` (`ModsData`, the flat rows `ModRow` and
+  `PluginRow`), `ModsCard` in `game.slint` between the DLC and prefix cards,
+  `TextField.read-only` (the folder field while mods are applied), and
+  `mods_ui.rs` (a `#[path]` child of `library_ui.rs`). Profiles are chips;
+  the name field takes the keyboard on `init`; Save and Cancel call
+  `focus_page`. A mod's facts sit on a line of their own under its name, so
+  they wrap. The card is not drawn while the mods are being read.
+- **Seams left for the next slices**, marked in the code: `// 52c2:`
+  (the downloads and Update buttons on the card, Search Nexus, the update
+  check after a read), `// 52c3:` (Options…, which is not drawn; the slot for
+  a waiting installer). An archive with a FOMOD installer is cancelled
+  (`mods::cancel_install`) and the footer says so with the new string
+  `mods-installer-not-yet`, to be removed in 52c3.
+- **Checked** (2026-11-15, with the user at the PC; a throwaway home with no
+  session bus; five seeded local games under it, two zip archives that share
+  a file and one with a FOMOD installer; a fake `xdg-open`): 149 Iced, 285
+  core, 60 shell and 132 Slint tests green, clippy and fmt clean. On screen,
+  with stills and the files on disk: Add mod through the file dialog twice
+  (the second says "1 replaced by mod-a" and the first "replaces 1 of
+  mod-b"), ↑ on a mod, the box off and on (the overlap facts go with it), Apply
+  (the files were in the game's folder and the later mod won the shared one),
+  a box while applied (the state turned red: "Changed since applied"), Back to
+  vanilla (only `game.sh` left), New (field focused, Save dimmed while empty),
+  a typed name and Enter (the chip, the footer, the Delete button enabled),
+  profile Delete twice ("Really delete", then the profile and its note went),
+  Rename (prefilled) then Cancel then Escape straight after (the page closed,
+  so the keys were alive), the folder field typed and Save (the place line,
+  the target and "As Zendo knows" changed) and "As Zendo knows" back, the
+  overwrite row (a file seeded in `overwrite/`) and its Delete twice (folder
+  gone), a mod's Delete twice (folder gone), Find mods on Nexus (the logging
+  `xdg-open` got `https://www.nexusmods.com/stardewvalley/mods/`), a game
+  with no folder (no card, and nothing left from the game before it), Skyrim
+  with no prefix (the plugins section, its red note, `Skyrim.esm` locked with
+  "its header cannot be read"), the FOMOD archive (the footer says why, no
+  `.adding-*` left). Iced's own window, same home: Add mod, Apply and Back to
+  vanilla through the shared code.
+- **Found on screen and fixed**: (1) after most clicks on the card the page
+  jumped up by hundreds of pixels when it was scrolled low: a model reset
+  (`set_vec`) made the card measure 116 px short for a moment and the scroll
+  view clamped to that; the models are now filled row by row when the count is
+  the same (`refill`), and the busy line has a fixed height. (2) Save stayed
+  dimmed while a name was typed (only a redraw lit it); the typing handler
+  sets it. A page jump that is left: removing a mod (the count changes, so
+  the model is reset) moved the page by about the row's height.
+- **Not fixed, seen once**: on Stardew Valley's page (a long Steam
+  description, screenshots, no requirements card yet) the page would not
+  scroll far enough to show the bottom 235 px of the Mods card, while the
+  scroll offset was at the page's reported limit. It did not happen on a
+  local game with no Steam match (Mods is the last card there, fully
+  reachable), on Cat Quest, or on Stardew once the requirements card arrived
+  after it. The pages' content height also flips by the Screenshots card's
+  height on every rebuild, and by 99 px on KMines' page, which has no Mods
+  card, so a stale page height is not specific to this card; it is listed for
+  item 54's parity pass.
+- **Not done**: ↓ on a mod, the plugin boxes and arrows (the only plugin
+  there was locked and the list had one row), a rename's Save (only a new
+  profile's), Apply while the game runs (a shell test covers the refusal), a
+  failed read on screen (a glue test), Add mod cancelled in the dialog, a
+  Nexus key and an archive Nexus named (`add_as_from_nexus`), pt-PT, a light
+  KDE scheme, the pad.
+- **Side effects**: the scratch home was deleted; `ydotoold` was stopped and
+  its socket removed.

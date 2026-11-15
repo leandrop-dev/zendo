@@ -355,6 +355,8 @@ mods-applied-count = { $count ->
 mods-vanilla = { $title } voltou ao original
 mods-applied = Aplicado a { $title }
 mods-choosing = A escolher um mod…
+# Removed with item 52c3, when this window runs a mod's installer itself.
+mods-installer-not-yet = { $name } tem um instalador, que esta janela ainda não sabe executar, por isso não foi adicionado
 mods-choose = Escolha um mod
 mods-deleted = Mod eliminado
 mods-new-folder = Os mods vão para a nova pasta

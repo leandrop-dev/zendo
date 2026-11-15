@@ -1,0 +1,103 @@
+// The Mods card on a game's page: what Rust says of the game's mods. The card
+// itself (`ModsCard`) lives in game.slint, beside the other cards, because
+// it needs that file's `Card`. Rust (src/mods_ui.rs) fills `ModsData` and
+// answers its callbacks; the rows are flat, so a row holds no `if`.
+
+import { ChipData } from "library.slint";
+
+// A mod in the order Apply puts them in.
+export struct ModRow {
+    name: string,
+    // Where it came from, its files, what it wins and loses.
+    facts: string,
+    enabled: bool,
+    up: bool,
+    down: bool,
+    // "Delete", or "Really delete" once pressed.
+    delete-label: string,
+    asking: bool,
+}
+
+// A Bethesda game's plugin in load order.
+export struct PluginRow {
+    name: string,
+    facts: string,
+    // What is wrong with it; empty when nothing is.
+    problems: string,
+    enabled: bool,
+    // The game always loads it: no box to untick.
+    locked: bool,
+    up: bool,
+    down: bool,
+}
+
+export global ModsData {
+    in property <bool> show;
+    // 0 the mods are being read, 1 they could not be, 2 they are here.
+    in property <int> body-kind;
+    // The reading line, or why they could not be read.
+    in property <string> message;
+    // What is happening to the game's mods now; empty when nothing is.
+    in property <string> busy;
+    // No change is in flight, so the controls take presses.
+    in property <bool> free;
+    // The game is on Nexus Mods.
+    in property <bool> nexus;
+
+    in property <[ChipData]> profiles;
+    in property <string> delete-profile-label;
+    in property <bool> delete-profile-on;
+    in property <bool> delete-profile-asking;
+    // A profile's name is being typed.
+    in property <bool> naming;
+    in property <string> name-placeholder;
+    in-out property <string> name;
+    in property <bool> name-ok;
+
+    in property <string> place;
+    in property <string> target;
+    in property <[ModRow]> mods;
+
+    in property <bool> plugins-show;
+    in property <string> plugins-note;
+    in property <bool> plugins-note-bad;
+    in property <string> plugins-file;
+    in property <[PluginRow]> plugins;
+
+    // "N files in overwrite", empty when there are none.
+    in property <string> overwrite;
+    in property <string> overwrite-label;
+    in property <bool> overwrite-asking;
+
+    in-out property <string> folder;
+    in property <bool> folder-editable;
+    in property <bool> folder-save;
+    in property <bool> folder-known;
+
+    in property <string> state;
+    // 0 dim, 1 good, 2 bad.
+    in property <int> state-tone;
+    in property <bool> can-apply;
+    in property <bool> can-restore;
+
+    callback add();
+    callback find-nexus();
+    callback profile(int);
+    callback new-profile();
+    callback rename-profile();
+    callback delete-profile();
+    callback name-typed(string);
+    callback save-name();
+    callback cancel-name();
+    callback toggle(int, bool);
+    callback step(int, bool);
+    callback remove(int);
+    callback plugin-toggle(int, bool);
+    callback plugin-step(int, bool);
+    callback clear-overwrite();
+    callback folder-typed(string);
+    callback save-folder();
+    callback known-folder();
+    callback apply();
+    callback restore();
+}

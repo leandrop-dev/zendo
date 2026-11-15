@@ -249,6 +249,7 @@ impl Glue {
     pub(super) fn want_cards(&self, id: &str) {
         self.cards.achievements_more.set(0);
         self.want_prefix(id);
+        self.mods_want(id);
         self.want_gog(id);
         self.want_rating(id);
         self.want_achievements(id);
@@ -598,6 +599,7 @@ impl Glue {
 
         self.show_anti_cheat(id, data);
         self.show_dlc(game, data);
+        self.show_mods(game);
         self.show_prefix(game, data);
         self.show_changelog(id, data);
         images.extend(self.show_achievements(id, data));

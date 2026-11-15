@@ -47,6 +47,8 @@ mod gog;
 mod jobs;
 #[path = "local_ui.rs"]
 mod local;
+#[path = "mods_ui.rs"]
+mod mods;
 #[path = "options_ui.rs"]
 mod options;
 #[path = "overlay_ui.rs"]
@@ -237,6 +239,8 @@ struct Glue {
     /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
     /// (`compat_ui.rs`).
     compat: compat::CompatState,
+    /// The Mods card (`mods_ui.rs`).
+    mods: mods::ModsUiState,
     /// The Wine prefix card (`prefix_ui.rs`).
     prefix: prefix::PrefixState,
     /// GOG's changelog and total time played (`gog_ui.rs`).
@@ -346,6 +350,7 @@ impl Glue {
             accounts: accounts::AccountsState::new(),
             cards: cards::CardsState::new(),
             compat: compat::CompatState::new(persist),
+            mods: mods::ModsUiState::new(),
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
             settings: settings::SettingsState::new(),
@@ -431,6 +436,7 @@ impl Glue {
         self.connect_store(window);
         self.connect_cards(window);
         self.connect_compat(window);
+        self.connect_mods(window);
         self.connect_prefix(window);
         self.connect_gog(window);
         self.connect_settings(window);
