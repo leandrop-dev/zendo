@@ -27,9 +27,29 @@ export struct JobRow {
     open: string,
 }
 
+// A line of the Steam card: an install, an uninstall or a verify asked of
+// Steam, or what Steam is downloading. Rust fills every text.
+export struct SteamRow {
+    app: string,
+    title: string,
+    line: string,
+    // How far, 0 to 100, or -1 for no bar.
+    percent: float,
+    // Stop waiting, for an install Steam has not started; empty is no button.
+    forget: string,
+}
+
 export global DownloadsData {
-    // Nothing queued and nothing finished: the page invites to the Store.
+    // Nothing queued and nothing finished: no tiles.
     in property <bool> empty;
+    // Nothing at all going on either, Steam's installs included: the page
+    // invites to the Store.
+    in property <bool> invite;
+    // Steam has something going: its card, with Open Steam's downloads.
+    in property <bool> steam-show;
+    in property <[SteamRow]> steam-rows;
+    callback steam-forget(string);
+    callback steam-open();
     // The counts, as tiles.
     in property <string> up-next-count;
     in property <string> paused-count;
@@ -169,6 +189,43 @@ component JobCard inherits Rectangle {
     }
 }
 
+// One line of the Steam card: the name and what Steam is doing, Stop waiting
+// when it applies, and a bar for a download.
+component SteamLine inherits VerticalLayout {
+    in property <SteamRow> item;
+    spacing: Space.s;
+    HorizontalLayout {
+        spacing: Space.m;
+        Text {
+            horizontal-stretch: 1;
+            text: root.item.title;
+            font-size: 15px;
+            color: Colors.foreground;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.item.line;
+            font-size: 13px;
+            color: Colors.dim;
+            vertical-alignment: center;
+        }
+        RowButton {
+            label: root.item.forget;
+            clicked => { DownloadsData.steam-forget(root.item.app); }
+        }
+    }
+    Rectangle {
+        height: root.item.percent >= 0 ? 8px : 0px;
+        background: Colors.raised;
+        Rectangle {
+            x: 0px;
+            width: parent.width * Math.min(root.item.percent, 100) / 100;
+            background: Colors.accent;
+        }
+    }
+}
+
 export component DownloadsPage inherits Rectangle {
     ScrollView {
         width: parent.width;
@@ -231,6 +288,42 @@ export component DownloadsPage inherits Rectangle {
                             clicked => { DownloadsData.stay-open(); }
                         }
                     }
+                }
+            }
+
+            // What Steam is doing for Zendo; Steam shows its own progress too.
+            if DownloadsData.steam-show: Rectangle {
+                background: Colors.surface;
+                border-width: 1px;
+                border-color: Colors.line;
+                height: steam-card.preferred-height;
+                steam-card := VerticalLayout {
+                    padding: Space.l;
+                    spacing: Space.m;
+                    HorizontalLayout {
+                        spacing: Space.m;
+                        Text {
+                            horizontal-stretch: 1;
+                            text: Tr.t("steam-downloads-title").to-uppercase();
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: Colors.foreground;
+                            vertical-alignment: center;
+                        }
+                        ActionButton {
+                            label: Tr.t("steam-open-downloads");
+                            small: true;
+                            clicked => { DownloadsData.steam-open(); }
+                        }
+                    }
+                    Text {
+                        width: parent.width - 2 * Space.l;
+                        text: Tr.t("steam-downloads-about");
+                        font-size: 13px;
+                        color: Colors.dim;
+                        wrap: word-wrap;
+                    }
+                    for item in DownloadsData.steam-rows: SteamLine { item: item; }
                 }
             }
 
@@ -324,7 +417,7 @@ export component DownloadsPage inherits Rectangle {
                 kind: 2;
             }
 
-            if DownloadsData.empty: VerticalLayout {
+            if DownloadsData.invite: VerticalLayout {
                 padding-top: 120px;
                 spacing: Space.m;
                 alignment: center;

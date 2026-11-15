@@ -4,7 +4,7 @@
 // nothing here holds a game.
 
 import { Colors, Space, Tr } from "style.slint";
-import { ChipButton, ActionButton, TextField, CheckBox } from "components.slint";
+import { ChipButton, ActionButton, RowButton, TextField, CheckBox } from "components.slint";
 import { ScrollView } from "std-widgets.slint";
 import { ChipData } from "library.slint";
 
@@ -22,7 +22,7 @@ export struct Fact {
     mono: bool,
     // The value opens this link, when there is one.
     url: string,
-    // The value's colour: 0 plain, 1 good, 2 bad, 3 dim.
+    // The value's colour: 0 plain, 1 good, 2 bad, 3 dim, 4 accent.
     tone: int,
 }
 
@@ -68,6 +68,22 @@ export struct Ach {
     unlocked: bool,
 }
 
+// A DLC in its card: its name and what it is (a size, "Comes with the game"),
+// then its button, or what it is instead of one. An empty label is no button.
+export struct DlcRow {
+    id: string,
+    title: string,
+    about: string,
+    label: string,
+    // Uninstall pressed once: pressed again, it goes.
+    danger: bool,
+    enabled: bool,
+    // "Installed" or "Not installed", where there is no button.
+    status: string,
+    // 1 good, 3 dim.
+    status-tone: int,
+}
+
 // A badge under the title of a store game: a platform, or Installed.
 export struct OwnedBadge {
     label: string,
@@ -83,10 +99,15 @@ export global GameData {
     in property <string> owned-note;
     in property <[OwnedBadge]> owned-badges;
     // What the queue holds of it: 0 nothing to press, 1 it can be installed,
-    // 2 queued, 3 running, 4 paused.
+    // 2 queued, 3 running, 4 paused. A Steam game: 5 Install with Steam,
+    // 6 asked of Steam (ask again, Stop waiting), 7 Steam is on it.
     in property <int> owned-job;
-    // What the running job is doing, as a button says it: "Installing".
+    // What the running job is doing, as a button says it: "Installing". For
+    // a Steam game, the main button's words in states 5 to 7.
     in property <string> owned-job-label;
+    // Steam's progress, 0 to 100, or -1 for no bar.
+    in property <float> owned-progress: -1;
+    callback owned-forget();
     // "Also install its DLC", with how many; empty when it has none to give.
     in property <string> owned-dlc;
     in property <bool> owned-dlc-on;
@@ -131,7 +152,44 @@ export global GameData {
     in property <string> no-match;
     in property <[Shot]> shots;
     in property <string> dlc-count;
-    in property <[Fact]> dlc;
+    in property <[DlcRow]> dlc;
+    // Install all, when more than one can be installed; empty is no button.
+    in property <string> dlc-install-all;
+    in property <bool> dlc-install-all-on;
+    // Why Zendo cannot manage these: sign in, or Heroic does.
+    in property <string> dlc-note;
+    callback dlc-action(string);
+    callback dlc-all();
+
+    // The installed game's jobs. Update, when one waits (empty: no button).
+    in property <string> update-label;
+    in property <bool> update-on;
+    callback update();
+    // More: the row of less used actions, folded on each game.
+    in property <bool> has-more;
+    in property <bool> more-open;
+    callback toggle-more();
+    // The queue has a job for the game: the line says which, with See downloads.
+    in property <bool> job-shown;
+    callback see-downloads();
+    // A game Zendo installed: Check for updates, Repair, Move and Uninstall.
+    in property <bool> managed;
+    in property <bool> check-on;
+    // No job queued for the game: Repair, Move and Uninstall may be pressed.
+    in property <bool> job-free;
+    in property <bool> move-on;
+    // Uninstall pressed once: pressed again, the files go.
+    in property <bool> uninstall-again;
+    // A Steam game: Verify and Uninstall, asked of Steam.
+    in property <string> steam-verify-label;
+    in property <bool> steam-verify-on;
+    in property <string> steam-uninstall-label;
+    callback check-updates();
+    callback repair();
+    callback move-game();
+    callback uninstall();
+    callback steam-verify();
+    callback steam-uninstall();
     in property <string> ach-summary;
     // The share unlocked, 0 to 1, or -1 when the store did not say.
     in property <float> ach-share: -1;
@@ -237,7 +295,7 @@ component FactRow inherits HorizontalLayout {
         if root.fact.url == "": Text {
             text: root.fact.value;
             font-size: root.fact.mono ? 12px : 14px;
-            color: root.fact.tone == 1 ? Colors.good : root.fact.tone == 2 ? Colors.bad : root.fact.tone == 3 ? Colors.dim : Colors.foreground;
+            color: root.fact.tone == 1 ? Colors.good : root.fact.tone == 2 ? Colors.bad : root.fact.tone == 3 ? Colors.dim : root.fact.tone == 4 ? Colors.accent : Colors.foreground;
             wrap: word-wrap;
         }
         if root.fact.url != "": Rectangle {
@@ -640,7 +698,20 @@ export component GamePage inherits Rectangle {
                             primary: true;
                             clicked => { GameData.owned-resume(); }
                         }
-                        if GameData.owned-job >= 2: ActionButton {
+                        // A Steam game: Steam's own dialog does the install.
+                        // Steam writes nothing when it is cancelled, so the
+                        // button asks again, and Stop waiting ends the wait.
+                        if GameData.owned-job >= 5: ActionButton {
+                            label: GameData.owned-job-label;
+                            primary: true;
+                            enabled: GameData.owned-job != 7;
+                            clicked => { GameData.owned-install(); }
+                        }
+                        if GameData.owned-job == 6: ActionButton {
+                            label: Tr.t("steam-stop-waiting");
+                            clicked => { GameData.owned-forget(); }
+                        }
+                        if GameData.owned-job >= 2 && GameData.owned-job != 5: ActionButton {
                             label: Tr.t("see-downloads");
                             clicked => { GameData.owned-downloads(); }
                         }
@@ -651,6 +722,15 @@ export component GamePage inherits Rectangle {
                             color: Colors.dim;
                             vertical-alignment: center;
                             wrap: word-wrap;
+                        }
+                    }
+                    if GameData.owned-progress >= 0: Rectangle {
+                        height: 8px;
+                        background: Colors.raised;
+                        Rectangle {
+                            x: 0px;
+                            width: parent.width * Math.min(GameData.owned-progress, 100) / 100;
+                            background: Colors.accent;
                         }
                     }
                     if GameData.owned-dlc != "": HorizontalLayout {
@@ -698,6 +778,11 @@ export component GamePage inherits Rectangle {
                             danger: true;
                             clicked => { GameData.stop(); }
                         }
+                        if GameData.update-label != "": ActionButton {
+                            label: GameData.update-label;
+                            enabled: GameData.update-on;
+                            clicked => { GameData.update(); }
+                        }
                         ActionButton {
                             label: GameData.pinned ? Tr.t("game-unfavorite") : Tr.t("game-favorite");
                             clicked => { GameData.toggle-pinned(); }
@@ -719,11 +804,73 @@ export component GamePage inherits Rectangle {
                             label: Tr.t("game-manage-steam");
                             clicked => { GameData.manage-steam(); }
                         }
+                        if GameData.has-more: ActionButton {
+                            label: GameData.more-open ? Tr.t("game-less") : Tr.t("game-more");
+                            clicked => { GameData.toggle-more(); }
+                        }
                     }
-                    Text {
-                        text: GameData.line;
-                        font-size: 14px;
-                        color: Colors.dim;
+                    // The job queued for the game, or the last thing said.
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: Space.m;
+                        Text {
+                            text: GameData.line;
+                            font-size: 14px;
+                            color: Colors.dim;
+                            vertical-alignment: center;
+                        }
+                        if GameData.job-shown: ActionButton {
+                            label: Tr.t("see-downloads");
+                            small: true;
+                            clicked => { GameData.see-downloads(); }
+                        }
+                    }
+                    // The less used actions: a game Zendo installed can be
+                    // checked, repaired, moved and uninstalled; a Steam game
+                    // verified and uninstalled, both asked of Steam.
+                    if GameData.has-more && GameData.more-open: Rectangle {
+                        background: Colors.surface;
+                        border-width: 1px;
+                        border-color: Colors.line;
+                        height: more-row.preferred-height;
+                        more-row := HorizontalLayout {
+                            padding-left: Space.l;
+                            padding-right: Space.l;
+                            padding-top: Space.m;
+                            padding-bottom: Space.m;
+                            spacing: Space.m;
+                            alignment: start;
+                            if GameData.managed: ActionButton {
+                                label: Tr.t("downloads-check-updates");
+                                enabled: GameData.check-on;
+                                clicked => { GameData.check-updates(); }
+                            }
+                            if GameData.managed: ActionButton {
+                                label: Tr.with("action-label", "action", "repair");
+                                enabled: GameData.job-free;
+                                clicked => { GameData.repair(); }
+                            }
+                            if GameData.managed: ActionButton {
+                                label: Tr.t("downloads-move");
+                                enabled: GameData.move-on;
+                                clicked => { GameData.move-game(); }
+                            }
+                            if GameData.managed: ActionButton {
+                                label: GameData.uninstall-again ? Tr.t("downloads-press-again") : Tr.with("action-label", "action", "uninstall");
+                                danger: GameData.uninstall-again;
+                                enabled: GameData.job-free;
+                                clicked => { GameData.uninstall(); }
+                            }
+                            if GameData.steam-verify-label != "": ActionButton {
+                                label: GameData.steam-verify-label;
+                                enabled: GameData.steam-verify-on;
+                                clicked => { GameData.steam-verify(); }
+                            }
+                            if GameData.steam-uninstall-label != "": ActionButton {
+                                label: GameData.steam-uninstall-label;
+                                clicked => { GameData.steam-uninstall(); }
+                            }
+                        }
                     }
                 }
                 // The collections the game is in, and the way to change them.
@@ -872,25 +1019,60 @@ export component GamePage inherits Rectangle {
                             heading: Tr.t("dlc-title");
                             VerticalLayout {
                                 spacing: Space.m;
-                                if GameData.dlc-count != "": Text {
-                                    text: GameData.dlc-count;
-                                    font-size: 13px;
-                                    color: Colors.dim;
-                                }
-                                for line in GameData.dlc: HorizontalLayout {
+                                HorizontalLayout {
                                     spacing: Space.m;
                                     Text {
                                         horizontal-stretch: 1;
-                                        text: line.label;
-                                        font-size: 14px;
-                                        color: Colors.foreground;
-                                        wrap: word-wrap;
+                                        text: GameData.dlc-count;
+                                        font-size: 13px;
+                                        color: Colors.dim;
+                                        vertical-alignment: center;
+                                    }
+                                    RowButton {
+                                        label: GameData.dlc-install-all;
+                                        enabled: GameData.dlc-install-all-on;
+                                        clicked => { GameData.dlc-all(); }
+                                    }
+                                }
+                                // One flat row per DLC: its words, then its
+                                // button or what it is instead of one.
+                                for line in GameData.dlc: HorizontalLayout {
+                                    spacing: Space.m;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
+                                        Text {
+                                            text: line.title;
+                                            font-size: 14px;
+                                            color: Colors.foreground;
+                                            wrap: word-wrap;
+                                        }
+                                        Text {
+                                            height: line.about == "" ? 0px : 16px;
+                                            text: line.about;
+                                            font-size: 12px;
+                                            color: Colors.dim;
+                                            overflow: elide;
+                                        }
                                     }
                                     Text {
-                                        text: line.value;
+                                        text: line.status;
                                         font-size: 13px;
-                                        color: Colors.good;
+                                        color: line.status-tone == 1 ? Colors.good : Colors.dim;
+                                        vertical-alignment: center;
                                     }
+                                    RowButton {
+                                        label: line.label;
+                                        danger: line.danger;
+                                        enabled: line.enabled;
+                                        clicked => { GameData.dlc-action(line.id); }
+                                    }
+                                }
+                                if GameData.dlc-note != "": Text {
+                                    text: GameData.dlc-note;
+                                    font-size: 12px;
+                                    color: Colors.dim;
+                                    wrap: word-wrap;
                                 }
                             }
                         }

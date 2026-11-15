@@ -4409,3 +4409,129 @@ page). Decided with the user: it moves to item 52, with the Mods page.
 - **Side effects**: only the scratch home (7 MB, deleted); nothing opened a
   browser (the fake `xdg-open` logged nothing); `ydotoold` and the sockets were
   stopped and removed.
+
+## Item 51c, Steam installs and the game page's jobs in Slint (2026-11-15)
+
+The last slice of item 51.
+
+- **Steam's installs are shared, as the queue is.** `zendo_shell::steam_installs`
+  holds the state and the rules (was Iced's `app/steam_installs.rs`): what was
+  asked of Steam and has not started, uninstalls and verifies asked, what Steam
+  is downloading, the apps seen at the last look (an install, an update, an
+  uninstall noticed there), and the "looking" guard. The methods return what
+  the window must do instead of touching its status: `install`, `uninstall` and
+  `verify` give the line to say (and call `steam::ask`, unless `persist` is
+  false), `begin_look` says where the log's verifies begin, `looked` returns
+  `Looked { say, rescan }`, `rows()` gives the Downloads card's lines in Iced's
+  order (asked, uninstalling, verifying, busy), and `every()` is 2 s while
+  something is going on and 15 s otherwise. Iced was switched to it first: its
+  `steam_installs.rs` went from 713 to about 190 lines (the messages, the
+  card and the tick streams); its four tests moved with the logic (6 in
+  `steam_installs.rs` in the shell: the install, what Steam does by itself, a
+  verify, the card's order, one look at a time, the progress words) and Iced
+  kept one that goes through its messages.
+- **Slint, `steam_installs_ui.rs`.** A repeating `slint::Timer` looks at Steam's
+  manifests on a thread and hands the answer to `steam_looked`; the interval
+  follows `every()`. A store game of Steam's shows Install with Steam (and Enter
+  or A asks the same), Ask Steam again and Stop waiting while Steam has not
+  started, and, once it has, "Installing…" or "Paused in Steam" with the line
+  ("Downloading, 400 B of 1000 B") and a bar (`owned-job` 5 to 7,
+  `owned-progress`). The Downloads page has the Steam card (Open Steam's
+  downloads, one line per install with Stop waiting only for an install not
+  started, a bar for a download) and does not invite to the Store while Steam
+  has something going. The tab's count is the queue plus Steam's. When Steam
+  finishes, updates or removes something the line says so and the library is
+  read again.
+- **Slint, `game_jobs_ui.rs`, the installed game's page.** Update in the bar (when
+  one was found, off while the game has a job), More and Less, and the line:
+  "Updating: now" or "…: queued" with See downloads when the queue has a job for
+  the game. The More row: Check for updates, Repair, Move… (the folder dialog;
+  "is running" when it is), Uninstall (a second press, "Press again to delete
+  its files", queues it), and for a Steam game Verify with Steam ("Verifying in
+  Steam" while it is asked) and Uninstall with Steam ("Ask Steam again to
+  uninstall" after). The details have the Updates row, with a fourth colour
+  (accent, `Fact.tone` 4). The DLC card is `DlcRow`s now: Install, Install all
+  (when more than one), Uninstall (a second press), or "Installed" and "Not
+  installed" where Zendo cannot manage them, and its notes. **Decision:** the
+  buttons and notes are for the game's own page; a store game's page lists the
+  DLC and leaves them to its Install and Open in library. More, the second
+  press and the DLC's second press start folded and unasked on each game
+  (Iced's `GameView::default()` on `navigate`), and the queue's own
+  `confirm_uninstall` goes with them.
+- **Small changes in what was there**: `folder_chosen` takes a purpose (Import or
+  Move, as Iced's `FolderFor`); `check_updates(ids)` asks about given games,
+  not only the unasked; `queue_changed` redraws the open game's page (library
+  or store) so the job line and the buttons follow the queue; the check marks
+  the games and redraws before it asks.
+- **Tests**: 6 in `zendo_shell::steam_installs`, 5 new in `zendo-slint` (Install
+  with Steam through asked, busy, paused, installed, Stop waiting on the page and
+  the card, Enter once, the tab's count and the Downloads card; what Steam does
+  by itself; Update, More, the job line, the one job per game, Uninstall twice,
+  Repair, Check, Move; the page opening folded; the DLC card's Install, Install
+  all, Uninstall twice and the buttons off while the game has a job), 151 in
+  `zendo` (Iced), 114 in `zendo-slint`, 41 in `zendo-shell`, 285 in `zendo-core`.
+  Clippy is clean.
+- **Checked on screen** (2026-11-15, throwaway home, no session bus, the user at
+  the PC; fakes first on `PATH`: `steam` and `xdg-open` that only log, and a
+  `legendary` with `info`, `install` (also `--update-only` and DLC), `repair`,
+  `uninstall` and, from the middle of the run, `move`; Steam's six first
+  games from the real cache, a manifest-seeded Steam root and an Epic game
+  installed with a record, a DLC installed and three owned): Install with Steam
+  (the fake got `steam://install/735580`; Ask Steam again, Stop waiting, See
+  downloads and the tab's 1), the card on Downloads (Open Steam's downloads,
+  which reached the fake `xdg-open`, and Stop waiting, after which the page
+  invited to the Store again), Steam starting (a manifest with a file in
+  `downloading/`: "Installing…", "Downloading, 400 B of 1000 B", the bar at
+  40%), paused ("Paused in Steam"), finished (the footer said "is installed",
+  Library 5 to 6, "Open in library"), then on that game's page More, Verify
+  with Steam (`steam://validate/735580`, "Verifying in Steam", then the content
+  log's two lines: "Steam verified the files", the button back) and Uninstall
+  with Steam (`steam://uninstall/735580`, "Ask Steam again to uninstall"; the
+  manifest removed: the game went, Library 6 to 5, the page closed). On the Epic
+  game: UPDATE in the bar, clicked (the fake got `install --update-only`, the
+  line "Updating: now", See downloads, Repair, Move… and Uninstall dimmed while
+  it ran, Check for updates enabled; afterwards 2.0 in the record and the button
+  gone), Check for updates ("Up to date" in the details), the DLC card (1 of 3,
+  Install all, Uninstall, Install: Install all ran both DLC one after the
+  other, 3 of 3; Uninstall pressed twice on one; Install on it), Repair (the
+  fake got `repair`; See downloads from the game page opened Downloads with the
+  job at 45%), Move… (Zendo's folder dialog, a path pasted with Ctrl+L and
+  Ctrl+V, Enter: the job queued and Zendo called `legendary move` for the game
+  and each DLC), More folded again on a game opened a second time, Uninstall
+  pressed twice (the fake got `uninstall`, Library 5 to 4, the page closed).
+  The store page again with a second Steam game: Ask Steam again (a second
+  request in the fake's log), Stop waiting, Enter (a third). **The Iced window**,
+  which now runs on the shared module, was launched in the same home: Install
+  with Steam (the request, "Installing…" with the bar), its Downloads card with
+  the bar, and Steam finishing (Library 5 to 6, the count cleared).
+- **Found on screen and by a test.** A rescan started by Steam's own finish
+  would have read the user's files in a test (`rescan` has no `persist` guard at
+  its call sites): `steam_looked` gates it. The "checking" state of a game did
+  not draw in a test because the check returned before a redraw when `persist`
+  is false: it redraws first now.
+- **Not checked, or not explained.** The footer's note after Steam uninstalled a
+  game: the game and the count followed, but the footer's left side was empty
+  afterwards; a later scan clears it (`Browser::loaded` does), and the file
+  watch may have started a second one after the note's own; not confirmed, and
+  Iced clears the line on a refresh too. **The first Move failed, and its
+  retry did not say why:** the fake had no `move` (the engine's refusal was
+  read back, the job paused with the error, Try again); after the fake learned
+  `move`, one retry failed the read-back of a DLC's record and the next said
+  Done with both folders empty. That was the rig: the failed attempt left the
+  fake's records changed, and `move_game`'s first branch (a record already at
+  the new folder) then deleted the old folder, which the failed attempt's
+  rollback had already emptied of its copy. Real legendary does not leave a
+  record changed by a move it refuses (Zendo reads it back and rolls the
+  records back), so this is unlikely outside the rig, but that branch trusts
+  the new folder to exist without looking (`downloads.rs` `move_game`, shared
+  with Iced and not changed here): worth an `is_dir` check on `new`. Not done
+  on screen: a real Steam client (the fake stands for it: the real dialog, the
+  real manifests' flags beyond the ones used, a real download); the second
+  press of "Ask Steam again to uninstall"; a Steam install by Steam itself
+  while Zendo is open (only the seeded manifest); Update, Repair and the DLC on
+  GOG or Amazon (Zendo's own steps, tests in `zendo_core::downloads`); a job
+  held while the game runs (51b's code, unchanged); the pad; pt-PT; a light KDE
+  scheme; "Check for updates" with a real store.
+- **Side effects**: only the scratch home (5 MB, left in the session's folder);
+  nothing opened a browser; `ydotoold` and the sockets were stopped and
+  removed, and the clipboard, empty before, was cleared again.

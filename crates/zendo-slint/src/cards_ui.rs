@@ -21,9 +21,10 @@ use zendo_core::{Game, Source, State, steam};
 use zendo_shell::running::now;
 use zendo_shell::{format, t};
 
+use super::store::DlcView;
 use super::{Glue, with_glue};
 use crate::covers::Cover;
-use crate::{Ach, Fact, GameData, MainWindow, Pill, Req, Shot};
+use crate::{Ach, DlcRow, Fact, GameData, MainWindow, Pill, Req, Shot};
 
 /// How many achievements show at first, and how many more Show more adds.
 const SHOWN: usize = 10;
@@ -54,7 +55,7 @@ pub(super) struct CardsState {
     achievements_more: Cell<usize>,
     pills: Rc<VecModel<Pill>>,
     shots: Rc<VecModel<Shot>>,
-    dlc: Rc<VecModel<Fact>>,
+    dlc: Rc<VecModel<DlcRow>>,
     achievements_model: Rc<VecModel<Ach>>,
     requirements_model: Rc<VecModel<Req>>,
     failures: Rc<VecModel<Fact>>,
@@ -607,15 +608,19 @@ impl Glue {
     }
 
     /// The DLC of a game of Epic or GOG: those the store says the user owns
-    /// and those installed. (Install and Uninstall come with item 51c.)
-    fn show_dlc(&self, game: &Game, data: &GameData<'_>) {
-        let (count, lines) = if matches!(game.source, Source::Epic | Source::Gog) {
+    /// and those installed, with Install and Uninstall for a game Zendo
+    /// installed (`game_jobs_ui.rs` does what they ask).
+    pub(super) fn show_dlc(&self, game: &Game, data: &GameData<'_>) {
+        let view = if matches!(game.source, Source::Epic | Source::Gog) {
             self.dlc_rows(game)
         } else {
-            (String::new(), Vec::new())
+            DlcView::default()
         };
-        data.set_dlc_count(count.into());
-        self.cards.dlc.set_vec(lines);
+        data.set_dlc_count(view.count.into());
+        data.set_dlc_install_all(view.all.into());
+        data.set_dlc_install_all_on(view.all_on);
+        data.set_dlc_note(view.note.into());
+        self.cards.dlc.set_vec(view.rows);
     }
 
     fn show_achievements(&self, id: &str, data: &GameData<'_>) -> Vec<PathBuf> {

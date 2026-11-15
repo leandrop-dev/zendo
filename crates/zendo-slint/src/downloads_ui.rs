@@ -32,6 +32,15 @@ use crate::{DownloadsData, GameData, JobRow, MainWindow, Page};
 /// writes its log many times a second.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
+/// What a folder from the dialog is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FolderFor {
+    /// Where a store game already is.
+    Import,
+    /// Where an installed game's folder goes.
+    Move,
+}
+
 /// What the page keeps of the queue.
 pub(super) struct DownloadsState {
     pub(super) queue: RefCell<Queue>,
@@ -130,6 +139,13 @@ impl Glue {
         let data = window.global::<GameData>();
         let glue = Rc::clone(self);
         data.on_owned_install(move || {
+            // A Steam game is installed by Steam's own dialog.
+            if glue
+                .store_open_id()
+                .is_some_and(|id| glue.steam_install(&id))
+            {
+                return;
+            }
             let job = glue.store_open_id().and_then(|id| glue.install_job(&id));
             if let Some(job) = job {
                 let effects = glue.downloads.queue.borrow_mut().enqueue(job);
@@ -326,19 +342,30 @@ impl Glue {
     /// Asks the stores, on a thread, about the games Zendo installed that
     /// were not asked about yet.
     pub(super) fn check_new_updates(&self) {
+        let ids = self
+            .downloads
+            .queue
+            .borrow()
+            .unasked(self.browser.borrow().games().iter());
+        self.check_updates(&ids);
+    }
+
+    /// Asks the stores, on a thread, whether these games have updates (Check
+    /// for updates asks about one).
+    pub(super) fn check_updates(&self, ids: &[String]) {
         let games: Vec<Game> = {
             let browser = self.browser.borrow();
-            let mut queue = self.downloads.queue.borrow_mut();
-            let unasked: HashSet<String> =
-                queue.unasked(browser.games().iter()).into_iter().collect();
-            queue.to_check(
-                browser
-                    .games()
-                    .iter()
-                    .filter(|game| unasked.contains(&game.id)),
-            )
+            self.downloads
+                .queue
+                .borrow_mut()
+                .to_check(ids.iter().filter_map(|id| browser.game(id)))
         };
-        if games.is_empty() || !self.persist {
+        if games.is_empty() {
+            return;
+        }
+        // The pages say the games are being asked about; tests ask nothing.
+        self.queue_changed();
+        if !self.persist {
             return;
         }
         let weak = self.window.clone();
@@ -348,7 +375,6 @@ impl Glue {
                 with_glue(|glue| glue.updates_checked(results));
             });
         });
-        self.queue_changed();
     }
 
     pub(super) fn updates_checked(self: &Rc<Self>, results: Vec<(String, Result<Update, String>)>) {
@@ -435,14 +461,13 @@ impl Glue {
 
     // Writing the page.
 
-    /// The queue changed: the page, the footer, the tab's count and a store
-    /// game's page say so.
+    /// The queue changed: the page, the footer, the tab's count and the open
+    /// game's page (a store game's, or an installed one with its buttons)
+    /// say so.
     pub(super) fn queue_changed(&self) {
         self.show_downloads();
         self.sync_status();
-        if self.store_page_open() {
-            self.show_owned();
-        }
+        self.show_game();
     }
 
     /// Writes the page, the tab's count and the footer's line.
@@ -452,7 +477,7 @@ impl Glue {
         };
         let queue = self.downloads.queue.borrow();
         let data = window.global::<DownloadsData>();
-        let count = queue.len();
+        let count = queue.len() + self.steam_installs.count();
         window.set_downloads_count(
             if count == 0 {
                 String::new()
@@ -519,8 +544,12 @@ impl Glue {
             })
             .collect();
         data.set_empty(queue.queue.is_empty() && queue.finished.is_empty());
+        data.set_invite(
+            queue.queue.is_empty() && queue.finished.is_empty() && !self.steam_active(),
+        );
+        self.show_steam_card(&data);
         // As in Iced, the running job counts as waiting its turn's end.
-        data.set_up_next_count(count.saturating_sub(paused.len()).to_string().into());
+        data.set_up_next_count(queue.len().saturating_sub(paused.len()).to_string().into());
         data.set_paused_count(paused.len().to_string().into());
         data.set_finished_count(finished.len().to_string().into());
         data.set_asking(queue.confirm_close);
@@ -641,8 +670,15 @@ impl Glue {
     pub(super) fn show_owned_install(&self, data: &GameData<'_>, owned: &Owned, installed: bool) {
         let queue = self.downloads.queue.borrow();
         let mut label = String::new();
-        let state = if installed || owned.id.starts_with("steam:") {
+        let mut progress = -1.0;
+        let state = if installed {
             0
+        } else if let Some(app) = owned.id.strip_prefix("steam:") {
+            // Steam's own dialog does it; the page follows Steam's manifest.
+            let (state, words, bar) = self.steam_install_state(app);
+            label = words;
+            progress = bar;
+            state
         } else if let Some((job, running)) = queue.job_for(&owned.id) {
             match (running, job.paused) {
                 (true, _) => {
@@ -657,6 +693,7 @@ impl Glue {
         };
         data.set_owned_job(state);
         data.set_owned_job_label(label.into());
+        data.set_owned_progress(progress);
         let dlc = if state == 1 {
             self.installable_dlc(&owned.id)
         } else {
@@ -679,13 +716,16 @@ impl Glue {
     }
 
     /// Enter or A on a store game's page: an installed game opens in the
-    /// library, any other is queued to install (Steam's own come with 51c).
+    /// library, any other is queued to install; a Steam game's is asked of
+    /// Steam, unless Steam is on it.
     pub(super) fn owned_activate(self: &Rc<Self>) {
         let Some(id) = self.store_open_id() else {
             return;
         };
         if self.store.browser.borrow().is_installed(&id) {
             self.open_in_library();
+        } else if id.starts_with("steam:") {
+            self.steam_install(&id);
         } else if let Some(job) = self.install_job(&id) {
             let effects = self.downloads.queue.borrow_mut().enqueue(job);
             self.queue_apply(effects);
@@ -718,24 +758,33 @@ impl Glue {
             )
             .map_err(|err| format!("{err:#}"));
             let _ = weak.upgrade_in_event_loop(move |_| {
-                with_glue(|glue| glue.folder_chosen(&id, result));
+                with_glue(|glue| glue.folder_chosen(FolderFor::Import, &id, result));
             });
         });
     }
 
+    /// The folder the dialog gave: queues the import or the move with it.
     pub(super) fn folder_chosen(
         self: &Rc<Self>,
+        purpose: FolderFor,
         id: &str,
         chosen: Result<Option<PathBuf>, String>,
     ) {
         match chosen {
             Ok(Some(folder)) => {
-                let job = self
-                    .store
-                    .browser
-                    .borrow()
-                    .owned(id)
-                    .and_then(|owned| Job::import(owned, folder));
+                let job = match purpose {
+                    FolderFor::Import => self
+                        .store
+                        .browser
+                        .borrow()
+                        .owned(id)
+                        .and_then(|owned| Job::import(owned, folder)),
+                    FolderFor::Move => self
+                        .browser
+                        .borrow()
+                        .game(id)
+                        .and_then(|game| Job::for_move(game, folder)),
+                };
                 if let Some(job) = job {
                     let effects = self.downloads.queue.borrow_mut().enqueue(job);
                     self.queue_apply(effects);

@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38, 41 to 50, 51a and 51b are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 51 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -47,11 +47,15 @@ to `zendo-core` when that page is ported. Ask before building any other page
   install its DLC" on the store game's page, the question about closing while
   a job runs, the engines busy while a job runs, the updates by themselves and
   the update checks after a scan. The "installer sheet" that was listed here is
-  the FOMOD mod installer: it moved to 52 [firm, decided with the user]. **51c**:
-  Steam installs (Install with Steam, its progress, Stop waiting, Uninstall)
-  and the game page's Update, job line, Check, Repair, Move, Uninstall and
-  Steam Verify, the DLC's Install and Uninstall, and jobs held while a game
-  runs (`game_ui.rs`). Item 54's parity checklist must go through these.
+  the FOMOD mod installer: it moved to 52 [firm, decided with the user]. **51c
+  built 2026-11-15**: Steam installs (Install with Steam, Ask Steam again, Stop
+  waiting, its progress and the Steam card on Downloads, shared with Iced as
+  `zendo_shell::steam_installs`), and the installed game's page: Update, the
+  job line with See downloads, More with Check for updates, Repair, Move… and
+  Uninstall (pressed twice), Verify and Uninstall with Steam, the Updates row,
+  and the DLC card's Install, Install all and Uninstall (pressed twice). The
+  jobs held while a game runs were 51b's. Item 54's parity checklist must go
+  through all of 51.
 - **52** Mods, Nexus, Nexus search, the FOMOD installer sheet (Iced
   `app/installer.rs`, opened from a mod's install; moved here from 51b), the
   mods' card on Downloads, launch options (and gamescope), artwork.
@@ -161,7 +165,27 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
   closing, and the tray's Quit with a download running (needs the session bus);
   a game's update while it plays (the job waits, "Waits until the game is
   closed"); Downloads in pt-PT and with a light KDE scheme. The game page's
-  Update, Check, Move and Uninstall come with 51c.
+  Update, Check, Move and Uninstall are 51c's, below.
+- **Steam installs and the game page's jobs (51c)**, same run. **Careful: a
+  real `cargo run -p zendo-slint` asks your real Steam client** (Install with
+  Steam opens Steam's own dialog, Verify and Uninstall with Steam ask Steam;
+  Uninstall with Steam and a game's Uninstall, Repair and Move touch real
+  files). Claude already clicked every new control against fakes of `steam`,
+  `xdg-open` and `legendary` and seeded Steam manifests (`docs/history.md`,
+  item 51c). What needs you, with the real clients: Install with Steam on a
+  game you do not own yet on this PC (Steam's dialog opens; cancel it and Ask
+  Steam again or Stop waiting; install it and watch the page and Downloads
+  follow Steam's own bar, pause and resume it in Steam, and a download you start
+  in Steam itself shows too); Verify with Steam and Uninstall with Steam on a
+  game you can spare (the footer says so when Steam finishes); on an Epic or
+  GOG game Zendo installed: Update (when one is found), Check for updates,
+  Repair, Move… to another disk (the files and the record move; check that
+  the game starts), Uninstall (the second press), and the DLC's Install, Install
+  all and Uninstall on a game that has some; the buttons off while a job runs;
+  the same in pt-PT and with a light KDE scheme. One thing from the check to
+  look at: `move_game` (`zendo-core` `downloads.rs`), shared with Iced, deletes
+  the old folder when the record already names the new one without checking
+  that the new folder exists; I could only reach it with a broken fake.
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 

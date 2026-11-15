@@ -41,6 +41,8 @@ mod engines;
 mod game;
 #[path = "gog_ui.rs"]
 mod gog;
+#[path = "game_jobs_ui.rs"]
+mod jobs;
 #[path = "local_ui.rs"]
 mod local;
 #[path = "overlay_ui.rs"]
@@ -55,6 +57,8 @@ mod runtimes;
 mod settings;
 #[path = "steam_ui.rs"]
 mod steam;
+#[path = "steam_installs_ui.rs"]
+mod steam_installs;
 #[path = "store_ui.rs"]
 mod store;
 
@@ -216,6 +220,10 @@ struct Glue {
     store: store::StoreState,
     /// The Downloads page and the queue (`downloads_ui.rs`).
     downloads: downloads::DownloadsState,
+    /// Steam's installs (`steam_installs_ui.rs`) and what an installed game's
+    /// page does with the queue (`game_jobs_ui.rs`).
+    steam_installs: steam_installs::SteamInstallState,
+    jobs: jobs::JobsState,
     /// What the stores and sites say about the open game (`cards_ui.rs`).
     cards: cards::CardsState,
     /// How the open game plays on Linux: anti-cheat, the Deck, cloud saves
@@ -258,6 +266,7 @@ pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>) {
     glue.show_store();
     glue.load_store_cache();
     glue.load_queue();
+    glue.start_steam_installs();
     glue.rescan();
     glue.check_accounts();
     glue.show_accounts();
@@ -305,6 +314,8 @@ impl Glue {
             covers,
             store,
             downloads: downloads::DownloadsState::new(),
+            steam_installs: steam_installs::SteamInstallState::new(),
+            jobs: jobs::JobsState::new(),
             steam: steam::SteamState::default(),
             grid,
             chips,
@@ -403,6 +414,8 @@ impl Glue {
         self.connect_accounts(window);
         self.connect_downloads(window);
         self.connect_steam(window);
+        self.connect_steam_installs(window);
+        self.connect_game_jobs(window);
         self.connect_store(window);
         self.connect_cards(window);
         self.connect_compat(window);

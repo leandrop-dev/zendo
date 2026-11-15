@@ -13,6 +13,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use zendo_core::launch::{self, Started, Watch};
 use zendo_core::{Game, Source, State, Status, sessions};
 use zendo_shell::presence::PresenceHandle;
+use zendo_shell::queue;
 use zendo_shell::running::{self, Effect, Names, RunMessage, Running};
 use zendo_shell::{format, open, t};
 
@@ -88,7 +89,7 @@ fn platform_label(platform: &str) -> String {
 }
 
 /// A game Steam installed, by its app id.
-fn steam_app(game: &Game) -> Option<&str> {
+pub(super) fn steam_app(game: &Game) -> Option<&str> {
     (game.source == Source::Steam)
         .then(|| game.id.strip_prefix("steam:"))
         .flatten()
@@ -237,7 +238,7 @@ impl Glue {
     }
 
     /// The open game, as the browser has it now.
-    fn open_game_record(&self) -> Option<Game> {
+    pub(super) fn open_game_record(&self) -> Option<Game> {
         let id = self.open.borrow().clone()?;
         self.browser.borrow().game(&id).cloned()
     }
@@ -270,6 +271,7 @@ impl Glue {
             *self.open.borrow_mut() = Some(id.to_owned());
             self.game.technical.set(false);
             *self.local.confirm_remove.borrow_mut() = None;
+            self.reset_game_jobs();
             self.show_steam_input(id);
             self.want_cards(id);
             self.want_info(id);
@@ -283,6 +285,7 @@ impl Glue {
     /// Closes the open page, a library game's or a store game's.
     pub(super) fn close_game(&self) -> bool {
         let was_library = self.open.borrow_mut().take().is_some();
+        self.reset_game_jobs();
         let was_store = self.close_owned();
         let was_open = was_library || was_store;
         if was_open && let Some(window) = self.window.upgrade() {
@@ -469,6 +472,7 @@ impl Glue {
             .status()
             .map_or_else(|| t!("game-ready"), str::to_owned);
         data.set_line(line.into());
+        self.show_game_jobs(&game, &data);
 
         let statuses: Vec<ChipData> = Status::ALL
             .iter()
@@ -532,6 +536,22 @@ impl Glue {
         }
         if let Some(size) = &game.details.size {
             rows.push(fact(t!("fact-install-size"), size.to_string()));
+        }
+        if game.installed_by_zendo() {
+            // What the last look for an update found.
+            let (line, tone) =
+                queue::update_line(self.downloads.queue.borrow().updates.get(&game.id));
+            if !line.is_empty() {
+                rows.push(Fact {
+                    tone: match tone {
+                        queue::Tone::Good => 1,
+                        queue::Tone::Bad => 2,
+                        queue::Tone::Dim => 3,
+                        queue::Tone::Accent => 4,
+                    },
+                    ..fact(t!("fact-updates"), line)
+                });
+            }
         }
         if let Some(path) = &game.details.install_path {
             rows.push(path_fact(t!("fact-install-path"), path));

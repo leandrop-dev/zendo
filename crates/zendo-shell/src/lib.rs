@@ -20,6 +20,7 @@ pub mod presence;
 pub mod queue;
 pub mod running;
 pub mod sign_in_window;
+pub mod steam_installs;
 pub mod steam_list;
 pub mod store_facts;
 pub mod tray;

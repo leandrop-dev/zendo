@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38, 41 to 50, 51a and 51b are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38, 41 to 51 are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -70,12 +70,17 @@ list and details views, OptiScaler and recompiled games are on hold.
   install its DLC" and See downloads on a store game's page; the question
   about closing while a job runs; the update checks and the updates by
   themselves). The FOMOD installer sheet, listed under 51b, is a mod installer
-  and moved to 52. Steam installs and the game page's jobs (51c) are next. The
+  and moved to 52. 51c is built (Steam's installs, followed from Zendo and
+  shared with Iced as `zendo_shell::steam_installs`: Install with Steam, its
+  progress and the card on Downloads, Verify and Uninstall with Steam; and the
+  installed game's page: Update, the job line, More with Check for updates,
+  Repair, Move and Uninstall, and the DLC card's Install and Uninstall). The
+  Mods, Nexus, launch options and artwork (52) are next. The
   Stats page shows its name. Run it as `zendo-slint`.
 
 ## Next
 
-Items 51c and 52 to 54, the port: `docs/backlog.md` has them, and what is
+Items 52 to 54, the port: `docs/backlog.md` has them, and what is
 on hold.
 
 ## Direction [firm]

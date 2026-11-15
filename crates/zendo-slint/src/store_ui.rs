@@ -4,9 +4,8 @@
 //! and latest version, Steam's page for a Steam game). A part of the
 //! Library's glue (`library_ui`), which owns the covers and the accounts.
 //!
-//! Install, Import and the queue are `downloads_ui`'s (51b). Left for 51c:
-//! Install with Steam; a Steam game that is not installed says what installing
-//! would do and has no button yet.
+//! Install, Import and the queue are `downloads_ui`'s (51b); Install with
+//! Steam is `steam_installs_ui`'s (51c).
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -19,7 +18,8 @@ use zendo_core::config::Config;
 use zendo_core::downloads;
 use zendo_core::info::{self, Dlc};
 use zendo_core::owned::{self, Owned, Shop};
-use zendo_core::{Game, Launch, Size};
+use zendo_core::stores::Store;
+use zendo_core::{Game, Launch, Size, Source};
 use zendo_shell::steam_list;
 use zendo_shell::store_facts::{self, InfoState};
 use zendo_shell::{format, running, t};
@@ -29,7 +29,42 @@ use super::{Glue, to_card, with_glue};
 use crate::covers::Covers;
 use crate::library::{Outcome, Rows, Scroll};
 use crate::store::{StoreBrowser, StoreChip, StorePick};
-use crate::{CardRow, ChipData, Fact, GameData, MainWindow, OwnedBadge, Page, StoreData, Tile};
+use crate::{
+    CardRow, ChipData, DlcRow, Fact, GameData, MainWindow, OwnedBadge, Page, StoreData, Tile,
+};
+
+/// What the DLC card shows: the count, a row each, Install all, and a note.
+#[derive(Default)]
+pub(super) struct DlcView {
+    pub(super) count: String,
+    pub(super) rows: Vec<DlcRow>,
+    pub(super) all: String,
+    pub(super) all_on: bool,
+    pub(super) note: String,
+}
+
+/// What a DLC's row has at its end: the button's words and whether it is
+/// pressed once already (Uninstall asks twice), or, where Zendo cannot manage
+/// the DLC, a status word and its tone (1 good, 3 dim). A DLC that comes with
+/// the game has neither.
+///
+/// `manage` is `None` where Zendo cannot manage the DLC, else whether the
+/// DLC's Uninstall was pressed once.
+fn dlc_button(
+    installable: bool,
+    installed: bool,
+    manage: Option<bool>,
+) -> (String, bool, String, i32) {
+    let none = String::new;
+    match (installable, installed, manage) {
+        (false, ..) => (none(), false, none(), 0),
+        (true, true, Some(true)) => (t!("downloads-press-again"), true, none(), 0),
+        (true, true, Some(false)) => (t!("action-label", action = "uninstall"), false, none(), 0),
+        (true, false, Some(_)) => (t!("install"), false, none(), 0),
+        (true, true, None) => (none(), false, t!("installed"), 1),
+        (true, false, None) => (none(), false, t!("dlc-not-installed"), 3),
+    }
+}
 
 /// The Store's grid as Slint reads it: a model of rows, each made when asked.
 struct StoreGrid {
@@ -549,8 +584,9 @@ impl Glue {
     /// The DLC of a game: those the store says the user owns and those
     /// installed, with how many of the installable are, when the game is in
     /// the library.
-    pub(super) fn dlc_rows(&self, game: &Game) -> (String, Vec<Fact>) {
+    pub(super) fn dlc_rows(&self, game: &Game) -> DlcView {
         struct Line {
+            id: String,
             title: String,
             installed: bool,
             installable: bool,
@@ -564,6 +600,7 @@ impl Glue {
         let mut lines: Vec<Line> = owned
             .iter()
             .map(|dlc| Line {
+                id: dlc.id.clone(),
                 title: dlc.title.clone(),
                 installed: installed.contains(dlc.id.as_str()),
                 installable: dlc.installable,
@@ -574,6 +611,7 @@ impl Glue {
         for dlc in &game.details.dlc {
             if !owned.iter().any(|item| item.id == dlc.id) {
                 lines.push(Line {
+                    id: dlc.id.clone(),
                     title: dlc.title.clone().unwrap_or_else(|| dlc.id.clone()),
                     installed: true,
                     installable: true,
@@ -591,22 +629,77 @@ impl Glue {
         } else {
             String::new()
         };
+        // Zendo installs and removes the DLC of a game it installed; for
+        // one Heroic installed, Heroic does.
+        // The buttons are for the game's own page; a store game's page lists
+        // the DLC and leaves them to Install and Open in library.
+        let on_page = self.open.borrow().as_deref() == Some(game.id.as_str());
+        let manage = game.installed_by_zendo() && on_page;
+        let free = manage && self.downloads.queue.borrow().job_for(&game.id).is_none();
+        let confirming = self.jobs.confirm_dlc.borrow().clone();
+        let to_install = lines
+            .iter()
+            .filter(|line| line.installable && !line.installed)
+            .count();
         let rows = lines
             .into_iter()
             .map(|line| {
-                let value = if line.installed {
-                    t!("installed")
-                } else if !line.installable {
-                    t!("dlc-comes-with")
-                } else {
+                let about = if line.installable {
                     line.size
                         .map(|bytes| Size::Bytes(bytes).to_string())
                         .unwrap_or_default()
+                } else {
+                    t!("dlc-comes-with")
                 };
-                fact(line.title, value)
+                let asked = confirming.as_deref() == Some(line.id.as_str());
+                let (label, danger, status, tone) =
+                    dlc_button(line.installable, line.installed, manage.then_some(asked));
+                DlcRow {
+                    id: line.id.into(),
+                    title: line.title.into(),
+                    about: about.into(),
+                    label: label.into(),
+                    danger,
+                    enabled: free,
+                    status: status.into(),
+                    status_tone: tone,
+                }
             })
             .collect();
-        (count, rows)
+        DlcView {
+            count,
+            rows,
+            all: if manage && to_install > 1 {
+                t!("dlc-install-all")
+            } else {
+                String::new()
+            },
+            all_on: free,
+            note: self.dlc_note(game, !manage && on_page),
+        }
+    }
+
+    /// Why Zendo cannot manage the DLC (`unmanaged`, on the game's own
+    /// page): sign in to see all of them, or Heroic does; and that the store
+    /// is being asked.
+    fn dlc_note(&self, game: &Game, unmanaged: bool) -> String {
+        let store = match game.source {
+            Source::Gog => Store::Gog,
+            _ => Store::Epic,
+        };
+        let info = self.store.browser.borrow().info.get(&game.id).cloned();
+        let mut notes = Vec::new();
+        if unmanaged {
+            notes.push(if info.is_none() && !self.store_signed_in(store) {
+                t!("dlc-sign-in", store = store.label())
+            } else {
+                t!("dlc-in-heroic")
+            });
+        }
+        if matches!(info, Some(InfoState::Asking)) {
+            notes.push(t!("dlc-asking"));
+        }
+        notes.join("\n")
     }
 
     // Writing the page.
@@ -854,7 +947,11 @@ impl Glue {
         if installed {
             return String::new();
         }
-        if owned.id.starts_with("steam:") {
+        if let Some(app) = owned.id.strip_prefix("steam:") {
+            // Steam's dialog is open, or Steam is on it: how far it is.
+            if let Some(note) = self.steam_install_note(app) {
+                return note;
+            }
             return owned.sizes.map_or_else(
                 || t!("store-steam-installs"),
                 |sizes| {
@@ -987,8 +1084,8 @@ impl Glue {
         }];
 
         // Install, Import and See downloads sit beside Open in library
-        // (`downloads_ui.rs`); 51c adds Install with Steam, and until then a
-        // Steam game's note says what installing would do.
+        // (`downloads_ui.rs`), and a Steam game's Install with Steam
+        // (`steam_installs_ui.rs`).
         let game = synthesized(&owned);
         let summary = owned.summary.clone();
         let parts = OwnedPage {
@@ -1229,8 +1326,13 @@ mod tests {
         assert_eq!(game.get_dlc().row_count(), 2);
         assert_eq!(game.get_dlc_count(), "", "no count off the library");
         assert_eq!(
-            game.get_dlc().row_data(0).map(|row| row.value),
+            game.get_dlc().row_data(0).map(|row| row.about),
             Some(t!("dlc-comes-with").into())
+        );
+        assert_eq!(game.get_dlc_note(), "", "a store game's page has no note");
+        assert_eq!(
+            game.get_dlc().row_data(1).map(|row| row.label),
+            Some("".into())
         );
         let rows: Vec<String> = game
             .get_details()

@@ -23,7 +23,7 @@ pub(super) struct LocalState {
     pub(super) confirm_remove: RefCell<Option<String>>,
     /// Once the library is read again: the game to open, if any, and what
     /// to say.
-    after_scan: RefCell<Option<(Option<String>, String)>>,
+    pub(super) after_scan: RefCell<Option<(Option<String>, String)>>,
 }
 
 #[derive(Default)]
