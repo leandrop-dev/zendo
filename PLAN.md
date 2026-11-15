@@ -22,7 +22,7 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38, 41 to 52 are built, with tests green (`docs/backlog.md` has the table,
+to 36, 38, 41 to 53 are built, with tests green (`docs/backlog.md` has the table,
 `docs/history.md` the detail and what was checked). Item 37 (emulation), the
 list and details views, OptiScaler and recompiled games are on hold.
 
@@ -90,15 +90,16 @@ list and details views, OptiScaler and recompiled games are on hold.
   `zendo_shell::nexus_search`) and 52c3 is built too (the FOMOD installer sheet,
   whose state is `zendo_shell::installer`, shared with Iced; Options… on a mod;
   the card of mods coming in from Nexus on Downloads), which closes item 52.
-  Item 53 is sliced [firm]: 53a is built (the Stats page: period chips, tiles,
-  most played, charts by month and weekday, highlights and the library by
-  status, reading the sessions the game page keeps; arrows change the period).
-  Run it as `zendo-slint`.
+  Item 53 is built [firm, sliced in two]: 53a (the Stats page: period chips,
+  tiles, most played, charts by month and weekday, highlights and the library
+  by status, reading the sessions the game page keeps; arrows change the
+  period) and 53b (Game Mode: F11 and Select, the hero and carousel, shelves,
+  the Start menu, `--game-mode`; its rules are `zendo_shell::game_mode`). Run
+  it as `zendo-slint`.
 
 ## Next
 
-53b (Game Mode) and item 54, the port: `docs/backlog.md` has them, and what
-is on hold.
+Item 54, the cut-over: `docs/backlog.md` has it, and what is on hold.
 
 ## Direction [firm]
 

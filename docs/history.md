@@ -5077,3 +5077,71 @@ the PC.
   `$HOME/.local/share/applications` were not what the library listed (it showed
   the system's KDE games), so a played game has to be a local one
   (`~/.config/zendo/local.toml`).
+
+## Item 53b, Game Mode in Slint (2026-11-15)
+
+Closes item 53. The toolkit-free half is `zendo_shell::game_mode` (the shelves
+Continue playing and All games, the hero's index, one tile along, shelf
+cycling past an empty one, the Start menu and its three choices, the
+description rule, the carousel's tile count and first tile, `played_games`
+and `meta_line`); the Slint side is `ui/game_mode.slint` (`GameModeScreen`,
+`GameModeData`) and `src/game_mode_ui.rs`. Iced's `app/game_mode.rs` and
+`hero.rs` were not switched to the shared module: they go at the cut-over
+(item 54), so the rules exist twice until then.
+
+- **Behaviour**: F11 and the pad's Select toggle Game Mode from any page: on,
+  the window goes full screen on the Library and shows the screen; off, it
+  returns to the page it was left from. The screen is drawn over the window
+  (the top bar and pages are hidden, not removed) while Game Mode is on, the
+  page is the Library, no game's page is open and the grid was not asked for.
+  Left and Right move the hero, Enter or A plays it, Tab or LB/RB/Y change the
+  shelf, Escape or B opens the Start menu (Back to Game Mode, Library, Leave
+  Game Mode; Up and Down choose, Enter confirms, Escape closes), Details opens
+  the hero's own page and Escape there comes back to the screen. Library in the
+  menu shows the grid with a GAME MODE chip in the top bar; the chip returns to
+  the screen. Typed text and other keys never reach the grid behind the
+  screen. `--game-mode` (and `--fullscreen`) start in it. The hero's
+  description is the store's or Steam's summary, asked once when a game takes
+  the hero (`want_known_facts`), else the developer and platform.
+- **Changed in shared code**: `play` in `game_ui.rs` is split into `play` and
+  `play_record(game)`; `want_known_facts` and `facts_of` are `pub(super)`;
+  `show_game` and the cover timer redraw the screen; `install` takes the
+  `--game-mode` flag.
+- **Not the same as Iced, on purpose**: after Play the hero follows the game
+  played. A launch moves it to the front of Continue playing, and Iced's hero
+  stayed on the same place, so it jumped to another game (seen on screen in
+  Slint first).
+- **Checked**: `cargo fmt`, clippy with no warning, tests green (91 in
+  `zendo-shell`, 166 in `zendo-slint`). New: 8 shell tests (played order and
+  hidden games, the meta line, the description, an odd tile count, tiles held
+  inside the shelf, stepping to the ends, shelf cycling, the menu) and 4 glue
+  tests (F11 in and out through the Store, the arrows and Enter counting only
+  the hero's launch and the hero following it, the menu and its choices, Tab
+  and Details with Escape).
+- **On screen** (KDE, 2026-11-15, with the user at the PC, throwaway home
+  `/tmp/zh`, no session bus, eight local games with real covers copied from the
+  cache and five of them played, `ydotoold` and the pid guard before every
+  key and click): F11 went full screen (2560x1080) into the screen with the
+  hero, the five played games in the carousel and the hints; Right twice moved
+  the outline to the third tile and the hero to Gamma Gate; Tab showed All
+  games (11 tiles); Escape opened the menu; Down and Enter on Library showed
+  the grid with the chip. Clicked once each: the GAME MODE chip, the Continue
+  playing chip, a carousel tile, Menu, the dim area outside the menu (closes
+  it), Play (a launch was counted; the hero stayed on the game after the fix),
+  Details (the page opened over the screen) and Escape back, the menu's
+  Library and Leave Game Mode choices (Leave returned to the 1368x892 window on
+  the Library). A second run with the new build: `--game-mode` started in it, in
+  pt-PT (JOGAR, DETALHES, TODOS OS JOGOS), then F11 out, Ctrl+2 to the Store,
+  F11 in and F11 out back to the Store.
+- **Not checked**: a real controller (no device; the pad's code is
+  `game_mode_pad`, only the key path is tested), All games chip and Back to
+  Game Mode by click, a game with a Steam summary for the hero's description
+  (the seeded games showed "linux", the platform line), a light KDE scheme,
+  a window narrower than the carousel, and Game Mode with a library of
+  thousands (the carousel draws at most as many tiles as fit).
+- **Things to know**: a window started with `--game-mode` has no windowed
+  size to go back to, so leaving it opened at 1108x632, not the default
+  1360x860. The top bar and pages are hidden with `visible: false`, not
+  removed, so their state survives a visit to the screen. With 11 games all 11
+  tiles showed at 2560 px; a narrower window shows an odd number around the
+  hero.

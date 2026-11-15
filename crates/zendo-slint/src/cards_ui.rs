@@ -307,7 +307,7 @@ impl Glue {
     /// Asks Steam's store when the game's Steam app id is known without
     /// asking the network: the user's, a Steam game's own, or the one a
     /// `ProtonDB` lookup found earlier.
-    fn want_known_facts(&self, id: &str) {
+    pub(super) fn want_known_facts(&self, id: &str) {
         if !self.persist {
             return;
         }
@@ -534,7 +534,7 @@ impl Glue {
     // What the page shows of them.
 
     /// The facts of the game, once they have come and the store has a page.
-    fn facts_of(&self, id: &str) -> Option<Facts> {
+    pub(super) fn facts_of(&self, id: &str) -> Option<Facts> {
         match self.cards.facts.borrow().get(id)? {
             Ask::Got(Some(facts)) => Some((**facts).clone()),
             _ => None,

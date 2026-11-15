@@ -426,6 +426,8 @@ impl Glue {
 
     /// Writes everything the open game's page shows.
     pub(super) fn show_game(&self) {
+        // Game Mode's hero shows what a page learns (a summary, a cover).
+        self.show_game_mode();
         // A store game's page is the open one, when there is one.
         if self.store_page_open() {
             self.show_owned();
@@ -652,9 +654,14 @@ impl Glue {
 
     /// Starts the open game, on a thread: its launch may look things up.
     pub(super) fn play(&self) {
-        let Some(game) = self.open_game_record() else {
-            return;
-        };
+        if let Some(game) = self.open_game_record() {
+            self.play_record(game);
+        }
+    }
+
+    /// Starts a game, whichever page asked: the open game's Play, or Game
+    /// Mode's hero.
+    pub(super) fn play_record(&self, game: Game) {
         if self.game.running.borrow().is_open(&game.id) {
             return;
         }

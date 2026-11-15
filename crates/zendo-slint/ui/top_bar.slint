@@ -6,6 +6,7 @@ import { Colors, Space, Tr } from "style.slint";
 import { Tab, IconButton, ChipButton, SearchField } from "components.slint";
 import { LibraryData } from "library.slint";
 import { StoreData } from "store.slint";
+import { GameModeData } from "game_mode.slint";
 
 export enum Page { library, store, stats, downloads, settings, accounts, about }
 
@@ -122,6 +123,12 @@ export component TopBar inherits Rectangle {
                     chosen: chip.chosen;
                     clicked => { LibraryData.chip(chip.id); }
                 }
+            }
+            // While Game Mode is on and the grid is showing: back to its screen.
+            if GameModeData.on: ChipButton {
+                label: Tr.t("gm-screen");
+                chosen: true;
+                clicked => { GameModeData.show(); }
             }
             Rectangle { horizontal-stretch: 1; }
             // Always there, so Ctrl+F and Ctrl+V can reach them; no room on

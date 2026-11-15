@@ -13,6 +13,7 @@ pub mod cli;
 pub mod collections;
 pub mod file_dialog;
 pub mod format;
+pub mod game_mode;
 pub mod gamepad;
 pub mod i18n;
 pub mod installer;

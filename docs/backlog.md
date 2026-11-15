@@ -1,6 +1,6 @@
 # Zendo: the backlog
 
-The work left. Items 1 to 20, 27 to 38, 41 to 52 are built; the detail of each is in
+The work left. Items 1 to 20, 27 to 38, 41 to 53 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
 ## Next: the port from Iced to Slint
@@ -91,10 +91,13 @@ to `zendo-core` when that page is ported. Ask before building any other page
   flips on every rebuild, with or without the card).
 - **53** Stats tab and Game Mode, sliced in two [firm]. **53a built
   2026-11-15**: the Stats page (`ui/stats.slint`, `stats_ui.rs`; the sums and
-  words were already shared). **53b**: Game Mode (F11 and Select enter and
-  leave, the hero and shelves, LB and RB, the menu, `--game-mode` and
-  `--fullscreen`; Iced's is `app/game_mode.rs` and `hero.rs`; the pad hooks
-  `Pad::ToggleGameMode`, `PrevShelf` and `NextShelf` wait in `library_ui.rs`).
+  words were already shared). **53b built 2026-11-15**: Game Mode (F11 and
+  Select, the hero and the carousel, shelves with Tab and LB/RB, the Start menu,
+  Details, the top bar's GAME MODE chip, `--game-mode`; the rules are
+  `zendo_shell::game_mode` (Iced's `app/game_mode.rs` and `hero.rs` were not
+  switched to it and go at the cut-over), the Slint side is `ui/game_mode.slint`
+  and `game_mode_ui.rs`). Not seen: a real controller, a hero with a Steam
+  summary, a light scheme. Item 54's parity checklist must go through 53.
 - **54** Cut-over: parity checklist, `zendo-slint` becomes `zendo`, the Iced
   crate goes, packaging (the spec's licence becomes `MIT AND OFL-1.1 AND
   GPL-3.0-only`), README, docs, COPR resubmit.

@@ -43,7 +43,7 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         theme.as_deref(),
         Theme::dir().as_deref(),
     )));
-    library_ui::install(&window, Rc::clone(&themes), link);
+    library_ui::install(&window, Rc::clone(&themes), link, fullscreen);
     if opaque {
         window.set_translucency(1.0);
     }

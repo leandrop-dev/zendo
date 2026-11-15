@@ -19,11 +19,12 @@ import { CollectionsSheet, CollectionsData, CollRow } from "collections.slint";
 import { SettingsPage, SettingsData, SetRow, Bar } from "settings.slint";
 import { AboutPage, AboutData } from "about.slint";
 import { StatsPage, StatsData, StatBar, StatCol, StatLine } from "stats.slint";
+import { GameModeScreen, GameModeData, GmTile } from "game_mode.slint";
 import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
-export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow, NexusData, DownloadRow, SearchData, SearchRow, InstallerData, InstallerRow, StatsData, StatBar, StatCol, StatLine }
+export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow, NexusData, DownloadRow, SearchData, SearchRow, InstallerData, InstallerRow, StatsData, StatBar, StatCol, StatLine, GameModeData, GmTile }
 
 export component MainWindow inherits Window {
     title: "Zendo";
@@ -63,6 +64,11 @@ export component MainWindow inherits Window {
 
     // Texts Rust writes (the chips, the cards' lines) do not read `Tr.language`,
     // so a change of language asks for them again.
+    // Game Mode's screen is up: it takes the window, so the top bar and the
+    // pages are not drawn. A game's page, or the Library's own grid asked
+    // for from the menu, shows through instead.
+    property <bool> gm-screen: GameModeData.on && !GameModeData.browsing && root.page == Page.library && !GameData.open;
+
     property <int> language: Tr.language;
     changed language => {
         LibraryData.relabel();
@@ -73,6 +79,7 @@ export component MainWindow inherits Window {
         InstallerData.relabel();
         AccountsData.relabel();
         StatsData.relabel();
+        GameModeData.relabel();
     }
 
     // Ctrl+F and Ctrl+V.
@@ -98,6 +105,7 @@ export component MainWindow inherits Window {
         }
 
         VerticalLayout {
+            visible: !root.gm-screen;
             top-bar := TopBar {
                 // Above the page, so the icon buttons' tooltips draw over it.
                 z: 1;
@@ -162,6 +170,10 @@ export component MainWindow inherits Window {
                     color: Colors.dim;
                 }
             }
+        }
+        if root.gm-screen: GameModeScreen {
+            width: 100%;
+            height: 100%;
         }
         // The Add game sheet, over everything and first to hear Escape.
         if CollectionsData.open: CollectionsSheet {

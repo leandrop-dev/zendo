@@ -42,6 +42,8 @@ mod downloads;
 mod engines;
 #[path = "game_ui.rs"]
 mod game;
+#[path = "game_mode_ui.rs"]
+mod game_mode;
 #[path = "gog_ui.rs"]
 mod gog;
 #[path = "installer_ui.rs"]
@@ -241,6 +243,8 @@ struct Glue {
     downloads: downloads::DownloadsState,
     /// The Stats page (`stats_ui.rs`).
     stats: stats::StatsState,
+    /// Game Mode (`game_mode_ui.rs`).
+    game_mode: game_mode::GameModeState,
     /// Steam's installs (`steam_installs_ui.rs`) and what an installed game's
     /// page does with the queue (`game_jobs_ui.rs`).
     steam_installs: steam_installs::SteamInstallState,
@@ -280,9 +284,17 @@ struct Glue {
 }
 
 /// Puts the Library in the window and starts reading the games.
-pub fn install(window: &MainWindow, themes: Rc<RefCell<Themes>>, link: Option<String>) {
+pub fn install(
+    window: &MainWindow,
+    themes: Rc<RefCell<Themes>>,
+    link: Option<String>,
+    game_mode: bool,
+) {
     let glue = Glue::new(window, true, themes);
     glue.connect(window);
+    if game_mode {
+        glue.start_game_mode();
+    }
     glue.start_presence();
     GLUE.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&glue)));
     *glue.timer.borrow_mut() = Some(glue.watch());
@@ -355,6 +367,7 @@ impl Glue {
             store,
             downloads: downloads::DownloadsState::new(),
             stats: stats::StatsState::new(),
+            game_mode: game_mode::GameModeState::new(),
             steam_installs: steam_installs::SteamInstallState::new(),
             jobs: jobs::JobsState::new(),
             steam: steam::SteamState::default(),
@@ -463,6 +476,7 @@ impl Glue {
         self.connect_accounts(window);
         self.connect_downloads(window);
         self.connect_stats(window);
+        self.connect_game_mode(window);
         self.connect_steam(window);
         self.connect_steam_installs(window);
         self.connect_game_jobs(window);
@@ -660,6 +674,7 @@ impl Glue {
 
     fn show_covers(&self) {
         self.covers_due.set(false);
+        self.show_game_mode();
         let (rows, near) = {
             let browser = self.browser.borrow();
             (
@@ -878,6 +893,10 @@ impl Glue {
             if pad == Pad::Back {
                 self.back();
             }
+        } else if pad == Pad::ToggleGameMode {
+            self.toggle_game_mode();
+        } else if self.game_mode_screen() {
+            self.game_mode_pad(pad);
         } else if pad == Pad::Back {
             self.back();
         } else if self.asking() {
@@ -894,7 +913,7 @@ impl Glue {
                 Pad::Sort => self.change(Browser::cycle_sort),
                 Pad::Hide => self.change(Browser::toggle_hidden),
                 Pad::ShowHidden => self.change(Browser::show_hidden),
-                // Game Mode and its shelves come in item 53.
+                // Game Mode and its shelves are `game_mode_ui`'s.
                 Pad::Back | Pad::ToggleGameMode | Pad::PrevShelf | Pad::NextShelf => false,
             };
         } else if self.on_stats() {
@@ -911,7 +930,7 @@ impl Glue {
                 Pad::Down => self.store_step(Move::Down),
                 Pad::Activate => self.open_selected_owned(),
                 Pad::Sort => self.store_cycle_sort(),
-                // Game Mode and its shelves come in item 53.
+                // Game Mode and its shelves are `game_mode_ui`'s.
                 Pad::Back
                 | Pad::Hide
                 | Pad::ShowHidden
@@ -949,6 +968,7 @@ impl Glue {
             || self.collections_back()
             || self.close_form()
             || self.close_game()
+            || self.game_mode_back()
         {
             return;
         }
@@ -1014,8 +1034,17 @@ impl Glue {
         let (Some(key), None) = (chars.next(), chars.next()) else {
             return false;
         };
+        // F11: Game Mode on or off, from any page.
+        if key == char::from(Key::F11) {
+            self.toggle_game_mode();
+            return true;
+        }
         if ctrl && !alt && !meta {
             return self.control_key(key);
+        }
+        // Game Mode's screen hears the keys; none reach the grid behind it.
+        if !alt && !meta && self.game_mode_screen() {
+            return self.game_mode_key(key);
         }
         // The question about closing a running download: Enter is Close
         // anyway, and Escape (in `back`) keeps downloading.
