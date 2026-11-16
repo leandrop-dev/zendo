@@ -2877,7 +2877,7 @@ pixel sample against the wallpaper (118,118,118 behind).
   Blur DX; the class list is, and the stock Blur effect would honour the
   request.
 - Decision [tentative]: the default is 2/3 opacity, with the Opaque switch;
-  plasmonk's class list gets `zendo` (PLAN.md, "On plasmonk's side"). No
+  plasmonk's class list gets `zendo` (PLAN.md, "On the desktop's side"). No
   fallback to an opaque window is needed.
 
 ## Item 31: the shell, 2026-11-12
@@ -5222,3 +5222,35 @@ the nine icons, `LICENSE`, `LICENSE.dependencies` and `OFL.txt`, and
 `--enable-network=false` is not valid (the flag takes no value; network is off
 by default). Not known: how much memory COPR's builders have; the lighter
 flags were only tested on this machine (31 GB).
+
+## The move to CachyOS, 2026-11-16
+
+The development machine moved from Fedora 45 + KDE Plasma to CachyOS (Arch)
+with Hyprland (Wayland). Zendo's window is distro-agnostic (item 27), so it
+needs no code change; this session brought the documents up to date.
+
+- Toolchain: CachyOS' Rust is 1.100.0, managed by rustup (`/usr/bin/cargo`
+  and `/usr/bin/rustc` are rustup symlinks; `stable` is the default, and
+  1.99.1 is also installed). `mise ls` reports the `mise.toml` pin of 1.99.1
+  as "missing" because mise does not manage rustup's toolchains; builds use
+  rustup's `stable`, which is fine (the minimum is 1.98).
+- System libraries: `gtk3`, `webkit2gtk-4.1`, `libsoup3` and
+  `javascriptcoregtk-4.1` are present, with `gcc`, `make`, `cmake` and
+  `pkg-config`; `cargo check --workspace` finished clean (3m57s).
+- Tools: `umu-run`, `gamescope`, `mangohud`, `steam`, `heroic`, `python3`,
+  `tar`, `xz`, `7z`, `bsdtar` are on `PATH`. The standalone store engines
+  (legendary, gogdl, nile, comet) are not, but Heroic bundles all four at
+  `/usr/lib/heroic-games-launcher/app.asar.unpacked/build/bin/x64/linux/`,
+  which Zendo already uses as its fallback. `gamemode` is not installed.
+- Hyprland 0.57.2. For checking: `grim` and `hyprctl` are present; `wtype`
+  is not (install with `sudo pacman -S wtype`). The KDE-side checking tools
+  (`spectacle`, `kdotool`, `ydotool`) are not installed here.
+- Documents: README, `PLAN.md` and `CLAUDE.md` now frame CachyOS + Hyprland
+  as the development machine while keeping Fedora + KDE Plasma supported,
+  and keep the repo distro-agnostic. Both distro packages (Arch PKGBUILD,
+  Fedora COPR spec) build with the distribution's toolchain; the `mise.toml`
+  pin is only for contributors.
+
+Install: from the Arch PKGBUILD, `cd packaging/arch/zendo-git && makepkg -si`
+(`--nocheck` skips the test suite). Not done yet: a release tag, an AUR
+release package and a COPR build from the tag (`docs/backlog.md`).

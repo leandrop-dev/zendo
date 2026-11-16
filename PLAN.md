@@ -2,7 +2,8 @@
 
 A game launcher for Linux: every game in one library, in a normal window with
 a full-screen mode for the couch, launched with the right tools, and mods
-later. Source files MIT, the binary GPLv3 (Slint). Developed on Fedora with KDE Plasma next to
+later. Source files MIT, the binary GPLv3 (Slint). Developed on CachyOS
+(Arch) with Hyprland and on Fedora with KDE Plasma, next to
 [plasmonk-kde](../plasmonk-kde); it began as a sister project of hyprmonk.
 
 ## Documents
@@ -17,14 +18,17 @@ Read this file first. The rest is read on demand, not up front.
 | `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
-## Where it stands (2026-11-15)
+## Where it stands (2026-11-16)
 
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
 to 36, 38 and 41 to 54 are built, with tests green (`docs/backlog.md` has the
-table, `docs/history.md` the detail and what was checked). Item 37 (emulation),
-the list and details views, OptiScaler and recompiled games are on hold.
+table, `docs/history.md` the detail and what was checked). On 2026-11-16 the
+development machine moved to CachyOS (Arch) with Hyprland; the window is
+distro-agnostic and is supported on both CachyOS/Hyprland and Fedora/KDE
+Plasma. Item 37 (emulation), the list and details views, OptiScaler and
+recompiled games are on hold.
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
@@ -54,8 +58,11 @@ the list and details views, OptiScaler and recompiled games are on hold.
 
 ## Next
 
-Trying the COPR build on the user's machine, then whatever the user chooses from `docs/backlog.md`
-(what is on hold is there).
+Installing Zendo on the user's machine from the Arch PKGBUILD
+(`makepkg -si`), then whatever the user chooses from `docs/backlog.md` (what
+is on hold is there). For the family: a release tag, an AUR release package
+and a COPR build from the tag, so both distros update from the same release
+(`docs/backlog.md`).
 
 ## Direction [firm]
 
@@ -81,9 +88,10 @@ Chosen on 2026-11-06:
 Reformulated on 2026-11-12 [tentative until the user confirms the order in
 docs/backlog.md]:
 
-- Generic platform: no Hyprland-specific code (the tray restore through
-  `hyprctl`, hyprmonk's `tone.json`); Wayland and X11 through standard
-  means. Fedora first: the RPM through COPR moves up, Arch's package stays.
+- Generic platform: no compositor-specific code (the old tray restore
+  through `hyprctl`, hyprmonk's `tone.json`); Hyprland and KDE Plasma,
+  Wayland and X11, all through standard means. Arch/CachyOS and Fedora are
+  both first-class: the PKGBUILD and the COPR RPM ship side by side.
 - The theme follows the active KDE colour scheme (`~/.config/kdeglobals`),
   which plasmonk sets. Zendo keeps its own colours elsewhere.
 - A complete redesign in the style of
@@ -165,14 +173,17 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 | umu-launcher | Windows games; the zipapp release, also from Settings → Engines (needs `python3`). |
 | MangoHud, GameMode, gamescope | Only games where they are switched on. |
 
-## On plasmonk's side
+## On the desktop's side
 
-- Zendo follows the KDE colour scheme plasmonk writes (item 28, built); nothing is
-  needed there.
-- Needed for the blur: Zendo's window class `zendo` in plasmonk's
-  `themes/mystical/better-blur-classes.txt` (and in the user's own Better Blur
-  DX `WindowClasses`); under Better Blur DX only listed classes blur, and
-  without it Zendo is translucent but sharp (docs/history.md, item 31's spike).
+- KDE Plasma: Zendo follows the KDE colour scheme plasmonk writes (item 28,
+  built); nothing is needed there. For the blur, Zendo's window class `zendo`
+  goes in plasmonk's `themes/mystical/better-blur-classes.txt` (and in the
+  user's own Better Blur DX `WindowClasses`); under Better Blur DX only listed
+  classes blur, and without it Zendo is translucent but sharp (docs/history.md,
+  item 31's spike).
+- Hyprland: the class is also `zendo`; blur is Hyprland's own rule
+  (`windowrulev2 = blur, class:^(zendo)$`), and the colour scheme falls back to
+  Zendo's own when there is no `kdeglobals`.
 
 ## Conventions
 

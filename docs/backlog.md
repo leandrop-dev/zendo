@@ -253,9 +253,28 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
 The COPR resubmit of `main` is done: the user ran `copr-cli buildscm
 leandrop/zendo --clone-url https://github.com/leandrop-dev/zendo.git --commit
 main --method make_srpm --nowait` on 2026-11-15 (commit `90da88a`), and build
-11332151 succeeded (about 40 minutes). Not yet tried: installing that RPM and
-starting it (`dnf copr` upgrade, then `zendo`); the installed copy before it
-ships the old ensō icon.
+11332151 succeeded (about 40 minutes). The RPM was not installed: on
+2026-11-16 the machine moved to CachyOS, so the Arch PKGBUILD is the package
+used there (`makepkg -si`, README). The COPR build stays for Fedora.
+
+## Release packaging (proposed 2026-11-16, tentative)
+
+The user wants a stable copy to use now, and later one place for the family
+to install and receive updates.
+
+- A release tag on the repository (the user's choice of name; `v0.1.0`,
+  marked a pre-release, is suggested), so both packages build from a tagged
+  commit instead of a moving `main`.
+- An Arch release package `zendo` beside `zendo-git`: `zendo-git` keeps
+  building `main`, `zendo` builds the tag's tarball with a checksum, and an
+  AUR repository serves both (`paru -S zendo` or `paru -S zendo-git`).
+- COPR from the tag: `.copr/Makefile` and `packaging/fedora/zendo.spec`
+  currently write a snapshot version (`0.1.0^<date>git<short>`) from whatever
+  ref they get; a tagged build needs a release version (`Version: 0.1.0`)
+  chosen when `git describe --exact-match` names a tag.
+- The AUR has no `copr-cli`: publishing is a `git push` to a per-package
+  repository on `aur.archlinux.org`, after an AUR account and an SSH key;
+  `devtools`' `pkgctl`, `aurpublish` and `namcap` help.
 
 ## On hold
 

@@ -19,8 +19,9 @@ art, Play, and what its store records about the install. It opens in a
 normal translucent window and has a Game Mode for the couch, and it is
 driven as well by a controller as by the keyboard.
 
-It is developed on Fedora with KDE Plasma and follows the KDE colour scheme
-when asked, but it runs on any Linux desktop. Its look follows
+It is developed on CachyOS (Arch) with Hyprland and on Fedora with KDE
+Plasma, follows the KDE colour scheme when there is one, and runs on any
+Linux desktop. Its look follows
 [omakade](https://github.com/btsouth/omakade)'s and its pages follow
 [Hikari](https://github.com/dodo986/hikari)'s (ideas only, no code).
 
@@ -300,6 +301,19 @@ launcher is needed only for its own games:
 
 ## Install
 
+On Arch and its relatives (including CachyOS), `zendo-git` builds the
+latest commit on main; its PKGBUILD is in `packaging/arch/zendo-git/`:
+
+```bash
+git clone https://github.com/leandrop-dev/zendo.git
+cd zendo/packaging/arch/zendo-git
+makepkg -si            # add --nocheck to skip the test suite
+```
+
+It installs `zendo` in `/usr/bin`, its menu entry and its icon. Steam,
+Heroic, umu-launcher, gamescope, MangoHud, GameMode and 7-Zip are optional;
+pacman lists what each one adds.
+
 On Fedora (x86_64, 45 and Rawhide), the latest commit on main is built in
 [COPR](https://copr.fedorainfracloud.org/coprs/leandrop/zendo/):
 
@@ -308,32 +322,21 @@ sudo dnf copr enable leandrop/zendo
 sudo dnf install zendo
 ```
 
-The package holds Zendo only. The store engines (legendary, gogdl, nile,
+Both packages hold Zendo only. The store engines (legendary, gogdl, nile,
 comet), umu-launcher and the Protons are downloaded from Settings → Engines
 and Settings → Protons, which is why `python3`, `tar`, `xz` and `coreutils`
 are required. Steam, gamescope, MangoHud and GameMode are suggested, not
 required.
 
-On Arch and its relatives, `zendo-git` builds the latest commit on main;
-its PKGBUILD is in `packaging/arch/zendo-git/`:
-
-```bash
-git clone https://github.com/leandrop-dev/zendo.git
-cd zendo/packaging/arch/zendo-git
-makepkg -si
-```
-
-It installs `zendo` in `/usr/bin`, its menu entry and its icon. Steam,
-Heroic, umu-launcher, gamescope, MangoHud, GameMode and 7-Zip are optional;
-pacman lists what each one adds.
-
 ## Build
 
-Rust 1.98 or newer, and WebKitGTK 4.1 with GTK 3 (on Arch, `webkit2gtk-4.1`;
-on Debian and Ubuntu, `libwebkit2gtk-4.1-dev`; on Fedora, `gtk3-devel
-webkit2gtk4.1-devel libsoup3-devel javascriptcoregtk4.1-devel
+Rust 1.98 or newer (CachyOS and Arch track newer than that; Fedora 45 ships
+1.98.1), and WebKitGTK 4.1 with GTK 3 (on Arch and CachyOS,
+`webkit2gtk-4.1`; on Debian and Ubuntu, `libwebkit2gtk-4.1-dev`; on Fedora,
+`gtk3-devel webkit2gtk4.1-devel libsoup3-devel javascriptcoregtk4.1-devel
 systemd-devel`, checked on Fedora 45). The repository's `mise.toml` pins
-Rust 1.99.1 for [mise](https://mise.jdx.dev) users (`mise install`):
+Rust 1.99.1 for [mise](https://mise.jdx.dev) contributors (`mise install`);
+a distribution's toolchain at 1.98 or newer works as it is:
 
 ```bash
 git clone https://github.com/leandrop-dev/zendo.git
@@ -600,12 +603,13 @@ count their own.
 7. **Mods** (built): mods from archives with
    Apply and Back to vanilla, from Nexus Mods links with updates,
    profiles, FOMOD installers and Bethesda plugin order.
-8. **Redesign** (built, 2026-11-12 to 13): a Fedora and KDE Plasma
-   machine, the KDE colour scheme as a theme, a top bar and translucent
-   window, Game Mode, play status, saved filters, play sessions with a Stats
-   tab, Steam's descriptions and facts, engine downloads from Settings and a
-   Fedora RPM through COPR. On hold: emulation, list and details views,
-   OptiScaler, recompiled games.
+8. **Redesign** (built, 2026-11-12 to 13): a machine on CachyOS with
+   Hyprland and on Fedora with KDE Plasma, the KDE colour scheme as a theme,
+   a top bar and translucent window, Game Mode, play status, saved filters,
+   play sessions with a Stats tab, Steam's descriptions and facts, engine
+   downloads from Settings, and packages for Fedora (COPR) and Arch
+   (PKGBUILD). On hold: emulation, list and details views, OptiScaler,
+   recompiled games.
 
 See [PLAN.md](PLAN.md) for the details.
 

@@ -26,7 +26,23 @@ Say so before launching Zendo for a check: a start can scan the library,
 fetch covers and queue auto-updates. Run it only in a throwaway home with
 no session bus (`env -i ... HOME=<scratch> DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent
 target/debug/zendo`): Zendo reads its API keys from the keyring at start,
-and on the real bus that is the user's real KDE Wallet.
+and on the real bus that is the user's real KDE Wallet or GNOME Keyring.
+
+The development machine is CachyOS with Hyprland (since 2026-11-16); Zendo is
+also tried on Fedora with KDE Plasma. The window is distro-agnostic, and the
+window class is `zendo` on both.
+
+On Hyprland (CachyOS), checked 2026-11-16:
+
+- A still: `grim FILE` (or `grim -o <output> FILE`).
+- Finding and driving the window: `hyprctl clients -j`, whose `class` is
+  `zendo`, with `pid`, `title`, `at` and `size`; focus and fullscreen through
+  `hyprctl dispatch`. Zendo closes and reopens its window to hide to and
+  restore from the tray, so a restore is a new window id.
+- Keys and the mouse: `wtype` types and `ydotool` drives the mouse. `wtype`
+  is not installed here (`sudo pacman -S wtype`); until then type by hand
+  with the user present. Under Hyprland the blur is a rule of its own
+  (`windowrulev2 = blur, class:^(zendo)$`).
 
 On KDE Plasma (Fedora), checked 2026-11-12:
 
