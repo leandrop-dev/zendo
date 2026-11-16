@@ -722,6 +722,13 @@ impl Glue {
                         crate::window::hide_for_launch(&window);
                     }
                 }
+                Effect::ShowOnClose => {
+                    if !self.game.running.borrow().busy()
+                        && let Some(window) = self.window.upgrade()
+                    {
+                        crate::window::show_after_game(&window);
+                    }
+                }
                 Effect::Changed(id) => {
                     let running = self.game.running.borrow().is_running(&id);
                     let outcome = self.browser.borrow_mut().set_running(&id, running);

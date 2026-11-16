@@ -266,7 +266,7 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a is built; 55b is next; 55c is its own investigation.
+55a and 55b are built; 55c is its own investigation.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -286,7 +286,7 @@ so they never collide with items 1 to 54.
   5. The Technical card's `+`/`−` button is under the heading, not on it
      (`ui/game.slint`). Put it on the heading row, right-aligned, and make the
      heading press it.
-- **55b, the tray** (two, in `zendo-shell` and the window):
+- **55b built 2026-11-16, the tray** (two, in `zendo-shell` and the window):
   6. "Only minimize to tray when the game window opens": for a game Zendo
      starts itself (`Watch::Group`), `HideOnLaunch` fires on `Started`, before
      the game's window is up (`zendo-shell/src/running.rs`). Hide when the

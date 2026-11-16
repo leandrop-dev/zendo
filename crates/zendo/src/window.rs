@@ -114,6 +114,9 @@ thread_local! {
 thread_local! {
     /// The tray is there (the setting asked for it and it was made).
     static TRAY_THERE: Cell<bool> = const { Cell::new(false) };
+    /// The window was hidden for a game's launch, not by the user: the game's
+    /// end brings it back.
+    static HID_FOR_GAME: Cell<bool> = const { Cell::new(false) };
 }
 
 /// A game is up: hides the window to the tray, when the Window setting asks
@@ -121,7 +124,19 @@ thread_local! {
 pub fn hide_for_launch(window: &MainWindow) {
     if TRAY_THERE.get() && window.window().is_visible() {
         remember_size(window);
+        HID_FOR_GAME.set(true);
         let _ = window.hide();
+    }
+}
+
+/// The game ended: brings back a window hidden for its launch, and only
+/// that one (one the user hid to the tray stays there).
+pub fn show_after_game(window: &MainWindow) {
+    if HID_FOR_GAME.replace(false) && !window.window().is_visible() {
+        if let Some(size) = LAST_SIZE.get() {
+            window.window().set_size(size);
+        }
+        let _ = window.show();
     }
 }
 

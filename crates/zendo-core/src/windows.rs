@@ -24,6 +24,15 @@ pub fn ask_to_close(pids: &HashSet<u32>) -> usize {
         .sum()
 }
 
+/// Whether any mapped window belongs to these processes: the game's window,
+/// once it is up.
+#[must_use]
+pub fn any_mapped(pids: &HashSet<u32>) -> bool {
+    displays(pids)
+        .iter()
+        .any(|display| on_display_mapped(display, pids).unwrap_or(false))
+}
+
 /// The X displays the processes use, from their environment, and Zendo's
 /// own.
 fn displays(pids: &HashSet<u32>) -> Vec<String> {
@@ -107,6 +116,43 @@ fn on_display(display: &str, pids: &HashSet<u32>) -> anyhow::Result<usize> {
     }
     conn.flush()?;
     Ok(asked)
+}
+
+/// Whether a mapped window of these processes is on this display.
+fn on_display_mapped(display: &str, pids: &HashSet<u32>) -> anyhow::Result<bool> {
+    let (conn, screen) = x11rb::connect(Some(display))?;
+    let root = conn.setup().roots[screen].root;
+    let net_pid = conn.intern_atom(false, b"_NET_WM_PID")?.reply()?.atom;
+
+    // Top-level windows, and one level down for a manager that frames them,
+    // as `on_display` walks them.
+    let mut windows: Vec<Window> = Vec::new();
+    for top in conn.query_tree(root)?.reply()?.children {
+        windows.push(top);
+        if let Ok(tree) = conn.query_tree(top)?.reply() {
+            windows.extend(tree.children);
+        }
+    }
+    for window in windows {
+        let Ok(cookie) = conn.get_window_attributes(window) else {
+            continue;
+        };
+        let Ok(attributes) = cookie.reply() else {
+            continue;
+        };
+        if attributes.map_state != MapState::VIEWABLE {
+            continue;
+        }
+        let pid = conn
+            .get_property(false, window, net_pid, AtomEnum::CARDINAL, 0, 1)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .and_then(|reply| reply.value32().and_then(|mut values| values.next()));
+        if pid.is_some_and(|pid| pids.contains(&pid)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]

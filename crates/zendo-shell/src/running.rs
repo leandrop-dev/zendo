@@ -31,6 +31,10 @@ const WAIT: Duration = Duration::from_mins(5);
 /// moment between.
 const GONE: u32 = 3;
 
+/// How long Zendo waits for the game's window before hiding itself anyway:
+/// a native Wayland game has no X11 window Zendo can see.
+const WINDOW_WAIT: Duration = Duration::from_secs(10);
+
 #[derive(Debug, Default)]
 pub struct Running {
     pub games: HashMap<String, Session>,
@@ -84,6 +88,8 @@ pub enum RunMessage {
     Started(String, Result<Started, String>),
     /// The launcher started the game: its processes turned up.
     Seen(String),
+    /// Its window is up, or Zendo waited long enough for one: hide now.
+    Shown(String),
     /// They did not, in time.
     Missed(String),
     Ended(String),
@@ -118,6 +124,8 @@ pub enum Effect {
     Presence,
     /// A game is up: hide the window when the setting asks for it.
     HideOnLaunch,
+    /// A game ended: show the window again when it was hidden for the launch.
+    ShowOnClose,
     /// The game ended: a job held while it ran can go now.
     NextJob,
     /// GOG's total now holds the session just sent.
@@ -281,8 +289,15 @@ impl Running {
                     session.since = now();
                     effects.push(Effect::Say(t!("run-running", title = names(&id).title)));
                 }
-                effects.extend([Effect::Presence, Effect::HideOnLaunch, Effect::Changed(id)]);
+                effects.extend([Effect::Presence, Effect::Changed(id)]);
                 effects
+            }
+            RunMessage::Shown(id) => {
+                if self.games.contains_key(&id) {
+                    vec![Effect::HideOnLaunch]
+                } else {
+                    Vec::new()
+                }
             }
             RunMessage::Missed(id) => {
                 if self.games.remove(&id).is_none() {
@@ -333,6 +348,7 @@ impl Running {
         let title = names(&id).title;
         effects.extend([
             Effect::Say(t!("run-closed", title = title, minutes = minutes)),
+            Effect::ShowOnClose,
             Effect::Presence,
             Effect::NextJob,
             Effect::Changed(id),
@@ -414,7 +430,7 @@ impl Running {
         // scanning again.
         effects.push(Effect::Launched(id.to_owned()));
         if running_now {
-            effects.extend([Effect::Presence, Effect::HideOnLaunch]);
+            effects.push(Effect::Presence);
         }
         effects.push(Effect::Changed(id.to_owned()));
         effects
@@ -502,7 +518,17 @@ pub fn follow(game: Game, send: impl Fn(RunMessage) -> bool + Send + 'static) {
         let own = matches!(watch, Some(Watch::Group(_)));
         match watch {
             Some(watch @ Watch::Group(_)) => {
+                let mut shown = false;
+                let since = Instant::now();
                 while launch::running(&watch) {
+                    if !shown
+                        && (launch::any_window_mapped(&watch) || since.elapsed() > WINDOW_WAIT)
+                    {
+                        if !send(RunMessage::Shown(id.clone())) {
+                            return;
+                        }
+                        shown = true;
+                    }
                     thread::sleep(POLL);
                 }
             }
@@ -518,8 +544,18 @@ pub fn follow(game: Game, send: impl Fn(RunMessage) -> bool + Send + 'static) {
                 if !send(RunMessage::Seen(id.clone())) {
                     return;
                 }
+                let mut shown = false;
+                let since = Instant::now();
                 let mut gone = 0;
                 while gone < GONE {
+                    if !shown
+                        && (launch::any_window_mapped(&watch) || since.elapsed() > WINDOW_WAIT)
+                    {
+                        if !send(RunMessage::Shown(id.clone())) {
+                            return;
+                        }
+                        shown = true;
+                    }
                     thread::sleep(POLL);
                     gone = if launch::running(&watch) { 0 } else { gone + 1 };
                 }
@@ -588,10 +624,16 @@ mod tests {
         assert!(running.is_running("gog:1"));
         assert_eq!(said(&effects), Some("Sugar is running"));
         assert!(effects.contains(&Effect::Launched("gog:1".into())));
+        assert!(
+            !effects.contains(&Effect::HideOnLaunch),
+            "the game's window is not up yet"
+        );
+        let effects = running.apply(RunMessage::Shown("gog:1".into()), &names);
         assert!(effects.contains(&Effect::HideOnLaunch));
         let effects = running.apply(RunMessage::Ended("gog:1".into()), &names);
         assert!(!running.is_running("gog:1"));
         assert_eq!(said(&effects), Some("Sugar closed"));
+        assert!(effects.contains(&Effect::ShowOnClose));
         assert!(
             !effects.iter().any(|e| matches!(e, Effect::Session { .. })),
             "under a minute is no session"

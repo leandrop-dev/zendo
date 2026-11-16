@@ -5285,3 +5285,31 @@ seeded local game (`local.toml`, `program = "/bin/true"`) whose page shows
 the Technical card with `+` at the right of the heading (the page was forced
 to its bottom for the look, then the force was removed). `cargo build -p
 zendo` and 168 `zendo` tests green.
+
+## Item 55b, the tray (2026-11-16)
+
+The two tray fixes from the user's testing (`docs/backlog.md`, "From the
+user's testing").
+
+- **The window hides only when the game's window is up.** Before, a game
+  Zendo starts itself (`Watch::Group`) hid the window on `Started`, as soon
+  as its process existed, before its window, its prefix or its splash: the
+  Play button's change and an early failure happened out of sight. Now
+  `zendo_core::windows::any_mapped` (the same X11 `_NET_WM_PID` walk Stop's
+  close request uses) and `zendo_core::launch::any_window_mapped` say when a
+  mapped window of the game's processes exists, and `running.rs`'s `follow`
+  sends a new `RunMessage::Shown` then, which `Running::apply` turns into
+  `Effect::HideOnLaunch`. A game watched by its folder (`Seen`) hides the
+  same way. A native Wayland game has no X11 window Zendo can see, so after
+  ten seconds (`WINDOW_WAIT`) Zendo hides anyway. A game that ends before its
+  window appears never sends `Shown`, so the window stays and its failure is
+  seen.
+- **The window comes back when the game ends.** `Effect::ShowOnClose` is new,
+  emitted by `ended`; `game_ui.rs` calls the new `window::show_after_game`,
+  which shows the window only when it was hidden for the launch
+  (`HID_FOR_GAME`), never one the user hid.
+
+Tests: the shell's transitions (Started no longer hides; `Shown` does; Ended
+shows). `cargo test` green (168 zendo, 285 core, 91 shell); `cargo build
+-p zendo` clean. Not seen on screen: a real game opening and closing with the
+tray on (needs the session bus and a game that opens a window).

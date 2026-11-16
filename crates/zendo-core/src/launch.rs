@@ -402,6 +402,18 @@ pub fn running(watch: &Watch) -> bool {
     }
 }
 
+/// Whether the game has a mapped window: it is up on screen, past its
+/// prefix and its splash. A native Wayland game has none Zendo can see.
+#[must_use]
+pub fn any_window_mapped(watch: &Watch) -> bool {
+    let pids: std::collections::HashSet<u32> = match watch {
+        Watch::Group(group) => group.members().into_iter().collect(),
+        Watch::Folder(folder) => in_folder(folder).into_iter().collect(),
+        Watch::Nothing => return false,
+    };
+    crate::windows::any_mapped(&pids)
+}
+
 /// Asks the game to quit: its windows to close, as their X button would,
 /// so it can save first; a game with no window that takes that request
 /// (no X11 window, or none open) is sent SIGTERM instead, which native
