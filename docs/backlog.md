@@ -257,6 +257,90 @@ main --method make_srpm --nowait` on 2026-11-15 (commit `90da88a`), and build
 2026-11-16 the machine moved to CachyOS, so the Arch PKGBUILD is the package
 used there (`makepkg -si`, README). The COPR build stays for Fedora.
 
+## From the user's testing of 2026-11-16
+
+The user ran the Slint window against their real library and stores and sent a
+list of bugs, improvements and new sources. The order is their choice [firm]:
+the bugs first, then the improvements, then the new sources. Numbers 55 to 59,
+so they never collide with items 1 to 54.
+
+### Bugs (55a to 55c)
+
+55a and 55b are the immediate work; 55c is its own investigation.
+
+- **55a, the layout fixes** (five, all small, all in the Slint window):
+  1. The footer floats under the empty Library and Store instead of sitting at
+     the bottom: the empty-state `Rectangle` in `ui/library.slint` and
+     `ui/store.slint` is only as tall as its text. Give it
+     `vertical-stretch: 1`.
+  2. The view chips (All, Favorites, Recent, Hidden) sit beside the tabs in
+     `ui/top_bar.slint`; `docs/design.md` puts them beside the search. Move
+     them to the right cluster, left of the search field.
+  3. The `sort` label is not centred against the chips, and neither is the
+     `organize` label: both are bare `Text` in a `FlexboxLayout` with
+     `cross-axis-alignment: start` (`ui/library.slint`, `ui/store.slint`).
+     Give each the chip's height and centre it.
+  4. The Store's sort chips are on a row of their own; the Library's share
+     their row with the source chips. Merge them in `ui/store.slint`.
+  5. The Technical card's `+`/`−` button is under the heading, not on it
+     (`ui/game.slint`). Put it on the heading row, right-aligned, and make the
+     heading press it.
+- **55b, the tray** (two, in `zendo-shell` and the window):
+  6. "Only minimize to tray when the game window opens": for a game Zendo
+     starts itself (`Watch::Group`), `HideOnLaunch` fires on `Started`, before
+     the game's window is up (`zendo-shell/src/running.rs`). Hide when the
+     window is actually mapped instead, reusing the window detection Stop
+     already uses. Today the Play button's change and a failure are hidden too.
+  7. "When the game closes the Zendo window should unminimize": there is no
+     such path. Add an effect (`ShowOnClose` or `ShowWhenIdle`) in
+     `running.rs` and handle it in `game_ui.rs`, beside `HideOnLaunch`.
+     (On Wayland the window is hidden, not minimised, so this is a show.)
+- **55c, the game page's scroll** (its own task): the known item 52c1 bug
+  (`docs/history.md`): the page's content height flips, the Screenshots card
+  especially, and the `ScrollView` clamps to a stale height, so the bottom
+  cannot be reached. The user: "sometimes we have too much scroll, sometimes
+  too less ... aren't we able to make the scroll fit content?"
+
+### Improvements (56a to 56c)
+
+- **56a, the screenshot lightbox**: a screenshot on a game page opens its full
+  image in the browser today (`GameData.open-path(shot.full)` in
+  `ui/game.slint`). Open it in the app instead: a sheet with the image and
+  previous/next. Needs full-size images kept, not only the thumbnails.
+- **56b, the Store's platform badge**: a badge in the top-left of a Store card
+  saying which platform the game is on. The top-left is free there (the mark
+  box is only on the Library's cards); the platform is in the card's caption
+  today. The user thinks Iced had one.
+- **56c, the wide art's fade**: the game page's backdrop is a flat
+  `opacity: 0.22` (`ui/game.slint`). Make it fade (a gradient towards
+  transparent), as omakade does.
+
+### New sources (57 to 59)
+
+Read from omakade's docs (`docs/GUIDE.md` and `COMPATIBILITY.md` on main,
+2026-11-16). Ideas only, as everywhere else.
+
+- **57, Battle.net** [tentative]: omakade reads the Battle.net Agent database
+  (`product.db`) inside a Wine, Proton or Bottles prefix and launches each game
+  through that prefix's Battle.net client. The same shape as Zendo's Steam and
+  Heroic import: read-only, launch through the launcher. Needs the database
+  format and the launch command researched before it is sliced.
+- **58, Game Pass through Xodus Nexus** [tentative]: omakade lists the games
+  Xodus Nexus (a third-party Xbox Cloud Gaming client) shows as ready to play,
+  with Microsoft Store art, and launches Nexus's own shortcut. Cloud
+  streaming, not local installs, and a third-party app the user installs.
+  Needs Nexus's shortcut or CLI contract checked.
+- **59, Xbox Series S** [tentative, both paths to investigate]: the user wants
+  to play on the Series S remotely and asked for both. Two different
+  mechanisms: cloud gaming through Xodus (58), and remote play from the
+  console itself through Greenlight or xbplay. Both are investigated before
+  anything is planned; remote play is a streaming client, a different shape
+  from Zendo's installed-games model.
+
+EA and Ubisoft are not listed: neither has a Linux launcher, and those games
+arrive through Steam or Heroic, which Zendo already imports. Emulation and
+RetroAchievements stay on hold (item 37).
+
 ## Release packaging (proposed 2026-11-16, tentative)
 
 The user wants a stable copy to use now, and later one place for the family
