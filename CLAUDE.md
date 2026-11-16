@@ -39,9 +39,18 @@ On Hyprland (CachyOS), checked 2026-11-16:
   `zendo`, with `pid`, `title`, `at` and `size`; focus and fullscreen through
   `hyprctl dispatch`. Zendo closes and reopens its window to hide to and
   restore from the tray, so a restore is a new window id.
-- Keys and the mouse: `wtype` types and `ydotool` drives the mouse. `wtype`
-  is not installed here (`sudo pacman -S wtype`); until then type by hand
-  with the user present. Under Hyprland the blur is a rule of its own
+- Keys and the mouse: `wtype` types and `ydotool` drives the mouse; both are
+  installed. `ydotoold` needs the `uinput` module loaded
+  (`sudo modprobe uinput`; the `uaccess` tag in `60-steam-input.rules` then
+  gives the logged-in user the `/dev/uinput` ACL). Run it as the user, with a
+  short socket path: `ydotoold --socket-path=/run/user/1000/ydt.sock
+  --socket-perm=0600 &`, and set `YDOTOOL_SOCKET` to it. `mousemove
+  --absolute -x X -y Y` positions, `mousemove --wheel -x 0 -y -N` scrolls
+  (negative is down; one event moves a fixed step), `click 0xC0` is a left
+  click, and a drag is `click 0x40` (down), move, `click 0x80` (up). Stop the
+  daemon and remove the socket afterwards; kill it by PID, not with `pkill
+  -f` on a pattern that contains the shell's own command line. Under
+  Hyprland the blur is a rule of its own
   (`windowrulev2 = blur, class:^(zendo)$`).
 
 On KDE Plasma (Fedora), checked 2026-11-12:
