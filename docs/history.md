@@ -5313,3 +5313,26 @@ Tests: the shell's transitions (Started no longer hides; `Shown` does; Ended
 shows). `cargo test` green (168 zendo, 285 core, 91 shell); `cargo build
 -p zendo` clean. Not seen on screen: a real game opening and closing with the
 tray on (needs the session bus and a game that opens a window).
+
+## Item 55c, the game page's scroll (2026-11-16, not fixed)
+
+The user's report: on a game's page the scroll is sometimes longer and
+sometimes shorter than the content, and the bottom can be out of reach. It is
+the known item 52c1 note ("the pages' content height flips on every rebuild").
+
+- **Tried.** Like the other scrolling pages (Settings, Downloads, Stats), the
+  game page's content now has an explicit width (`parent.width - 14px`), the
+  `ScrollView` an explicit size, and `inner` counts the 14px bar. A `changed
+  content-height` handler re-clamps `content-y`, so a card that shrinks does
+  not leave the scroll past the content.
+- **Measured** (a throwaway home, a seeded local game, the page forced to its
+  bottom, a temporary debug line): the page reports a content height of
+  1323 px against 767 px visible, while what it draws ends about 1235 px down,
+  so the measured height is about 88 px too tall and the scroll runs past the
+  content. The explicit width did not change that number. The suspect is a
+  card's preferred height (the Mods or Details card) measured taller than it
+  renders, most likely a `Text` with `wrap` measured at another width.
+- **Not fixed.** The longer scroll remains; the shorter one (the bottom out of
+  reach) was not reproduced with the seeded game. It needs a real Steam game
+  (About, screenshots, requirements, achievements) to reproduce both, and a
+  fix in the card or page measurement. Left open.

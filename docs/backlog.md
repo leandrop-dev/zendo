@@ -266,7 +266,7 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a and 55b are built; 55c is its own investigation.
+55a and 55b are built; 55c is open (investigated 2026-11-16).
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -296,11 +296,13 @@ so they never collide with items 1 to 54.
      such path. Add an effect (`ShowOnClose` or `ShowWhenIdle`) in
      `running.rs` and handle it in `game_ui.rs`, beside `HideOnLaunch`.
      (On Wayland the window is hidden, not minimised, so this is a show.)
-- **55c, the game page's scroll** (its own task): the known item 52c1 bug
-  (`docs/history.md`): the page's content height flips, the Screenshots card
-  especially, and the `ScrollView` clamps to a stale height, so the bottom
-  cannot be reached. The user: "sometimes we have too much scroll, sometimes
-  too less ... aren't we able to make the scroll fit content?"
+- **55c, the game page's scroll** (its own task, still open): the known item
+  52c1 bug (`docs/history.md`): the page's content height flips, the
+  Screenshots card especially, and the `ScrollView` clamps to a stale height,
+  so the bottom cannot be reached. The user: "sometimes we have too much
+  scroll, sometimes too less ... aren't we able to make the scroll fit
+  content?" Investigated 2026-11-16 (`docs/history.md`): a measured 88px
+  overestimate; an explicit width and a re-clamp were added, not a fix.
 
 ### Improvements (56a to 56c)
 

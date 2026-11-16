@@ -907,7 +907,7 @@ component PillButton inherits Rectangle {
 export component GamePage inherits Rectangle {
     // The room for the page's content: its width less the margins and the
     // scroll bar.
-    property <length> inner: root.width - 2 * Space.xl - 12px;
+    property <length> inner: root.width - 2 * Space.xl - 14px;
     // Whether the page's wide column has anything to say.
     property <bool> has-main: GameData.about != "" || GameData.no-match != "" || GameData.shots.length > 0
         || GameData.dlc.length > 0 || GameData.sessions.length > 0 || GameData.ach.length > 0
@@ -918,7 +918,18 @@ export component GamePage inherits Rectangle {
         sv.content-y = min(0px, -(sv.content-height - sv.visible-height));
     }
     sv := ScrollView {
+        // The content grew or shrank (a card arrived): keep the scroll inside
+        // it, so the bottom stays reachable and no empty space is left over.
+        changed content-height => {
+            self.content-y = clamp(self.content-y, min(0px, -(self.content-height - self.visible-height)), 0px);
+        }
+        width: parent.width;
+        height: parent.height;
         VerticalLayout {
+            // An explicit width: a wrapped text's height is measured at it,
+            // and the scroll's content height stays right (item 55c).
+            width: parent.width - 14px;
+            x: 0px;
             page := VerticalLayout {
                 padding: Space.xl;
                 spacing: Space.xl;
