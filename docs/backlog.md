@@ -376,24 +376,32 @@ EA and Ubisoft are not listed: neither has a Linux launcher, and those games
 arrive through Steam or Heroic, which Zendo already imports. Emulation and
 RetroAchievements stay on hold (item 37).
 
-## Release packaging (proposed 2026-11-16, tentative)
+## Release packaging (deferred 2026-11-16; a proper system to design)
 
 The user wants a stable copy to use now, and later one place for the family
-to install and receive updates.
+to install and receive updates. On 2026-11-16 they chose to leave releases
+for now: once more work is out, design a proper release system in GitHub
+(actions that check and build, releases, and the packages that follow them),
+with omakade as inspiration (its `.github/workflows` and `RELEASING.md`).
+What is there now, and what a system must keep:
 
-- A release tag on the repository (the user's choice of name; `v0.1.0`,
-  marked a pre-release, is suggested), so both packages build from a tagged
-  commit instead of a moving `main`.
-- An Arch release package `zendo` beside `zendo-git`: `zendo-git` keeps
-  building `main`, `zendo` builds the tag's tarball with a checksum, and an
-  AUR repository serves both (`paru -S zendo` or `paru -S zendo-git`).
-- COPR from the tag: `.copr/Makefile` and `packaging/fedora/zendo.spec`
-  currently write a snapshot version (`0.1.0^<date>git<short>`) from whatever
-  ref they get; a tagged build needs a release version (`Version: 0.1.0`)
-  chosen when `git describe --exact-match` names a tag.
+- `v0.1.0` is an annotated pre-release tag at `af26913` (2026-11-16), with a
+  GitHub prerelease. `main` has moved well past it (55a to 57b); the tag is
+  not moved, since a tag must mean one commit.
+- The Arch `zendo-git` PKGBUILD builds `main`; the Fedora spec and
+  `.copr/Makefile` write a snapshot version (`0.1.0^<date>git<short>`) from
+  whatever ref they get. A tag-based release version needs
+  `git describe --exact-match` in the spec.
+- A release package `zendo` beside `zendo-git` (the tag's tarball with a
+  checksum) and an AUR repository serving both were proposed, not built.
 - The AUR has no `copr-cli`: publishing is a `git push` to a per-package
   repository on `aur.archlinux.org`, after an AUR account and an SSH key;
   `devtools`' `pkgctl`, `aurpublish` and `namcap` help.
+
+To investigate when the system is designed: GitHub Actions for the tests,
+clippy, fmt and the two packages; how omakade's `release.yml` builds and
+publishes; whether COPR and AUR are fed from the same tag; and the version
+scheme (`0.x.y-pre` while pre-release).
 
 ## On hold
 
