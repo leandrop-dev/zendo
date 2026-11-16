@@ -3,6 +3,12 @@
 %{!?shortcommit:%global shortcommit 0000000}
 %{!?snapdate:%global snapdate 00000000}
 
+# The window's Slint code is generated as one large unit: with Fedora's
+# defaults (-Cdebuginfo=2, one codegen unit) rustc used about 17 GB building
+# the window's tests in %%check and was killed (mock, 2026-11-15).
+%global rustflags_debuginfo 1
+%global rustflags_codegen_units 16
+
 Name:           zendo
 Version:        0.1.0^%{snapdate}git%{shortcommit}
 Release:        1%{?dist}

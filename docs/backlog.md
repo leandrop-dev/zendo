@@ -110,8 +110,7 @@ to `zendo-core` when that page is ported. Ask before building any other page
   licence became `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries
   and the PKGBUILD's became Slint's (EGL, GL, fontconfig, Wayland, xkbcommon,
   X11; no Vulkan), and the README, PLAN.md and the module comments were
-  brought up to date. Left: the COPR resubmit (the user's, below) and an RPM
-  mock build, which was not run.
+  brought up to date. The RPM mock build passes (it needed `rustflags_debuginfo 1` and 16 codegen units in the spec: with Fedora's defaults rustc was OOM-killed at 17 GB). Left: the COPR resubmit (the user's, below).
 
 The full plan, with files and risks, is `~/.claude/plans/drifting-hugging-scone.md`
 (outside the repo).

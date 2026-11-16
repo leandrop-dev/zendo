@@ -5204,3 +5204,21 @@ Checked: `cargo build`, `cargo test --workspace` (168, 285 and 91 passed,
 this item did not touch. A launch after the rename (throwaway home) showed the
 font, icons and covers. Not done: an RPM mock build and the COPR resubmit (the
 user's).
+
+### Item 54b, the RPM mock build (2026-11-15)
+
+`make -f .copr/Makefile build` made the SRPM from HEAD (the spec is taken
+from the working tree, the sources from the commit), then `mock -r
+fedora-45-x86_64` with no network. First run: `%build` passed, `%check` was
+killed: `rustc` (SIGKILL, the kernel's OOM kill, 17 GB resident) while building
+the window's test target with Fedora's flags `-Cdebuginfo=2
+-Ccodegen-units=1`; Slint's generated code is one large unit. The spec now sets
+`%global rustflags_debuginfo 1` and `%global rustflags_codegen_units 16`. Second
+run: passes, 168, 285 and 91 tests, `desktop-file-validate`, an RPM with
+licence `MIT AND OFL-1.1 AND GPL-3.0-only`, `/usr/bin/zendo`, the desktop file,
+the nine icons, `LICENSE`, `LICENSE.dependencies` and `OFL.txt`, and
+`Requires` for `libglvnd-egl`, `libglvnd-glx`, `fontconfig`, `libwayland-egl`,
+`libX11`, `libXcursor`, `libXi`, `libxkbcommon(-x11)`. A mock option
+`--enable-network=false` is not valid (the flag takes no value; network is off
+by default). Not known: how much memory COPR's builders have; the lighter
+flags were only tested on this machine (31 GB).
