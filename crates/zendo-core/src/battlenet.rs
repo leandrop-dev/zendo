@@ -17,9 +17,13 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::atomic::AtomicBool;
 
+use anyhow::{Context, bail};
 use serde::Deserialize;
 
+use crate::launch_options::LaunchOptions;
 use crate::{Details, Game, Launch, Played, Scan, Source, WineRunner, paths};
 
 /// The Agent's database, under a prefix's `drive_c`.
@@ -70,6 +74,10 @@ pub fn prefixes() -> Vec<PathBuf> {
     if let Some(data) = paths::data_home() {
         children(&data.join("wineprefixes"), &mut found);
         children(&data.join("bottles/bottles"), &mut found);
+    }
+    // The prefix Zendo made for its own Battle.net installation.
+    if let Some(prefix) = managed_prefix() {
+        add(&prefix, &mut found);
     }
     for root in crate::steam::roots() {
         let mut problems = Vec::new();
@@ -185,15 +193,17 @@ fn is_tool(code: &str) -> bool {
     code.eq_ignore_ascii_case("agent") || code.eq_ignore_ascii_case("bna")
 }
 
+/// The client in the prefix, when it is there.
+fn client_in(prefix: &Path) -> Option<PathBuf> {
+    CLIENTS
+        .iter()
+        .map(|relative| prefix.join(relative))
+        .find(|path| path.is_file())
+}
+
 /// The client in the prefix, the first place Blizzard writes it to.
 fn client(prefix: &Path) -> PathBuf {
-    for relative in CLIENTS {
-        let candidate = prefix.join(relative);
-        if candidate.is_file() {
-            return candidate;
-        }
-    }
-    prefix.join(CLIENTS[0])
+    client_in(prefix).unwrap_or_else(|| prefix.join(CLIENTS[0]))
 }
 
 /// What runs the client: a Bottles prefix, a Proton one, or Wine.
@@ -232,6 +242,138 @@ fn bottle(prefix: &Path) -> Option<String> {
     prefix
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
+}
+
+/// Blizzard's installer, which follows through to the versioned file.
+pub const INSTALLER_URL: &str = "https://us.battle.net/download/getInstallerForGame?os=win&locale=enUS&version=LIVE&gameProgram=BATTLENET_APP";
+
+/// The prefix Zendo installs Battle.net into: the games folder's
+/// `Prefixes/Battle.net`.
+#[must_use]
+pub fn managed_prefix() -> Option<PathBuf> {
+    let dir = crate::config::Config::load_file().ok()?.install_dir()?;
+    Some(dir.join("Prefixes").join("Battle.net"))
+}
+
+/// Where the installer is kept while and after it is downloaded.
+#[must_use]
+pub fn installer_path() -> Option<PathBuf> {
+    paths::cache_home().map(|dir| dir.join("zendo/battlenet/Battle.net-Setup.exe"))
+}
+
+/// Downloads Blizzard's installer, saying how far it got. It has no checksum
+/// to check it against; HTTPS is the only guarantee.
+///
+/// # Errors
+///
+/// When there is no cache folder, or the download fails or is stopped.
+pub fn download_installer(
+    stop: &AtomicBool,
+    progress: &mut dyn FnMut(u64, Option<u64>),
+) -> anyhow::Result<PathBuf> {
+    let path = installer_path().context("no cache folder for the installer")?;
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("could not make {}", dir.display()))?;
+    }
+    crate::http::download(
+        INSTALLER_URL,
+        &path,
+        "the Battle.net installer",
+        None,
+        stop,
+        progress,
+    )?;
+    Ok(path)
+}
+
+/// The prefix and client found, Zendo's own prefix first.
+#[must_use]
+pub fn installed() -> Option<(PathBuf, PathBuf)> {
+    let mut candidates = Vec::new();
+    if let Some(prefix) = managed_prefix() {
+        candidates.push(prefix);
+    }
+    candidates.extend(prefixes());
+    candidates
+        .into_iter()
+        .find_map(|prefix| client_in(&prefix).map(|client| (prefix, client)))
+}
+
+/// How many games the prefixes hold.
+#[must_use]
+pub fn count() -> usize {
+    scan(&prefixes()).games.len()
+}
+
+/// Runs Blizzard's installer in Zendo's prefix, with Wine. The window it
+/// opens is the user's to click through; the process ends when it does.
+///
+/// # Errors
+///
+/// When there is no games folder, the installer is not downloaded, or Wine
+/// cannot be started.
+pub fn run_installer() -> anyhow::Result<std::process::Child> {
+    let prefix = managed_prefix().context("set the games folder in Settings first")?;
+    let installer = installer_path().context("no cache folder for the installer")?;
+    if !installer.is_file() {
+        bail!("download the Battle.net installer first");
+    }
+    fs::create_dir_all(&prefix).with_context(|| format!("could not make {}", prefix.display()))?;
+    let mut warning = None;
+    let command = crate::launch::in_prefix(
+        &prefix,
+        WineRunner::Wine,
+        None,
+        &installer,
+        &[],
+        &LaunchOptions::default(),
+        &mut warning,
+    )?;
+    spawn(command, "battlenet-installer")
+}
+
+/// Opens the client found, so the user signs in or plays from it.
+///
+/// # Errors
+///
+/// When Battle.net is not installed, or its runner cannot be started.
+pub fn open_client() -> anyhow::Result<()> {
+    let (prefix, client) = installed().context("Battle.net is not installed yet")?;
+    let runner = runner(&prefix);
+    let bottle = bottle(&prefix);
+    let mut warning = None;
+    let command = crate::launch::in_prefix(
+        &prefix,
+        runner,
+        bottle.as_deref(),
+        &client,
+        &[],
+        &LaunchOptions::default(),
+        &mut warning,
+    )?;
+    let mut child = spawn(command, "battlenet")?;
+    // Reaped when it ends, so it does not linger as a zombie.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// Starts a command with its output in the logs folder, or nowhere.
+fn spawn(mut command: std::process::Command, name: &str) -> anyhow::Result<std::process::Child> {
+    command.stdin(Stdio::null());
+    if let Some(dir) = crate::launch::logs_dir() {
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join(format!("{name}.log"));
+        if let Ok(file) = fs::File::create(&path)
+            && let Ok(errors) = file.try_clone()
+        {
+            command.stdout(file).stderr(errors);
+        }
+    }
+    command
+        .spawn()
+        .with_context(|| format!("could not start {name}"))
 }
 
 /// A short, stable tag for the prefix, so the same product in two prefixes
@@ -825,6 +967,18 @@ mod tests {
     }
 
     #[test]
+    fn finds_the_client_in_a_prefix() {
+        let dir = scratch("client");
+        let prefix = dir.join("prefix");
+        assert_eq!(client_in(&prefix), None);
+        let client = prefix.join(CLIENTS[0]);
+        fs::create_dir_all(client.parent().unwrap()).unwrap();
+        fs::write(&client, "").unwrap();
+        assert_eq!(client_in(&prefix), Some(client));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn reads_a_last_played_from_the_clients_config() {
         let dir = scratch("played");
         let prefix = dir.join("prefix");
@@ -835,5 +989,21 @@ mod tests {
         let last = last_played(&prefix);
         assert_eq!(last.get("wow"), Some(&1_577_836_800));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The real installer, into a scratch cache; run with
+    /// `cargo test -p zendo-core battlenet::tests::downloads_the_real_installer -- --ignored`.
+    #[test]
+    #[ignore = "needs the network and a scratch XDG_CACHE_HOME"]
+    fn downloads_the_real_installer() {
+        let cache = std::env::var("XDG_CACHE_HOME").unwrap_or_default();
+        assert!(
+            cache.contains("zendo-battlenet-live"),
+            "set XDG_CACHE_HOME to a scratch folder named zendo-battlenet-live"
+        );
+        let stop = AtomicBool::new(false);
+        let path = download_installer(&stop, &mut |_, _| {}).unwrap();
+        let start = fs::read(&path).unwrap();
+        assert_eq!(&start[..2], b"MZ", "the installer is a Windows program");
     }
 }

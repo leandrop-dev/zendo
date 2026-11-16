@@ -70,6 +70,8 @@ mod runtimes;
 mod search;
 #[path = "settings_ui.rs"]
 mod settings;
+#[path = "sources_ui.rs"]
+mod sources;
 #[path = "stats_ui.rs"]
 mod stats;
 #[path = "steam_ui.rs"]
@@ -283,6 +285,8 @@ struct Glue {
     gog: gog::GogState,
     /// The Settings page (`settings_ui.rs`).
     settings: settings::SettingsState,
+    /// The Launchers group on it (`sources_ui.rs`).
+    sources: sources::SourcesState,
     /// The Engines, Anti-cheat and Epic overlay cards (`engines_ui.rs`,
     /// `runtimes_ui.rs`, `overlay_ui.rs`) and the Proton group
     /// (`protons_ui.rs`).
@@ -414,6 +418,7 @@ impl Glue {
             prefix: prefix::PrefixState::new(),
             gog: gog::GogState::new(),
             settings: settings::SettingsState::new(),
+            sources: sources::SourcesState::new(),
             engines: engines::EnginesState::default(),
             runtimes: runtimes::RuntimesState::default(),
             overlay: overlay::OverlayState::default(),
@@ -505,6 +510,7 @@ impl Glue {
         self.connect_prefix(window);
         self.connect_gog(window);
         self.connect_settings(window);
+        self.connect_sources(window);
         let glue = Rc::clone(self);
         data.on_back(move || glue.back());
         let glue = Rc::clone(self);
@@ -1219,7 +1225,7 @@ fn scan() -> Scanned {
 
 #[cfg(test)]
 mod tests {
-    use crate::{GameData, SettingsData};
+    use crate::{AccountsData, GameData, SettingsData};
     use zendo_core::launch::{Started, Watch};
     use zendo_core::{Game, Launch, Source, View};
     use zendo_shell::format;
@@ -1655,7 +1661,7 @@ mod tests {
         let settings = window.global::<SettingsData>();
         window.invoke_page_requested(Page::Settings);
         assert_eq!(window.get_page(), Page::Settings);
-        assert_eq!(settings.get_groups().row_count(), 6);
+        assert_eq!(settings.get_groups().row_count(), 7);
         assert_eq!(settings.get_group(), 0);
         // The window's paint and the switches follow a change.
         settings.invoke_set_opaque(true);
@@ -1690,11 +1696,32 @@ mod tests {
         glue.key_checked("abc".into(), Ok(KeyCheck::Accepted));
         assert_eq!(settings.get_key_note(), t!("steamgriddb-saved"));
         assert!(!settings.get_key_changed());
-        // The groups, and the files the last one lists.
+        // The Launchers group: Battle.net's row, not installed in a test.
         settings.invoke_group_chosen(3);
         assert_eq!(settings.get_group(), 3);
+        let launchers = settings.get_launchers();
+        assert_eq!(launchers.row_count(), 1);
+        let row = launchers.row_data(0).unwrap();
+        assert_eq!(row.title.as_str(), "Battle.net");
+        assert_eq!(row.status.as_str(), t!("battlenet-not-installed"));
+        assert_eq!(row.action.as_str(), t!("battlenet-install"));
+        // The groups, and the files the last one lists.
+        settings.invoke_group_chosen(6);
+        assert_eq!(settings.get_group(), 6);
         assert_eq!(settings.get_files().row_count(), 6);
         assert!(settings.get_sources().row_count() >= 7);
+    }
+
+    #[test]
+    fn the_accounts_page_has_a_battle_net_card() {
+        let (window, _glue) = page(2);
+        window.invoke_page_requested(Page::Accounts);
+        let data = window.global::<AccountsData>();
+        let card = data.get_battlenet();
+        assert_eq!(card.status.as_str(), t!("battlenet-not-installed"));
+        assert_eq!(card.action.as_str(), t!("battlenet-open"));
+        assert!(!card.action_on, "nothing to open when it is not installed");
+        assert_eq!(card.badge.as_str(), "BATTLE.NET");
     }
 
     #[test]

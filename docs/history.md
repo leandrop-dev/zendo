@@ -5439,3 +5439,54 @@ the client's process group, so a client left open after the game ends does not
 count as the game still running. `in_prefix` runs native Bottles only (the
 Flatpak's `bottles-cli` is not on `PATH`). The installer and the Accounts
 card are 57b, not built.
+
+## Item 57b, the installer and the Accounts card (2026-11-16)
+
+The second half of item 57: Zendo brings Blizzard's installer, runs it in a
+prefix of its own, and opens the client for the sign-in.
+
+- **`zendo-core/src/battlenet.rs`**: `managed_prefix()` is the games folder's
+  `Prefixes/Battle.net`, and `prefixes()` now includes it, so 57a imports the
+  games installed there. `installer_path()` is
+  `$XDG_CACHE_HOME/zendo/battlenet/Battle.net-Setup.exe`; `download_installer`
+  brings it from
+  `us.battle.net/download/getInstallerForGame?os=win&locale=enUS&version=LIVE&gameProgram=BATTLENET_APP`
+  (HTTPS only: Blizzard publishes no checksum). `run_installer` runs it in the
+  managed prefix with `wine` and writes its output to
+  `$XDG_STATE_HOME/zendo/logs/battlenet-installer.log`; `open_client` runs the
+  client found (Zendo's prefix first, then any other) with the runner its
+  prefix asks for, and reaps it. `installed()` and `count()` feed both pages.
+- **Settings**: a new group, **Launchers** (the chip reads LAUNCHERS; it is not
+  called Sources because the Library group already has a Sources section), in
+  `ui/settings.slint` and the new `src/sources_ui.rs`. Its one row is
+  Battle.net: Not installed → **Download installer** (with the download bar
+  and Stop) → **Run installer** → Installed (n games) and **Open Battle.net**.
+  When the installer's window closes, the row is looked at again and the
+  library rescanned, so the games appear without a manual Refresh.
+- **Accounts**: a Battle.net card under the three stores
+  (`LauncherCardData`, `LauncherCard` in `ui/accounts.slint`,
+  `accounts_ui.rs`): the badge, the prefix, Not installed / Installed / n
+  games, **Open Battle.net**, and the line that the sign-in happens in the
+  client. `check_accounts` looks at the prefix when the page opens.
+- New messages in both languages (`settings-group-launchers`,
+  `launchers-*`, `battlenet-*`); `settings_ui.rs`'s group constants shifted by
+  one for the new group.
+
+Checked: `cargo test --workspace` green (169 zendo, 296 core, 91 shell). New:
+the client in a prefix, the launcher row and the Accounts card in the window
+tests, and an ignored test that downloads the real installer into a scratch
+cache and checks its `MZ` start. The old group-count assertion moved from 6 to
+7. Clippy reports nothing in the new code; the pre-existing `map_unwrap_or`
+notes of the 1.100 toolchain remain. On screen in a throwaway home with a
+seeded `Prefixes/Battle.net`: the Library showed the BATTLE.NET chip and the
+Overwatch 2 card; Ctrl+5 showed the Settings page with the LAUNCHERS chip, and
+Ctrl+4 the Accounts page with the store cards. The pointer hovered but did not
+activate the chip in this session (ydotool clicks and PageDown did not scroll
+the Accounts page), so the group's row and the Battle.net card itself were not
+seen. Not run: the real installer, download and client; the Accounts card's
+Open.
+
+Things to know: the installer is interactive, so Zendo only starts it and
+watches the process; it is downloaded over HTTPS with no checksum to check.
+The managed prefix is a plain Wine one, so `runner()` reads it as Wine. The
+Launchers row has no Remove: deleting the prefix would delete the games.

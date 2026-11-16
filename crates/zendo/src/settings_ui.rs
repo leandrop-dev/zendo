@@ -35,9 +35,10 @@ const WORKERS: [u32; 4] = [2, 4, 8, 16];
 const GENERAL: i32 = 0;
 const KEYS: i32 = 1;
 const LIBRARY: i32 = 2;
-const ENGINES: i32 = 3;
-const PROTON: i32 = 4;
-const DIAGNOSTICS: i32 = 5;
+const SOURCES: i32 = 3;
+const ENGINES: i32 = 4;
+const PROTON: i32 = 5;
+const DIAGNOSTICS: i32 = 6;
 
 /// A change to the settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -395,6 +396,7 @@ impl Glue {
         self.want_engines();
         self.want_protons();
         self.want_runtimes();
+        self.want_sources();
         self.show_settings();
     }
 
@@ -668,6 +670,7 @@ impl Glue {
                 (GENERAL, t!("settings-group-general")),
                 (KEYS, t!("settings-group-keys")),
                 (LIBRARY, t!("settings-group-library")),
+                (SOURCES, t!("settings-group-launchers")),
                 (ENGINES, t!("settings-group-engines")),
                 (PROTON, t!("settings-group-proton")),
                 (DIAGNOSTICS, t!("settings-group-diagnostics")),
@@ -837,6 +840,7 @@ impl Glue {
         data.set_report_note(note.into());
         data.set_report_tone(if good { 1 } else { 2 });
         data.set_logs(self.settings.logs.borrow().is_some());
+        self.show_sources();
     }
 
     /// How many games each source gave, and what could not be read.

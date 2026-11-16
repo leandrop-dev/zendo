@@ -102,6 +102,11 @@ export global SettingsData {
     in property <bool> auto-update;
     in property <[ChipData]> workers;
     in property <[Fact]> sources;
+    // Launchers: the programs that need their own window.
+    in property <[SetRow]> launchers;
+    in property <Bar> launchers-bar;
+    in property <string> launchers-note;
+    in property <int> launchers-note-tone;
     // Diagnostics.
     in property <[Fact]> files;
     in property <bool> report-busy;
@@ -120,6 +125,8 @@ export global SettingsData {
     callback engine-act(int);
     callback engine-remove(int);
     callback engines-stop();
+    callback launcher-act(int);
+    callback launchers-stop();
     callback runtime-act(int);
     callback runtime-remove(int);
     callback overlay-do-install();
@@ -580,8 +587,31 @@ export component SettingsPage inherits Rectangle {
                         }
                     }
 
-                    // Engines.
+                    // Launchers: the programs that need their own window.
                     if SettingsData.group == 3: Section {
+                        heading: Tr.t("launchers-title");
+                        about: Tr.t("launchers-about");
+                        VerticalLayout {
+                            spacing: Space.m;
+                            SetList {
+                                rows: SettingsData.launchers;
+                                inner: root.inner;
+                                act(index) => { SettingsData.launcher-act(index); }
+                                remove(index) => { }
+                            }
+                            DownloadBar {
+                                bar: SettingsData.launchers-bar;
+                                stop => { SettingsData.launchers-stop(); }
+                            }
+                            if SettingsData.launchers-note != "": Note {
+                                text: SettingsData.launchers-note;
+                                tone: SettingsData.launchers-note-tone;
+                            }
+                        }
+                    }
+
+                    // Engines.
+                    if SettingsData.group == 4: Section {
                         heading: Tr.t("engines-title");
                         about: Tr.t("engines-about");
                         VerticalLayout {
@@ -616,7 +646,7 @@ export component SettingsPage inherits Rectangle {
                             }
                         }
                     }
-                    if SettingsData.group == 3: Section {
+                    if SettingsData.group == 4: Section {
                         heading: Tr.t("runtimes-title");
                         about: Tr.t("runtimes-about");
                         VerticalLayout {
@@ -633,7 +663,7 @@ export component SettingsPage inherits Rectangle {
                             }
                         }
                     }
-                    if SettingsData.group == 3: Section {
+                    if SettingsData.group == 4: Section {
                         heading: Tr.t("overlay-title");
                         about: Tr.t("overlay-about");
                         VerticalLayout {
@@ -667,7 +697,7 @@ export component SettingsPage inherits Rectangle {
                     }
 
                     // Proton.
-                    if SettingsData.group == 4: Section {
+                    if SettingsData.group == 5: Section {
                         heading: "Proton";
                         about: Tr.t("protons-about");
                         VerticalLayout {
@@ -774,7 +804,7 @@ export component SettingsPage inherits Rectangle {
                     }
 
                     // Diagnostics.
-                    if SettingsData.group == 5: Section {
+                    if SettingsData.group == 6: Section {
                         heading: Tr.t("files-title");
                         about: Tr.t("files-about");
                         VerticalLayout {
@@ -805,7 +835,7 @@ export component SettingsPage inherits Rectangle {
                             }
                         }
                     }
-                    if SettingsData.group == 5: Section {
+                    if SettingsData.group == 6: Section {
                         heading: Tr.t("report-title");
                         about: Tr.t("report-about");
                         VerticalLayout {

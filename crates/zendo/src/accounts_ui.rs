@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
+use zendo_core::battlenet;
 use zendo_core::owned::{self, Shop};
 use zendo_core::stores::{self, AmazonLogin, Store};
 use zendo_shell::sign_in_window::{self, Handle};
@@ -47,12 +48,24 @@ struct SignIn {
     browser: bool,
 }
 
+/// What Battle.net's card shows: the client found, how many games, and what
+/// the last action said.
+#[derive(Debug, Default, Clone)]
+struct Battlenet {
+    installed: bool,
+    games: usize,
+    path: Option<PathBuf>,
+    note: Option<(String, bool)>,
+}
+
 pub(super) struct AccountsState {
     accounts: RefCell<[Account; 3]>,
     /// Each store's engine, found when the accounts are checked: not when
     /// the page is drawn, which would walk `PATH` each time.
     engines: RefCell<[Option<PathBuf>; 3]>,
     signing_in: RefCell<Option<SignIn>>,
+    /// Battle.net's card, looked at as the page opens.
+    battlenet: RefCell<Battlenet>,
     cards: Rc<VecModel<AccountCard>>,
     focus: Cell<i32>,
     paste: Cell<i32>,
@@ -64,6 +77,7 @@ impl AccountsState {
             accounts: RefCell::default(),
             engines: RefCell::default(),
             signing_in: RefCell::new(None),
+            battlenet: RefCell::default(),
             cards: Rc::new(VecModel::default()),
             focus: Cell::new(0),
             paste: Cell::new(0),
@@ -219,6 +233,8 @@ impl Glue {
         data.on_set_gog_galaxy(move |on| glue.save_setting(Setting::GogGalaxy(on)));
         let glue = Rc::clone(self);
         data.on_relabel(move || glue.show_accounts());
+        let glue = Rc::clone(self);
+        data.on_battlenet_open(move || glue.open_battlenet_card());
     }
 
     /// Whether Accounts is the page on screen.
@@ -274,6 +290,17 @@ impl Glue {
                 });
             });
         }
+        // Battle.net is a launcher Zendo reads, not an engine it signs in
+        // with: its card asks the prefix and the Agent's database instead.
+        let installed = battlenet::installed();
+        let games = battlenet::count();
+        {
+            let mut card = self.accounts.battlenet.borrow_mut();
+            card.installed = installed.is_some();
+            card.path = installed.map(|(prefix, _)| prefix);
+            card.games = games;
+        }
+        self.show_accounts();
     }
 
     pub(super) fn account_checked(
@@ -612,6 +639,20 @@ impl Glue {
         self.show_accounts();
     }
 
+    /// Opens the Battle.net client found: its window is where the sign-in
+    /// happens, and Zendo reads the games from the prefix afterwards.
+    fn open_battlenet_card(self: &Rc<Self>) {
+        if !self.persist {
+            return;
+        }
+        let result = battlenet::open_client().map_err(|err| format!("{err:#}"));
+        self.accounts.battlenet.borrow_mut().note = Some(match result {
+            Ok(()) => (t!("battlenet-opened"), true),
+            Err(err) => (err, false),
+        });
+        self.show_accounts();
+    }
+
     /// Text typed with no field focused: it starts the code, as typing in the
     /// library starts a search. Says whether it was taken.
     pub(super) fn type_code(&self, typed: &str) -> bool {
@@ -650,6 +691,42 @@ impl Glue {
         true
     }
 
+    /// Battle.net's card, from what the page looked at last.
+    fn battlenet_card(&self) -> crate::LauncherCardData {
+        let card = self.accounts.battlenet.borrow();
+        let status = if card.installed {
+            if card.games > 0 {
+                t!("count-games", count = card.games)
+            } else {
+                t!("battlenet-installed")
+            }
+        } else {
+            t!("battlenet-not-installed")
+        };
+        let note = card.note.clone();
+        crate::LauncherCardData {
+            badge: t!("battlenet-title").to_uppercase().into(),
+            about: t!("battlenet-about").into(),
+            status: status.into(),
+            status_tone: i32::from(card.installed),
+            path: card
+                .path
+                .as_ref()
+                .map_or_else(String::new, |path| path.display().to_string())
+                .into(),
+            line: t!("battlenet-sign-in").into(),
+            action: t!("battlenet-open").into(),
+            action_on: card.installed,
+            note: note
+                .as_ref()
+                .map_or_else(String::new, |(text, _)| text.clone())
+                .into(),
+            note_tone: note
+                .as_ref()
+                .map_or(0, |(_, good)| if *good { 1 } else { 2 }),
+        }
+    }
+
     /// Writes everything the page shows, and the count beside its tab.
     pub(super) fn show_accounts(&self) {
         let Some(window) = self.window.upgrade() else {
@@ -673,6 +750,7 @@ impl Glue {
             .collect();
         self.accounts.cards.set_vec(cards);
         data.set_steam(self.steam_card());
+        data.set_battlenet(self.battlenet_card());
         data.set_gog_playtime(config.gog_playtime);
         data.set_gog_galaxy(config.gog_galaxy);
         let pasted = signing_in

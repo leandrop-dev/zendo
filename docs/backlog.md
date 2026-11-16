@@ -267,7 +267,7 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a and 55b are built; 55c is open (investigated 2026-11-16); 56a to 56c are
-built; 57a is built; 57b and 58 to 59 are next.
+built; 57a and 57b are built; 58 to 59 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -340,12 +340,14 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
     throwaway home with a generated database through `zendo list` and `zendo
     launch` and a fake `wine` and `umu-run`; not seen: a real client and
     installation, a Bottles prefix, Play/Stop on screen, and covers.
-  - **57b, install and sign in**: the new Settings → Sources group downloads
-    Blizzard's installer and runs it in a Zendo-managed prefix under the games
-    folder (`Prefixes/Battle.net`) through `umu-run` or `wine`; Accounts gets a
-    Battle.net card that opens the client and reads its status from
-    `product.db`. The installer is the riskiest part, and is checked with the
-    user.
+  - **57b built 2026-11-16**: the installer and the sign-in. Settings →
+    Launchers (the chip says Launchers, since the Library group already has a
+    Sources section) brings Blizzard's installer and runs it in
+    `Prefixes/Battle.net` with Wine; the Accounts page's Battle.net card opens
+    the client and shows the prefix and the games found. The download has a
+    bar and Stop; after the installer closes the library is rescanned. Not
+    seen on screen: the group's row and the card (the pointer clicked nothing
+    in the check), a real installer and client.
   - The download is Blizzard's installer
     (`downloader.battle.net/.../Battle.net-Setup.exe`); it has no checksum,
     only HTTPS.

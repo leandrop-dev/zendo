@@ -169,6 +169,7 @@ card-failed = Could not ask: { $error }
 settings-group-general = General
 settings-group-keys = Keys
 settings-group-library = Library
+settings-group-launchers = Launchers
 settings-group-engines = Engines
 settings-group-proton = Proton
 settings-group-diagnostics = Diagnostics
@@ -224,6 +225,25 @@ sources-desktop = .desktop files in the Game category
 sources-local = Added by hand in Zendo
 sources-none-found = none found
 sources-unreadable = Could not read { $problem }
+
+## Launchers
+
+launchers-title = Launchers
+launchers-about = The programs that need a window of their own. Zendo brings the installer and opens the client; the sign-in and the games stay with the client.
+battlenet-title = Battle.net
+battlenet-about = Blizzard's launcher: World of Warcraft, Overwatch, Diablo and the rest.
+battlenet-not-installed = Not installed
+battlenet-installed = Installed
+battlenet-install = Download installer
+battlenet-run-installer = Run installer
+battlenet-installing = Installer open
+battlenet-open = Open Battle.net
+battlenet-installer = Battle.net installer
+battlenet-downloaded = The installer is ready. Run it, and sign in in its window.
+battlenet-installer-open = The installer's window is open. Finish it there; the games appear here as the client finds them.
+battlenet-opened = Battle.net is open.
+battlenet-sign-in = Sign in inside the client; Zendo lists the games it finds.
+
 files-title = Files
 files-about = Zendo's own files. Removing one resets what it holds. Store games install into the games folder; `install_dir` in the settings file moves it.
 files-no-home = no home folder

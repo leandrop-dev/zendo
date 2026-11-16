@@ -171,6 +171,7 @@ card-failed = Não foi possível perguntar: { $error }
 settings-group-general = Geral
 settings-group-keys = Chaves
 settings-group-library = Biblioteca
+settings-group-launchers = Lançadores
 settings-group-engines = Motores
 settings-group-proton = Proton
 settings-group-diagnostics = Diagnóstico
@@ -229,6 +230,25 @@ sources-desktop = Ficheiros .desktop da categoria Game
 sources-local = Adicionados à mão no Zendo
 sources-none-found = nenhum encontrado
 sources-unreadable = Não foi possível ler { $problem }
+
+## Launchers
+
+launchers-title = Lançadores
+launchers-about = Os programas que precisam de uma janela própria. O Zendo descarrega o instalador e abre o cliente; a sessão e os jogos ficam com o cliente.
+battlenet-title = Battle.net
+battlenet-about = O lançador da Blizzard: World of Warcraft, Overwatch, Diablo e os restantes.
+battlenet-not-installed = Não instalado
+battlenet-installed = Instalado
+battlenet-install = Descarregar instalador
+battlenet-run-installer = Executar instalador
+battlenet-installing = Instalador aberto
+battlenet-open = Abrir Battle.net
+battlenet-installer = Instalador do Battle.net
+battlenet-downloaded = O instalador está pronto. Execute-o e inicie sessão na janela dele.
+battlenet-installer-open = A janela do instalador está aberta. Termine aí; os jogos aparecem aqui quando o cliente os encontrar.
+battlenet-opened = O Battle.net está aberto.
+battlenet-sign-in = Inicie sessão no cliente; o Zendo lista os jogos que encontrar.
+
 files-title = Ficheiros
 files-about = Os ficheiros do próprio Zendo. Remover um repõe o que ele guarda. Os jogos das lojas são instalados na pasta de jogos; `install_dir` no ficheiro de definições muda-a.
 files-no-home = sem pasta pessoal

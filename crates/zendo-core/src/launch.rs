@@ -867,7 +867,7 @@ fn local_command(
 /// A Windows program in a prefix someone else made (Battle.net): `wine`,
 /// `umu-run` (Proton) or Bottles runs it, with the prefix in the environment
 /// and the command starting in the program's own folder.
-fn in_prefix(
+pub(crate) fn in_prefix(
     prefix: &Path,
     runner: WineRunner,
     bottle: Option<&str>,
