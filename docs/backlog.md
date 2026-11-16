@@ -266,9 +266,10 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a and 55b are the immediate work; 55c is its own investigation.
+55a is built; 55b is next; 55c is its own investigation.
 
-- **55a, the layout fixes** (five, all small, all in the Slint window):
+- **55a built 2026-11-16, the layout fixes** (five, all small, all in the
+  Slint window):
   1. The footer floats under the empty Library and Store instead of sitting at
      the bottom: the empty-state `Rectangle` in `ui/library.slint` and
      `ui/store.slint` is only as tall as its text. Give it

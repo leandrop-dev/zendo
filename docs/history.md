@@ -5254,3 +5254,34 @@ needs no code change; this session brought the documents up to date.
 Install: from the Arch PKGBUILD, `cd packaging/arch/zendo-git && makepkg -si`
 (`--nocheck` skips the test suite). Not done yet: a release tag, an AUR
 release package and a COPR build from the tag (`docs/backlog.md`).
+
+## Item 55a, the layout fixes (2026-11-16)
+
+The five fixes from the user's testing of 2026-11-16 (`docs/backlog.md`,
+"From the user's testing"). All in `crates/zendo/ui/`.
+
+- **The empty page's footer**: `LibraryPage` and `StorePage` had no
+  `vertical-stretch` in `main.slint` (the other pages do), so with nothing to
+  show the page took only its content's height and the footer floated under
+  the message. Both now stretch, and each page's empty-state `Rectangle` does
+  too, so the message centres and the footer stays at the bottom.
+- **The view chips**: All, Favorites, Recent and Hidden sat after the tabs;
+  `docs/design.md` puts them beside the search. They now draw in the right
+  cluster, immediately left of the search field, on the Library only.
+- **The sort and organize labels**: the labels were 12px `Text` in a
+  `FlexboxLayout` with `cross-axis-alignment: start`, so they sat at the top
+  of the taller 13px chips. The rows now use `center`.
+- **The Store's sort chips**: they had a row of their own; they now share the
+  platform chips' row, as the Library's do.
+- **The Technical card's `+`/`−`**: it was a small button under the heading.
+  `Card` (in `game.slint`) now takes an optional `action-label`, drawn on the
+  heading row and right-aligned, and the heading itself presses it. The
+  Technical card wires it to `toggle-technical`.
+
+Checked on screen in a throwaway home with no session bus (2026-11-16): an
+empty Library and Store (footer at the bottom, message centred, view chips
+beside the search, labels aligned, Store sorts in the platform row), and a
+seeded local game (`local.toml`, `program = "/bin/true"`) whose page shows
+the Technical card with `+` at the right of the heading (the page was forced
+to its bottom for the look, then the force was removed). `cargo build -p
+zendo` and 168 `zendo` tests green.

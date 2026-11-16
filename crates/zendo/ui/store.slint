@@ -48,7 +48,7 @@ export component StorePage inherits Rectangle {
     init => { StoreData.columns-changed(root.columns); }
 
     VerticalLayout {
-        // The stores, the installed ones, and Refresh at the right.
+        // The stores, the sorts, what is being asked, and Refresh at the right.
         HorizontalLayout {
             padding-top: Space.xl;
             padding-bottom: Space.xs;
@@ -58,7 +58,7 @@ export component StorePage inherits Rectangle {
             FlexboxLayout {
                 horizontal-stretch: 1;
                 vertical-stretch: 0;
-                cross-axis-alignment: start;
+                cross-axis-alignment: center;
                 cross-axis-line-alignment: start;
                 spacing: Space.s;
                 for chip in StoreData.sources: ChipButton {
@@ -66,6 +66,23 @@ export component StorePage inherits Rectangle {
                     count: chip.count;
                     chosen: chip.chosen;
                     clicked => { StoreData.chip(chip.id); }
+                }
+                Text {
+                    text: Tr.t("library-sort-keys").to-uppercase();
+                    font-size: 12px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
+                }
+                for chip in StoreData.sorts: ChipButton {
+                    label: chip.label;
+                    chosen: chip.chosen;
+                    clicked => { StoreData.chip(chip.id); }
+                }
+                if StoreData.asking != "": Text {
+                    text: StoreData.asking;
+                    font-size: 13px;
+                    color: Colors.dim;
+                    vertical-alignment: center;
                 }
             }
             Rectangle {
@@ -86,34 +103,6 @@ export component StorePage inherits Rectangle {
                     enabled: StoreData.refresh-on;
                     clicked => { StoreData.refresh(); }
                 }
-            }
-        }
-        // The sort chips and what the stores are being asked.
-        FlexboxLayout {
-            vertical-stretch: 0;
-            cross-axis-alignment: start;
-            cross-axis-line-alignment: start;
-            padding-top: Space.xs;
-            padding-bottom: Space.xs;
-            padding-left: Grid.margin;
-            padding-right: Grid.margin;
-            spacing: Space.s;
-            Text {
-                text: Tr.t("library-sort-keys").to-uppercase();
-                font-size: 12px;
-                color: Colors.dim;
-                vertical-alignment: center;
-            }
-            for chip in StoreData.sorts: ChipButton {
-                label: chip.label;
-                chosen: chip.chosen;
-                clicked => { StoreData.chip(chip.id); }
-            }
-            if StoreData.asking != "": Text {
-                text: StoreData.asking;
-                font-size: 13px;
-                color: Colors.dim;
-                vertical-alignment: center;
             }
         }
         // What went wrong, on a card, since it is red text over the window.
@@ -140,6 +129,7 @@ export component StorePage inherits Rectangle {
         }
 
         if StoreData.empty-title != "": Rectangle {
+            vertical-stretch: 1;
             VerticalLayout {
                 alignment: center;
                 spacing: Space.l;

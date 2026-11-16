@@ -246,7 +246,7 @@ export component LibraryPage inherits Rectangle {
                 horizontal-stretch: 1;
                 // The chips keep their own height, whatever room is left.
                 vertical-stretch: 0;
-                cross-axis-alignment: start;
+                cross-axis-alignment: center;
                 cross-axis-line-alignment: start;
                 spacing: Space.s;
                 for chip in LibraryData.sources: ChipButton {
@@ -311,7 +311,7 @@ export component LibraryPage inherits Rectangle {
         // Organize: statuses, collections, and what is marked.
         FlexboxLayout {
             vertical-stretch: 0;
-            cross-axis-alignment: start;
+            cross-axis-alignment: center;
             cross-axis-line-alignment: start;
             padding-top: Space.xs;
             padding-bottom: Space.xs;
@@ -343,6 +343,7 @@ export component LibraryPage inherits Rectangle {
         }
 
         if LibraryData.empty-title != "": Rectangle {
+            vertical-stretch: 1;
             VerticalLayout {
                 alignment: center;
                 spacing: Space.s;

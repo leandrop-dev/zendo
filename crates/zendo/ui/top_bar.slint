@@ -113,9 +113,15 @@ export component TopBar inherits Rectangle {
                 current: root.page == Page.stats;
                 clicked => { root.navigate(Page.stats); }
             }
-            // The view chips, on the Library only.
+            // While Game Mode is on and the grid is showing: back to its screen.
+            if GameModeData.on: ChipButton {
+                label: Tr.t("gm-screen");
+                chosen: true;
+                clicked => { GameModeData.show(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            // The view chips, on the Library only: beside the search.
             if root.page == Page.library: HorizontalLayout {
-                padding-left: Space.m;
                 spacing: Space.s;
                 for chip in LibraryData.views: ChipButton {
                     label: chip.label;
@@ -124,13 +130,6 @@ export component TopBar inherits Rectangle {
                     clicked => { LibraryData.chip(chip.id); }
                 }
             }
-            // While Game Mode is on and the grid is showing: back to its screen.
-            if GameModeData.on: ChipButton {
-                label: Tr.t("gm-screen");
-                chosen: true;
-                clicked => { GameModeData.show(); }
-            }
-            Rectangle { horizontal-stretch: 1; }
             // Always there, so Ctrl+F and Ctrl+V can reach them; no room on
             // the other pages. The Library and the Store each have a field
             // in the same place.

@@ -273,17 +273,40 @@ export global GameData {
 
 component Card inherits Rectangle {
     in property <string> heading;
+    // A small button on the heading row, for a card that opens and closes
+    // (`+` and `−`); empty is no button. The heading itself opens and closes
+    // it too, when there is one.
+    in property <string> action-label;
+    callback action-clicked;
     background: Colors.surface;
     border-width: 1px;
     border-color: Colors.line;
     VerticalLayout {
         padding: Space.l;
         spacing: Space.m;
-        Text {
-            text: root.heading.to-uppercase();
-            font-size: 14px;
-            font-weight: 700;
-            color: Colors.foreground;
+        Rectangle {
+            height: heading-row.preferred-height;
+            heading-touch := TouchArea {
+                mouse-cursor: root.action-label != "" ? pointer : default;
+                clicked => { root.action-clicked(); }
+            }
+            heading-row := HorizontalLayout {
+                spacing: Space.m;
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.heading.to-uppercase();
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: Colors.foreground;
+                    vertical-alignment: center;
+                }
+                if root.action-label != "": ActionButton {
+                    label: root.action-label;
+                    small: true;
+                    horizontal-stretch: 0;
+                    clicked => { root.action-clicked(); }
+                }
+            }
         }
         @children
     }
@@ -1678,55 +1701,48 @@ export component GamePage inherits Rectangle {
                         }
                         Card {
                             heading: Tr.t("game-technical");
-                            VerticalLayout {
+                            action-label: GameData.technical-open ? "−" : "+";
+                            action-clicked => { GameData.toggle-technical(); }
+                            if GameData.technical-open: VerticalLayout {
                                 spacing: Space.m;
-                                ActionButton {
-                                    label: GameData.technical-open ? "−" : "+";
-                                    small: true;
-                                    horizontal-stretch: 0;
-                                    clicked => { GameData.toggle-technical(); }
-                                }
-                                if GameData.technical-open: VerticalLayout {
-                                    spacing: Space.m;
-                                    for fact in GameData.technical: FactRow { fact: fact; }
-                                    if GameData.steam-app-row: HorizontalLayout {
+                                for fact in GameData.technical: FactRow { fact: fact; }
+                                if GameData.steam-app-row: HorizontalLayout {
+                                    spacing: Space.s;
+                                    Text {
+                                        width: 130px;
+                                        text: Tr.t("steam-app-label");
+                                        wrap: word-wrap;
+                                        color: Colors.dim;
+                                        vertical-alignment: top;
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
                                         spacing: Space.s;
                                         Text {
-                                            width: 130px;
-                                            text: Tr.t("steam-app-label");
+                                            text: GameData.steam-app-line;
+                                            font-size: 13px;
+                                            font-weight: 700;
+                                            color: Colors.foreground;
                                             wrap: word-wrap;
-                                            color: Colors.dim;
-                                            vertical-alignment: top;
                                         }
-                                        VerticalLayout {
-                                            horizontal-stretch: 1;
+                                        HorizontalLayout {
                                             spacing: Space.s;
-                                            Text {
-                                                text: GameData.steam-app-line;
-                                                font-size: 13px;
-                                                font-weight: 700;
-                                                color: Colors.foreground;
-                                                wrap: word-wrap;
+                                            TextField {
+                                                horizontal-stretch: 1;
+                                                height: 28px;
+                                                text <=> GameData.steam-app-input;
+                                                placeholder: Tr.t("steam-app-placeholder");
+                                                accepted => { GameData.steam-app-save(GameData.steam-app-input); }
                                             }
-                                            HorizontalLayout {
-                                                spacing: Space.s;
-                                                TextField {
-                                                    horizontal-stretch: 1;
-                                                    height: 28px;
-                                                    text <=> GameData.steam-app-input;
-                                                    placeholder: Tr.t("steam-app-placeholder");
-                                                    accepted => { GameData.steam-app-save(GameData.steam-app-input); }
-                                                }
-                                                ActionButton {
-                                                    label: Tr.t("steam-app-save");
-                                                    small: true;
-                                                    clicked => { GameData.steam-app-save(GameData.steam-app-input); }
-                                                }
-                                                if GameData.steam-app-clearable: ActionButton {
-                                                    label: Tr.t("steam-app-clear");
-                                                    small: true;
-                                                    clicked => { GameData.steam-app-clear(); }
-                                                }
+                                            ActionButton {
+                                                label: Tr.t("steam-app-save");
+                                                small: true;
+                                                clicked => { GameData.steam-app-save(GameData.steam-app-input); }
+                                            }
+                                            if GameData.steam-app-clearable: ActionButton {
+                                                label: Tr.t("steam-app-clear");
+                                                small: true;
+                                                clicked => { GameData.steam-app-clear(); }
                                             }
                                         }
                                     }
