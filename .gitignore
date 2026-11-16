@@ -1,3 +1,8 @@
 /target
 # Feature plans, kept for the sessions and never published.
 /.mallet/
+# makepkg's output: the source clone, the staging tree and the built package.
+packaging/arch/*/pkg/
+packaging/arch/*/src/
+packaging/arch/*/zendo/
+packaging/arch/*/*.pkg.tar.*
