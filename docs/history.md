@@ -5332,10 +5332,17 @@ the known item 52c1 note ("the pages' content height flips on every rebuild").
   content. The explicit width did not change that number. The suspect is a
   card's preferred height (the Mods or Details card) measured taller than it
   renders, most likely a `Text` with `wrap` measured at another width.
-- **Not fixed.** The longer scroll remains; the shorter one (the bottom out of
-  reach) was not reproduced with the seeded game. It needs a real Steam game
-  (About, screenshots, requirements, achievements) to reproduce both, and a
-  fix in the card or page measurement. Left open.
+- **Reproduced with a real page** (a local game given Steam app 620, so the
+  page loaded Portal 2's About, screenshots, Mods and System Requirements,
+  driven with `ydotool` and `wtype`): the page stops at the top of System
+  Requirements and cannot scroll further, while more cards (the rest of the
+  requirements, the achievements) are below. The content height is the stale
+  one from before the cards arrived: it does not grow with them. That is the
+  "too little scroll" half.
+- **Not fixed.** Both halves are the same stale measurement: the page's height
+  is taken before the network cards are added and is not taken again. A fix
+  belongs in the page's measurement (or in forcing the `ScrollView` to
+  re-measure when the cards change). Left open.
 
 ## Items 56a to 56c, the improvements (2026-11-16)
 
@@ -5364,9 +5371,11 @@ user's testing").
 Checked (2026-11-16, a throwaway home with no session bus, a local game given
 Steam app 620 in `state.json` so the page asked Steam's store): the lightbox
 with the first of Portal 2's eight screenshots (full size, "1 / 8",
-PREVIOUS, NEXT, CLOSE); the gradient's direction with a temporary red-to-blue
-fill (red at the top, blue at the bottom); the fade itself with the first
-screenshot as the backdrop; and the platform badge with a temporary "ADDED" on
-a Library card. `cargo build -p zendo` and 168 zendo, 285 core and 91 shell
-tests green. Not seen: a Store card's own badge (no signed-in store here), the
-lightbox's PREVIOUS and NEXT pressed, and pt-PT.
+PREVIOUS, NEXT, CLOSE), then driven by hand with `ydotool` and `wtype`: a
+click on a screenshot opened it, NEXT went to "2 / 8", PREVIOUS back to
+"1 / 8", a second PREVIOUS wrapped to "8 / 8", and CLOSE and Escape closed
+it; the gradient's direction with a temporary red-to-blue fill (red at the
+top, blue at the bottom); the fade itself with the first screenshot as the
+backdrop; and the platform badge with a temporary "ADDED" on a Library card.
+`cargo build -p zendo` and 168 zendo, 285 core and 91 shell tests green. Not
+seen: a Store card's own badge (no signed-in store here) and pt-PT.
