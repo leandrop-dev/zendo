@@ -250,10 +250,12 @@ in a throwaway home; what was not checked is in `docs/history.md`). Run
 - pt-PT and a light KDE scheme on the game page; a window narrower than the
   page needs; arrow keys and a controller on the Library into a game and back.
 
-Waiting on the user: the COPR resubmit of `main` (item 30). They run
-`copr-cli buildscm zendo --clone-url https://github.com/leandrop-dev/zendo.git
---commit main --method make_srpm --nowait` once the redesign is done; the
-installed RPM still ships the old ensō icon until then.
+The COPR resubmit of `main` is done: the user ran `copr-cli buildscm
+leandrop/zendo --clone-url https://github.com/leandrop-dev/zendo.git --commit
+main --method make_srpm --nowait` on 2026-11-15 (commit `90da88a`), and build
+11332151 succeeded (about 40 minutes). Not yet tried: installing that RPM and
+starting it (`dnf copr` upgrade, then `zendo`); the installed copy before it
+ships the old ensō icon.
 
 ## On hold
 

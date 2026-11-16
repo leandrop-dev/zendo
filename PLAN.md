@@ -47,14 +47,14 @@ the list and details views, OptiScaler and recompiled games are on hold.
 - The Fedora RPM builds on COPR `leandrop/zendo`; the spec's licence is now
   `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
   (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
-  resubmits `main` (`docs/backlog.md`, "Waiting on the user").
+  has built it on COPR (build 11332151, 2026-11-15, commit `90da88a`).
 - Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44, and the
   Slint window with real accounts and engines (`docs/backlog.md` lists what to
   try).
 
 ## Next
 
-The COPR resubmit, then whatever the user chooses from `docs/backlog.md`
+Trying the COPR build on the user's machine, then whatever the user chooses from `docs/backlog.md`
 (what is on hold is there).
 
 ## Direction [firm]
