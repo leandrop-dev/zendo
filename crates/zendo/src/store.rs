@@ -217,6 +217,7 @@ impl StoreBrowser {
                 .contains(&game.id)
                 .then(|| t!("badge-installed")),
             badge_running: true,
+            platform: game.shop.label().to_uppercase(),
             progress: None,
             marked: false,
             cover: game.cover.clone(),

@@ -276,7 +276,9 @@ impl Glue {
             self.want_cards(id);
             self.want_info(id);
             if let Some(window) = self.window.upgrade() {
-                window.global::<GameData>().set_open(true);
+                let data = window.global::<GameData>();
+                data.set_open(true);
+                data.set_shot(-1);
             }
             self.show_game();
         }
@@ -294,6 +296,7 @@ impl Glue {
             let data = window.global::<GameData>();
             data.set_open(false);
             data.set_owned(false);
+            data.set_shot(-1);
         }
         was_open
     }

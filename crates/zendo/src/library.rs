@@ -93,6 +93,9 @@ pub struct CardData {
     pub badge: Option<String>,
     /// The badge says Running, in the colour for good news.
     pub badge_running: bool,
+    /// The store a Store card belongs to ("STEAM"), drawn top-left; empty on
+    /// the Library's cards, whose top-left is the mark box.
+    pub platform: String,
     pub progress: Option<f32>,
     pub marked: bool,
     pub cover: Option<PathBuf>,
@@ -282,6 +285,7 @@ impl Browser {
                 game.pinned.then(|| t!("badge-favorite"))
             },
             badge_running: self.running.contains(&game.id),
+            platform: String::new(),
             progress: game.achievements.and_then(format::progress_of),
             marked: self.marked.contains(&game.id),
             cover: game.cover.clone(),

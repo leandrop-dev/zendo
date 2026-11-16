@@ -16,6 +16,9 @@ export struct Card {
     badge: string,
     // The badge says Running, in the colour for good news.
     badge-running: bool,
+    // The store a Store card belongs to ("STEAM"), top left; empty on the
+    // Library's cards, whose top left is the mark box.
+    platform: string,
     // The share of achievements, 0 to 1, or -1 for none.
     progress: float,
     marked: bool,
@@ -189,6 +192,14 @@ export component CardView inherits Rectangle {
                 mouse-cursor: pointer;
                 clicked => { root.marked(); }
             }
+        }
+        // The platform badge, top left, on the Store's cards (the Library's
+        // top left is the mark box).
+        if !root.markable && root.card.platform != "": Badge {
+            x: Space.s;
+            y: Space.s;
+            label: root.card.platform;
+            tint: Colors.foreground;
         }
         if root.card.badge != "": Badge {
             x: parent.width - self.width - Space.s;

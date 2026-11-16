@@ -31,11 +31,12 @@ pub struct Facts {
     pub shots: Vec<Shot>,
 }
 
-/// A screenshot: the small image on disk, and the full-size one's address.
+/// A screenshot: the small image on disk, and the full-size one, both
+/// downloaded on the same pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shot {
     pub thumb: PathBuf,
-    pub full: String,
+    pub full: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,9 +112,10 @@ pub fn details(app: u32) -> anyhow::Result<Option<StoreDetails>> {
     Ok(found)
 }
 
-/// [`details`] with the first screenshots' small images downloaded (or
-/// found again in the cache folder). One that cannot be downloaded is left
-/// out.
+/// [`details`] with the first screenshots' small and full images downloaded
+/// (or found again in the cache folder). One whose small image cannot be
+/// downloaded is left out; one whose full image cannot falls back to the
+/// small one, so it still opens.
 ///
 /// # Errors
 ///
@@ -134,20 +136,23 @@ fn shots_of(details: &StoreDetails) -> Vec<Shot> {
     if wanted.is_empty() || fs::create_dir_all(&dir).is_err() {
         return Vec::new();
     }
-    let mut files: Vec<Option<PathBuf>> = vec![None; wanted.len()];
+    let mut files: Vec<(Option<PathBuf>, Option<PathBuf>)> = vec![(None, None); wanted.len()];
     std::thread::scope(|scope| {
         for (shot, file) in wanted.iter().zip(&mut files) {
             let dir = &dir;
-            scope.spawn(move || *file = http::cached_image(dir, &shot.thumb));
+            scope.spawn(move || {
+                file.0 = http::cached_image(dir, &shot.thumb);
+                file.1 = http::cached_image(dir, &shot.full);
+            });
         }
     });
-    wanted
-        .iter()
-        .zip(files)
-        .filter_map(|(shot, file)| {
+    files
+        .into_iter()
+        .filter_map(|(thumb, full)| {
+            let thumb = thumb?;
             Some(Shot {
-                thumb: file?,
-                full: shot.full.clone(),
+                full: full.unwrap_or_else(|| thumb.clone()),
+                thumb,
             })
         })
         .collect()

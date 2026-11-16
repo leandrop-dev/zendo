@@ -22,6 +22,7 @@ import { StatsPage, StatsData, StatBar, StatCol, StatLine } from "stats.slint";
 import { GameModeScreen, GameModeData, GmTile } from "game_mode.slint";
 import { AccountsPage, AccountsData, AccountCard, SteamCardData } from "accounts.slint";
 import { LibraryPage, LibraryData, Card, CardRow, ChipData, Grid } from "library.slint";
+import { ShotSheet } from "shots.slint";
 
 // Rust reaches the globals, the structs and the enum through these.
 export { Colors, Space, Tr, Page, LibraryData, Card, CardRow, ChipData, Grid, GameData, Tile, Fact, OwnedBadge, StoreData, DownloadsData, JobRow, SteamRow, DlcRow, LocalData, SettingsData, SetRow, Bar, AboutData, CollectionsData, CollRow, OptionsData, OptSwitch, ArtData, ArtThumb, AccountsData, AccountCard, SteamCardData, ModsData, ModRow, PluginRow, NexusData, DownloadRow, SearchData, SearchRow, InstallerData, InstallerRow, StatsData, StatBar, StatCol, StatLine, GameModeData, GmTile }
@@ -179,6 +180,15 @@ export component MainWindow inherits Window {
         if root.gm-screen: GameModeScreen {
             width: 100%;
             height: 100%;
+        }
+        // The screenshot lightbox, over the game page and under the sheets.
+        if GameData.shot >= 0 && GameData.shots.length > 0: ShotSheet {
+            width: 100%;
+            height: 100%;
+            shot: GameData.shot;
+            shots: GameData.shots;
+            close() => { GameData.close-shot(); }
+            step(d) => { GameData.step-shot(d); }
         }
         // The Add game sheet, over everything and first to hear Escape.
         if CollectionsData.open: CollectionsSheet {

@@ -266,7 +266,8 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a and 55b are built; 55c is open (investigated 2026-11-16).
+55a and 55b are built; 55c is open (investigated 2026-11-16); 56a to 56c are
+built; 57 to 59 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -306,17 +307,17 @@ so they never collide with items 1 to 54.
 
 ### Improvements (56a to 56c)
 
-- **56a, the screenshot lightbox**: a screenshot on a game page opens its full
-  image in the browser today (`GameData.open-path(shot.full)` in
-  `ui/game.slint`). Open it in the app instead: a sheet with the image and
-  previous/next. Needs full-size images kept, not only the thumbnails.
-- **56b, the Store's platform badge**: a badge in the top-left of a Store card
-  saying which platform the game is on. The top-left is free there (the mark
-  box is only on the Library's cards); the platform is in the card's caption
-  today. The user thinks Iced had one.
-- **56c, the wide art's fade**: the game page's backdrop is a flat
-  `opacity: 0.22` (`ui/game.slint`). Make it fade (a gradient towards
-  transparent), as omakade does.
+- **56a built 2026-11-16, the screenshot lightbox**: a screenshot on a game
+  page opened its full image in the browser (`GameData.open-path(shot.full)`
+  in `ui/game.slint`). It now opens in the app: `ui/shots.slint`
+  (`ShotSheet`), one full picture over the page with previous, a count and
+  next. The full-size files are downloaded beside the thumbnails.
+- **56b built 2026-11-16, the Store's platform badge**: a badge in the
+  top-left of a Store card with the store the game belongs to (the mark box
+  is only on the Library's cards). `CardData.platform` carries it.
+- **56c built 2026-11-16, the wide art's fade**: the game page's backdrop
+  was a flat `opacity: 0.22` (`ui/game.slint`). It now fades in at the top
+  edge and out towards the bottom, as omakade does.
 
 ### New sources (57 to 59)
 

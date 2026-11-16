@@ -39,11 +39,13 @@ export struct Pill {
     url: string,
 }
 
-// A screenshot: its small picture, and the address of the full one.
+// A screenshot: its small picture, and the full-size one for the lightbox.
 export struct Shot {
     thumb: image,
     ready: bool,
-    full: string,
+    // Kept wide, for the opened picture.
+    full: image,
+    full-ready: bool,
 }
 
 // A line of GOG's changelog: 0 an update's title, 1 a heading, 2 a paragraph,
@@ -156,6 +158,11 @@ export global GameData {
     // No Steam game was found for it: the card that offers the way to give one.
     in property <string> no-match;
     in property <[Shot]> shots;
+    // The screenshot open in the page's lightbox, or -1.
+    in-out property <int> shot: -1;
+    callback open-shot(int);
+    callback close-shot();
+    callback step-shot(int);
     in property <string> dlc-count;
     in property <[DlcRow]> dlc;
     // Install all, when more than one can be installed; empty is no button.
@@ -972,7 +979,18 @@ export component GamePage inherits Rectangle {
                         height: 100%;
                         source: GameData.backdrop;
                         image-fit: cover;
-                        opacity: 0.22;
+                        opacity: 0.30;
+                    }
+                    // Fade the wide art into the page: in at the top edge, out
+                    // towards the bottom, as omakade's game page does.
+                    if GameData.has-backdrop: Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        background: @linear-gradient(180deg,
+                            Colors.background.with-alpha(0.6) 0%,
+                            transparent 20%,
+                            transparent 45%,
+                            Colors.background.with-alpha(0.9) 100%);
                     }
                     HorizontalLayout {
                         padding: Space.l;
@@ -1405,7 +1423,7 @@ export component GamePage inherits Rectangle {
                                 content-width: shots-row.preferred-width;
                                 shots-row := HorizontalLayout {
                                     spacing: Space.m;
-                                    for shot in GameData.shots: Rectangle {
+                                    for shot[index] in GameData.shots: Rectangle {
                                         width: shot.ready ? self.height * shot.thumb.width / max(1, shot.thumb.height) : 267px;
                                         height: 150px;
                                         background: Colors.raised;
@@ -1417,7 +1435,7 @@ export component GamePage inherits Rectangle {
                                         }
                                         TouchArea {
                                             mouse-cursor: pointer;
-                                            clicked => { GameData.open-path(shot.full); }
+                                            clicked => { GameData.open-shot(index); }
                                         }
                                     }
                                 }

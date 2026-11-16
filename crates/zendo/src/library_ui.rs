@@ -193,6 +193,7 @@ fn to_card(card: CardData, covers: &mut Covers) -> Card {
         faded: card.faded,
         badge: card.badge.unwrap_or_default().into(),
         badge_running: card.badge_running,
+        platform: card.platform.into(),
         progress: card.progress.unwrap_or(-1.0),
         marked: card.marked,
         has_cover: cover.is_some(),
@@ -978,6 +979,7 @@ impl Glue {
             || self.search_back()
             || self.art_back()
             || self.options_back()
+            || self.shots_back()
             || self.stay_open()
             || self.collections_back()
             || self.close_form()
@@ -1041,6 +1043,7 @@ impl Glue {
             || self.collections_open()
             || self.nexus_choosing()
             || self.search_is_open()
+            || self.shot_open()
         {
             return false;
         }

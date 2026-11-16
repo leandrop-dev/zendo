@@ -5336,3 +5336,37 @@ the known item 52c1 note ("the pages' content height flips on every rebuild").
   reach) was not reproduced with the seeded game. It needs a real Steam game
   (About, screenshots, requirements, achievements) to reproduce both, and a
   fix in the card or page measurement. Left open.
+
+## Items 56a to 56c, the improvements (2026-11-16)
+
+The three improvements from the user's testing (`docs/backlog.md`, "From the
+user's testing").
+
+- **56a, the screenshot lightbox.** A screenshot on a game page opened its
+  full picture in the browser. `steam_facts::Shot` now keeps the full-size
+  file as well as the small one (`shots_of` downloads both, and a full one
+  that fails falls back to the small one); `cards_ui` loads both through the
+  covers (the full one at the wide 960 px) and puts them in the page's images;
+  and `ui/shots.slint` (`ShotSheet`) draws one full picture over the page with
+  PREVIOUS, a "n / N" count, NEXT and CLOSE. `GameData.shot` is the open index,
+  driven by `open-shot`, `close-shot` and `step-shot` (stepping wraps);
+  Escape closes it (`shots_back`), the page's other keys do not reach the game
+  while it is open (`shot_open`), and opening or closing a game resets it. New
+  words `shots-previous` and `shots-next` in both languages.
+- **56b, the Store's platform badge.** `CardData` has `platform` (the Library
+  leaves it empty; the Store sets the store's name), and a Store card draws it
+  in the top left, where the Library has its mark box.
+- **56c, the wide art's fade.** The game page's backdrop was a flat
+  `opacity: 0.22`. It is now 0.30 under a vertical gradient that fades the
+  page's background in at the top edge and out towards the bottom
+  (`@linear-gradient(180deg, ...)`), as omakade's game page does.
+
+Checked (2026-11-16, a throwaway home with no session bus, a local game given
+Steam app 620 in `state.json` so the page asked Steam's store): the lightbox
+with the first of Portal 2's eight screenshots (full size, "1 / 8",
+PREVIOUS, NEXT, CLOSE); the gradient's direction with a temporary red-to-blue
+fill (red at the top, blue at the bottom); the fade itself with the first
+screenshot as the backdrop; and the platform badge with a temporary "ADDED" on
+a Library card. `cargo build -p zendo` and 168 zendo, 285 core and 91 shell
+tests green. Not seen: a Store card's own badge (no signed-in store here), the
+lightbox's PREVIOUS and NEXT pressed, and pt-PT.

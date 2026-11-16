@@ -1,0 +1,52 @@
+// The screenshot lightbox: one full-size picture, with previous and next.
+// `GameData.shot` is the open index, -1 when it is closed.
+
+import { Colors, Space, Tr } from "style.slint";
+import { ActionButton } from "components.slint";
+import { Shot } from "game.slint";
+
+export component ShotSheet inherits Rectangle {
+    in property <int> shot;
+    in property <[Shot]> shots;
+    callback close();
+    callback step(int);
+
+    background: Colors.background.with-alpha(0.94);
+
+    VerticalLayout {
+        padding: Space.xl;
+        spacing: Space.m;
+
+        // The whole picture, centred; the small one until the full one comes.
+        Image {
+            vertical-stretch: 1;
+            source: root.shots[root.shot].full-ready
+                ? root.shots[root.shot].full
+                : root.shots[root.shot].thumb;
+            image-fit: contain;
+        }
+
+        HorizontalLayout {
+            spacing: Space.m;
+            alignment: center;
+            ActionButton {
+                label: Tr.t("shots-previous");
+                clicked => { root.step(-1); }
+            }
+            Text {
+                vertical-alignment: center;
+                text: "\{root.shot + 1} / \{root.shots.length}";
+                font-size: 14px;
+                color: Colors.dim;
+            }
+            ActionButton {
+                label: Tr.t("shots-next");
+                clicked => { root.step(1); }
+            }
+            ActionButton {
+                label: Tr.t("close");
+                clicked => { root.close(); }
+            }
+        }
+    }
+}

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use slint::{Color, ComponentHandle, ModelRc, VecModel};
+use slint::{Color, ComponentHandle, Model, ModelRc, VecModel};
 use zendo_core::achievements::{self, Achievement, Achievements};
 use zendo_core::owned::{Owned, StoreDetails};
 use zendo_core::protondb::{self, Rating};
@@ -208,6 +208,31 @@ impl Glue {
                 glue.retry_cards(&id);
             }
         });
+        // The screenshot lightbox: open one, close it, or step along them.
+        let glue = Rc::clone(self);
+        data.on_open_shot(move |index| {
+            if let Some(window) = glue.window.upgrade() {
+                window.global::<GameData>().set_shot(index);
+            }
+        });
+        let glue = Rc::clone(self);
+        data.on_close_shot(move || {
+            if let Some(window) = glue.window.upgrade() {
+                window.global::<GameData>().set_shot(-1);
+            }
+        });
+        let glue = Rc::clone(self);
+        data.on_step_shot(move |step| {
+            if let Some(window) = glue.window.upgrade() {
+                let data = window.global::<GameData>();
+                let count = data.get_shots().row_count();
+                if count > 0 {
+                    let next = (data.get_shot() + step)
+                        .rem_euclid(i32::try_from(count).unwrap_or(i32::MAX));
+                    data.set_shot(next);
+                }
+            }
+        });
         let glue = Rc::clone(self);
         data.on_show_steam_app(move || {
             glue.game.technical.set(true);
@@ -226,6 +251,26 @@ impl Glue {
                 glue.give_steam_app(&id, None);
             }
         });
+    }
+
+    /// Whether the screenshot lightbox is open.
+    pub(super) fn shot_open(&self) -> bool {
+        self.window
+            .upgrade()
+            .is_some_and(|window| window.global::<GameData>().get_shot() >= 0)
+    }
+
+    /// Escape closes the screenshot lightbox.
+    pub(super) fn shots_back(&self) -> bool {
+        let Some(window) = self.window.upgrade() else {
+            return false;
+        };
+        let data = window.global::<GameData>();
+        if data.get_shot() < 0 {
+            return false;
+        }
+        data.set_shot(-1);
+        true
     }
 
     /// Runs `work` on a thread and hands its answer to `arrived` on the
@@ -579,21 +624,33 @@ impl Glue {
             "".into()
         });
 
-        // Screenshots.
+        // Screenshots: their small images beside the card, and their full ones
+        // for the lightbox.
         let mut shots = Vec::new();
         if let Some(facts) = &facts {
             for shot in &facts.shots {
                 images.push(shot.thumb.clone());
+                images.push(shot.full.clone());
                 let picture = match self.covers.borrow_mut().get(&shot.thumb) {
+                    Cover::Ready(image) => Some(image),
+                    _ => None,
+                };
+                let full = match self.covers.borrow_mut().get_wide(&shot.full) {
                     Cover::Ready(image) => Some(image),
                     _ => None,
                 };
                 shots.push(Shot {
                     ready: picture.is_some(),
                     thumb: picture.unwrap_or_default(),
-                    full: shot.full.clone().into(),
+                    full_ready: full.is_some(),
+                    full: full.unwrap_or_default(),
                 });
             }
+        }
+        // The open picture stays inside the list that replaced it.
+        let count = i32::try_from(shots.len()).unwrap_or(i32::MAX);
+        if data.get_shot() >= count {
+            data.set_shot(count - 1);
         }
         self.cards.shots.set_vec(shots);
 
