@@ -295,3 +295,114 @@ key. The reply is `{"<id>": {"success": bool, "data": {...}}}`.
   of 0 (old apps) counts as the size. All 749 games in the user's list
   have a size. The game page shows Download size and Size on disk; the
   Install with Steam note says what it needs.
+
+## New sources: Battle.net, Nexus Launcher, Xbox streaming (checked 2026-11-16)
+
+Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
+`src/sources/xodus/`, `src/launch/GameLauncher.cpp`, and `docs/GUIDE.md` and
+`docs/COMPATIBILITY.md`. Formats and commands are facts; no code is copied
+(omakade is GPL-3.0-or-later, ideas only, the same rule as everywhere else).
+
+### Battle.net
+
+- The Battle.net Agent keeps its install database at
+  `<prefix>/drive_c/ProgramData/Battle.net/Agent/product.db`, where `<prefix>`
+  is a Wine, Proton or Bottles prefix. It is a protobuf-like wire format, not
+  SQLite: top level repeats a product record in field 1; the record has `uid`
+  in field 1, the product code in field 2, user settings in field 3 (field 1 is
+  the Windows install path) and cached product state in field 4 (field 1 is the
+  base state, field 1 installed and field 2 playable). omakade caps the read at
+  16 MB, skips the tool products `agent` and `bna`, and keeps a product only
+  when `installed` or `playable` and its install path maps into the prefix
+  (through `dosdevices/<drive>:`; `c:` falls back to `drive_c`).
+- The product code is the same as Battle.net's own code for most titles
+  (`wow`, `wow_classic`, `pro`/`prometheus`, `d3`, `fenris`, `anbs`, `hsb`,
+  `hero`, `d2`, `d2LOD`, `osi`, `w3`, `w3tft`, `s1`, `s2`, `sca`, `codhq`, …).
+  The launch code differs for a few: `wow` → `WoW`, `pro`/`prometheus` → `Pro`,
+  `fenris` → `Fen`, `d2`/`d2LOD` → `Diablo II`, `w3` → `W3`, `w3ROC`/`w3tft` →
+  `Warcraft III`. omakade keeps a fixed product → (title, launch code, Lutris
+  slug) table; a code it does not know is titled from the code (underscores to
+  spaces, first letter upper) and launched with the code as is.
+- Game identity is `product@<first 8 hex of sha256(clean(prefix))>`, so the same
+  product installed in two prefixes is two games.
+- Prefixes scanned: `~/.wine`, `$XDG_DATA_HOME/wineprefixes/*`,
+  `~/.local/share/wineprefixes/*`, `$XDG_DATA_HOME/bottles/bottles/*`, the
+  Bottles Flatpak's `~/.var/app/com.usebottles.bottles/data/bottles/bottles/*`,
+  `~/Games/*`, and every `steamapps/compatdata/<app>/pfx` under Steam's
+  libraries. Only a prefix whose `product.db` exists is kept.
+- Runner: `bottle.yml` at the prefix root → Bottles; `pfx` with a sibling
+  `version` file, or `version` in the prefix root → Proton; else Wine. Flatpak
+  is noted when the path is under `~/.var/app/com.usebottles.bottles/` or
+  `~/.var/app/com.valvesoftware.Steam/`.
+- The client is `drive_c/Program Files (x86)/Battle.net/Battle.net.exe` (or
+  `Program Files`, `Battle.net Launcher.exe`). A game starts as
+  `<client> --exec=launch <launch code>`:
+  - Wine: `wine <client> --exec=launch <code>`, with `WINEPREFIX=<prefix>`.
+  - Proton: `env WINEPREFIX=<prefix> GAMEID=umu-battlenet STORE=battlenet
+    PROTONPATH=GE-Proton PROTON_VERB=run umu-run <client> --exec=launch <code>`
+    (omakade uses `GAMEID=0` and `STEAM_COMPAT_DATA_PATH` for a Steam-style
+    prefix; `umu-run` and `wine` are both on this machine).
+  - Bottles: `bottles-cli run -b <bottle> -e <client> -- --exec=launch <code>`;
+    the bottle name is `Name:` in `bottle.yml`, else the prefix folder's name.
+    Flatpak Bottles: `flatpak run --command=bottles-cli
+    com.usebottles.bottles run …`.
+- Last played comes from `<prefix>/drive_c/users/<account>/AppData/Roaming/
+  Battle.net/Battle.net.config` (JSON): `Games.<product>.LastPlayed`, a Windows
+  FILETIME (100-ns since 1601), milliseconds or seconds. There is no total
+  playtime.
+- Artwork: omakade downloads Lutris's public `https://lutris.net/games/
+  cover/<slug>.jpg` and `banner/<slug>.jpg`, and prefers artwork the game's
+  own folder carries (`cover.png`, `library_600x900.jpg`,
+  `library_hero.png`, `header.jpg`, …). Zendo could use SteamGridDB instead,
+  as it does for other sources.
+- Installer, checked 2026-11-16:
+  `https://us.battle.net/download/getInstallerForGame?os=win&locale=enUS&
+  version=LIVE&gameProgram=BATTLENET_APP` redirects (301, then 302) to
+  `https://downloader.battle.net/download/installer/win/1.0.69/
+  Battle.net-Setup.exe` (`application/x-msdos-program`, HTTP 200). The version
+  in the path moves; no checksum is published, only HTTPS.
+
+### Nexus Launcher (Microsoft Store, PC Game Pass)
+
+- The project is `domsvoboda/nexus-launcher` (MIT; renamed from `xodus-nexus`
+  on 2026-11-09; built on the Xbox team's Xodus). The latest release checked is
+  v0.5.0: `Xodus-Nexus-0.5.0-x86_64.AppImage` (~131 MB) and an arm64 build,
+  each with a `.sha512sum`; GitHub's API gives each asset a `sha256` digest.
+  The launcher installs its own backend first and its runtime family from
+  Settings; it needs glibc 2.38 or newer.
+- Profile: `$XDG_CONFIG_HOME/xodus-nexus` (or `~/.config/xodus-nexus`), with
+  `launcher-state.json`. The `games` array's records use `id` (16 hex),
+  `title`, `publisher`, `storeId` (12 `[0-9A-Z]`), `path`, `installState`
+  (`"ready"` for a playable install), `executable`, an inline `coverDataUrl`
+  data URL, `heroUrl` and an `antiCheat` object. A game is imported only when
+  its state is `ready` and its path is absolute.
+- Starting one: `<profile>/shortcuts/launch-game <id>`; the launcher itself is
+  `<profile>/shortcuts/launch-nexus` (no argument). Both are scripts Nexus
+  writes, marked `# X-Xodus-Nexus-Profile=` on line 2 and private to the user;
+  omakade refuses anything else in that place. There is also a backend CLI at
+  the path `binaryPath` names in `<profile>/xodus-backends/current.json`
+  (`xodus-cli`, under `<profile>/xodus-backends/releases/`).
+- Artwork: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
+  <storeId>&market=US&languages=en-US`, keeping `Poster` images at `w=600` and
+  `SuperHeroArt` (else `TitledHeroArt`) at `w=1920` from
+  `store-images.s-microsoft.com`. The Xbox title id is `<TitleId>` in the
+  game's `MicrosoftGame.config`.
+- It is a separate GUI, not a command-line engine: Zendo would list its games
+  read-only and start them through its script, the way Steam and Heroic are
+  handled, not install or update them itself.
+
+### Xbox Series S (streaming)
+
+- **Greenlight** (`unknownskl/greenlight`, MIT, TypeScript): an open client for
+  xCloud *and* Xbox home streaming, on Flathub as
+  `io.github.unknownskl.greenlight` and as GitHub AppImages. It starts with
+  `--fullscreen` and `--connect=<F000000000000000>` for a console, or
+  `--connect=xcloud_<title>` for a cloud title. It streams the console's own
+  screen; it does not expose the console's installed games as a list, so it is
+  a streaming client, not a library source.
+- **xbPlay** was a closed client (Flathub `net.studio08.xbplay`); Flathub
+  archived that repository as the app is end-of-life, and the project's public
+  history carries a copyright dispute (`XBplay-OSC`, `Xbplay-probe`). Not a
+  candidate to depend on; Greenlight is the open one.
+- Cloud gaming through Xodus/Nexus is the same mechanism as the Microsoft
+  Store source above (item 58), not a separate one.

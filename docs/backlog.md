@@ -321,25 +321,50 @@ built; 57 to 59 are next.
 
 ### New sources (57 to 59)
 
-Read from omakade's docs (`docs/GUIDE.md` and `COMPATIBILITY.md` on main,
-2026-11-16). Ideas only, as everywhere else.
+Read from omakade's docs and source on `main` on 2026-11-16 (`docs/GUIDE.md`,
+`docs/COMPATIBILITY.md`, `src/sources/battlenet/`, `src/sources/xodus/`,
+`src/launch/GameLauncher.cpp`). Ideas and formats only, as everywhere else.
+The verified contracts are in `docs/reference.md`, "New sources: Battle.net,
+Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
 
-- **57, Battle.net** [tentative]: omakade reads the Battle.net Agent database
-  (`product.db`) inside a Wine, Proton or Bottles prefix and launches each game
-  through that prefix's Battle.net client. The same shape as Zendo's Steam and
-  Heroic import: read-only, launch through the launcher. Needs the database
-  format and the launch command researched before it is sliced.
-- **58, Game Pass through Xodus Nexus** [tentative]: omakade lists the games
-  Xodus Nexus (a third-party Xbox Cloud Gaming client) shows as ready to play,
-  with Microsoft Store art, and launches Nexus's own shortcut. Cloud
-  streaming, not local installs, and a third-party app the user installs.
-  Needs Nexus's shortcut or CLI contract checked.
-- **59, Xbox Series S** [tentative, both paths to investigate]: the user wants
-  to play on the Series S remotely and asked for both. Two different
-  mechanisms: cloud gaming through Xodus (58), and remote play from the
-  console itself through Greenlight or xbplay. Both are investigated before
-  anything is planned; remote play is a streaming client, a different shape
-  from Zendo's installed-games model.
+- **57, Battle.net** [firm, sliced 2026-11-16]. A read-only import like Steam
+  and Heroic: the Agent's `product.db` in a Wine, Proton or Bottles prefix,
+  launched through that prefix's client (`Battle.net.exe --exec=launch <code>`
+  with `wine`, `umu-run` or `bottles-cli`). Sliced in two:
+  - **57a, import and launch** first: `zendo-core/src/battlenet.rs`, a new
+    `Source::BattleNet`, a `Launch` carrying the prefix (a shared prefix does
+    not fit `Launch::Local`), the product-code catalogue, last played from
+    `Battle.net.config`, covers through SteamGridDB with local art first, the
+    chip and the game page, and a fixture `product.db` in the tests.
+  - **57b, install and sign in**: the new Settings → Sources group downloads
+    Blizzard's installer and runs it in a Zendo-managed prefix under the games
+    folder (`Prefixes/Battle.net`) through `umu-run` or `wine`; Accounts gets a
+    Battle.net card that opens the client and reads its status from
+    `product.db`. The installer is the riskiest part, and is checked with the
+    user.
+  - The download is Blizzard's installer
+    (`downloader.battle.net/.../Battle.net-Setup.exe`); it has no checksum,
+    only HTTPS.
+- **58, Game Pass through Nexus Launcher** [firm, sliced 2026-11-16].
+  `domsvoboda/nexus-launcher` (MIT, formerly `xodus-nexus`). Read-only:
+  `launcher-state.json` games with `installState == "ready"`, launched through
+  Nexus's own `shortcuts/launch-game <id>`, with Microsoft Store art. Sliced in
+  two:
+  - **58a, import and launch**: `zendo-core/src/xodus.rs`, a new
+    `Source::Xbox`, `Launch::Command` to `launch-game`, the Store art, the chip
+    and the page.
+  - **58b, download and sign in**: Settings → Sources downloads the Nexus
+    AppImage (GitHub's `sha256` digest, the `engines` machinery), opens it once
+    so it writes `shortcuts/` and the user installs its runtime and signs in;
+    Accounts gets an Xbox card that opens it and reads readiness from
+    `launcher-state.json`.
+- **59, Xbox Series S** [firm, 2026-11-16]. Cloud gaming is 58. Remote play is
+  a streaming client, not a library source: **Greenlight** (MIT, Flathub
+  `io.github.unknownskl.greenlight`) started with
+  `--connect=F000000000000000` streams the console's own screen and lists no
+  games. The slice is a thin entry (Settings → Sources, with the downloads)
+  that opens Greenlight on the console. **xbPlay is Flathub-archived and
+  end-of-life, with a copyright dispute, so it is not used.**
 
 EA and Ubisoft are not listed: neither has a Linux launcher, and those games
 arrive through Steam or Heroic, which Zendo already imports. Emulation and
