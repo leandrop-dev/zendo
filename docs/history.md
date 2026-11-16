@@ -5379,3 +5379,63 @@ top, blue at the bottom); the fade itself with the first screenshot as the
 backdrop; and the platform badge with a temporary "ADDED" on a Library card.
 `cargo build -p zendo` and 168 zendo, 285 core and 91 shell tests green. Not
 seen: a Store card's own badge (no signed-in store here) and pt-PT.
+
+## Item 57a, the Battle.net import and launch (2026-11-16)
+
+The read-only half of item 57: the games the Battle.net client installed in a
+Wine, Proton or Bottles prefix, launched through that prefix's client.
+
+- **`crates/zendo-core/src/battlenet.rs`**: `prefixes()` looks in `~/.wine`,
+  `$XDG_DATA_HOME/wineprefixes` and `~/.local/share/wineprefixes`,
+  `$XDG_DATA_HOME/bottles/bottles`, the Bottles Flatpak's, `~/Games`, and every
+  `steamapps/compatdata/<app>/pfx` under Steam's libraries, keeping only the
+  ones with a `product.db`. The database is read with a small protobuf wire
+  reader: field 1 a product record, field 2 its code, field 3.1 the Windows
+  install path, field 4.1.1/4.1.2 installed and playable; other fields are
+  skipped. The tools `agent` and `bna`, uninstalled and unplayable products,
+  and records without an install path are left out. The id is
+  `battlenet:<code>@<8 hex>` (FNV-1a of the canonical prefix), so the same
+  product in two prefixes is two games. `CATALOGUE` names the products Zendo
+  knows and the launch code where it differs (`wow` → `WoW`, `pro` →
+  `Pro`, `fenris` → `Fen`, `w3tft` → `Warcraft III`, …); the rest take their
+  own code. Last played comes from `Battle.net.config` (FILETIME, ms or s).
+  Artwork in the game's own folder comes first; SteamGridDB fills in the rest
+  through the existing covers fetch.
+- **`zendo-core/src/lib.rs`**: `Source::BattleNet` (eight sources now),
+  `Launch::Prefix { prefix, runner, bottle, program, args }` and
+  `WineRunner { Wine, Proton, Bottles }`, with `launcher()` and
+  `command_line()` saying what runs the client; `Library::scan` adds the
+  Battle.net scan after Heroic's.
+- **`zendo-core/src/launch.rs`**: `in_prefix` builds the command: `wine
+  <client> --exec=launch <code>` with `WINEPREFIX`; `umu-run <client> …` with
+  `WINEPREFIX`, `GAMEID=umu-battlenet`, `STORE=battlenet` and the chosen or
+  default Proton; `bottles-cli run -b <bottle> -e <client> -- …` for a native
+  Bottles prefix. The command starts in the client's folder, the launch
+  options' wrappers and environment still apply, and `prefix()` returns the
+  explicit prefix for a `Launch::Prefix`.
+- **`zendo/src/game_ui.rs`**: a Battle.net game's Technical card shows its
+  prefix and last log. `report.rs` and `settings_ui.rs` list Battle.net among
+  the sources.
+
+Checked: `cargo test --workspace` green (168 zendo, 295 core, 91 shell; the 10
+new core tests cover the wire reader, the tool and absent products, the
+catalogue, Windows paths, the timestamps, the config, the runner and the
+game). Clippy reports nothing in the new code; the pre-existing
+`map_unwrap_or` notes and the `achievements.rs` fmt diff are the toolchain's
+1.100, left alone. In a throwaway home with a generated `product.db`:
+`zendo list` showed World of Warcraft Classic and Overwatch 2 from a Wine
+prefix and Diablo IV from a Steam Proton prefix, with the `agent` tool left
+out, the ids `battlenet:<code>@<8 hex>` and last played read from the config;
+`zendo launch` with a fake `wine` got `wine <client> --exec=launch Pro`,
+`WINEPREFIX=<prefix>` and the client's folder as the working directory; with a
+fake `umu-run` it got `umu-run <client> --exec=launch Fen`, the prefix,
+`GAMEID=umu-battlenet`, `STORE=battlenet` and `PROTONPATH=<the default>`.
+Not seen: a real Battle.net client and a real installation, a Bottles prefix,
+the window on screen, Play/Stop and the folder watch with a real game,
+SteamGridDB covers for a Battle.net title, and pt-PT.
+
+Things to know: the watch is the game's install folder when it exists, else
+the client's process group, so a client left open after the game ends does not
+count as the game still running. `in_prefix` runs native Bottles only (the
+Flatpak's `bottles-cli` is not on `PATH`). The installer and the Accounts
+card are 57b, not built.

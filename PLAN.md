@@ -23,8 +23,9 @@ Read this file first. The rest is read on demand, not up front.
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
 moved to Fedora 45 + KDE Plasma and was redesigned (see "Direction"): items 27
-to 36, 38 and 41 to 54 are built, with tests green (`docs/backlog.md` has the
-table, `docs/history.md` the detail and what was checked). On 2026-11-16 the
+to 36, 38, 41 to 54 and 55a to 57a are built, with tests green
+(`docs/backlog.md` has the table, `docs/history.md` the detail and what was
+checked). On 2026-11-16 the
 development machine moved to CachyOS (Arch) with Hyprland; the window is
 distro-agnostic and is supported on both CachyOS/Hyprland and Fedora/KDE
 Plasma. Item 37 (emulation), the list and details views, OptiScaler and

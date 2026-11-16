@@ -267,7 +267,7 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a and 55b are built; 55c is open (investigated 2026-11-16); 56a to 56c are
-built; 57 to 59 are next.
+built; 57a is built; 57b and 58 to 59 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -331,11 +331,15 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   and Heroic: the Agent's `product.db` in a Wine, Proton or Bottles prefix,
   launched through that prefix's client (`Battle.net.exe --exec=launch <code>`
   with `wine`, `umu-run` or `bottles-cli`). Sliced in two:
-  - **57a, import and launch** first: `zendo-core/src/battlenet.rs`, a new
-    `Source::BattleNet`, a `Launch` carrying the prefix (a shared prefix does
-    not fit `Launch::Local`), the product-code catalogue, last played from
-    `Battle.net.config`, covers through SteamGridDB with local art first, the
-    chip and the game page, and a fixture `product.db` in the tests.
+  - **57a built 2026-11-16**: the import and launch.
+    `zendo-core/src/battlenet.rs`, `Source::BattleNet`, `Launch::Prefix` (a
+    shared prefix does not fit `Launch::Local`), the product-code catalogue,
+    last played from `Battle.net.config`, covers through SteamGridDB with local
+    art first, the chip and the game page, a fixture `product.db` in the tests,
+    and the launch through `wine`, `umu-run` or `bottles-cli`. Checked in a
+    throwaway home with a generated database through `zendo list` and `zendo
+    launch` and a fake `wine` and `umu-run`; not seen: a real client and
+    installation, a Bottles prefix, Play/Stop on screen, and covers.
   - **57b, install and sign in**: the new Settings → Sources group downloads
     Blizzard's installer and runs it in a Zendo-managed prefix under the games
     folder (`Prefixes/Battle.net`) through `umu-run` or `wine`; Accounts gets a

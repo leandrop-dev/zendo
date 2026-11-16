@@ -39,7 +39,7 @@ use crate::runtimes::{self, Runtime};
 use crate::steam_runtime::Runtime as SteamRuntime;
 use crate::store_tasks::{self, Chosen};
 use crate::stores::Store;
-use crate::{Game, Launch, Source, State, downloads, paths, proton, umu};
+use crate::{Game, Launch, Source, State, WineRunner, downloads, paths, proton, umu};
 use crate::{cloud_saves, eos_overlay};
 
 /// A game just started.
@@ -182,6 +182,35 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
                 local_command(game, program, args, dir.as_deref(), &options, &mut warning)?;
             make_prefix(&command)?;
             (command, log_path(&game.id), None)
+        }
+        Launch::Prefix {
+            prefix,
+            runner,
+            bottle,
+            program,
+            args,
+        } => {
+            let options = options_for(game)?;
+            let command = in_prefix(
+                prefix,
+                *runner,
+                bottle.as_deref(),
+                program,
+                args,
+                &options,
+                &mut warning,
+            )?;
+            make_prefix(&command)?;
+            // The game, when its folder is there, so a client left open after
+            // it ends is not taken for the game still running; the client's
+            // group otherwise.
+            let folder = game
+                .details
+                .install_path
+                .as_ref()
+                .filter(|dir| dir.is_dir())
+                .map(|dir| Some(dir.clone()));
+            (command, log_path(&game.id), folder)
         }
         Launch::Engine { app, .. } => {
             let command = engine_command(game, app, &mut warning)?;
@@ -580,6 +609,10 @@ pub fn logs_dir() -> Option<PathBuf> {
 /// The Wine prefix a Windows game Zendo starts runs in.
 #[must_use]
 pub fn prefix(game: &Game) -> Option<PathBuf> {
+    // A prefix another client made (Battle.net) is the game's own.
+    if let Launch::Prefix { prefix, .. } = &game.launch {
+        return Some(prefix.clone());
+    }
     let dir = Config::load_file()
         .ok()
         .and_then(|config| config.install_dir())?;
@@ -831,6 +864,81 @@ fn local_command(
     Ok(command)
 }
 
+/// A Windows program in a prefix someone else made (Battle.net): `wine`,
+/// `umu-run` (Proton) or Bottles runs it, with the prefix in the environment
+/// and the command starting in the program's own folder.
+fn in_prefix(
+    prefix: &Path,
+    runner: WineRunner,
+    bottle: Option<&str>,
+    program: &Path,
+    args: &[String],
+    options: &LaunchOptions,
+    warning: &mut Option<String>,
+) -> anyhow::Result<Command> {
+    let (mut words, more) = wrappers_for(options, true)?;
+    if warning.is_none() {
+        *warning = more;
+    }
+    let mut env: Vec<(&'static str, std::ffi::OsString)> = Vec::new();
+    let after: Vec<String> = args.to_vec();
+    match runner {
+        WineRunner::Wine => {
+            let wine = crate::engines::find("wine")
+                .or_else(|| crate::engines::find("wine64"))
+                .context("Wine is needed to start this game: install it")?;
+            env.push(("WINEPREFIX", prefix.as_os_str().to_os_string()));
+            words.push(wine.to_string_lossy().into_owned());
+        }
+        WineRunner::Proton => {
+            let umu = crate::engines::find("umu-run").context(
+                "umu-launcher is needed to start this game: download it in Settings → Engines",
+            )?;
+            env.push(("WINEPREFIX", prefix.as_os_str().to_os_string()));
+            env.push(("GAMEID", "umu-battlenet".into()));
+            env.push(("STORE", "battlenet".into()));
+            let chosen = options
+                .proton
+                .as_deref()
+                .and_then(proton::named)
+                .or_else(proton::default);
+            if let Some(proton) = chosen {
+                env.push(("PROTONPATH", proton.path.into_os_string()));
+            }
+            words.push(umu.to_string_lossy().into_owned());
+        }
+        WineRunner::Bottles => {
+            // Native Bottles only; the Flatpak's `bottles-cli` is not on PATH.
+            let bottles = crate::engines::find("bottles-cli")
+                .context("Bottles is needed to start this game: install it")?;
+            let bottle = bottle.context("Bottles does not say which bottle holds this game")?;
+            words.extend([
+                bottles.to_string_lossy().into_owned(),
+                "run".into(),
+                "-b".into(),
+                bottle.to_owned(),
+                "-e".into(),
+                program.to_string_lossy().into_owned(),
+                "--".into(),
+            ]);
+        }
+    }
+    if runner != WineRunner::Bottles {
+        words.push(program.to_string_lossy().into_owned());
+    }
+    words.extend(after);
+    let (exe, rest) = words.split_first().context("nothing to start")?;
+    let mut command = Command::new(exe);
+    command
+        .args(rest)
+        .envs(env)
+        .envs(options.environment_for(true)?);
+    if let Some(dir) = program.parent().filter(|dir| dir.is_dir()) {
+        command.current_dir(dir);
+    }
+    Ok(command)
+}
+
 /// The anti-cheat runtimes a game Zendo starts through Proton ships and
 /// this machine lacks, to download before it starts. Steam's and Heroic's
 /// games get theirs from their launcher.
@@ -844,7 +952,7 @@ pub fn missing_runtimes(game: &Game) -> Vec<Runtime> {
         Launch::Local { program, dir, .. } => dir
             .clone()
             .or_else(|| program.parent().map(Path::to_path_buf)),
-        Launch::Uri { .. } | Launch::Command { .. } => None,
+        Launch::Uri { .. } | Launch::Command { .. } | Launch::Prefix { .. } => None,
     };
     folder.map_or_else(Vec::new, |folder| runtimes::missing_for(&folder))
 }

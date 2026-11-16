@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 use zendo_core::launch::{self, Started, Watch};
-use zendo_core::{Game, Source, State, Status, sessions};
+use zendo_core::{Game, Launch, Source, State, Status, sessions};
 use zendo_shell::presence::PresenceHandle;
 use zendo_shell::queue;
 use zendo_shell::running::{self, Effect, Names, RunMessage, Running};
@@ -584,19 +584,22 @@ impl Glue {
             mono(t!("fact-launch-command"), game.command_line()),
             mono(t!("fact-zendo-id"), game.id.clone()),
         ];
-        let starts_itself = game.installed_by_zendo() || game.source == Source::Local;
-        if starts_itself
-            && launch::needs_proton(game)
-            && let Some(dir) = self
-                .config
-                .borrow()
-                .as_ref()
-                .and_then(zendo_core::config::Config::install_dir)
-        {
-            rows.push(path_fact(
-                t!("run-wine-prefix"),
-                &launch::prefix_in(&dir, game),
-            ));
+        let starts_itself = game.installed_by_zendo()
+            || game.source == Source::Local
+            || matches!(game.launch, Launch::Prefix { .. });
+        if starts_itself && launch::needs_proton(game) {
+            let prefix = match &game.launch {
+                Launch::Prefix { prefix, .. } => Some(prefix.clone()),
+                _ => self
+                    .config
+                    .borrow()
+                    .as_ref()
+                    .and_then(zendo_core::config::Config::install_dir)
+                    .map(|dir| launch::prefix_in(&dir, game)),
+            };
+            if let Some(prefix) = prefix {
+                rows.push(path_fact(t!("run-wine-prefix"), &prefix));
+            }
         }
         if starts_itself && let Some(log) = launch::log_path(&game.id) {
             rows.push(path_fact(t!("run-last-log"), &log));

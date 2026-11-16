@@ -848,6 +848,7 @@ impl Glue {
             (Source::Epic, t!("sources-epic")),
             (Source::Gog, t!("sources-gog")),
             (Source::Amazon, t!("sources-amazon")),
+            (Source::BattleNet, "Battle.net".to_owned()),
             (Source::Heroic, t!("sources-heroic")),
             (Source::Desktop, t!("sources-desktop")),
             (Source::Local, t!("sources-local")),
