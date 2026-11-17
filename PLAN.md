@@ -67,9 +67,9 @@ record write is ADR 0002. Updates stay with the launcher (item 60c).
   `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
   (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
   has built it on COPR (build 11332151, 2026-11-15, commit `90da88a`).
-- Not yet tried by the user: items 28, 29, 33 to 36 and 41 to 44, and the
-  Slint window with real accounts and engines (`docs/backlog.md` lists what to
-  try).
+- The user closed the "not yet tried" checklist on 2026-11-17: the app has
+  been used through development and works, so items 28, 29, 33 to 36 and 41
+  to 44 are taken as seen rather than retested one by one.
 
 ## Next
 
