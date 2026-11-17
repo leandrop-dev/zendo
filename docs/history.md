@@ -5925,10 +5925,12 @@ the launcher would not see those games.
   package when its page opened. Now, when the Game Pass list arrives, a thread
   asks for every game's package one at a time (about 1.4 s each), and each
   answer goes into the browser (`StoreBrowser::package` and `set_package`), so
-  a card says what installing it takes ("Needs 1.94 GiB") or that this PC
-  cannot install it ("Not for this PC") without opening the game, and the
-  page's note is instant afterwards. The page's size row is filled from the
-  same answer. Words `xbox-card-needs` and `xbox-card-not-for-pc`.
+  a card carries an **UNSUPPORTED** badge (`badge-unsupported`, in the accent
+  colour) when this PC cannot install the game, and the page's note and size
+  row are instant afterwards. The first shape was a caption ("Needs 1.94 GiB"
+  or "Not for this PC"), which the user turned down the same day: no other
+  store's card shows a size, and the page's details already do; a badge says
+  the one thing a card cannot otherwise show.
 - **60e, achievements.** `xodus::title_id` reads the `<TitleId>` (hex) from
   the `MicrosoftGame.config` beside an installed game's executable, since the
   backend wants it in decimal; `xodus::achievements(title)` asks
@@ -5937,8 +5939,11 @@ the launcher would not see those games.
   `unlockedAt` (ISO 8601, through `time::parse_utc`), revoked items dropped,
   unlocked first newest first then the locked by name. An `xbox:` library
   game's Achievements card fills from that, with `unlocks_known: true` so its
-  "n of m" line is right. No icons yet: the backend gives addresses, and their
-  pictures are not fetched. `entitlements`, `package` and `achievements` now
+  "n of m" line is right. Their pictures are the backend's `iconUrl`, fetched
+  through `http::cached_image` into the same folder Steam's achievement icons
+  use (`$XDG_CACHE_HOME/zendo/achievements`, `achievements::icons_dir`), so
+  the first look at a game downloads them (40 for Minecraft Legends, 12.6 s)
+  and the next looks find them (3 s). `entitlements`, `package` and `achievements` now
   share one `backend()` runner.
 
 Checked: `cargo test --workspace` green (173 zendo, 310 core, 91 shell): the

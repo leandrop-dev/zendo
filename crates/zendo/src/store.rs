@@ -221,37 +221,31 @@ impl StoreBrowser {
     #[must_use]
     pub fn card(&self, place: usize) -> Option<CardData> {
         let game = self.games.get(*self.shown.get(place)?)?;
-        let caption = match (game.shop, self.packages.get(&game.id)) {
-            // What installing a Game Pass game would take, or that this PC
-            // cannot install it at all; until the Store answers, the
-            // developer, as every store card says.
-            (Shop::Xbox, Some(package)) if !package.supported => {
-                t!("xbox-card-not-for-pc")
-            }
-            (Shop::Xbox, Some(package)) => package.download_bytes.map_or_else(
-                || format::owned_line(game),
-                |bytes| {
-                    t!(
-                        "xbox-card-needs",
-                        size = zendo_core::Size::Bytes(bytes).to_string()
-                    )
-                },
-            ),
-            _ => format::owned_line(game),
+        let installed = self.installed.contains(&game.id);
+        // A Game Pass game this PC cannot install is marked, as a Steam game
+        // is not: the Store, not the launcher, says so.
+        let not_for_pc = game.shop == Shop::Xbox
+            && self
+                .packages
+                .get(&game.id)
+                .is_some_and(|package| !package.supported);
+        let (badge, badge_running) = if installed {
+            (Some(t!("badge-installed")), true)
+        } else if not_for_pc {
+            (Some(t!("badge-unsupported")), false)
+        } else {
+            (None, false)
         };
         Some(CardData {
             id: game.id.clone(),
             title: game.title.clone(),
-            caption,
+            caption: format::owned_line(game),
             caption_accent: false,
             faded: false,
             // The badge in the colour for good news, as the Library's
             // Running one.
-            badge: self
-                .installed
-                .contains(&game.id)
-                .then(|| t!("badge-installed")),
-            badge_running: true,
+            badge,
+            badge_running,
             platform: game.shop.label().to_uppercase(),
             progress: None,
             marked: false,
@@ -716,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn a_game_pass_card_says_what_installing_it_takes() {
+    fn a_game_pass_card_marks_what_this_pc_cannot_install() {
         let mut browser = browser();
         browser.cached(vec![(
             Shop::Xbox,
@@ -727,40 +721,30 @@ mod tests {
         )]);
         browser.set_accounts(HashSet::from([Shop::Xbox]), vec![Shop::Xbox]);
         browser.pick(StorePick::Shop(Shop::Xbox));
-        browser.set_package(
-            "xbox:9AAA",
-            zendo_core::xodus::Package {
-                supported: true,
-                status: "ready".into(),
-                download_bytes: Some(2_087_256_064),
-                format: Some("MSIXVC".into()),
-            },
-        );
-        browser.set_package(
-            "xbox:9BBB",
-            zendo_core::xodus::Package {
-                supported: false,
-                status: "unavailable".into(),
-                download_bytes: Some(5_399_841_994),
-                format: Some("EAPPX".into()),
-            },
-        );
-        let captions: Vec<String> = (0..browser.len())
+        let package = |supported: bool| zendo_core::xodus::Package {
+            supported,
+            status: String::new(),
+            download_bytes: None,
+            format: None,
+        };
+        browser.set_package("xbox:9AAA", package(true));
+        browser.set_package("xbox:9BBB", package(false));
+        let cards: Vec<_> = (0..browser.len())
             .filter_map(|place| browser.card(place))
-            .map(|card| card.caption)
             .collect();
+        // By title: Cuphead, then Halo Infinite.
         assert_eq!(
-            captions,
-            [
-                // By title: Cuphead, then Halo Infinite.
-                t!("xbox-card-not-for-pc"),
-                t!(
-                    "xbox-card-needs",
-                    size = zendo_core::Size::Bytes(2_087_256_064).to_string()
-                )
-            ],
-            "the size, or that this PC cannot install it, on the card"
+            cards[0].badge.as_deref(),
+            Some(t!("badge-unsupported").as_str()),
+            "a badge, not the caption"
         );
+        assert!(!cards[0].badge_running, "not the good news colour");
+        assert_eq!(
+            cards[0].caption,
+            format::owned_line(browser.owned("xbox:9BBB").unwrap()),
+            "the caption is what every store card says"
+        );
+        assert_eq!(cards[1].badge, None, "an installable one has no mark");
     }
 
     #[test]

@@ -460,15 +460,15 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   launcher's. It also means two ways to install one game, and a game the
   launcher cannot repair or remove. Not started; the user's call.
 - **60d built 2026-11-17, the packages on the cards**: when the Game Pass list
-  arrives a thread asks `resolve-package` for each game, and a card reads
-  "Needs 1.94 GiB" or "Not for this PC" without its page being opened (the
-  page's size is instant then). Not seen on screen.
+  arrives a thread asks `resolve-package` for each game, so a card shows an
+  UNSUPPORTED badge when this PC cannot install it, without the page being
+  opened (and the page's size is instant then). Not seen on screen.
 - **60e built 2026-11-17, Game Pass achievements**: `xodus::title_id` reads
   `<TitleId>` from an installed game's `MicrosoftGame.config` (hex, asked in
   decimal) and `xodus::achievements` maps the backend's items into the page's
-  Achievements card, unlocked first, secrets kept back, "n of m" right. No
-  icons yet. Checked with Minecraft Legends (40 achievements); not seen on
-  screen. `game-activity` (time played and last activity) is still unread and
+  Achievements card, unlocked first, secrets kept back, "n of m" right, with
+  their pictures downloaded into the achievement icons' cache. Checked with
+  Minecraft Legends (40 achievements, 40 icons); not seen on screen. `game-activity` (time played and last activity) is still unread and
   could fill a Game Pass game's time played.
 - **61, Battle.net's empty window under Proton** (from the user's testing,
   2026-11-17): the client now starts (item 58c) and shows its window, but the

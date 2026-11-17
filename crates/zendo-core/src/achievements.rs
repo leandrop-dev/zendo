@@ -499,6 +499,11 @@ fn epic_unlocks(answer: &Value) -> Option<HashMap<String, u64>> {
     )
 }
 
+/// The folder the achievement icons are kept in, whoever asked for them.
+pub(crate) fn icons_dir() -> Option<std::path::PathBuf> {
+    paths::cache_home().map(|dir| dir.join("zendo/achievements"))
+}
+
 /// The achievements with their icons downloaded, a few at once and each
 /// address once (locked ones often share an icon); an icon that cannot be
 /// downloaded is left out.
@@ -518,7 +523,7 @@ fn with_icons(found: Vec<Found>) -> Vec<Achievement> {
     urls.sort_unstable();
     urls.dedup();
     let mut files: Vec<Option<PathBuf>> = vec![None; urls.len()];
-    let dir = paths::cache_home().map(|dir| dir.join("zendo/achievements"));
+    let dir = icons_dir();
     if let Some(dir) = dir.filter(|dir| fs::create_dir_all(dir).is_ok()) {
         let chunk = urls.len().div_ceil(ICON_WORKERS).max(1);
         std::thread::scope(|scope| {

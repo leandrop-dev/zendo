@@ -9,6 +9,7 @@
 //! read: Zendo lists these games and starts them, and never installs,
 //! updates or uninstalls them (`docs/reference.md`, "Nexus Launcher").
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -738,9 +739,9 @@ pub fn title_id(install: &Path) -> Option<u64> {
     u64::from_str_radix(text[start..end].trim(), 16).ok()
 }
 
-/// The account's achievements for a title, as the backend gives them:
-/// unlocked first, newest first, then the locked by name. No icons: the
-/// backend gives addresses, and their pictures are not fetched.
+/// The account's achievements for a title, as the backend gives them, their
+/// pictures downloaded beside the other achievements': unlocked first,
+/// newest first, then the locked by name.
 ///
 /// # Errors
 ///
@@ -749,6 +750,7 @@ pub fn achievements(title: u64) -> anyhow::Result<Vec<crate::achievements::Achie
     let answer: Achieved =
         serde_json::from_str(&backend(&["achievements", &title.to_string(), "--json"])?)
             .context("Nexus Launcher's backend's achievements were odd")?;
+    let icons = download_icons(&answer);
     let mut list: Vec<crate::achievements::Achievement> = answer
         .items
         .into_iter()
@@ -757,9 +759,15 @@ pub fn achievements(title: u64) -> anyhow::Result<Vec<crate::achievements::Achie
             name: item.name,
             description: item.description,
             hidden: item.secret,
-            unlocked: item.unlocked_at.as_deref().and_then(crate::time::parse_utc),
+            unlocked: item
+                .unlocked_at
+                .as_deref()
+                .and_then(crate::time::parse_utc),
             rarity: None,
-            icon: None,
+            icon: item
+                .icon_url
+                .as_ref()
+                .and_then(|url| icons.get(url).cloned().flatten()),
         })
         .collect();
     list.sort_by(|one, other| match (one.unlocked, other.unlocked) {
@@ -769,6 +777,28 @@ pub fn achievements(title: u64) -> anyhow::Result<Vec<crate::achievements::Achie
         (None, None) => one.name.cmp(&other.name),
     });
     Ok(list)
+}
+
+/// The pictures the achievements name, each address once, downloaded into
+/// the achievements' folder; one that cannot be downloaded is left out.
+fn download_icons(answer: &Achieved) -> HashMap<String, Option<PathBuf>> {
+    let mut urls: Vec<&str> = answer
+        .items
+        .iter()
+        .filter_map(|item| item.icon_url.as_deref())
+        .collect();
+    urls.sort_unstable();
+    urls.dedup();
+    let mut icons: HashMap<String, Option<PathBuf>> = HashMap::new();
+    let Some(dir) = crate::achievements::icons_dir().filter(|dir| fs::create_dir_all(dir).is_ok())
+    else {
+        return icons;
+    };
+    for url in urls {
+        let file = crate::http::cached_image(&dir, url);
+        icons.insert(url.to_owned(), file);
+    }
+    icons
 }
 
 /// The backend's answer about a title's achievements.
@@ -791,6 +821,8 @@ struct AchievedItem {
     revoked: bool,
     #[serde(default)]
     unlocked_at: Option<String>,
+    #[serde(default)]
+    icon_url: Option<String>,
 }
 
 /// The backend's answer about a product's packages.
