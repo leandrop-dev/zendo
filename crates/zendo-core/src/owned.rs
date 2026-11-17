@@ -120,16 +120,20 @@ pub enum Shop {
     Epic,
     Gog,
     Amazon,
+    /// PC Game Pass, listed by the Microsoft Store through Nexus Launcher:
+    /// read from its backend, not installed by Zendo (item 60).
+    Xbox,
 }
 
 impl Shop {
-    pub const ALL: [Self; 4] = [Self::Steam, Self::Epic, Self::Gog, Self::Amazon];
+    pub const ALL: [Self; 5] = [Self::Steam, Self::Epic, Self::Gog, Self::Amazon, Self::Xbox];
 
-    /// The store Zendo installs it through; `None` for Steam.
+    /// The store Zendo installs it through; `None` for Steam's games and for
+    /// Game Pass's, which their own launcher installs.
     #[must_use]
     pub fn store(self) -> Option<Store> {
         match self {
-            Self::Steam => None,
+            Self::Steam | Self::Xbox => None,
             Self::Epic => Some(Store::Epic),
             Self::Gog => Some(Store::Gog),
             Self::Amazon => Some(Store::Amazon),
@@ -138,7 +142,13 @@ impl Shop {
 
     #[must_use]
     pub fn source(self) -> Source {
-        self.store().map_or(Source::Steam, Store::source)
+        match self {
+            Self::Steam => Source::Steam,
+            Self::Epic => Store::Epic.source(),
+            Self::Gog => Store::Gog.source(),
+            Self::Amazon => Store::Amazon.source(),
+            Self::Xbox => Source::Xbox,
+        }
     }
 
     #[must_use]
@@ -148,7 +158,13 @@ impl Shop {
 
     /// The first half of its games' ids, and its cache file's name.
     fn key(self) -> &'static str {
-        self.store().map_or("steam", Store::source_key)
+        match self {
+            Self::Steam => "steam",
+            Self::Epic => Store::Epic.source_key(),
+            Self::Gog => Store::Gog.source_key(),
+            Self::Amazon => Store::Amazon.source_key(),
+            Self::Xbox => "xbox",
+        }
     }
 }
 

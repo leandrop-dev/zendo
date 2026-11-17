@@ -681,6 +681,34 @@ mod tests {
     }
 
     #[test]
+    fn shows_game_pass_games_under_their_own_chip() {
+        let mut browser = browser();
+        browser.cached(vec![(
+            Shop::Xbox,
+            vec![Owned::new(Shop::Xbox, "9AAA", "Halo Infinite".into())],
+        )]);
+        browser.set_accounts(
+            HashSet::from([Shop::Epic, Shop::Gog, Shop::Xbox]),
+            vec![Shop::Epic, Shop::Gog, Shop::Xbox],
+        );
+        let chips = browser.chips();
+        assert!(
+            chips
+                .sources
+                .iter()
+                .any(|chip| chip.label == "Xbox" && chip.count == Some(1)),
+            "a chip of its own"
+        );
+        browser.pick(StorePick::Shop(Shop::Xbox));
+        assert_eq!(titles(&browser), ["Halo Infinite"]);
+        assert_eq!(
+            browser.card(0).map(|card| card.id),
+            Some("xbox:9AAA".to_owned())
+        );
+        assert!(!browser.is_installed("xbox:9AAA"), "not installed yet");
+    }
+
+    #[test]
     fn shows_steams_games_while_it_is_signed_in() {
         let mut browser = browser();
         browser.set_accounts(

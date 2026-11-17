@@ -1,4 +1,5 @@
-//! Nexus Launcher's games: PC Game Pass titles the Microsoft Store installed.
+//! Nexus Launcher's games: PC Game Pass titles the Microsoft Store installed,
+//! and the titles the account owns (`owned`, for the Store page).
 //!
 //! The launcher (`domsvoboda/nexus-launcher`, MIT, formerly `xodus-nexus`)
 //! keeps a profile in `$XDG_CONFIG_HOME/xodus-nexus` with
@@ -15,6 +16,7 @@ use std::sync::atomic::AtomicBool;
 use anyhow::Context as _;
 use serde::Deserialize;
 
+use crate::owned::{Owned, Shop};
 use crate::{Details, Game, Launch, Scan, Source, engines, paths};
 
 /// Where the launcher keeps its profile, when it is installed.
@@ -70,6 +72,28 @@ pub fn release() -> anyhow::Result<engines::Release> {
         asset,
         service: None,
     })
+}
+
+/// The Store's catalogue of product information.
+const CATALOGUE: &str = "https://displaycatalog.mp.microsoft.com/v7.0/products";
+
+/// How many product ids one catalogue query asks for.
+const BATCH: usize = 20;
+
+/// The market the Store answers for, as `resolve-package` asks by default.
+const MARKET: &str = "US";
+
+/// The launcher's backend program, at the path its `current.json` names.
+fn cli() -> Option<PathBuf> {
+    #[derive(Deserialize)]
+    struct Current {
+        #[serde(rename = "binaryPath")]
+        binary: PathBuf,
+    }
+    let file = profile()?.join("xodus-backends/current.json");
+    let bytes = fs::read(file).ok()?;
+    let current: Current = serde_json::from_slice(&bytes).ok()?;
+    current.binary.is_file().then_some(current.binary)
 }
 
 /// Whether an `AppImage`'s name is the one this machine runs: the release
@@ -352,11 +376,267 @@ mod tests {
     }
 
     #[test]
+    fn reads_the_entitlements_then_the_store_catalogue() {
+        // The backend writes its diagnostics before the answer.
+        let answer = "NEXUS_SESSION_DIAGNOSTIC_V1 ticket-response-received\n\
+                      NEXUS_LIBRARY_DIAGNOSTIC_V1 complete 0 0\n\
+                      {\"account\":\"me@example.com\",\"entitlements\":[\
+                      {\"productId\":\"9AAA\",\"status\":\"Active\"},\
+                      {\"productId\":\"9BBB\",\"status\":\"Active\"},\
+                      {\"productId\":\"9CCC\",\"status\":\"Revoked\"}]}";
+        let json = &answer[answer.find('{').unwrap()..];
+        let library: Library = serde_json::from_str(json).unwrap();
+        let ids: Vec<&str> = library
+            .entitlements
+            .iter()
+            .filter(|entitlement| entitlement.status == "Active")
+            .map(|entitlement| entitlement.product_id.as_str())
+            .collect();
+        assert_eq!(ids, ["9AAA", "9BBB"], "a revoked one is not owned");
+
+        let catalogue = Catalogue {
+            products: vec![
+                Product {
+                    id: "9AAA".into(),
+                    schema: "ProductGame;1".into(),
+                    localized: vec![Localized {
+                        title: "Halo Infinite".into(),
+                        short_title: None,
+                        developer: Some("343 Industries".into()),
+                        publisher: Some("Xbox Game Studios".into()),
+                        short_description: Some("Spartans. ".into()),
+                        description: None,
+                        images: vec![
+                            Art {
+                                purpose: "Poster".into(),
+                                uri: "//img/p".into(),
+                            },
+                            Art {
+                                purpose: "SuperHeroArt".into(),
+                                uri: "//img/h".into(),
+                            },
+                        ],
+                    }],
+                },
+                Product {
+                    id: "9BBB".into(),
+                    schema: "ProductAddOn;3".into(),
+                    localized: vec![Localized {
+                        title: "Some Skins".into(),
+                        short_title: None,
+                        developer: None,
+                        publisher: None,
+                        short_description: None,
+                        description: None,
+                        images: vec![],
+                    }],
+                },
+            ],
+        };
+        let games: Vec<Owned> = catalogue.products.iter().filter_map(owned_game).collect();
+        assert_eq!(games.len(), 1, "an add-on is not a game");
+        let game = &games[0];
+        assert_eq!(game.id, "xbox:9AAA");
+        assert_eq!(game.title, "Halo Infinite");
+        assert_eq!(game.developer.as_deref(), Some("343 Industries"));
+        assert_eq!(game.publisher.as_deref(), Some("Xbox Game Studios"));
+        assert_eq!(game.summary.as_deref(), Some("Spartans."));
+        assert_eq!(game.platforms, ["Windows"]);
+        assert_eq!(game.cover_url.as_deref(), Some("https://img/p?w=600"));
+        assert_eq!(game.hero_url.as_deref(), Some("https://img/h?w=1920"));
+    }
+
+    #[test]
+    fn a_title_that_is_empty_takes_the_short_one() {
+        let product = Product {
+            id: "9AAA".into(),
+            schema: "ProductGame;1".into(),
+            localized: vec![Localized {
+                title: " ".into(),
+                short_title: Some("Retro Classics".into()),
+                developer: None,
+                publisher: None,
+                short_description: None,
+                description: None,
+                images: vec![],
+            }],
+        };
+        assert_eq!(owned_game(&product).unwrap().title, "Retro Classics");
+    }
+
+    #[test]
     fn no_profile_is_no_game_and_no_problem() {
         let scan = scan(None);
         assert!(scan.games.is_empty());
         assert!(scan.problems.is_empty());
     }
+}
+
+/// The Game Pass games the account owns: the launcher's backend lists its
+/// entitlements, and the Store's catalogue names them and gives their art.
+///
+/// # Errors
+///
+/// When the backend or the Store cannot be asked, or answer oddly.
+pub fn owned() -> anyhow::Result<Vec<Owned>> {
+    let ids = entitlements()?;
+    let products = catalogue(&ids)?;
+    crate::owned::keep(Shop::Xbox, products.iter().filter_map(owned_game).collect())
+}
+
+/// The product ids the account holds, from the backend's `library --json`.
+fn entitlements() -> anyhow::Result<Vec<String>> {
+    let cli = cli().context("Nexus Launcher's backend is not installed")?;
+    let output = std::process::Command::new(&cli)
+        .args(["library", "--json"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .context("could not run Nexus Launcher's backend")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Nexus Launcher's backend could not list the account's games: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    // It writes its diagnostics before the answer, one line each.
+    let json = text
+        .find('{')
+        .context("Nexus Launcher's backend gave no list")?;
+    let answer: Library =
+        serde_json::from_str(&text[json..]).context("Nexus Launcher's backend's list was odd")?;
+    Ok(answer
+        .entitlements
+        .iter()
+        .filter(|entitlement| entitlement.status == "Active")
+        .map(|entitlement| entitlement.product_id.clone())
+        .collect())
+}
+
+/// The catalogue's products for those ids, a batch at a time.
+fn catalogue(ids: &[String]) -> anyhow::Result<Vec<Product>> {
+    let agent = crate::http::download_agent();
+    let mut products = Vec::new();
+    for batch in ids.chunks(BATCH) {
+        let url = format!(
+            "{CATALOGUE}?bigIds={}&market={MARKET}&languages=en-US&fieldsTemplate=Details",
+            batch.join(",")
+        );
+        let body = agent
+            .get(&url)
+            .call()
+            .context("could not reach the Microsoft Store's catalogue")?
+            .into_body()
+            .read_to_string()
+            .context("the Store's catalogue answer was cut short")?;
+        let answer: Catalogue =
+            serde_json::from_str(&body).context("the Store's catalogue answer was odd")?;
+        products.extend(answer.products);
+    }
+    Ok(products)
+}
+
+/// One owned game, when the product is a game and not an add-on.
+fn owned_game(product: &Product) -> Option<Owned> {
+    if !product.schema.starts_with("ProductGame") {
+        return None;
+    }
+    let local = product.localized.first()?;
+    let title = match local.title.trim() {
+        "" => local.short_title.as_deref()?.trim().to_owned(),
+        title => title.to_owned(),
+    };
+    if title.is_empty() {
+        return None;
+    }
+    let mut game = Owned::new(Shop::Xbox, &product.id, title);
+    game.developer.clone_from(&local.developer);
+    game.publisher.clone_from(&local.publisher);
+    game.summary = local
+        .short_description
+        .clone()
+        .or_else(|| local.description.clone())
+        .map(|summary| summary.trim().to_owned())
+        .filter(|summary| !summary.is_empty());
+    game.platforms = vec!["Windows".to_owned()];
+    game.cover_url = local.image("Poster", 600);
+    game.hero_url = local
+        .image("SuperHeroArt", 1920)
+        .or_else(|| local.image("TitledHeroArt", 1920));
+    Some(game)
+}
+
+/// The backend's answer about the account's entitlements.
+#[derive(Deserialize)]
+struct Library {
+    #[serde(default)]
+    entitlements: Vec<Entitlement>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Entitlement {
+    product_id: String,
+    #[serde(default)]
+    status: String,
+}
+
+/// The catalogue's answer.
+#[derive(Deserialize)]
+struct Catalogue {
+    #[serde(rename = "Products", default)]
+    products: Vec<Product>,
+}
+
+/// One product of the catalogue.
+#[derive(Deserialize)]
+struct Product {
+    #[serde(rename = "ProductId")]
+    id: String,
+    /// `ProductGame;1` for a game, `ProductAddOn;3` for an add-on.
+    #[serde(rename = "ProductBSchema", default)]
+    schema: String,
+    #[serde(rename = "LocalizedProperties", default)]
+    localized: Vec<Localized>,
+}
+
+#[derive(Deserialize)]
+struct Localized {
+    #[serde(rename = "ProductTitle", default)]
+    title: String,
+    #[serde(rename = "ShortTitle", default)]
+    short_title: Option<String>,
+    #[serde(rename = "DeveloperName", default)]
+    developer: Option<String>,
+    #[serde(rename = "PublisherName", default)]
+    publisher: Option<String>,
+    #[serde(rename = "ShortDescription", default)]
+    short_description: Option<String>,
+    #[serde(rename = "ProductDescription", default)]
+    description: Option<String>,
+    #[serde(rename = "Images", default)]
+    images: Vec<Art>,
+}
+
+impl Localized {
+    /// The address of one image, at a width, as the Store serves it; the
+    /// catalogue gives it without a scheme.
+    fn image(&self, purpose: &str, width: u32) -> Option<String> {
+        let art = self.images.iter().find(|art| art.purpose == purpose)?;
+        if art.uri.is_empty() {
+            return None;
+        }
+        let separator = if art.uri.contains('?') { '&' } else { '?' };
+        Some(format!("https:{}{separator}w={width}", art.uri))
+    }
+}
+
+#[derive(Deserialize)]
+struct Art {
+    #[serde(rename = "ImagePurpose", default)]
+    purpose: String,
+    #[serde(rename = "Uri", default)]
+    uri: String,
 }
 
 #[cfg(test)]
@@ -402,6 +682,30 @@ mod online {
             release.tag,
             release.asset.name,
             bytes.len()
+        );
+    }
+    /// Asks the real backend and the Store for the account's games; run with
+    /// `cargo test -p zendo-core xodus::online -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the network and a signed-in Nexus Launcher"]
+    fn lists_the_owned_games() {
+        let games = super::owned().unwrap();
+        println!("{} games", games.len());
+        for game in games.iter().take(5) {
+            println!(
+                "{} | {} | {} | cover {}",
+                game.id,
+                game.title,
+                game.publisher.as_deref().unwrap_or(""),
+                game.cover_url.is_some()
+            );
+        }
+        assert!(!games.is_empty(), "the account owns a game");
+        assert!(games.iter().all(|game| game.id.starts_with("xbox:")));
+        assert!(games.iter().all(|game| !game.title.is_empty()));
+        assert!(
+            games.iter().any(|game| game.cover_url.is_some()),
+            "art found"
         );
     }
 }

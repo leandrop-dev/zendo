@@ -19,7 +19,7 @@ use zendo_core::downloads;
 use zendo_core::info::{self, Dlc};
 use zendo_core::owned::{self, Owned, Shop};
 use zendo_core::stores::Store;
-use zendo_core::{Game, Launch, Size, Source};
+use zendo_core::{Game, Launch, Size, Source, xodus};
 use zendo_shell::steam_list;
 use zendo_shell::store_facts::{self, InfoState};
 use zendo_shell::{format, running, t};
@@ -305,21 +305,24 @@ impl Glue {
         let steam = self.steam_session().is_some();
         let mut listed = HashSet::new();
         let mut connected = Vec::new();
+        // Game Pass is read from Nexus Launcher's backend, not signed in
+        // through an engine: it is there when the launcher is. A window that
+        // writes nothing (the tests') looks at no launcher at all.
+        let xbox = self.persist && xodus::installed().is_some();
         for shop in Shop::ALL {
-            match shop.store() {
-                Some(store) => {
-                    if !self.store_signed_out(store) {
-                        listed.insert(shop);
-                    }
-                    if self.store_signed_in(store) {
-                        connected.push(shop);
-                    }
+            let (listed_here, connected_here) = match shop {
+                Shop::Xbox => (xbox, xbox),
+                Shop::Steam => (steam, steam),
+                engine => {
+                    let store = engine.store().expect("a shop with an engine");
+                    (!self.store_signed_out(store), self.store_signed_in(store))
                 }
-                None if steam => {
-                    listed.insert(shop);
-                    connected.push(shop);
-                }
-                None => {}
+            };
+            if listed_here {
+                listed.insert(shop);
+            }
+            if connected_here {
+                connected.push(shop);
             }
         }
         let outcome = self
@@ -365,6 +368,19 @@ impl Glue {
             return;
         }
         let weak = self.window.clone();
+        if shop == Shop::Xbox {
+            self.show_store();
+            std::thread::spawn(move || {
+                let result = xodus::owned().map_err(|err| format!("{err:#}"));
+                let _ = weak.upgrade_in_event_loop(move |_| {
+                    with_glue(|glue| match result {
+                        Ok(games) => glue.store_fetched(Shop::Xbox, Ok(games), &[]),
+                        Err(err) => glue.store_fetched(Shop::Xbox, Err(err), &[]),
+                    });
+                });
+            });
+            return;
+        }
         if let Some(store) = shop.store() {
             self.show_store();
             std::thread::spawn(move || {

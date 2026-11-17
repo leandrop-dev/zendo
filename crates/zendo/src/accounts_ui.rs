@@ -788,7 +788,8 @@ impl Glue {
         }
         data.set_focus_code(self.accounts.focus.get());
         data.set_paste_code(self.accounts.paste.get());
-        // The stores signed in, and Steam once it has a session.
+        // The stores signed in, and Steam once it has a session. Game Pass is
+        // not counted: Nexus Launcher signs in to it, not Zendo.
         let connected = accounts
             .iter()
             .filter(|account| matches!(account, Account::SignedIn(_)))
@@ -801,7 +802,7 @@ impl Glue {
                 t!(
                     "top-bar-signed-in",
                     count = connected,
-                    stores = Shop::ALL.len()
+                    stores = Store::ALL.len() + 1
                 )
             }
             .into(),

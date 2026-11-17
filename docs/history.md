@@ -5738,3 +5738,55 @@ mode 0755, an ELF, in 3.1 s, and its runtime answers `--appimage-version`
 (`effcebc`). Seen on screen (2026-11-17, the
 user): the row, the download, and **Open Greenlight** starting the AppImage.
 Not seen: a console streamed. Not tried: pt-PT.
+
+## Item 60a, the Game Pass list on the Store page (2026-11-17)
+
+The first slice of item 60: the games the account owns in Game Pass, listed in
+Zendo, read from Nexus Launcher's backend. Installing them is 60b.
+
+- **`crates/zendo-core/src/xodus.rs`**: `owned()` asks the launcher's backend
+  for its entitlements (`xodus-cli library --json`, at the `binaryPath` of
+  `xodus-backends/current.json`; the first `{` in its output starts the
+  answer, its diagnostics come first), keeps the `Active` ones, and then asks
+  the Microsoft Store's catalogue for them, 20 ids at a time
+  (`displaycatalog.mp.microsoft.com/v7.0/products?bigIds=…&market=US&languages=en-US&fieldsTemplate=Details`).
+  A product counts as a game when its `ProductBSchema` starts with
+  `ProductGame`; an add-on (`ProductAddOn`) is left out. The title is
+  `ProductTitle` (or `ShortTitle`), with the developer, the publisher and the
+  short description; the art is `Poster` at `w=600` and `SuperHeroArt` (else
+  `TitledHeroArt`) at `w=1920` from `LocalizedProperties[].Images`, whose
+  `Uri` the catalogue gives without a scheme and to which `?w=` is appended
+  (checked: 600x900 and 1920-wide JPEGs). The list goes through
+  `owned::keep`, so it is sorted, deduplicated, cached and given its images by
+  the same path the stores' lists take.
+- **`owned.rs`**: `Shop::Xbox` (five shops now), `store()` `None` (no engine
+  installs it), `source()` `Source::Xbox`, and `key()` written out rather than
+  taken from a `Store`, since two shops now have none.
+- **The Store page** (`store_ui.rs`): Game Pass is "listed and connected" when
+  the launcher is installed (a file check; a window that persists nothing, the
+  tests', looks at no launcher at all), and its list is asked for on the same
+  threads as the stores' (`fetch_owned`, then `store_fetched`). Its chip, its
+  cards, its sort and its search come from the existing code; the cover fetch
+  follows `cover_url`/`hero_url` as for any store.
+- **Accounts' count** now says "n of `Store::ALL.len() + 1`": Game Pass is not
+  one Zendo signs in to, so the launcher's sign-in is not counted there.
+
+Checked (2026-11-17): `cargo test --workspace` green (170 zendo, 307 core, 91
+shell). New: the entitlements' parse (diagnostics before the JSON, a revoked
+entitlement left out), the catalogue's game-and-add-on split, the title
+fallback and the art addresses; a Store-page test (an Xbox list gets its chip,
+its card and its id); and an ignored test that asks the real backend and
+Store. Run against the user's account: 36 entitlements, 22 games (14 add-ons
+left out), each with a publisher and a cover, in 1.9 s, for example
+`xbox:9NJRX71M5X9P Cuphead | Studio MDHR` and `xbox:9PK09BL31FK1 DOOM Eternal
+Standard Edition (PC) | Bethesda Softworks`.
+
+Not seen: the Store page on screen with the Xbox chip (the user's own
+account), the covers downloaded, a game's page from that list, and a refresh.
+Not tried: a signed-out launcher, pt-PT.
+
+Things to know: entitlements are read as the launcher holds them, so a title
+Zendo lists is one the account has; whether it can be installed on this PC is
+`resolve-package`'s answer, which is 60b's. Two editions of one game (DOOM
+Eternal's Battlemode build and standard edition) are two products and so two
+cards, as the Store lists them.

@@ -267,7 +267,7 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
-58c are built; 59 is built; 60 is next.
+58c are built; 59 is built; 60a is built; 60b and 60c are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -418,13 +418,19 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   and extracts a game with `--progress-json` and pause/resume over stdin; the
   `productId` is the Microsoft Store id that option 2's art is keyed by
   (`docs/reference.md`, "Nexus Launcher"). Sliced, to do with the user:
-  **60a** the owned list (a Store-like page or a section of the Store, titles
-  and Store art by `productId`, sizes from `resolve-package`), **60b** install
-  through the queue (a `streaming` job with its progress and Stop, the game
-  then imported as it is today), **60c** uninstall and update if the CLI
-  allows them. Not started; the contracts to confirm first are
-  `resolve-package`'s answer shape and whether `streaming` needs the
-  launcher's runtime installed.
+  **60a built 2026-11-17**, the owned list: `xodus::owned()` reads the
+  backend's entitlements and the Store's catalogue (titles, publishers, short
+  descriptions, `Poster` at `w=600` and `SuperHeroArt` at `w=1920`), keeps the
+  games and leaves the add-ons out, and the Store page lists them under an
+  Xbox chip with the stores' cards, sorts, search and cover fetch. Checked
+  against the user's account: 22 games of 36 entitlements, in 1.9 s; not seen
+  on screen.
+  **60b** install through the queue (a `streaming` job with its progress and
+  Stop, the game then imported as it is today), with sizes from
+  `resolve-package` on the game's page; **60c** uninstall and update if the
+  CLI allows them. Contracts still to confirm for 60b: whether `streaming`
+  needs the launcher's runtime installed, and how the game's folder and
+  executable come out of it.
 
 EA and Ubisoft are not listed: neither has a Linux launcher, and those games
 arrive through Steam or Heroic, which Zendo already imports. Emulation and

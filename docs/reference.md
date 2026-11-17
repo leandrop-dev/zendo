@@ -401,11 +401,20 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   `achievements`, `game-activity`, `run` and `social` read or start other
   things. The `productId` is the Microsoft Store id (the art query's
   `bigIds`).
-- Artwork: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
-  <storeId>&market=US&languages=en-US`, keeping `Poster` images at `w=600` and
-  `SuperHeroArt` (else `TitledHeroArt`) at `w=1920` from
-  `store-images.s-microsoft.com`. The Xbox title id is `<TitleId>` in the
-  game's `MicrosoftGame.config`.
+- Artwork and product facts: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
+  <storeId>&market=US&languages=en-US&fieldsTemplate=Details`, checked
+  2026-11-17: one query took 36 ids (1.8 MB), and its answer is a `Products`
+  array. `ProductBSchema` says what a product is (`ProductGame;1`,
+  `ProductAddOn;3`); the title, developer, publisher and descriptions are
+  `LocalizedProperties[0]`'s `ProductTitle`/`ShortTitle`, `DeveloperName`,
+  `PublisherName`, `ShortDescription`/`ProductDescription`; the images are
+  `LocalizedProperties[0].Images[]` with an `ImagePurpose` (`Poster`,
+  `SuperHeroArt`, `TitledHeroArt`, `BoxArt`, …) and a `Uri` **without a
+  scheme** (`//store-images.s-microsoft.com/image/…`), to which `?w=600` or
+  `?w=1920` is appended (checked: 600x900 and 1920x2880 JPEGs). The Xbox
+  title id is `<TitleId>` in the game's `MicrosoftGame.config`. The account's
+  entitlements come from the backend's `library --json`, whose diagnostics
+  precede the JSON.
 - It is a separate GUI with a command-line backend, not an engine with its own
   licence or store API: Zendo reads the games it installed and starts them
   through its script, as it does for Steam and Heroic, and can go further on
