@@ -518,3 +518,37 @@ for when it comes back; no code reads them today.
   candidate to depend on; Greenlight is the open one.
 - Cloud gaming through Xodus/Nexus is the same mechanism as the Microsoft
   Store source above (item 58), not a separate one.
+
+## Releases (checked 2026-11-17)
+
+- A tag `vX.Y.Z` (pre-release `vX.Y.Z-rc.N`) runs
+  `.github/workflows/release.yml`. Its assets, from the dry run
+  `v1.0.0-rc.1`: `zendo-1.0.0-rc.1.tar.gz`, `SHA256SUMS`,
+  `zendo-1.0.0_rc.1-1-x86_64.pkg.tar.zst` and
+  `zendo-1.0.0.rc.1-1.fc45.src.rpm`.
+- **Arch**: `https://leandrop-dev.github.io/zendo/x86_64/` holds
+  `zendo.db` (and `.db.tar.gz`, `.files*`) plus the packages; `repo-add`
+  writes the database in the `arch` job and `gh-pages` keeps old files
+  (`keep_files: true`). `pacman -Sy` reads the database and names
+  `zendo-1.0.0_rc.1-1-x86_64.pkg.tar.zst`; the package and database answered
+  200. GitHub Pages was enabled with
+  `gh api -X POST repos/leandrop-dev/zendo/pages -f source[branch]=gh-pages
+  -f source[path]=/`, after the first push created the branch; the first
+  deployment took about a minute. The repository is unsigned, so the README
+  asks for `SigLevel = Optional TrustAll`.
+- **Version mapping**: Arch `pkgver` and RPM `Version` cannot contain `-`.
+  The package `version` in the workflow replaces `-` with `_` for Arch
+  (`1.0.0_rc.1`) and the SRPM script replaces it with `~` for RPM
+  (`1.0.0~rc.1`); the tag itself stays in `_tag`/`tagversion` for the source
+  URL and the extracted folder. The SRPM's spec must carry those values
+  expanded (`make-srpm.sh` writes them in): an SRPM keeps the spec
+  unexpanded and COPR rebuilds it without the `--define`s.
+- **Fedora**: `copr-cli --config` with `[copr-cli] login`, `username`, `token`
+  and `copr_url = https://copr.fedorainfracloud.org`, from the
+  `COPR_LOGIN`/`COPR_API_TOKEN` repository secrets. The dry run's build
+  11342037 succeeded for `fedora-45-x86_64` and `fedora-rawhide-x86_64`; the
+  result repo is
+  `https://download.copr.fedorainfracloud.org/results/leandrop/zendo/`.
+- **Checks**: `ci.yml` runs fmt, clippy (`-D warnings`) and the tests; clippy
+  1.100's 87 warnings are cleared. `zendo-git` and `zendo` conflict; both own
+  `/usr/bin/zendo`.

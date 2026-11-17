@@ -511,32 +511,28 @@ investigated them first.
 
 Emulation and RetroAchievements stay on hold (item 37).
 
-## Release packaging (deferred 2026-11-16; a proper system to design)
+## Release packaging (built 2026-11-17)
 
-The user wants a stable copy to use now, and later one place for the family
-to install and receive updates. On 2026-11-16 they chose to leave releases
-for now: once more work is out, design a proper release system in GitHub
-(actions that check and build, releases, and the packages that follow them),
-with omakade as inspiration (its `.github/workflows` and `RELEASING.md`).
-What is there now, and what a system must keep:
+- **63, the release system** [built 2026-11-17]. `.github/workflows/ci.yml`
+  runs fmt, clippy with `-D warnings` and the workspace tests on every push
+  and pull request. `.github/workflows/release.yml`, on a `v*` tag, builds
+  the Arch package `zendo` from the tag tarball, `repo-add`s it into a
+  pacman repository pushed to `gh-pages`
+  (`https://leandrop-dev.github.io/zendo/x86_64`), makes the tag's SRPM with
+  a vendored crate tree and builds it on COPR, then publishes a GitHub
+  Release with the source tarball, `SHA256SUMS` and both packages. The
+  dry run was `v1.0.0-rc.1` (release 2026-11-17, COPR build 11342037); the
+  Arch repository and the COPR repository both serve the package. ADR 0003.
+  Not done: signed Arch repository (it is `SigLevel = Optional TrustAll`),
+  AUR package (registration closed; `packaging/aur/` is to be added when it
+  reopens), and a cleanup policy for old packages on Pages.
+- **64, the first stable release** [built 2026-11-17]: `v1.0.0`.
 
-- `v0.1.0` is an annotated pre-release tag at `af26913` (2026-11-16), with a
-  GitHub prerelease. `main` has moved well past it (55a to 57b); the tag is
-  not moved, since a tag must mean one commit.
-- The Arch `zendo-git` PKGBUILD builds `main`; the Fedora spec and
-  `.copr/Makefile` write a snapshot version (`0.1.0^<date>git<short>`) from
-  whatever ref they get. A tag-based release version needs
-  `git describe --exact-match` in the spec.
-- A release package `zendo` beside `zendo-git` (the tag's tarball with a
-  checksum) and an AUR repository serving both were proposed, not built.
-- The AUR has no `copr-cli`: publishing is a `git push` to a per-package
-  repository on `aur.archlinux.org`, after an AUR account and an SSH key;
-  `devtools`' `pkgctl`, `aurpublish` and `namcap` help.
+### What was there before
 
-To investigate when the system is designed: GitHub Actions for the tests,
-clippy, fmt and the two packages; how omakade's `release.yml` builds and
-publishes; whether COPR and AUR are fed from the same tag; and the version
-scheme (`0.x.y-pre` while pre-release).
+- `v0.1.0` is an annotated pre-release tag at `af26913` (2026-11-16).
+- The Arch `zendo-git` PKGBUILD builds `main`; the Fedora snapshot spec is
+  still in `packaging/fedora/zendo.spec` for that path.
 
 ## On hold
 
@@ -603,5 +599,8 @@ history.md and the commits.
 | 47 | `zendo-slint` skeleton: window, themes, `Tr`, top bar, tray with size kept, `--game-mode`; the command line moved to `zendo-shell` | 2026-11-14 |
 | 48 | The Library in Slint: grid, chips, search, sort, marks, bulk actions, keyboard and pad cursor, cover downloads, file watch; the grid's logic in `zendo_core::browse` | 2026-11-14 |
 | 49 to 54 | The rest of the Slint window (game page, Settings, Accounts, Store, Downloads, mods, Stats, Game Mode), and the cut-over: `zendo-slint` became `zendo`, the Iced crate deleted, licence and packaging updated | 2026-11-14 to 2026-11-15 |
+| 62 | Game Pass installs, registration with Nexus Launcher and uninstall | 2026-11-17 |
+| 63 | CI (fmt, clippy, tests) and the tag release: GitHub Release, Arch pacman repository on Pages, COPR | 2026-11-17 |
+| 64 | First stable release `v1.0.0` | 2026-11-17 |
 
 Item 37 (emulation) is on hold above.

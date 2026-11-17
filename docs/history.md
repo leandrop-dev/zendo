@@ -6089,3 +6089,53 @@ under the launcher itself, so those titles do not play here yet. Not tried:
 pt-PT, a launcher update (the record schema may move), a launcher running on
 a non-default profile (the lock is read from the default one), DLC, and the
 MangoHud/gamescope wrappers.
+
+## Items 63 and 64, the release system and 1.0.0 (2026-11-17)
+
+One `v*` tag now builds and publishes everything, with CI on every push
+(ADR 0003).
+
+- **CI**: `.github/workflows/ci.yml` runs `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo test --workspace` on Ubuntu, with the fontconfig, xkbcommon, Wayland,
+  X11, GL, udev, WebKitGTK 4.1 and libsoup 3 headers installed.
+  `rust-toolchain.toml` pins stable with rustfmt and clippy. The clippy gate
+  needed a cleanup first: 87 warnings (74 `map_unwrap_or`, 3 `double_must_use`
+  on `ExitCode`, 3 `assert_is_empty`, 1 `doc_markdown`) went in one
+  mechanical commit.
+- **Release**: `.github/workflows/release.yml` on tags `v*`. `arch` builds in
+  an `archlinux:latest` container as an unprivileged user, with the package's
+  dependencies installed and `makepkg --nocheck --nodeps`, then `repo-add`s
+  it into `x86_64/` and publishes that to `gh-pages` with
+  `peaceiris/actions-gh-pages` (`keep_files`). `fedora` makes the tag's SRPM
+  (`packaging/fedora/make-srpm.sh` vendors the crates) and runs
+  `copr-cli build` with the `COPR_LOGIN` and `COPR_API_TOKEN` secrets.
+  `release` then publishes a GitHub Release with the source tarball,
+  `SHA256SUMS`, the Arch package and the SRPM.
+- **Packaging**: `packaging/arch/zendo/PKGBUILD` is the release package
+  (`pkgver` from the mapped tag, `_tag` for the tarball URL, a `prepare()`
+  that fetches the crates, `!debug`); it conflicts with `zendo-git`.
+  `packaging/fedora/zendo-release.spec` is the tag spec: Arch cannot put `-`
+  in `pkgver` and RPM cannot in `Version`, so `v1.0.0-rc.1` maps to
+  `1.0.0_rc.1` and `1.0.0~rc.1`, with `tagversion` keeping the tarball's
+  name. `make-srpm.sh` writes those macros into a copy of the spec, because
+  an SRPM keeps the spec unexpanded and COPR rebuilds it without our
+  `--define`s.
+- **The dry run**: `v1.0.0-rc.1` at `dd788bc`, after three failures fixed in
+  the workflow (an Arch `pkgver` hyphen, a missing `prepare()` fetch, and the
+  spec defaults losing the version). It published release
+  `v1.0.0-rc.1` (prerelease), COPR build 11342037 for Fedora 45 and Rawhide,
+  and the Pages repository; `zendo.db` names
+  `zendo-1.0.0_rc.1-1-x86_64.pkg.tar.zst` and both the package and the COPR
+  repodata answer 200. Pages was enabled with
+  `gh api repos/leandrop-dev/zendo/pages` after the first `gh-pages` push.
+- **1.0.0**: the version in `crates/zendo/Cargo.toml` moved to `1.0.0` and
+  `v1.0.0` is the first stable tag.
+
+Checked: the CI run on `fc6f71d` green; the dry-run release green for
+`arch`, `fedora` and `release`; `zendo.db` downloaded and its `desc` read;
+`https://leandrop-dev.github.io/zendo/x86_64/zendo-1.0.0_rc.1-1-x86_64.pkg.tar.zst`
+and the COPR repodata both 200. Not done: a signed Arch repository (the README
+says `SigLevel = Optional TrustAll`), an AUR package (registration closed),
+a Pages cleanup policy, and a real install from the repository on a second
+machine.

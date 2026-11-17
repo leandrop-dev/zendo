@@ -63,6 +63,10 @@ record write is ADR 0002. Updates stay with the launcher (item 60c).
 - Tray: hiding closes to the tray and the tray brings the window back.
 - The parity checklist that gated the cut-over is `docs/parity-checklist.md`
   (signed off by the user 2026-11-15).
+- Releases are built from a `v*` tag by `.github/workflows/release.yml`: a
+  GitHub Release (source tarball, checksums, Arch package, Fedora SRPM), a
+  pacman repository on GitHub Pages, and a COPR build (ADR 0003). The first
+  stable tag is `v1.0.0`.
 - The Fedora RPM builds on COPR `leandrop/zendo`; the spec's licence is now
   `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
   (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
@@ -73,11 +77,9 @@ record write is ADR 0002. Updates stay with the launcher (item 60c).
 
 ## Next
 
-Installing Zendo on the user's machine from the Arch PKGBUILD
-(`makepkg -si`), then whatever the user chooses from `docs/backlog.md` (what
-is on hold is there). For the family: a release tag, an AUR release package
-and a COPR build from the tag, so both distros update from the same release
-(`docs/backlog.md`).
+Installing the 1.0.0 packages from the new repositories on the family's
+machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
+the user chooses from `docs/backlog.md` (what is on hold is there).
 
 ## Direction [firm]
 

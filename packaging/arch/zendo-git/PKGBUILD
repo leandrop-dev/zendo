@@ -43,7 +43,7 @@ provides=("$_pkgname")
 conflicts=("$_pkgname")
 # makepkg's LTO turns ring's C code into GCC LTO objects, which Rust's
 # linker cannot read; Rust's own optimisation is unaffected.
-options=('!lto')
+options=('!lto' '!debug')
 source=("$_pkgname::git+$url.git")
 sha256sums=('SKIP')
 

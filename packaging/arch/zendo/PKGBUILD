@@ -45,7 +45,7 @@ provides=('zendo-git')
 conflicts=('zendo-git')
 # makepkg's LTO turns ring's C code into GCC LTO objects, which Rust's
 # linker cannot read; Rust's own optimisation is unaffected.
-options=('!lto')
+options=('!lto' '!debug')
 source=("$pkgname-$_tag.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
 sha256sums=('SKIP')
 
