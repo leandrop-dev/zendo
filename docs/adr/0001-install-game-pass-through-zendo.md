@@ -1,7 +1,7 @@
 # 0001. Install Game Pass games through Zendo
 
 Date: 2026-11-17
-Status: Accepted
+Status: Superseded by [0002](0002-register-game-pass-with-nexus-launcher.md)
 
 ## Context
 
