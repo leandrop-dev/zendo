@@ -523,9 +523,44 @@ Emulation and RetroAchievements stay on hold (item 37).
   Release with the source tarball, `SHA256SUMS` and both packages. The
   dry run was `v1.0.0-rc.1` (release 2026-11-17, COPR build 11342037); the
   Arch repository and the COPR repository both serve the package. ADR 0003.
-  Not done: signed Arch repository (it is `SigLevel = Optional TrustAll`),
-  AUR package (registration closed; `packaging/aur/` is to be added when it
-  reopens), and a cleanup policy for old packages on Pages.
+  Not done: signing the Arch repository (item 65), a cleanup policy for old
+  packages on Pages (item 66), and the AUR package (on hold by the user on
+  2026-11-17 while the Pages repository works; registration is closed too).
+- **65, sign the Arch repository** [tentative]. Currently unsigned with
+  `SigLevel = Optional TrustAll`, so anything able to write the `gh-pages`
+  branch can publish a package every machine installs. Steps, checked
+  against `repo-add --help`, `makepkg --help` and `pacman-key --help` on
+  2026-11-17:
+  - A dedicated key (`zendo-repo@…`, expiry 2 to 3 years, not the personal
+    key). Public key distributed; private key in a repository secret, with a
+    passphrase secret if it has one (`gpg --batch --pinentry-mode loopback
+    --passphrase`).
+  - Each release: `makepkg --sign` (or `gpg --detach-sign`) for
+    `zendo-<version>-1-x86_64.pkg.tar.zst.sig`, and
+    `repo-add --sign --key <fingerprint>` for the database and `.files`
+    signatures. The `arch` job imports the key into a temporary `GNUPGHOME`
+    and publishes the `.sig` files beside the existing assets.
+  - Trust on a user's machine, one time: download the public key and
+    `pacman-key --add zendo.gpg` + `pacman-key --lsign-key <fingerprint>`,
+    then `SigLevel = Required DatabaseOptional`; or ship a `zendo-keyring`
+    package (key under `/usr/share/pacman/keyrings/`, install script running
+    `pacman-key --populate zendo`), installed once from the release by
+    fingerprint. The keyring package is the bootstrap that must be trusted
+    out of band.
+  - Risks to plan for: a lost or expired key needs a new keyring package
+    signed with the old key; a leaked key needs revocation and a keyring
+    update; signing protects the files on Pages, not a rewrite of both the
+    keyring package and the repository.
+  - README changes: fingerprint, the one-time commands or the keyring
+    package, and `Required DatabaseOptional` in place of `Optional TrustAll`.
+- **66, clean up old packages on GitHub Pages** [tentative]. `gh-pages` keeps
+  every release (`keep_files: true`), about 18 MB each (`zendo-1.0.0` package
+  ~18 MB; the RC's debug package went with `!debug`). Pages has a 1 GB site
+  limit, so roughly 50 releases. A workflow step after `repo-add` could keep
+  the newest two or three versions (delete packages whose names the database
+  no longer lists, keep their `.sig` files in step), and say what was
+  removed; users pinned to an older version would lose it, so state that in
+  the release notes. Also watch the site size and report it in the job.
 - **64, the first stable release** [built 2026-11-17]: `v1.0.0`.
 
 ### What was there before
