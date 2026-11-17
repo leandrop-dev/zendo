@@ -354,6 +354,61 @@ fn clear_leftovers(cache: &Path, root: &Path) {
     }
 }
 
+/// Zendo's folder for the programs it brings that are not engines: the
+/// launchers and streamers it opens (Nexus Launcher, Greenlight).
+pub(crate) fn launchers_dir() -> Option<PathBuf> {
+    paths::data_home().map(|dir| dir.join("zendo/launchers"))
+}
+
+/// Downloads one file of a release into [`launchers_dir`] under `name`,
+/// executable, after checking it against the digest GitHub gives it;
+/// `stop` set ends the download early, and the file there before stays.
+///
+/// # Errors
+///
+/// When the download fails or is stopped, the checksum does not match, or
+/// the file cannot be put in place.
+pub fn bring(
+    release: &Release,
+    name: &str,
+    stop: &AtomicBool,
+    progress: &mut dyn FnMut(u64, u64),
+) -> anyhow::Result<PathBuf> {
+    let root = launchers_dir().context("no home folder for Zendo's programs")?;
+    let target = root.join(name);
+    let cache = paths::cache_home()
+        .context("no cache folder to download into")?
+        .join("zendo/launchers");
+    fs::create_dir_all(&cache).with_context(|| format!("could not make {}", cache.display()))?;
+    fs::create_dir_all(&root).with_context(|| format!("could not make {}", root.display()))?;
+    let file = cache.join(&release.asset.name);
+    let partial = root.join(format!(".{name}.partial"));
+    let _ = fs::remove_file(&file);
+    let result = (|| {
+        let size = Some(release.asset.size).filter(|&size| size > 0);
+        crate::http::download(
+            &release.asset.url,
+            &file,
+            &release.asset.name,
+            size,
+            stop,
+            &mut |done, total| progress(done, total.unwrap_or(done)),
+        )?;
+        check_sha256(&file, &release.asset.sha256)?;
+        fs::copy(&file, &partial)
+            .with_context(|| format!("could not write {}", partial.display()))?;
+        fs::set_permissions(&partial, fs::Permissions::from_mode(0o755))
+            .context("could not make it run")?;
+        fs::rename(&partial, &target)
+            .with_context(|| format!("could not put {} in place", target.display()))
+    })();
+    let _ = fs::remove_file(&file);
+    if result.is_err() {
+        let _ = fs::remove_file(&partial);
+    }
+    result.map(|()| target)
+}
+
 /// Compares a file with its SHA-256, through `sha256sum`.
 pub(crate) fn check_sha256(file: &Path, wanted: &str) -> anyhow::Result<()> {
     let output = Command::new("sha256sum")

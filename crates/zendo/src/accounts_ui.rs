@@ -730,8 +730,8 @@ impl Glue {
             "XBOX",
             t!("xbox-title"),
             t!("xbox-about"),
-            t!("xbox-installed"),
-            t!("xbox-not-installed"),
+            t!("launcher-installed"),
+            t!("launcher-not-installed"),
             t!("xbox-sign-in"),
             t!("xbox-open"),
         )
@@ -745,8 +745,8 @@ impl Glue {
             "BATTLE.NET",
             t!("battlenet-title"),
             t!("battlenet-about"),
-            t!("battlenet-installed"),
-            t!("battlenet-not-installed"),
+            t!("launcher-installed"),
+            t!("launcher-not-installed"),
             t!("battlenet-sign-in"),
             t!("battlenet-open"),
         )

@@ -5661,3 +5661,80 @@ Things to know: a prefix at `<any>/Prefixes/Battle.net` is read as Zendo's
 own and so runs on Proton; a Battle.net prefix made by hand elsewhere keeps
 Wine unless it carries a Proton marker. `umu-run` or a Proton missing now
 gives its own error at Play or Open ("umu-launcher is needed…").
+
+## Item 59, the Xbox Series S's row (2026-11-17)
+
+Remote play is a streaming client, not a library source: Greenlight streams a
+console's own screen and lists no games, so the item is the thin entry that
+opens it.
+
+- **`zendo-core/src/greenlight.rs`**: `installed()` finds the Flatpak's export
+  desktop file
+  (`$XDG_DATA_HOME/flatpak/exports/share/applications/io.github.unknownskl.greenlight.desktop`,
+  else the system's under `/var/lib/flatpak`), or a `greenlight`/`Greenlight`
+  on `PATH`; `open()` runs `flatpak run io.github.unknownskl.greenlight` (or
+  the program), its output in `$XDG_STATE_HOME/zendo/logs/greenlight.log`, and
+  hands the child back; `PAGE` is its Flathub page.
+- **Settings → Launchers** has a third row (index 2): **Xbox Series S**, Not
+  installed with **Get on Flathub** (which opens its page, since Zendo installs
+  no other program's Flatpak) or Installed with **Open Greenlight**, and the
+  program's path. When Greenlight's window closes the row is looked at again.
+- **No `--connect`**: Greenlight's `--connect=<console id>` starts a stream
+  once signed in, but the id is a console's own 16-hex id, which Zendo does not
+  know (its README: "For console use `F000000000000000` format"), so the window
+  opens with its own console list. Recorded in `docs/reference.md`. (The
+  AppImage this entry's row first lacked is the next section.)
+- **Words**: `launcher-not-installed` and `launcher-installed` are now shared by
+  the three rows and both Accounts cards, the four per-launcher copies gone,
+  and new `series-*` words in both languages (their count changed with the
+  AppImage, below).
+
+Checked: `cargo test --workspace` green (170 zendo, 303 core, 91 shell): the
+third row's words, its action and its empty note, and `exported()` over a
+temporary Flatpak export folder. Clippy reports nothing in the new code. Not
+seen: the row on screen, and Greenlight itself, which is not installed on this
+machine (no export desktop file in either place, no `greenlight` on `PATH`), so
+neither Open Greenlight nor Get on Flathub was pressed and no console was
+streamed. Not tried: pt-PT.
+
+## Item 59 again: the AppImage, and the embedding question (2026-11-17)
+
+The user had not tried Greenlight yet and asked two things: why the Flatpak
+rather than the AppImage its release carries, and whether the streaming could
+live inside Zendo instead of an external program.
+
+- **The AppImage** is now what Zendo brings. Item 59 first only found a
+  Flatpak or a program on `PATH`, because the reference had recorded the
+  Flathub route. `greenlight::release()`/`install()` take
+  `Greenlight-<version>.AppImage` from the latest GitHub release (v2.4.2,
+  130720574 bytes, digest `sha256:1ceb56c4…`) and put it in Zendo's launchers
+  folder, executable, with the download's bar and Stop in the row. The
+  placement moved out of `xodus` into `engines::bring` (and
+  `engines::launchers_dir`), so Nexus Launcher and Greenlight share it. A
+  Flatpak or a `greenlight` on `PATH` still works: `installed()` prefers
+  Zendo's AppImage, then the Flatpak's export desktop file, then `PATH`.
+- **Embedding** is recorded on hold in `docs/backlog.md` with what it would
+  take: the Xbox sign-in, WebRTC, video and audio decoding, input over the data
+  channel, and a video surface in Slint. Greenlight's streaming half is MIT
+  (`xbox-xcloud-player`, TypeScript), so ideas and protocol knowledge are
+  usable; a Rust port is a phase of its own, and the only part of Zendo that
+  would need a GPU video path and could not be checked offline.
+
+The user tried it on screen the same day and got "Greenlight is not
+installed: get it on Flathub" from **Open Greenlight**, with the AppImage
+already in place. A replacement had silently missed: `open()` still asked the
+Flatpak first and the `AppImage` never, while `installed()` (and so the row)
+had found it. **Fixed**: `open()` asks Zendo's `AppImage`, then the Flatpak,
+then `PATH`, through a small `opener()` that takes the three answers, and a
+test pins the order (`opens_the_appimage_before_a_flatpak`) so an AppImage
+never loses to a Flatpak again.
+
+Checked: `cargo test --workspace` green (170 zendo, 305 core, 91 shell); two
+new ignored tests ask GitHub for the real release and, in a scratch home,
+download it and check it. `cargo test -p zendo-core greenlight::online --
+--ignored` printed v2.4.2, `Greenlight-2.4.2.AppImage`, 130720574 bytes and the
+digest; the install put it at `$XDG_DATA_HOME/zendo/launchers/Greenlight.AppImage`,
+mode 0755, an ELF, in 3.1 s, and its runtime answers `--appimage-version`
+(`effcebc`). Seen on screen (2026-11-17, the
+user): the row, the download, and **Open Greenlight** starting the AppImage.
+Not seen: a console streamed. Not tried: pt-PT.

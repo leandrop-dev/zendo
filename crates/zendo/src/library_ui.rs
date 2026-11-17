@@ -1701,15 +1701,27 @@ mod tests {
         settings.invoke_group_chosen(3);
         assert_eq!(settings.get_group(), 3);
         let launchers = settings.get_launchers();
-        assert_eq!(launchers.row_count(), 2);
+        assert_eq!(
+            launchers.row_count(),
+            3,
+            "Battle.net, Nexus and the Series S"
+        );
         let row = launchers.row_data(0).unwrap();
         assert_eq!(row.title.as_str(), "Battle.net");
-        assert_eq!(row.status.as_str(), t!("battlenet-not-installed"));
+        assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(row.action.as_str(), t!("battlenet-install"));
         let row = launchers.row_data(1).unwrap();
         assert_eq!(row.title.as_str(), t!("xbox-title"));
-        assert_eq!(row.status.as_str(), t!("xbox-not-installed"));
+        assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(row.action.as_str(), t!("xbox-install"));
+        let row = launchers.row_data(2).unwrap();
+        assert_eq!(row.title.as_str(), t!("series-title"));
+        assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
+        assert_eq!(
+            row.action.as_str(),
+            t!("series-download"),
+            "Zendo brings its AppImage"
+        );
         // The groups, and the files the last one lists.
         settings.invoke_group_chosen(6);
         assert_eq!(settings.get_group(), 6);
@@ -1723,13 +1735,13 @@ mod tests {
         window.invoke_page_requested(Page::Accounts);
         let data = window.global::<AccountsData>();
         let card = data.get_battlenet();
-        assert_eq!(card.status.as_str(), t!("battlenet-not-installed"));
+        assert_eq!(card.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(card.action.as_str(), t!("battlenet-open"));
         assert!(!card.action_on, "nothing to open when it is not installed");
         assert_eq!(card.badge.as_str(), "BATTLE.NET");
         assert_eq!(card.title.as_str(), t!("battlenet-title"));
         let card = data.get_xbox();
-        assert_eq!(card.status.as_str(), t!("xbox-not-installed"));
+        assert_eq!(card.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(card.action.as_str(), t!("xbox-open"));
         assert!(!card.action_on, "nothing to open when it is not installed");
         assert_eq!(card.badge.as_str(), "XBOX");

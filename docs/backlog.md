@@ -267,7 +267,7 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
-58c are built; 59 and 60 are next.
+58c are built; 59 is built; 60 is next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -391,13 +391,22 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
     drawn three times, fixed (each row keeps its own note now); not seen: the
     rows and the card on screen after that, the bar, and the launcher's own
     window with its runtime and sign-in.
-- **59, Xbox Series S** [firm, 2026-11-16]. Cloud gaming is 58. Remote play is
-  a streaming client, not a library source: **Greenlight** (MIT, Flathub
-  `io.github.unknownskl.greenlight`) started with
-  `--connect=F000000000000000` streams the console's own screen and lists no
-  games. The slice is a thin entry (Settings → Sources, with the downloads)
-  that opens Greenlight on the console. **xbPlay is Flathub-archived and
-  end-of-life, with a copyright dispute, so it is not used.**
+- **59 built 2026-11-17, Xbox Series S**. Cloud gaming is 58. Remote play is a
+  streaming client, not a library source: **Greenlight** (MIT,
+  `unknownskl/greenlight`) streams the console's own screen and lists no
+  games. The slice, as recorded, is the thin entry that opens it, and Zendo
+  **brings its AppImage** (the user chose it over the Flatpak): 
+  `zendo-core/src/greenlight.rs` takes `Greenlight-<version>.AppImage` from the
+  latest GitHub release, checks its digest and puts it in Zendo's launchers
+  folder (`engines::bring`, the machinery Nexus Launcher shares); a
+  Flatpak or a `greenlight` on `PATH` is used just as well. Settings →
+  Launchers has the row: Download Greenlight (bar and Stop) → Open Greenlight.
+  No `--connect`: the console id is Greenlight's to know (its README says a
+  console's is a 16-hex id), so its window carries the list. **xbPlay is
+  Flathub-archived and end-of-life, with a copyright dispute, so it is not
+  used.** Checked in a scratch home with the real v2.4.2 AppImage (digest,
+  0755, `--appimage-version`); not seen: the row on screen, Greenlight's own
+  window and a console streamed.
 
 - **60, Game Pass from Zendo** [firm, 2026-11-17]. The user's question after
   58b: can Zendo show the Game Pass games on offer and install them, rather
@@ -467,6 +476,20 @@ All decided by the user on 2026-11-13.
   chosen (ideas only, it is GPL): RetroArch playlists as a source, a scan of
   the EmuDeck `~/Emulation/roms/<system>` layout, and covers from Libretro's
   thumbnails.
+- Xbox streaming inside Zendo (asked 2026-11-17, after item 59): a stream of
+  the console's own screen, in Zendo's window, instead of Greenlight. It is
+  possible in principle, since Greenlight's whole streaming half is the MIT
+  `xbox-xcloud-player` (TypeScript, on `xbox-webapi`): Xbox Live sign-in, then
+  WebRTC with the console (or xCloud), H.264/HEVC video, Opus audio, and the
+  controller's input over the same channel. In Rust that is four pieces Zendo
+  has none of: the Xbox auth chain (device-code sign-in is already understood
+  in `zendo-shell`'s sign-in window, the rest would be new), a WebRTC stack
+  (`webrtc-rs`), a video decoder and an audio sink (gstreamer or ffmpeg +
+  cpal), and a way to put decoded frames on a Slint surface at 1080p60. It is
+  its own project, not a slice, and it would also be the one thing in Zendo
+  that needs a GPU video path and a network protocol Zendo cannot test
+  offline. On hold; revisit if `xbox-xcloud-player` gains a Rust binding or if
+  the user wants to spend a phase on it.
 - Recompiled games (N64 recomps and the like) and their mods (was 21), with
   ideas from Quiver Launcher (checked 2026-11-07: it installs apps from
   GitHub and GitLab releases with community catalogs; Business Source

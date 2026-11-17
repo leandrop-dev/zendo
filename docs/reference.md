@@ -414,13 +414,24 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
 
 ### Xbox Series S (streaming)
 
-- **Greenlight** (`unknownskl/greenlight`, MIT, TypeScript): an open client for
-  xCloud *and* Xbox home streaming, on Flathub as
-  `io.github.unknownskl.greenlight` and as GitHub AppImages. It starts with
-  `--fullscreen` and `--connect=<F000000000000000>` for a console, or
-  `--connect=xcloud_<title>` for a cloud title. It streams the console's own
-  screen; it does not expose the console's installed games as a list, so it is
-  a streaming client, not a library source.
+- **Greenlight** (`unknownskl/greenlight`, MIT, TypeScript; the README read
+  here is on the default branch `main-v2`, v2.4.2, 2026-11-17; `master` is the
+  v1 line): an open client for xCloud *and* Xbox home streaming, on Flathub as
+  `io.github.unknownskl.greenlight`, and as GitHub releases holding
+  `Greenlight-2.4.2.AppImage` (130720574 bytes, digest
+  `sha256:1ceb56c4b3b348480565f784083e3a4222ad782dd9cb9a0aa8934df070331777`),
+  a `.deb`, a `.flatpak`, a Windows `.exe`/`.zip` and a macOS `.dmg`, each with
+  a digest; the AppImage's runtime answers `--appimage-version` on CachyOS. It
+  is an Electron wrapper around `xbox-xcloud-player` (TypeScript). Its
+  README's
+  optional arguments, checked 2026-11-17: `--fullscreen`, and
+  `--connect=<value>`, which "will start stream once the user is
+  authenticated", "For console use `F000000000000000` format and for xCloud use
+  `xcloud_<title>`", i.e. a console's own 16-hex id. It streams the console's
+  own screen; it does not expose the console's installed games as a list, so it
+  is a streaming client, not a library source. Zendo opens it without
+  `--connect`: the console id is Greenlight's to know, and its window carries
+  the list (item 59).
 - **xbPlay** was a closed client (Flathub `net.studio08.xbplay`); Flathub
   archived that repository as the app is end-of-life, and the project's public
   history carries a copyright dispute (`XBplay-OSC`, `Xbplay-probe`). Not a

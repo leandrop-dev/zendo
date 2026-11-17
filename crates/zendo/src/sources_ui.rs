@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use slint::{ComponentHandle, ModelRc, VecModel};
-use zendo_core::{battlenet, xodus};
+use zendo_core::{battlenet, greenlight, xodus};
 use zendo_shell::t;
 
 use super::settings::{bar_of, note_tone};
@@ -27,6 +27,7 @@ const BAR_EVERY: Duration = Duration::from_millis(150);
 enum Launcher {
     BattleNet,
     Nexus,
+    Greenlight,
 }
 
 struct Download {
@@ -62,9 +63,18 @@ struct Nexus {
     note: Option<(String, bool)>,
 }
 
+/// What the Xbox Series S's row shows: Greenlight found, and the last word.
+#[derive(Default)]
+struct Series {
+    /// Greenlight's `AppImage`, Flatpak or program.
+    program: Option<PathBuf>,
+    note: Option<(String, bool)>,
+}
+
 pub(super) struct SourcesState {
     battlenet: RefCell<Battlenet>,
     nexus: RefCell<Nexus>,
+    series: RefCell<Series>,
     download: RefCell<Option<Download>>,
     model: Rc<VecModel<SetRow>>,
 }
@@ -74,6 +84,7 @@ impl SourcesState {
         Self {
             battlenet: RefCell::default(),
             nexus: RefCell::default(),
+            series: RefCell::default(),
             download: RefCell::default(),
             model: Rc::new(VecModel::default()),
         }
@@ -112,6 +123,7 @@ impl Glue {
             nexus.appimage = xodus::installed();
             nexus.games = xodus::count();
         }
+        self.sources.series.borrow_mut().program = greenlight::installed();
         self.show_sources();
     }
 
@@ -120,6 +132,7 @@ impl Glue {
         match index {
             0 => self.battlenet_act(),
             1 => self.nexus_act(),
+            2 => self.series_act(),
             _ => {}
         }
     }
@@ -142,15 +155,47 @@ impl Glue {
         }
     }
 
+    /// Greenlight opens, or its `AppImage` is brought first.
+    fn series_act(self: &Rc<Self>) {
+        if self.sources.series.borrow().program.is_none() {
+            self.download(Launcher::Greenlight);
+            return;
+        }
+        if !self.persist {
+            return;
+        }
+        match greenlight::open() {
+            Ok(mut child) => {
+                self.sources.series.borrow_mut().note = Some((t!("series-opened"), true));
+                self.show_settings();
+                let weak = self.window.clone();
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                    let _ = weak.upgrade_in_event_loop(|_| with_glue(Glue::series_done));
+                });
+            }
+            Err(err) => {
+                self.sources.series.borrow_mut().note = Some((format!("{err:#}"), false));
+                self.show_settings();
+            }
+        }
+    }
+
+    /// Greenlight's window closed: look at it again, in case it was
+    /// installed or removed meanwhile.
+    fn series_done(self: &Rc<Self>) {
+        self.sources.series.borrow_mut().program = greenlight::installed();
+        self.show_sources();
+    }
+
     fn open_battlenet(self: &Rc<Self>) {
         if !self.persist {
             return;
         }
-        self.sources.battlenet.borrow_mut().note =
-            Some(match battlenet::open_client() {
-                Ok(()) => (t!("battlenet-opened"), true),
-                Err(err) => (format!("{err:#}"), false),
-            });
+        self.sources.battlenet.borrow_mut().note = Some(match battlenet::open_client() {
+            Ok(()) => (t!("battlenet-opened"), true),
+            Err(err) => (format!("{err:#}"), false),
+        });
         self.show_settings();
     }
 
@@ -230,6 +275,9 @@ impl Glue {
                 Launcher::Nexus => xodus::release()
                     .and_then(|release| xodus::install(&release, &stop, &mut report))
                     .map(drop),
+                Launcher::Greenlight => greenlight::release()
+                    .and_then(|release| greenlight::install(&release, &stop, &mut report))
+                    .map(drop),
             }
             .map_err(|err| format!("{err:#}"));
             let _ = weak.upgrade_in_event_loop(move |_| {
@@ -258,12 +306,17 @@ impl Glue {
                     self.sources.nexus.borrow_mut().appimage = xodus::installed();
                     (t!("xbox-downloaded"), true)
                 }
+                Launcher::Greenlight => {
+                    self.sources.series.borrow_mut().program = greenlight::installed();
+                    (t!("series-downloaded"), true)
+                }
             },
             Err(err) => (err, false),
         };
         match which {
             Launcher::BattleNet => self.sources.battlenet.borrow_mut().note = Some(note),
             Launcher::Nexus => self.sources.nexus.borrow_mut().note = Some(note),
+            Launcher::Greenlight => self.sources.series.borrow_mut().note = Some(note),
         }
         self.show_settings();
     }
@@ -313,11 +366,12 @@ impl Glue {
         };
         let data = window.global::<SettingsData>();
         let downloading = self.sources.download.borrow().is_some();
-        let (battlenet, nexus) = (
+        let (battlenet, nexus, series) = (
             self.battlenet_row(downloading),
             self.nexus_row(downloading),
+            self.series_row(downloading),
         );
-        self.sources.model.set_vec(vec![battlenet, nexus]);
+        self.sources.model.set_vec(vec![battlenet, nexus, series]);
         let bar =
             self.sources
                 .download
@@ -327,6 +381,7 @@ impl Glue {
                     let what = match download.which {
                         Launcher::BattleNet => t!("battlenet-installer"),
                         Launcher::Nexus => t!("xbox-launcher"),
+                        Launcher::Greenlight => t!("series-launcher"),
                     };
                     bar_of(
                         &what,
@@ -354,8 +409,8 @@ impl Glue {
         };
         let (status, status_tone) = match (installed, games) {
             (true, 1..) => (t!("count-games", count = games), 1),
-            (true, _) => (t!("battlenet-installed"), 1),
-            (false, _) => (t!("battlenet-not-installed"), 0),
+            (true, _) => (t!("launcher-installed"), 1),
+            (false, _) => (t!("launcher-not-installed"), 0),
         };
         let path = state
             .installed
@@ -387,8 +442,8 @@ impl Glue {
         };
         let (status, status_tone) = match (installed, games) {
             (true, 1..) => (t!("count-games", count = games), 1),
-            (true, _) => (t!("xbox-installed"), 1),
-            (false, _) => (t!("xbox-not-installed"), 0),
+            (true, _) => (t!("launcher-installed"), 1),
+            (false, _) => (t!("launcher-not-installed"), 0),
         };
         let path = state
             .appimage
@@ -405,6 +460,36 @@ impl Glue {
             action_on,
             status,
             status_tone,
+        )
+    }
+
+    /// The Xbox Series S's row: Greenlight, which streams the console's
+    /// screen, and the way to it when it is not installed.
+    fn series_row(&self, downloading: bool) -> SetRow {
+        let state = self.sources.series.borrow();
+        let installed = state.program.is_some();
+        let (note, tone) = state.note.clone().unwrap_or_default();
+        row(
+            t!("series-title"),
+            t!("series-about"),
+            state
+                .program
+                .as_ref()
+                .map_or_else(String::new, |path| path.display().to_string()),
+            &note.into(),
+            note_tone(tone),
+            if installed {
+                t!("series-open")
+            } else {
+                t!("series-download")
+            },
+            !downloading || installed,
+            if installed {
+                t!("launcher-installed")
+            } else {
+                t!("launcher-not-installed")
+            },
+            i32::from(installed),
         )
     }
 }
@@ -456,12 +541,17 @@ mod tests {
         let (window, glue) = page(1);
         glue.downloaded(Launcher::BattleNet, Ok(()));
         let rows = window.global::<SettingsData>().get_launchers();
-        assert_eq!(rows.row_count(), 2, "Battle.net and Nexus Launcher");
+        assert_eq!(
+            rows.row_count(),
+            3,
+            "Battle.net, Nexus Launcher and the Series S"
+        );
         let row = rows.row_data(0).unwrap();
         assert_eq!(row.note.as_str(), t!("battlenet-downloaded"));
         assert_eq!(row.action.as_str(), t!("battlenet-run-installer"));
         let other = rows.row_data(1).unwrap();
         assert_eq!(other.note.as_str(), "", "another row's line");
         assert_eq!(other.action.as_str(), t!("xbox-install"));
+        assert_eq!(rows.row_data(2).unwrap().note.as_str(), "", "nor the third");
     }
 }

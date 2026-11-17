@@ -9,7 +9,6 @@
 //! updates or uninstalls them (`docs/reference.md`, "Nexus Launcher").
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
@@ -35,10 +34,13 @@ const REPO: &str = "domsvoboda/nexus-launcher";
 /// What the launcher is called in Zendo's words.
 const LABEL: &str = "Nexus Launcher";
 
+/// What the file in Zendo's launchers folder is called.
+const APPIMAGE: &str = "Nexus.AppImage";
+
 /// The `AppImage` Zendo downloaded, once it is in place.
 #[must_use]
 pub fn appimage() -> Option<PathBuf> {
-    paths::data_home().map(|dir| dir.join("zendo/launchers/Nexus.AppImage"))
+    engines::launchers_dir().map(|dir| dir.join(APPIMAGE))
 }
 
 /// The `AppImage`, when it is there.
@@ -94,42 +96,7 @@ pub fn install(
     stop: &AtomicBool,
     progress: &mut dyn FnMut(u64, u64),
 ) -> anyhow::Result<PathBuf> {
-    let target = appimage().context("no home folder for Zendo's programs")?;
-    let root = target
-        .parent()
-        .context("the AppImage has no folder")?
-        .to_path_buf();
-    let cache = paths::cache_home()
-        .context("no cache folder to download into")?
-        .join("zendo/launchers");
-    fs::create_dir_all(&cache).with_context(|| format!("could not make {}", cache.display()))?;
-    fs::create_dir_all(&root).with_context(|| format!("could not make {}", root.display()))?;
-    let file = cache.join(&release.asset.name);
-    let partial = root.join(".Nexus.AppImage.partial");
-    let _ = fs::remove_file(&file);
-    let result = (|| {
-        let size = Some(release.asset.size).filter(|&size| size > 0);
-        crate::http::download(
-            &release.asset.url,
-            &file,
-            LABEL,
-            size,
-            stop,
-            &mut |done, total| progress(done, total.unwrap_or(done)),
-        )?;
-        engines::check_sha256(&file, &release.asset.sha256)?;
-        fs::copy(&file, &partial)
-            .with_context(|| format!("could not write {}", partial.display()))?;
-        fs::set_permissions(&partial, fs::Permissions::from_mode(0o755))
-            .context("could not make the AppImage run")?;
-        fs::rename(&partial, &target)
-            .with_context(|| format!("could not put {} in place", target.display()))
-    })();
-    let _ = fs::remove_file(&file);
-    if result.is_err() {
-        let _ = fs::remove_file(&partial);
-    }
-    result.map(|()| target)
+    engines::bring(release, APPIMAGE, stop, progress)
 }
 
 /// Opens the launcher in its own window: it writes its profile and shortcuts

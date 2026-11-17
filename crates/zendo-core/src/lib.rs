@@ -28,6 +28,7 @@ pub mod gog_changelog;
 mod gog_import;
 pub mod gog_playtime;
 pub mod gog_setup;
+pub mod greenlight;
 mod heroic;
 mod http;
 pub mod info;
