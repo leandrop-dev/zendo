@@ -267,8 +267,7 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
-58c are built; 59 is built; 60a and 60b are built; 60c and the install
-question below are next.
+58c are built; 59 is built; 60a to 60e are built; 61 and 62 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -441,19 +440,36 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   `launcher-state.json`, so Zendo could neither list it nor start it with
   `launch-game <id>` (`run <path> <wine>` is a second path to design). One
   small title installed with `streaming` would settle whether the state gains
-  it; Retro Classics (90 MB, supported) is the one to try.
-- **60d, the Game Pass list's packages in the background** (from the user's
-  testing, 2026-11-17): a card says nothing about whether this PC can install
-  the game; only its page does. `resolve-package` answers for a whole list at
-  about 1.4 s a product (22 titles: 10 MB to 338 GB, four of them
-  unavailable), so a thread could fill them all when the list arrives, and the
-  cards could carry the size or a "not for this PC" mark, with the page's
-  answer instant afterwards.
-- **60e, Game Pass achievements** (asked 2026-11-17): the launcher's backend
-  has `achievements` ("Read achievements for one Xbox title without signing in
-  or unlocking anything") and `game-activity` (time played and last activity).
-  Neither is used yet; they could fill a library game's Achievements card,
-  which today is Steam's and the stores' only.
+  it. **Settled on 2026-11-17** (`docs/history.md`, "The Game Pass install
+  experiment"): `streaming` works and its progress protocol is clear, but
+  `launcher-state.json` is not touched, and without that record Zendo can
+  neither list the game nor start it through `launch-game`; `xodus-cli run
+  <folder> <wine>` is the other way, and needs the runtime's own Wine (the
+  system Wine 11.22 page-faulted). See item 62.
+- **62, installing Game Pass games from Zendo** [tentative, 2026-11-17]. The
+  experiment above showed it is possible but that it makes Zendo a second
+  manager of the same games folder: `streaming <product> <folder>` installs
+  (89 MB in under a minute for Retro Classics, `NEXUS_PROGRESS` lines with
+  `phase`, `completedBytes`, `totalBytes`, `canPause`), and the launcher's
+  state does not learn about it. A slice would need: a record of Zendo's own
+  for such installs (the way store-engine installs are recorded, or a marker
+  file in the folder), the folder's executable from `appxmanifest.xml` or the
+  largest `.exe`, a launch through `xodus-cli run <folder> <runtime wine>`
+  with the runtime found under `~/.local/share/xodus-nexus/runtimes/variants/`,
+  the queue's progress/pause/Stop from the protocol, and space checks like the
+  launcher's. It also means two ways to install one game, and a game the
+  launcher cannot repair or remove. Not started; the user's call.
+- **60d built 2026-11-17, the packages on the cards**: when the Game Pass list
+  arrives a thread asks `resolve-package` for each game, and a card reads
+  "Needs 1.94 GiB" or "Not for this PC" without its page being opened (the
+  page's size is instant then). Not seen on screen.
+- **60e built 2026-11-17, Game Pass achievements**: `xodus::title_id` reads
+  `<TitleId>` from an installed game's `MicrosoftGame.config` (hex, asked in
+  decimal) and `xodus::achievements` maps the backend's items into the page's
+  Achievements card, unlocked first, secrets kept back, "n of m" right. No
+  icons yet. Checked with Minecraft Legends (40 achievements); not seen on
+  screen. `game-activity` (time played and last activity) is still unread and
+  could fill a Game Pass game's time played.
 - **61, Battle.net's empty window under Proton** (from the user's testing,
   2026-11-17): the client now starts (item 58c) and shows its window, but the
   window is blank. The log

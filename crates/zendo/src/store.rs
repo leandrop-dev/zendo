@@ -77,6 +77,9 @@ pub struct StoreBrowser {
     viewport: f32,
     /// Sizes and versions asked of the stores, by game id.
     pub info: HashMap<String, InfoState>,
+    /// What the Store would install for each Game Pass game, by game id: its
+    /// size, or that this PC cannot install it at all.
+    packages: HashMap<String, zendo_core::xodus::Package>,
 }
 
 impl Default for StoreBrowser {
@@ -106,7 +109,21 @@ impl StoreBrowser {
             scroll_top: 0.0,
             viewport: 800.0,
             info: HashMap::new(),
+            packages: HashMap::new(),
         }
+    }
+
+    /// The Store's answer about a Game Pass game's package: what a card says
+    /// about installing it.
+    pub fn set_package(&mut self, id: &str, package: zendo_core::xodus::Package) -> Outcome {
+        self.packages.insert(id.to_owned(), package);
+        self.rebuild()
+    }
+
+    /// What the Store said about a Game Pass game's package, once asked.
+    #[must_use]
+    pub fn package(&self, id: &str) -> Option<&zendo_core::xodus::Package> {
+        self.packages.get(id)
     }
 
     // What the window reads.
@@ -204,10 +221,28 @@ impl StoreBrowser {
     #[must_use]
     pub fn card(&self, place: usize) -> Option<CardData> {
         let game = self.games.get(*self.shown.get(place)?)?;
+        let caption = match (game.shop, self.packages.get(&game.id)) {
+            // What installing a Game Pass game would take, or that this PC
+            // cannot install it at all; until the Store answers, the
+            // developer, as every store card says.
+            (Shop::Xbox, Some(package)) if !package.supported => {
+                t!("xbox-card-not-for-pc")
+            }
+            (Shop::Xbox, Some(package)) => package.download_bytes.map_or_else(
+                || format::owned_line(game),
+                |bytes| {
+                    t!(
+                        "xbox-card-needs",
+                        size = zendo_core::Size::Bytes(bytes).to_string()
+                    )
+                },
+            ),
+            _ => format::owned_line(game),
+        };
         Some(CardData {
             id: game.id.clone(),
             title: game.title.clone(),
-            caption: format::owned_line(game),
+            caption,
             caption_accent: false,
             faded: false,
             // The badge in the colour for good news, as the Library's
@@ -678,6 +713,54 @@ mod tests {
         assert!(browser.is_installed("epic:a"));
         assert!(browser.card(0).is_some_and(|card| card.badge.is_some()));
         assert!(browser.card(1).is_some_and(|card| card.badge.is_none()));
+    }
+
+    #[test]
+    fn a_game_pass_card_says_what_installing_it_takes() {
+        let mut browser = browser();
+        browser.cached(vec![(
+            Shop::Xbox,
+            vec![
+                Owned::new(Shop::Xbox, "9AAA", "Halo Infinite".into()),
+                Owned::new(Shop::Xbox, "9BBB", "Cuphead".into()),
+            ],
+        )]);
+        browser.set_accounts(HashSet::from([Shop::Xbox]), vec![Shop::Xbox]);
+        browser.pick(StorePick::Shop(Shop::Xbox));
+        browser.set_package(
+            "xbox:9AAA",
+            zendo_core::xodus::Package {
+                supported: true,
+                status: "ready".into(),
+                download_bytes: Some(2_087_256_064),
+                format: Some("MSIXVC".into()),
+            },
+        );
+        browser.set_package(
+            "xbox:9BBB",
+            zendo_core::xodus::Package {
+                supported: false,
+                status: "unavailable".into(),
+                download_bytes: Some(5_399_841_994),
+                format: Some("EAPPX".into()),
+            },
+        );
+        let captions: Vec<String> = (0..browser.len())
+            .filter_map(|place| browser.card(place))
+            .map(|card| card.caption)
+            .collect();
+        assert_eq!(
+            captions,
+            [
+                // By title: Cuphead, then Halo Infinite.
+                t!("xbox-card-not-for-pc"),
+                t!(
+                    "xbox-card-needs",
+                    size = zendo_core::Size::Bytes(2_087_256_064).to_string()
+                )
+            ],
+            "the size, or that this PC cannot install it, on the card"
+        );
     }
 
     #[test]

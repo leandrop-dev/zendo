@@ -438,6 +438,10 @@ impl Glue {
     /// Asks the game's store for its achievements, once a session; nothing
     /// for a game with none to ask.
     fn want_achievements(&self, id: &str) {
+        if let Some(rest) = id.strip_prefix("xbox:") {
+            self.want_xbox_achievements(id, rest);
+            return;
+        }
         let from_store = ["gog:", "steam:", "epic:"]
             .iter()
             .any(|prefix| id.starts_with(prefix));
@@ -466,6 +470,46 @@ impl Glue {
                     .map_err(|err| format!("{err:#}"))
             },
             move |glue, result| glue.achievements_arrived(owned, result),
+        );
+    }
+
+    /// A Game Pass game's achievements: the backend asks Xbox Live by the
+    /// game's title id, which is in the `MicrosoftGame.config` beside its
+    /// executable, so only an installed game has them.
+    fn want_xbox_achievements(&self, id: &str, _rest: &str) {
+        if !self.persist
+            || matches!(
+                self.cards.achievements.borrow().get(id),
+                Some(Ask::Asking | Ask::Got(_))
+            )
+        {
+            return;
+        }
+        let Some(install) = self
+            .browser
+            .borrow()
+            .game(id)
+            .and_then(|game| game.details.install_path.clone())
+        else {
+            return;
+        };
+        self.cards
+            .achievements
+            .borrow_mut()
+            .insert(id.to_owned(), Ask::Asking);
+        let asked = id.to_owned();
+        self.ask(
+            move || {
+                let title = zendo_core::xodus::title_id(&install)
+                    .ok_or("its MicrosoftGame.config has no title id")?;
+                let list =
+                    zendo_core::xodus::achievements(title).map_err(|err| format!("{err:#}"))?;
+                Ok(Some(achievements::Achievements {
+                    list,
+                    unlocks_known: true,
+                }))
+            },
+            move |glue, result| glue.achievements_arrived(asked, result),
         );
     }
 

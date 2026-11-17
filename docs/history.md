@@ -5881,3 +5881,70 @@ runtime. The whole list's packages, resolved one by one on 2026-11-17:
 (The rest are editions of the same titles.) `cargo test --workspace` green
 (172 zendo, 309 core, 91 shell) with the new id test. Not seen on screen: the
 badge and the page after the fix.
+
+## The Game Pass install experiment (2026-11-17)
+
+The one test that decides whether Zendo can install Game Pass games itself:
+does the launcher's state learn about an install made with the CLI? It does
+not. The run, with the user's go-ahead, on Retro Classics (the smallest
+supported title, 88,821,760 bytes):
+
+```
+xodus-cli streaming 9MTVJ3HHTQGS "$HOME/Games/Xodus Nexus/Retro Classics" \
+    --progress-json --market US
+```
+
+- **It works**: exit 0, 84,879,403 bytes reported as `totalBytes`, 85 MB in the
+  folder, the same shape as the launcher's own install
+  (`appxmanifest.xml`, the payload, `RetroClassics.exe` at 6,565,120 bytes).
+- **The progress protocol** is one `NEXUS_PROGRESS ` line per event, then
+  JSON: `schema: 1`, `sequence`, `event: "progress"`, `phase` (`downloading`,
+  `finalizing`, `complete`), `completedBytes`, `totalBytes`, `bytesPerSecond`,
+  `canPause`, `paused`. It ended with `phase: "complete"`, `canPause: false`.
+- **`launcher-state.json` was untouched**: the same MD5 before and after
+  (`b9e22952b8ddd92a71f26b968f3af76c`), `games` holding only the Minecraft
+  Legends the launcher had installed. The launcher's `shortcuts/launch-game`
+  is `exec Nexus.AppImage --launch-game "$@"`, i.e. the launcher itself
+  starts a game, so a game it never recorded cannot be started through Zendo's
+  current path.
+- **Launching without the launcher** would be `xodus-cli run <folder> <wine>`,
+  and the Wine matters: with the system Wine 11.22 the game page-faulted
+  during the prefix setup (`wineboot.exe` appeared, then `wine: Unhandled page
+  fault on write access`), exit 5. The launcher's runtimes are Proton builds
+  under `~/.local/share/xodus-nexus/runtimes/variants/{nexus,nexus-cachyos}/releases/<hash>/`,
+  and `run` was not tried with one.
+
+The test install was removed afterwards (85 MB), and the state file left
+exactly as it was. Recorded as item 62 in `docs/backlog.md`: a Zendo install
+would be a manager of its own, with its own record, launch and progress, and
+the launcher would not see those games.
+
+## Items 60d and 60e, the Game Pass cards and achievements (2026-11-17)
+
+- **60d, the packages on the cards.** The Store was only asked about a game's
+  package when its page opened. Now, when the Game Pass list arrives, a thread
+  asks for every game's package one at a time (about 1.4 s each), and each
+  answer goes into the browser (`StoreBrowser::package` and `set_package`), so
+  a card says what installing it takes ("Needs 1.94 GiB") or that this PC
+  cannot install it ("Not for this PC") without opening the game, and the
+  page's note is instant afterwards. The page's size row is filled from the
+  same answer. Words `xbox-card-needs` and `xbox-card-not-for-pc`.
+- **60e, achievements.** `xodus::title_id` reads the `<TitleId>` (hex) from
+  the `MicrosoftGame.config` beside an installed game's executable, since the
+  backend wants it in decimal; `xodus::achievements(title)` asks
+  `achievements <title> --json` and maps the items into Zendo's
+  `Achievement`: name, description, `hidden` from `secret`, `unlocked` from
+  `unlockedAt` (ISO 8601, through `time::parse_utc`), revoked items dropped,
+  unlocked first newest first then the locked by name. An `xbox:` library
+  game's Achievements card fills from that, with `unlocks_known: true` so its
+  "n of m" line is right. No icons yet: the backend gives addresses, and their
+  pictures are not fetched. `entitlements`, `package` and `achievements` now
+  share one `backend()` runner.
+
+Checked: `cargo test --workspace` green (173 zendo, 310 core, 91 shell): the
+card captions (a size and "not for this PC", in title order), the title id
+from a config file, and the ordering and secret handling of a list of
+achievements. Against the real backend: 40 achievements for Minecraft Legends
+(title `61B215AE`, decimal 1639060910) in 3 s. Not seen on screen: a card
+saying "Needs …", a Game Pass game's achievements on its page, and the icons,
+which are absent on purpose. Not tried: pt-PT.

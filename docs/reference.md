@@ -384,8 +384,10 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   (`"ready"` for a playable install), `executable`, an inline `coverDataUrl`
   data URL, `heroUrl` and an `antiCheat` object. A game is imported only when
   its state is `ready` and its path is absolute.
-- Starting one: `<profile>/shortcuts/launch-game <id>`; the launcher itself is
-  `<profile>/shortcuts/launch-nexus` (no argument). Both are scripts Nexus
+- Starting one: `<profile>/shortcuts/launch-game <id>`, which is
+  `exec <the AppImage> --nexus-profile <profile> --launch-game "$@"` (checked
+  2026-11-17), so the launcher itself starts the game from its own state; the
+  launcher is `<profile>/shortcuts/launch-nexus` (no argument). Both are scripts Nexus
   writes, marked `# X-Xodus-Nexus-Profile=` on line 2 and private to the user;
   omakade refuses anything else in that place. Its backend CLI is below.
 - **The backend CLI**, checked on the user's machine 2026-11-17 (v0.2.15, at
@@ -404,13 +406,25 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   <product> <folder>` downloads and extracts a game, `--progress-json`
   over stdout and pause/resume JSON over stdin (`--control-stdin`), with
   `--parallel` and `--download-limit-kib` (it needs the launcher's runtime
-  installed; an unknown product answers "Invalid Store product or market");
+  installed; an unknown product answers "Invalid Store product or market";
+  checked 2026-11-17 on Retro Classics: 84,879,403 bytes into a folder holding
+  `appxmanifest.xml` and the game's `.exe`, and one `NEXUS_PROGRESS ` line per
+  event with `schema`, `sequence`, `event`, `phase` (`downloading`,
+  `finalizing`, `complete`), `completedBytes`, `totalBytes`, `bytesPerSecond`,
+  `canPause`, `paused`; **it does not write `launcher-state.json`**);
   `download <product> --dry-run` refuses with "Select an installable package
   in Nexus before starting this download"; `run <path> <wine>` starts one with
   a Wine given, and its own error for a missing path is "Cannot launch this
   game: No such file or directory"; `extract`, `license`, `saved-accounts`, `account`, `profile`,
-  `achievements`, `game-activity`, `run` and `social` read or start other
-  things. The `productId` is the Microsoft Store id (the art query's
+  `achievements <title id> --json` answers the account's achievements for a
+  title: `items[]` with `name`, `description`, `gamerscore`, `iconUrl`,
+  `progress`, `state` (`locked`), `unlockedAt` (ISO 8601 or null), `secret`
+  and `revoked`, and the title id is the `<TitleId>` of `MicrosoftGame.config`
+  **in hex** (e.g. `61B215AE`) but is asked for **in decimal**
+  (`1639060910`; the CLI refuses hex with "invalid digit found in string");
+  `game-activity`, `run` and `social` read or start other things. `run <folder> <wine>` starts an installed folder with a Wine given
+  (system Wine 11.22 page-faulted on Retro Classics; the launcher's runtimes
+  are Proton builds under `~/.local/share/xodus-nexus/runtimes/variants/{nexus,nexus-cachyos}/releases/<hash>/`). The `productId` is the Microsoft Store id (the art query's
   `bigIds`).
 - Artwork and product facts: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
   <storeId>&market=US&languages=en-US&fieldsTemplate=Details`, checked

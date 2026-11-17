@@ -8,7 +8,7 @@
 //! Steam is `steam_installs_ui`'s (51c).
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use slint::platform::Key;
@@ -122,9 +122,6 @@ pub(super) struct StoreState {
     /// The first scan was read, so the settings, Steam's sign-in among them,
     /// are in.
     first_scan: Cell<bool>,
-    /// What the Store would install for each Game Pass game, by game id, as
-    /// the launcher's backend resolved it.
-    xbox: RefCell<HashMap<String, xodus::Package>>,
 }
 
 impl StoreState {
@@ -146,7 +143,6 @@ impl StoreState {
             open: RefCell::new(None),
             lists_loaded: Cell::new(false),
             first_scan: Cell::new(false),
-            xbox: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -434,6 +430,43 @@ impl Glue {
         if kept {
             self.download_images();
         }
+        if kept && shop == Shop::Xbox && self.persist {
+            self.ask_xbox_packages();
+        }
+    }
+
+    /// Asks the Store what it would install for every Game Pass game on the
+    /// list, one at a time on a thread, so a card can say its size or that
+    /// this PC cannot install it, before its page is opened.
+    fn ask_xbox_packages(self: &Rc<Self>) {
+        let ids: Vec<(String, String)> = self
+            .store
+            .browser
+            .borrow()
+            .list(Shop::Xbox)
+            .unwrap_or_default()
+            .iter()
+            .filter(|game| self.store.browser.borrow().package(&game.id).is_none())
+            .filter_map(|game| {
+                let app = game.id.strip_prefix("xbox:")?;
+                Some((game.id.clone(), app.to_owned()))
+            })
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        let weak = self.window.clone();
+        std::thread::spawn(move || {
+            for (id, app) in ids {
+                let result = xodus::package(&app).map_err(|err| format!("{err:#}"));
+                let done = weak.upgrade_in_event_loop(move |_| {
+                    with_glue(|glue| glue.xbox_package_arrived(&id, result));
+                });
+                if done.is_err() {
+                    break;
+                }
+            }
+        });
     }
 
     /// A signed-out store's games leave the page.
@@ -551,12 +584,11 @@ impl Glue {
     pub(super) fn xbox_package_arrived(&self, id: &str, result: Result<xodus::Package, String>) {
         let state = match result {
             Ok(package) => {
-                self.store
-                    .xbox
-                    .borrow_mut()
-                    .insert(id.to_owned(), package.clone());
+                let size = package.download_bytes;
+                let outcome = self.store.browser.borrow_mut().set_package(id, package);
+                self.apply_store(outcome);
                 InfoState::Got(info::GameInfo {
-                    download_size: package.download_bytes,
+                    download_size: size,
                     ..info::GameInfo::default()
                 })
             }
@@ -1035,8 +1067,8 @@ impl Glue {
             return String::new();
         }
         if owned.shop == Shop::Xbox {
-            let packages = self.store.xbox.borrow();
-            return match packages.get(&owned.id) {
+            let browser = self.store.browser.borrow();
+            return match browser.package(&owned.id) {
                 Some(package) if !package.supported => t!("xbox-not-available"),
                 Some(package) => package.download_bytes.map_or_else(
                     || t!("xbox-install-in-launcher"),
@@ -1275,15 +1307,16 @@ mod tests {
             HashSet::from([Shop::Epic, Shop::Xbox]),
             vec![Shop::Epic, Shop::Xbox],
         );
-        glue.store.xbox.borrow_mut().insert(
-            "xbox:9AAA".into(),
-            xodus::Package {
-                supported: true,
-                status: "ready".into(),
-                download_bytes: Some(2_000_000_000),
-                format: Some("MSIXVC".into()),
-            },
-        );
+        let package = xodus::Package {
+            supported: true,
+            status: "ready".into(),
+            download_bytes: Some(2_000_000_000),
+            format: Some("MSIXVC".into()),
+        };
+        glue.store
+            .browser
+            .borrow_mut()
+            .set_package("xbox:9AAA", package);
         glue.open_owned("xbox:9AAA");
         let data = window.global::<GameData>();
         assert_eq!(data.get_owned_launcher().as_str(), t!("xbox-open"));
@@ -1297,15 +1330,16 @@ mod tests {
         );
 
         // The Store has no build for this PC: the page says that instead.
-        glue.store.xbox.borrow_mut().insert(
-            "xbox:9AAA".into(),
-            xodus::Package {
-                supported: false,
-                status: "unavailable".into(),
-                download_bytes: Some(5_399_841_994),
-                format: Some("EAPPX".into()),
-            },
-        );
+        let package = xodus::Package {
+            supported: false,
+            status: "unavailable".into(),
+            download_bytes: Some(5_399_841_994),
+            format: Some("EAPPX".into()),
+        };
+        glue.store
+            .browser
+            .borrow_mut()
+            .set_package("xbox:9AAA", package);
         glue.show_owned();
         assert_eq!(
             window.global::<GameData>().get_owned_note().as_str(),

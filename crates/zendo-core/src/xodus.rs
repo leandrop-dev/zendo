@@ -83,6 +83,29 @@ const BATCH: usize = 20;
 /// The market the Store answers for, as `resolve-package` asks by default.
 const MARKET: &str = "US";
 
+/// Runs the launcher's backend and returns its answer, from the first `{`:
+/// its diagnostics come before it, one line each.
+fn backend(args: &[&str]) -> anyhow::Result<String> {
+    let cli = cli().context("Nexus Launcher's backend is not installed")?;
+    let output = std::process::Command::new(&cli)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .context("could not run Nexus Launcher's backend")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Nexus Launcher's backend could not {}: {}",
+            args.first().copied().unwrap_or("answer"),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let start = text
+        .find('{')
+        .context("Nexus Launcher's backend gave no answer")?;
+    Ok(text[start..].to_owned())
+}
+
 /// The launcher's backend program, at the path its `current.json` names.
 fn cli() -> Option<PathBuf> {
     #[derive(Deserialize)]
@@ -469,6 +492,66 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_title_id_and_orders_achievements() {
+        let dir = std::env::temp_dir().join(format!(
+            "zendo-xodus-title-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_nanos())
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("MicrosoftGame.config"),
+            "<?xml version=\"1.0\"?>\n<Game><TitleId>61B215AE</TitleId></Game>\n",
+        )
+        .unwrap();
+        assert_eq!(title_id(&dir), Some(1_639_060_910));
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(title_id(Path::new("/nowhere")), None, "no config, no title");
+
+        let answer: super::Achieved = serde_json::from_str(
+            r#"{"account":"me","items":[
+                 {"name":"Broken","description":"Defeat The Unbreakable.","secret":false,"revoked":false,"unlockedAt":null},
+                 {"name":"With Light Comes Hope","description":"Destroy the Night Beacon Base.","secret":false,"revoked":false,"unlockedAt":"2026-11-16T20:00:00.000Z"},
+                 {"name":"Secret","description":"?","secret":true,"revoked":false,"unlockedAt":null},
+                 {"name":"Gone","description":"","secret":false,"revoked":true,"unlockedAt":null}]}"#,
+        )
+        .unwrap();
+        let mut list: Vec<crate::achievements::Achievement> = answer
+            .items
+            .into_iter()
+            .filter(|item| !item.revoked)
+            .map(|item| crate::achievements::Achievement {
+                name: item.name,
+                description: item.description,
+                hidden: item.secret,
+                unlocked: item.unlocked_at.as_deref().and_then(crate::time::parse_utc),
+                rarity: None,
+                icon: None,
+            })
+            .collect();
+        list.sort_by(|one, other| match (one.unlocked, other.unlocked) {
+            (Some(one), Some(other)) => other.cmp(&one),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => one.name.cmp(&other.name),
+        });
+        let names: Vec<&str> = list.iter().map(|one| one.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["With Light Comes Hope", "Broken", "Secret"],
+            "unlocked first, then the locked by name; a revoked one left out"
+        );
+        assert_eq!(
+            list[0].unlocked,
+            Some(1_794_859_200),
+            "2026-11-16T20:00:00Z"
+        );
+        assert!(list[2].hidden, "a secret one, kept back until unlocked");
+    }
+
+    #[test]
     fn picks_the_desktop_package_and_says_whether_it_can_install() {
         let resolved: super::Resolved = serde_json::from_str(
             r#"{"choices":[
@@ -537,25 +620,8 @@ pub fn owned() -> anyhow::Result<Vec<Owned>> {
 
 /// The product ids the account holds, from the backend's `library --json`.
 fn entitlements() -> anyhow::Result<Vec<String>> {
-    let cli = cli().context("Nexus Launcher's backend is not installed")?;
-    let output = std::process::Command::new(&cli)
-        .args(["library", "--json"])
-        .stdin(std::process::Stdio::null())
-        .output()
-        .context("could not run Nexus Launcher's backend")?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "Nexus Launcher's backend could not list the account's games: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    // It writes its diagnostics before the answer, one line each.
-    let json = text
-        .find('{')
-        .context("Nexus Launcher's backend gave no list")?;
-    let answer: Library =
-        serde_json::from_str(&text[json..]).context("Nexus Launcher's backend's list was odd")?;
+    let answer: Library = serde_json::from_str(&backend(&["library", "--json"])?)
+        .context("Nexus Launcher's backend's list was odd")?;
     Ok(answer
         .entitlements
         .iter()
@@ -640,20 +706,14 @@ pub struct Package {
 ///
 /// When the backend is not installed, cannot be run, or answers oddly.
 pub fn package(product: &str) -> anyhow::Result<Package> {
-    let cli = cli().context("Nexus Launcher's backend is not installed")?;
-    let output = std::process::Command::new(&cli)
-        .args(["resolve-package", product, "--json", "--market", MARKET])
-        .stdin(std::process::Stdio::null())
-        .output()
-        .context("could not run Nexus Launcher's backend")?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "Nexus Launcher's backend could not resolve {product}: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let answer: Resolved = serde_json::from_slice(&output.stdout)
-        .context("Nexus Launcher's backend's package was odd")?;
+    let answer: Resolved = serde_json::from_str(&backend(&[
+        "resolve-package",
+        product,
+        "--json",
+        "--market",
+        MARKET,
+    ])?)
+    .context("Nexus Launcher's backend's package was odd")?;
     // The desktop build is the one a PC runs; the Xbox one is for a console.
     let picked = answer
         .choices
@@ -666,6 +726,71 @@ pub fn package(product: &str) -> anyhow::Result<Package> {
         download_bytes: picked.and_then(|choice| choice.download_bytes),
         format: picked.map(|choice| choice.package_format.clone()),
     })
+}
+
+/// The Xbox title id the backend wants, in decimal: the `<TitleId>` in the
+/// `MicrosoftGame.config` beside the game's executable, which is hex.
+#[must_use]
+pub fn title_id(install: &Path) -> Option<u64> {
+    let text = fs::read_to_string(install.join("MicrosoftGame.config")).ok()?;
+    let start = text.find("<TitleId>")? + "<TitleId>".len();
+    let end = text[start..].find("</TitleId>")? + start;
+    u64::from_str_radix(text[start..end].trim(), 16).ok()
+}
+
+/// The account's achievements for a title, as the backend gives them:
+/// unlocked first, newest first, then the locked by name. No icons: the
+/// backend gives addresses, and their pictures are not fetched.
+///
+/// # Errors
+///
+/// When the backend is not installed, cannot be run, or answers oddly.
+pub fn achievements(title: u64) -> anyhow::Result<Vec<crate::achievements::Achievement>> {
+    let answer: Achieved =
+        serde_json::from_str(&backend(&["achievements", &title.to_string(), "--json"])?)
+            .context("Nexus Launcher's backend's achievements were odd")?;
+    let mut list: Vec<crate::achievements::Achievement> = answer
+        .items
+        .into_iter()
+        .filter(|item| !item.revoked)
+        .map(|item| crate::achievements::Achievement {
+            name: item.name,
+            description: item.description,
+            hidden: item.secret,
+            unlocked: item.unlocked_at.as_deref().and_then(crate::time::parse_utc),
+            rarity: None,
+            icon: None,
+        })
+        .collect();
+    list.sort_by(|one, other| match (one.unlocked, other.unlocked) {
+        (Some(one), Some(other)) => other.cmp(&one),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => one.name.cmp(&other.name),
+    });
+    Ok(list)
+}
+
+/// The backend's answer about a title's achievements.
+#[derive(Deserialize)]
+struct Achieved {
+    #[serde(default)]
+    items: Vec<AchievedItem>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AchievedItem {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    secret: bool,
+    #[serde(default)]
+    revoked: bool,
+    #[serde(default)]
+    unlocked_at: Option<String>,
 }
 
 /// The backend's answer about a product's packages.
@@ -779,6 +904,22 @@ mod online {
             std::env::consts::ARCH
         ));
         assert_eq!(release.asset.sha256.len(), 64, "a digest to check against");
+    }
+
+    /// Asks the real backend for Minecraft Legends' achievements; run with
+    /// `cargo test -p zendo-core xodus::online -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the network and a signed-in Nexus Launcher"]
+    fn reads_real_achievements() {
+        let list = super::achievements(1_639_060_910).unwrap();
+        println!("{} achievements", list.len());
+        for one in list.iter().take(3) {
+            println!(
+                "{} | {} | unlocked {:?} | hidden {}",
+                one.name, one.description, one.unlocked, one.hidden
+            );
+        }
+        assert!(!list.is_empty(), "the title has achievements");
     }
 
     /// Asks the real backend what two products would install; run with
