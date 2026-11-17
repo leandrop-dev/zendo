@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
-use zendo_core::battlenet;
 use zendo_core::owned::{self, Shop};
 use zendo_core::stores::{self, AmazonLogin, Store};
+use zendo_core::{battlenet, xodus};
 use zendo_shell::sign_in_window::{self, Handle};
 use zendo_shell::t;
 
@@ -48,10 +48,10 @@ struct SignIn {
     browser: bool,
 }
 
-/// What Battle.net's card shows: the client found, how many games, and what
+/// What a launcher's card shows: the program found, how many games, and what
 /// the last action said.
 #[derive(Debug, Default, Clone)]
-struct Battlenet {
+struct Launcher {
     installed: bool,
     games: usize,
     path: Option<PathBuf>,
@@ -64,8 +64,9 @@ pub(super) struct AccountsState {
     /// the page is drawn, which would walk `PATH` each time.
     engines: RefCell<[Option<PathBuf>; 3]>,
     signing_in: RefCell<Option<SignIn>>,
-    /// Battle.net's card, looked at as the page opens.
-    battlenet: RefCell<Battlenet>,
+    /// The launchers' cards, looked at as the page opens.
+    battlenet: RefCell<Launcher>,
+    xbox: RefCell<Launcher>,
     cards: Rc<VecModel<AccountCard>>,
     focus: Cell<i32>,
     paste: Cell<i32>,
@@ -78,6 +79,7 @@ impl AccountsState {
             engines: RefCell::default(),
             signing_in: RefCell::new(None),
             battlenet: RefCell::default(),
+            xbox: RefCell::default(),
             cards: Rc::new(VecModel::default()),
             focus: Cell::new(0),
             paste: Cell::new(0),
@@ -235,6 +237,8 @@ impl Glue {
         data.on_relabel(move || glue.show_accounts());
         let glue = Rc::clone(self);
         data.on_battlenet_open(move || glue.open_battlenet_card());
+        let glue = Rc::clone(self);
+        data.on_xbox_open(move || glue.open_xbox_card());
     }
 
     /// Whether Accounts is the page on screen.
@@ -290,8 +294,9 @@ impl Glue {
                 });
             });
         }
-        // Battle.net is a launcher Zendo reads, not an engine it signs in
-        // with: its card asks the prefix and the Agent's database instead.
+        // The launchers are read, not signed in through: Battle.net's card
+        // asks the prefix and the Agent's database, Nexus Launcher's its
+        // AppImage and its profile.
         let installed = battlenet::installed();
         let games = battlenet::count();
         {
@@ -299,6 +304,13 @@ impl Glue {
             card.installed = installed.is_some();
             card.path = installed.map(|(prefix, _)| prefix);
             card.games = games;
+        }
+        let appimage = xodus::installed();
+        {
+            let mut card = self.accounts.xbox.borrow_mut();
+            card.installed = appimage.is_some();
+            card.path = appimage;
+            card.games = xodus::count();
         }
         self.show_accounts();
     }
@@ -641,6 +653,25 @@ impl Glue {
 
     /// Opens the Battle.net client found: its window is where the sign-in
     /// happens, and Zendo reads the games from the prefix afterwards.
+    fn open_xbox_card(self: &Rc<Self>) {
+        if !self.persist {
+            return;
+        }
+        let result = xodus::open()
+            .map(|mut child| {
+                // Reaped when it ends, so it does not linger as a zombie.
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            })
+            .map_err(|err| format!("{err:#}"));
+        self.accounts.xbox.borrow_mut().note = Some(match result {
+            Ok(()) => (t!("xbox-opened"), true),
+            Err(err) => (err, false),
+        });
+        self.show_accounts();
+    }
+
     fn open_battlenet_card(self: &Rc<Self>) {
         if !self.persist {
             return;
@@ -691,40 +722,34 @@ impl Glue {
         true
     }
 
+    /// Nexus Launcher's card, from what the page looked at last.
+    fn xbox_card(&self) -> crate::LauncherCardData {
+        let card = self.accounts.xbox.borrow();
+        launcher_card(
+            &card,
+            "XBOX",
+            t!("xbox-title"),
+            t!("xbox-about"),
+            t!("xbox-installed"),
+            t!("xbox-not-installed"),
+            t!("xbox-sign-in"),
+            t!("xbox-open"),
+        )
+    }
+
     /// Battle.net's card, from what the page looked at last.
     fn battlenet_card(&self) -> crate::LauncherCardData {
         let card = self.accounts.battlenet.borrow();
-        let status = if card.installed {
-            if card.games > 0 {
-                t!("count-games", count = card.games)
-            } else {
-                t!("battlenet-installed")
-            }
-        } else {
-            t!("battlenet-not-installed")
-        };
-        let note = card.note.clone();
-        crate::LauncherCardData {
-            badge: t!("battlenet-title").to_uppercase().into(),
-            about: t!("battlenet-about").into(),
-            status: status.into(),
-            status_tone: i32::from(card.installed),
-            path: card
-                .path
-                .as_ref()
-                .map_or_else(String::new, |path| path.display().to_string())
-                .into(),
-            line: t!("battlenet-sign-in").into(),
-            action: t!("battlenet-open").into(),
-            action_on: card.installed,
-            note: note
-                .as_ref()
-                .map_or_else(String::new, |(text, _)| text.clone())
-                .into(),
-            note_tone: note
-                .as_ref()
-                .map_or(0, |(_, good)| if *good { 1 } else { 2 }),
-        }
+        launcher_card(
+            &card,
+            "BATTLE.NET",
+            t!("battlenet-title"),
+            t!("battlenet-about"),
+            t!("battlenet-installed"),
+            t!("battlenet-not-installed"),
+            t!("battlenet-sign-in"),
+            t!("battlenet-open"),
+        )
     }
 
     /// Writes everything the page shows, and the count beside its tab.
@@ -751,6 +776,7 @@ impl Glue {
         self.accounts.cards.set_vec(cards);
         data.set_steam(self.steam_card());
         data.set_battlenet(self.battlenet_card());
+        data.set_xbox(self.xbox_card());
         data.set_gog_playtime(config.gog_playtime);
         data.set_gog_galaxy(config.gog_galaxy);
         let pasted = signing_in
@@ -810,5 +836,54 @@ impl Glue {
             self.accounts.accounts.borrow()[index(store)],
             Account::SignedIn(_)
         )
+    }
+}
+
+/// A launcher's card, from what the page looked at last.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the words that differ between the launchers, one per argument"
+)]
+fn launcher_card(
+    card: &Launcher,
+    badge: &str,
+    title: String,
+    about: String,
+    installed: String,
+    not_installed: String,
+    line: String,
+    action: String,
+) -> crate::LauncherCardData {
+    let status = if card.installed {
+        if card.games > 0 {
+            t!("count-games", count = card.games)
+        } else {
+            installed
+        }
+    } else {
+        not_installed
+    };
+    let note = card.note.clone();
+    crate::LauncherCardData {
+        badge: badge.to_uppercase().into(),
+        title: title.into(),
+        about: about.into(),
+        status: status.into(),
+        status_tone: i32::from(card.installed),
+        path: card
+            .path
+            .as_ref()
+            .map_or_else(String::new, |path| path.display().to_string())
+            .into(),
+        line: line.into(),
+        action: action.into(),
+        action_on: card.installed,
+        note: note
+            .as_ref()
+            .map_or_else(String::new, |(text, _)| text.clone())
+            .into(),
+        note_tone: note
+            .as_ref()
+            .map_or(0, |(_, good)| if *good { 1 } else { 2 }),
     }
 }

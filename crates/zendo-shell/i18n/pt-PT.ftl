@@ -235,7 +235,7 @@ sources-unreadable = Não foi possível ler { $problem }
 ## Launchers
 
 launchers-title = Lançadores
-launchers-about = Os programas que precisam de uma janela própria. O Zendo descarrega o instalador e abre o cliente; a sessão e os jogos ficam com o cliente.
+launchers-about = Os programas que precisam de uma janela própria. O Zendo trá-los e abre-os; a sessão e os jogos ficam neles.
 battlenet-title = Battle.net
 battlenet-about = O lançador da Blizzard: World of Warcraft, Overwatch, Diablo e os restantes.
 battlenet-not-installed = Não instalado
@@ -249,6 +249,17 @@ battlenet-downloaded = O instalador está pronto. Execute-o e inicie sessão na 
 battlenet-installer-open = A janela do instalador está aberta. Termine aí; os jogos aparecem aqui quando o cliente os encontrar.
 battlenet-opened = O Battle.net está aberto.
 battlenet-sign-in = Inicie sessão no cliente; o Zendo lista os jogos que encontrar.
+xbox-title = Nexus Launcher
+xbox-about = O lançador do PC Game Pass: o Zendo trá-lo e abre-o; os jogos vêm da Microsoft Store.
+xbox-not-installed = Não instalado
+xbox-installed = Instalado
+xbox-install = Transferir o lançador
+xbox-downloaded = O lançador está pronto. Abre-o, instala o que ele precisa e inicia sessão lá.
+xbox-open = Abrir o Nexus Launcher
+xbox-launcher = Nexus Launcher
+xbox-running = A janela do lançador está aberta. Termina lá; os jogos aparecem aqui conforme ele os encontra.
+xbox-opened = O Nexus Launcher está aberto.
+xbox-sign-in = Inicia sessão, e instala o que ele precisa, na janela do lançador; o Zendo lista os jogos que ele encontra.
 
 files-title = Ficheiros
 files-about = Os ficheiros do próprio Zendo. Remover um repõe o que ele guarda. Os jogos das lojas são instalados na pasta de jogos; `install_dir` no ficheiro de definições muda-a.

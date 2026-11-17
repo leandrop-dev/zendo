@@ -366,10 +366,13 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
 
 - The project is `domsvoboda/nexus-launcher` (MIT; renamed from `xodus-nexus`
   on 2026-11-09; built on the Xbox team's Xodus). The latest release checked is
-  v0.5.0: `Xodus-Nexus-0.5.0-x86_64.AppImage` (~131 MB) and an arm64 build,
-  each with a `.sha512sum`; GitHub's API gives each asset a `sha256` digest.
-  The launcher installs its own backend first and its runtime family from
-  Settings; it needs glibc 2.38 or newer.
+  v0.5.0: `Xodus-Nexus-0.5.0-x86_64.AppImage` (~131 MB; 130930811 bytes, digest
+  `sha256:9a28294adb20345dcc5673e6085b44824d5fce105060e822867ce9d375a633ff`)
+  and `Xodus-Nexus-0.5.0-arm64.AppImage` (132107015 bytes), each with a
+  `.sha512sum`; GitHub's API gives each asset a `sha256` digest, checked
+  2026-11-17. The AppImage's runtime answers `--appimage-version` on CachyOS
+  (FUSE works). The launcher installs its own backend first and its runtime
+  family from Settings; it needs glibc 2.38 or newer.
 - Profile: `$XDG_CONFIG_HOME/xodus-nexus` (or `~/.config/xodus-nexus`), with
   `launcher-state.json`. The `games` array's records use `id` (16 hex),
   `title`, `publisher`, `storeId` (12 `[0-9A-Z]`), `path`, `installState`

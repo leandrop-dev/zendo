@@ -5567,3 +5567,62 @@ on screen, and pt-PT.
 Things to know: Nexus Launcher is not installed on this machine, so the real
 check waits for 58b, which brings the AppImage. A game whose shortcut is
 missing is not listed at all, since nothing could start it.
+
+## Item 58b, the launcher's download and the Accounts card (2026-11-17)
+
+The second half of item 58: Settings brings Nexus Launcher and opens it, and
+the Accounts page has a card for it.
+
+- **`zendo-core/src/xodus.rs`**: `release()` asks GitHub for the latest
+  release of `domsvoboda/nexus-launcher` and takes the AppImage for this
+  machine (`Xodus-Nexus-<version>-x86_64.AppImage`, or `-arm64`/`aarch64` on
+  arm), through the new `engines::latest_asset`: the engines' GitHub call,
+  split out, with the digest still required and no digest meaning no release.
+  `install()` downloads into the cache, checks with `sha256sum`
+  (`engines::check_sha256`), copies it to
+  `$XDG_DATA_HOME/zendo/launchers/Nexus.AppImage` executable (0755) and swaps
+  it in; a failure leaves the AppImage there before and clears the partial.
+  `open()` starts it in its own window, its output in
+  `$XDG_STATE_HOME/zendo/logs/nexus.log`, and hands the child back so the
+  caller reaps it; `installed()` and `count()` feed the row and the card.
+- **`launch::spawn_logged`** is the "start it, output into the logs folder"
+  helper Battle.net had to itself, moved there so both use it.
+- **Settings → Launchers** has a second row (`sources_ui.rs`): Not installed →
+  Download launcher (the same bar and Stop) → Open Nexus Launcher, with the
+  AppImage's path, the games found and a note. The section's note and bar are
+  shared by the two rows, and the bar says which download it is; the list is
+  addressed by index (0 Battle.net, 1 Nexus Launcher). When the launcher's
+  window closes, the page looks again and the library rescans.
+- **Accounts** has its card: `LauncherCardData` gained `title`, so the badge
+  can read XBOX while the card reads Nexus Launcher, and `LauncherCard` gained
+  an `act()` callback instead of the hard-wired Battle.net one. XBOX / Nexus
+  Launcher, the AppImage's path, Not installed or Installed or n games, Open
+  Nexus Launcher, and the line that the sign-in and its runtime are done in
+  the launcher's own window.
+- Words: eleven `xbox-*` in both languages, and `launchers-about` now speaks
+  of launchers rather than of Battle.net's installer.
+
+Checked (2026-11-17): `cargo test --workspace` green (169 zendo, 302 core, 91
+shell): the two Settings rows and both launchers' cards. Clippy clean in the
+new code, `too_many_arguments` expected on the two functions that take a row's
+or a card's words. The real release: `cargo test -p zendo-core xodus::online --
+--ignored --nocapture` printed v0.5.0, `Xodus-Nexus-0.5.0-x86_64.AppImage`,
+130930811 bytes and the digest the API gives, and
+`installs_the_real_launcher` (with `XDG_DATA_HOME` and `XDG_CACHE_HOME` in a
+scratch folder) downloaded it, checked it and put it in place, mode 0755, an
+ELF file, in 4.5 s. The AppImage's own runtime answers `--appimage-version`
+(`effcebc`) there, so FUSE works on this machine.
+
+The user's first look on screen (2026-11-17) found one bug: after Download
+installer, Battle.net's line was drawn three times, in its row, in Nexus
+Launcher's row and again under the group. Both rows had been given the
+section's one note. **Fixed** the same day: each launcher keeps its own note
+and its row shows it; the section's `launchers-note` and
+`launchers-note-tone` are gone from `ui/settings.slint` and
+`SettingsData`, and one test pins it (`a_note_belongs_to_the_row_it_is_about`:
+Battle.net's note in Battle.net's row, nothing in the other). Also then: the
+section's note is cleared when the window it announced closes.
+
+Not seen: the two rows and the card on screen after that fix, the download's
+bar in the window, and the launcher's own window with its runtime download
+and the Microsoft sign-in, which is the user's to do. Not tried: pt-PT.

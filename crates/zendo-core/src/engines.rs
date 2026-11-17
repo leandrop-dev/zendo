@@ -239,18 +239,17 @@ fn pick(engine: Engine, arch: &str, entry: &Entry) -> anyhow::Result<Release> {
     })
 }
 
-/// The latest release of an engine, from GitHub (60 requests an hour are
+/// A repository's latest release, from GitHub (60 requests an hour are
 /// allowed without an account).
 ///
 /// # Errors
 ///
-/// When GitHub cannot be reached or answers oddly, the release is only a
-/// pre-release, or it has no build for this machine or no checksum.
-pub fn latest(engine: Engine) -> anyhow::Result<Release> {
+/// When GitHub cannot be reached or answers oddly, or the latest release is
+/// only a pre-release.
+fn entry(repo: &str, label: &str) -> anyhow::Result<Entry> {
     let body = crate::http::download_agent()
         .get(format!(
-            "https://api.github.com/repos/{}/releases/latest",
-            engine.repo()
+            "https://api.github.com/repos/{repo}/releases/latest"
         ))
         .header("Accept", "application/vnd.github+json")
         .call()
@@ -260,9 +259,40 @@ pub fn latest(engine: Engine) -> anyhow::Result<Release> {
     let entry: Entry =
         serde_json::from_str(&body).context("GitHub's answer about the release was odd")?;
     if entry.prerelease {
-        bail!("{}'s latest release is a pre-release", engine.label());
+        bail!("{label}'s latest release is a pre-release");
     }
+    Ok(entry)
+}
+
+/// The latest release of an engine.
+///
+/// # Errors
+///
+/// As [`entry`], and when it has no build for this machine or no checksum.
+pub fn latest(engine: Engine) -> anyhow::Result<Release> {
+    let entry = entry(engine.repo(), engine.label())?;
     pick(engine, std::env::consts::ARCH, &entry)
+}
+
+/// The latest release of any repository Zendo takes one file from: its tag,
+/// and the asset whose name `wanted` accepts, checked against its digest.
+///
+/// # Errors
+///
+/// As [`entry`], and when no asset's name is accepted or has no checksum.
+pub(crate) fn latest_asset(
+    repo: &str,
+    label: &str,
+    wanted: impl Fn(&str) -> bool,
+) -> anyhow::Result<(String, Asset)> {
+    let entry = entry(repo, label)?;
+    let asset = entry
+        .assets
+        .iter()
+        .find(|asset| wanted(&asset.name))
+        .with_context(|| format!("{label} {} has no build for this machine", entry.tag_name))?
+        .checked()?;
+    Ok((entry.tag_name, asset))
 }
 
 /// Downloads, checks and puts a release in place, reporting the bytes

@@ -230,7 +230,7 @@ sources-unreadable = Could not read { $problem }
 ## Launchers
 
 launchers-title = Launchers
-launchers-about = The programs that need a window of their own. Zendo brings the installer and opens the client; the sign-in and the games stay with the client.
+launchers-about = The programs that need a window of their own. Zendo brings them and opens them; the sign-in and the games stay with them.
 battlenet-title = Battle.net
 battlenet-about = Blizzard's launcher: World of Warcraft, Overwatch, Diablo and the rest.
 battlenet-not-installed = Not installed
@@ -244,6 +244,17 @@ battlenet-downloaded = The installer is ready. Run it, and sign in in its window
 battlenet-installer-open = The installer's window is open. Finish it there; the games appear here as the client finds them.
 battlenet-opened = Battle.net is open.
 battlenet-sign-in = Sign in inside the client; Zendo lists the games it finds.
+xbox-title = Nexus Launcher
+xbox-about = The launcher for PC Game Pass: Zendo brings it and opens it; the games come from the Microsoft Store.
+xbox-not-installed = Not installed
+xbox-installed = Installed
+xbox-install = Download launcher
+xbox-downloaded = The launcher is ready. Open it, install its runtime and sign in there.
+xbox-open = Open Nexus Launcher
+xbox-launcher = Nexus Launcher
+xbox-running = The launcher's window is open. Finish there; the games appear here as it finds them.
+xbox-opened = Nexus Launcher is open.
+xbox-sign-in = Sign in, and install its runtime, in the launcher's own window; Zendo lists the games it finds.
 
 files-title = Files
 files-about = Zendo's own files. Removing one resets what it holds. Store games install into the games folder; `install_dir` in the settings file moves it.

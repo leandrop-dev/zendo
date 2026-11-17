@@ -9,11 +9,14 @@
 //! updates or uninstalls them (`docs/reference.md`, "Nexus Launcher").
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
+use anyhow::Context as _;
 use serde::Deserialize;
 
-use crate::{Details, Game, Launch, Scan, Source, paths};
+use crate::{Details, Game, Launch, Scan, Source, engines, paths};
 
 /// Where the launcher keeps its profile, when it is installed.
 #[must_use]
@@ -25,6 +28,121 @@ pub fn profile() -> Option<PathBuf> {
 /// The marker the launcher writes on line 2 of the scripts it makes. A
 /// `launch-game` without it is some other file, and is never started.
 const MARKER: &str = "# X-Xodus-Nexus-Profile=";
+
+/// `domsvoboda/nexus-launcher`, whose releases carry the Linux `AppImage`.
+const REPO: &str = "domsvoboda/nexus-launcher";
+
+/// What the launcher is called in Zendo's words.
+const LABEL: &str = "Nexus Launcher";
+
+/// The `AppImage` Zendo downloaded, once it is in place.
+#[must_use]
+pub fn appimage() -> Option<PathBuf> {
+    paths::data_home().map(|dir| dir.join("zendo/launchers/Nexus.AppImage"))
+}
+
+/// The `AppImage`, when it is there.
+#[must_use]
+pub fn installed() -> Option<PathBuf> {
+    appimage().filter(|path| path.is_file())
+}
+
+/// How many games the launcher's profile lists as ready.
+#[must_use]
+pub fn count() -> usize {
+    profile().map_or(0, |profile| scan(Some(&profile)).games.len())
+}
+
+/// The `AppImage` of the latest release, for this machine.
+///
+/// # Errors
+///
+/// When GitHub cannot be reached, the release has no `AppImage` for this
+/// machine, or it has no checksum to check the download against.
+pub fn release() -> anyhow::Result<engines::Release> {
+    let (tag, asset) = engines::latest_asset(REPO, LABEL, |name| {
+        appimage_for(name, std::env::consts::ARCH)
+    })?;
+    Ok(engines::Release {
+        tag,
+        asset,
+        service: None,
+    })
+}
+
+/// Whether an `AppImage`'s name is the one this machine runs: the release
+/// names them `Xodus-Nexus-<version>-x86_64.AppImage` and `-arm64`, and the
+/// checksum file beside them is not an `AppImage`.
+fn appimage_for(name: &str, arch: &str) -> bool {
+    name.ends_with(".AppImage")
+        && match arch {
+            "x86_64" => name.contains("x86_64"),
+            "aarch64" => name.contains("arm64") || name.contains("aarch64"),
+            _ => false,
+        }
+}
+
+/// Downloads the `AppImage`, checks it against its digest and puts it in
+/// place, executable, reporting the bytes as it goes; `stop` set ends it.
+///
+/// # Errors
+///
+/// When the download fails or is stopped, the checksum does not match, or
+/// the file cannot be put in place; the `AppImage` there before stays then.
+pub fn install(
+    release: &engines::Release,
+    stop: &AtomicBool,
+    progress: &mut dyn FnMut(u64, u64),
+) -> anyhow::Result<PathBuf> {
+    let target = appimage().context("no home folder for Zendo's programs")?;
+    let root = target
+        .parent()
+        .context("the AppImage has no folder")?
+        .to_path_buf();
+    let cache = paths::cache_home()
+        .context("no cache folder to download into")?
+        .join("zendo/launchers");
+    fs::create_dir_all(&cache).with_context(|| format!("could not make {}", cache.display()))?;
+    fs::create_dir_all(&root).with_context(|| format!("could not make {}", root.display()))?;
+    let file = cache.join(&release.asset.name);
+    let partial = root.join(".Nexus.AppImage.partial");
+    let _ = fs::remove_file(&file);
+    let result = (|| {
+        let size = Some(release.asset.size).filter(|&size| size > 0);
+        crate::http::download(
+            &release.asset.url,
+            &file,
+            LABEL,
+            size,
+            stop,
+            &mut |done, total| progress(done, total.unwrap_or(done)),
+        )?;
+        engines::check_sha256(&file, &release.asset.sha256)?;
+        fs::copy(&file, &partial)
+            .with_context(|| format!("could not write {}", partial.display()))?;
+        fs::set_permissions(&partial, fs::Permissions::from_mode(0o755))
+            .context("could not make the AppImage run")?;
+        fs::rename(&partial, &target)
+            .with_context(|| format!("could not put {} in place", target.display()))
+    })();
+    let _ = fs::remove_file(&file);
+    if result.is_err() {
+        let _ = fs::remove_file(&partial);
+    }
+    result.map(|()| target)
+}
+
+/// Opens the launcher in its own window: it writes its profile and shortcuts
+/// the first time, and there the user installs its runtime and signs in.
+/// The caller waits for it, so the profile can be read once it ends.
+///
+/// # Errors
+///
+/// When the `AppImage` is not there or cannot be started.
+pub fn open() -> anyhow::Result<std::process::Child> {
+    let appimage = installed().context("Nexus Launcher is not installed yet")?;
+    crate::launch::spawn_logged(std::process::Command::new(appimage), "nexus")
+}
 
 /// The games the launcher's profile lists, or one problem.
 pub(crate) fn scan(profile: Option<&Path>) -> Scan {
@@ -247,9 +365,76 @@ mod tests {
     }
 
     #[test]
+    fn takes_the_appimage_for_this_machine() {
+        let name = "Xodus-Nexus-0.5.0-x86_64.AppImage";
+        assert!(super::appimage_for(name, "x86_64"));
+        assert!(!super::appimage_for(name, "aarch64"));
+        assert!(super::appimage_for(
+            "Xodus-Nexus-0.5.0-arm64.AppImage",
+            "aarch64"
+        ));
+        assert!(
+            super::appimage_for("Xodus-Nexus-0.5.0-aarch64.AppImage", "aarch64"),
+            "either name the release gives it"
+        );
+        assert!(
+            !super::appimage_for("Xodus-Nexus-0.5.0-x86_64.AppImage.sha512sum", "x86_64"),
+            "the checksum file is not the AppImage"
+        );
+        assert!(!super::appimage_for(name, "riscv64"), "no AppImage here");
+    }
+
+    #[test]
     fn no_profile_is_no_game_and_no_problem() {
         let scan = scan(None);
         assert!(scan.games.is_empty());
         assert!(scan.problems.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod online {
+    /// Asks GitHub; run with `cargo test -p zendo-core xodus::online -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the network"]
+    fn lists_the_real_latest_release() {
+        let release = super::release().unwrap();
+        println!(
+            "{} {} {} {}",
+            release.tag, release.asset.name, release.asset.size, release.asset.sha256
+        );
+        assert!(super::appimage_for(
+            &release.asset.name,
+            std::env::consts::ARCH
+        ));
+        assert_eq!(release.asset.sha256.len(), 64, "a digest to check against");
+    }
+
+    /// Downloads the real `AppImage` into a throwaway home; run with
+    /// `XDG_DATA_HOME=.../zendo-xodus-live/data XDG_CACHE_HOME=.../zendo-xodus-live/cache
+    /// cargo test -p zendo-core xodus::online -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the network and writes to a throwaway home"]
+    fn installs_the_real_launcher() {
+        let data = std::env::var("XDG_DATA_HOME").unwrap_or_default();
+        assert!(
+            data.contains("zendo-xodus-live"),
+            "set XDG_DATA_HOME and XDG_CACHE_HOME to a scratch folder named zendo-xodus-live"
+        );
+        let release = super::release().unwrap();
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let at = super::install(&release, &stop, &mut |_, _| {}).unwrap();
+        assert_eq!(super::installed(), Some(at.clone()));
+        let bytes = std::fs::read(&at).unwrap();
+        assert!(bytes.starts_with(b"\x7fELF"), "an AppImage is an ELF file");
+        let mode =
+            std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&at).unwrap().permissions());
+        assert_eq!(mode & 0o111, 0o111, "it can be run");
+        println!(
+            "{} {} -> {} bytes",
+            release.tag,
+            release.asset.name,
+            bytes.len()
+        );
     }
 }

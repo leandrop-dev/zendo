@@ -266,8 +266,8 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a is
-built; 58b and 59 are next.
+55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a and
+58b are built; 59 is next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -373,11 +373,18 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
     `SuperHeroArt` else `TitledHeroArt` at `w=1920`), if the inline picture
     proves not enough or of a lesser quality. It needs one request per game,
     so the scan does not do it.
-  - **58b, download and sign in** (next): Settings → Sources downloads the
-    Nexus AppImage (GitHub's `sha256` digest, the `engines` machinery), opens
-    it once so it writes `shortcuts/` and the user installs its runtime and
-    signs in; Accounts gets an Xbox card that opens it and reads readiness
-    from `launcher-state.json`.
+  - **58b built 2026-11-17**: the download and the sign-in.
+    `xodus::release()`/`install()` bring the AppImage for this machine from
+    GitHub (its `sha256` digest checked, `engines::latest_asset`), into
+    `$XDG_DATA_HOME/zendo/launchers/Nexus.AppImage`, executable;
+    `xodus::open()` starts it. Settings → Launchers has its row (Download
+    launcher → Open Nexus Launcher, with the bar and Stop), and Accounts has
+    an XBOX card that opens it and shows the games its profile lists. Checked
+    in a scratch home with the real v0.5.0 AppImage (download, digest,
+    0755, `--appimage-version` runs); the user's first look found one note
+    drawn three times, fixed (each row keeps its own note now); not seen: the
+    rows and the card on screen after that, the bar, and the launcher's own
+    window with its runtime and sign-in.
 - **59, Xbox Series S** [firm, 2026-11-16]. Cloud gaming is 58. Remote play is
   a streaming client, not a library source: **Greenlight** (MIT, Flathub
   `io.github.unknownskl.greenlight`) started with

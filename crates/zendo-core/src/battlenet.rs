@@ -17,7 +17,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, bail};
@@ -329,7 +328,7 @@ pub fn run_installer() -> anyhow::Result<std::process::Child> {
         &LaunchOptions::default(),
         &mut warning,
     )?;
-    spawn(command, "battlenet-installer")
+    crate::launch::spawn_logged(command, "battlenet-installer")
 }
 
 /// Opens the client found, so the user signs in or plays from it.
@@ -351,29 +350,12 @@ pub fn open_client() -> anyhow::Result<()> {
         &LaunchOptions::default(),
         &mut warning,
     )?;
-    let mut child = spawn(command, "battlenet")?;
+    let mut child = crate::launch::spawn_logged(command, "battlenet")?;
     // Reaped when it ends, so it does not linger as a zombie.
     std::thread::spawn(move || {
         let _ = child.wait();
     });
     Ok(())
-}
-
-/// Starts a command with its output in the logs folder, or nowhere.
-fn spawn(mut command: std::process::Command, name: &str) -> anyhow::Result<std::process::Child> {
-    command.stdin(Stdio::null());
-    if let Some(dir) = crate::launch::logs_dir() {
-        let _ = fs::create_dir_all(&dir);
-        let path = dir.join(format!("{name}.log"));
-        if let Ok(file) = fs::File::create(&path)
-            && let Ok(errors) = file.try_clone()
-        {
-            command.stdout(file).stderr(errors);
-        }
-    }
-    command
-        .spawn()
-        .with_context(|| format!("could not start {name}"))
 }
 
 /// A short, stable tag for the prefix, so the same product in two prefixes

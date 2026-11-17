@@ -62,6 +62,8 @@ export struct SteamCardData {
 export struct LauncherCardData {
     // The small badge's text, already upper case.
     badge: string,
+    // The card's name.
+    title: string,
     about: string,
     // "Not installed", "Installed" or the games found.
     status: string,
@@ -82,9 +84,11 @@ export global AccountsData {
     callback steam-cancel();
     callback steam-sign-out();
     in property <[AccountCard]> cards;
-    // Battle.net's card, under the stores'.
+    // The launchers' cards, under the stores'.
     in property <LauncherCardData> battlenet;
     callback battlenet-open();
+    in property <LauncherCardData> xbox;
+    callback xbox-open();
     in property <bool> gog-playtime;
     in property <bool> gog-galaxy;
     in-out property <string> code;
@@ -382,6 +386,8 @@ component SteamCard inherits Rectangle {
 component LauncherCard inherits Rectangle {
     in property <LauncherCardData> card;
     in property <length> inner;
+    // The card's one button.
+    callback act();
     background: Colors.surface;
     border-width: 1px;
     border-color: Colors.line;
@@ -408,7 +414,7 @@ component LauncherCard inherits Rectangle {
             }
             Text {
                 horizontal-stretch: 1;
-                text: root.card.badge;
+                text: root.card.title;
                 font-size: 16px;
                 font-weight: 700;
                 color: Colors.foreground;
@@ -418,7 +424,7 @@ component LauncherCard inherits Rectangle {
                 label: root.card.action;
                 primary: true;
                 enabled: root.card.action-on;
-                clicked => { AccountsData.battlenet-open(); }
+                clicked => { root.act(); }
             }
         }
         Text {
@@ -490,7 +496,8 @@ export component AccountsPage inherits Rectangle {
                 Card { index: 0; card: AccountsData.cards[0]; inner: root.inner; }
                 Card { index: 1; card: AccountsData.cards[1]; inner: root.inner; }
                 Card { index: 2; card: AccountsData.cards[2]; inner: root.inner; }
-                LauncherCard { card: AccountsData.battlenet; inner: root.inner; }
+                LauncherCard { card: AccountsData.battlenet; inner: root.inner; act => { AccountsData.battlenet-open(); } }
+                LauncherCard { card: AccountsData.xbox; inner: root.inner; act => { AccountsData.xbox-open(); } }
             }
         }
     }

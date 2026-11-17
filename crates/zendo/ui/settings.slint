@@ -105,8 +105,6 @@ export global SettingsData {
     // Launchers: the programs that need their own window.
     in property <[SetRow]> launchers;
     in property <Bar> launchers-bar;
-    in property <string> launchers-note;
-    in property <int> launchers-note-tone;
     // Diagnostics.
     in property <[Fact]> files;
     in property <bool> report-busy;
@@ -602,10 +600,6 @@ export component SettingsPage inherits Rectangle {
                             DownloadBar {
                                 bar: SettingsData.launchers-bar;
                                 stop => { SettingsData.launchers-stop(); }
-                            }
-                            if SettingsData.launchers-note != "": Note {
-                                text: SettingsData.launchers-note;
-                                tone: SettingsData.launchers-note-tone;
                             }
                         }
                     }

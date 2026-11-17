@@ -600,6 +600,32 @@ pub fn log_path(id: &str) -> Option<PathBuf> {
     logs_dir().map(|dir| dir.join(format!("{name}.log")))
 }
 
+/// Starts a program with nothing on stdin and its output in the logs
+/// folder, reaped when it ends by the caller; `name` names the log.
+///
+/// # Errors
+///
+/// When it cannot be started.
+pub fn spawn_logged(
+    mut command: std::process::Command,
+    name: &str,
+) -> anyhow::Result<std::process::Child> {
+    use std::process::Stdio;
+    command.stdin(Stdio::null());
+    if let Some(dir) = logs_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(format!("{name}.log"));
+        if let Ok(file) = std::fs::File::create(&path)
+            && let Ok(errors) = file.try_clone()
+        {
+            command.stdout(file).stderr(errors);
+        }
+    }
+    command
+        .spawn()
+        .map_err(|err| anyhow::anyhow!("could not start {name}: {err}"))
+}
+
 /// Where each game's last launch is logged.
 #[must_use]
 pub fn logs_dir() -> Option<PathBuf> {
