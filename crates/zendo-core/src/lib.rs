@@ -311,6 +311,19 @@ impl Game {
     #[must_use]
     pub fn installed_by_zendo(&self) -> bool {
         matches!(self.launch, Launch::Engine { .. })
+            || (self.source == Source::Xbox
+                && self
+                    .details
+                    .install_path
+                    .as_deref()
+                    .is_some_and(|folder| crate::xodus::read_marker(folder).is_some()))
+    }
+
+    /// Installed by a store engine, so its own Update, Repair, Move and DLC
+    /// jobs apply. A Game Pass install has none of those.
+    #[must_use]
+    pub fn store_managed(&self) -> bool {
+        matches!(self.launch, Launch::Engine { .. })
     }
 
     /// The launch as one line, for the details card and logs.

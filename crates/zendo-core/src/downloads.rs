@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::heroic::{self, Installed};
 use crate::moving::{self, Moved};
-use crate::owned::{self, Owned, StoreKey};
+use crate::owned::{self, Owned, Shop};
 use crate::stores::Store;
 use crate::{Details, Game, Launch, Scan, Source, paths};
 use crate::{gog_import, gog_setup, info, mods};
@@ -97,7 +97,11 @@ impl Action {
 /// One thing to do to one game.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
-    pub store: StoreKey,
+    /// The shop it belongs to: a store Zendo installs from, or Game Pass.
+    /// The field was `store` before Game Pass jobs; the alias keeps a queue
+    /// written then readable.
+    #[serde(alias = "store")]
+    pub shop: Shop,
     /// The store's own id for the game.
     pub app: String,
     pub title: String,
@@ -140,12 +144,14 @@ impl Job {
     /// The game's id in the library and the Store.
     #[must_use]
     pub fn id(&self) -> String {
-        format!("{}:{}", self.store().source_key(), self.app)
+        format!("{}:{}", self.shop.key(), self.app)
     }
 
+    /// The store engine that runs it; `None` for a shop with no engine,
+    /// like Game Pass.
     #[must_use]
-    pub fn store(&self) -> Store {
-        self.store.into()
+    pub fn store(&self) -> Option<Store> {
+        self.shop.store()
     }
 
     /// Installing a store game into a folder of its own in `dir`, for the
@@ -153,13 +159,21 @@ impl Job {
     #[must_use]
     pub fn install(game: &Owned, dir: PathBuf, dlc: Vec<String>) -> Option<Self> {
         let (_, app) = game.id.split_once(':')?;
+        if game.shop != Shop::Xbox {
+            game.store()?;
+        }
+        let (path, platform) = if game.shop == Shop::Xbox {
+            (dir.join("GamePass"), "Windows".to_owned())
+        } else {
+            (dir, install_platform(game).to_owned())
+        };
         Some(Self {
-            store: game.store()?.into(),
+            shop: game.shop,
             app: app.to_owned(),
             title: game.title.clone(),
             action: Action::Install,
-            platform: install_platform(game).to_owned(),
-            path: dir,
+            platform,
+            path,
             folder: None,
             paused: false,
             dlc,
@@ -194,6 +208,26 @@ impl Job {
     /// Updating, repairing or uninstalling a game Zendo installed.
     #[must_use]
     pub fn for_game(game: &Game, action: Action) -> Option<Self> {
+        if game.source == Source::Xbox
+            && let Some(folder) = &game.details.install_path
+            && let Some(marker) = crate::xodus::read_marker(folder)
+        {
+            if action != Action::Uninstall {
+                return None;
+            }
+            return Some(Self {
+                shop: Shop::Xbox,
+                app: marker.product,
+                title: game.title.clone(),
+                action,
+                platform: "Windows".to_owned(),
+                path: folder.clone(),
+                folder: None,
+                paused: false,
+                dlc: Vec::new(),
+                to: None,
+            });
+        }
         let Launch::Engine { app, .. } = &game.launch else {
             return None;
         };
@@ -204,7 +238,7 @@ impl Job {
             _ => return None,
         };
         Some(Self {
-            store: store.into(),
+            shop: store.into(),
             app: app.clone(),
             title: game.title.clone(),
             action,
@@ -369,7 +403,10 @@ impl Stop {
 /// When the engine is missing or fails, or the game is not where the
 /// engine said it would be afterwards.
 pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
-    let store = job.store();
+    if job.shop == Shop::Xbox {
+        return run_xbox(job, stop, report);
+    }
+    let store = job.store().context("this job has no store engine")?;
     let mut ended = match (store, job.action) {
         (_, Action::Move) => move_game(job, stop, report)?,
         (_, Action::Import) => import_game(job, stop, report)?,
@@ -470,6 +507,142 @@ pub fn run(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Res
     Ok(ended)
 }
 
+/// A Game Pass job: installing the Store's package into the folder, or
+/// deleting a folder Zendo installed.
+fn run_xbox(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
+    match job.action {
+        Action::Uninstall => {
+            if crate::xodus::running() {
+                bail!("close Nexus Launcher first: it must not be running");
+            }
+            let marker = crate::xodus::read_marker(&job.path);
+            if let Some(marker) = &marker {
+                let id = crate::xodus::record_id(&marker.product);
+                crate::xodus::unregister(&id)?;
+                if let Some(dir) = crate::xodus::compatdata(&id)
+                    && dir.exists()
+                {
+                    fs::remove_dir_all(&dir)
+                        .with_context(|| format!("could not remove {}", dir.display()))?;
+                }
+            }
+            if job.path.exists() && safe_to_delete(&job.path) {
+                fs::remove_dir_all(&job.path)
+                    .with_context(|| format!("could not remove {}", job.path.display()))?;
+            }
+            Ok(Ended::Done)
+        }
+        Action::Install => {
+            if crate::xodus::running() {
+                bail!("close Nexus Launcher first: it must not be running");
+            }
+            fs::create_dir_all(&job.path)
+                .with_context(|| format!("could not make {}", job.path.display()))?;
+            let folder = if let Some(folder) = &job.folder {
+                folder.clone()
+            } else {
+                let folder = new_folder(&job.path, &job.title);
+                report(Event::Folder(folder.clone()));
+                folder
+            };
+            fs::create_dir_all(&folder)
+                .with_context(|| format!("could not make {}", folder.display()))?;
+            let package = crate::xodus::package(&job.app)?;
+            if !package.supported {
+                bail!("the Store has no install of {} for this PC", job.title);
+            }
+            if let Some(bytes) = package.download_bytes
+                && !crate::xodus::fits(&job.path, bytes)?
+            {
+                bail!(
+                    "there is not enough room for {}: it needs {}",
+                    job.title,
+                    crate::Size::Bytes(bytes)
+                );
+            }
+            let ended = crate::xodus::stream(&job.app, &folder, stop, &mut |done, total| {
+                let percent = (total > 0).then(|| {
+                    #[expect(clippy::cast_precision_loss, reason = "shown to two decimals")]
+                    let percent = done as f32 / total as f32 * 100.0;
+                    percent.clamp(0.0, 100.0)
+                });
+                report(Event::Progress(Progress {
+                    percent,
+                    written: Some((done, total)),
+                    ..Progress::default()
+                }));
+            })?;
+            if ended == Ended::Stopped {
+                return Ok(Ended::Stopped);
+            }
+            let owned = owned::cached(Shop::Xbox)
+                .into_iter()
+                .find(|game| game.id == format!("xbox:{}", job.app));
+            let (package_name, version, executable) = appx_identity(&folder);
+            let marker = crate::xodus::Marker {
+                schema: 1,
+                product: job.app.clone(),
+                title: job.title.clone(),
+                publisher: owned.as_ref().and_then(|game| game.publisher.clone()),
+                package: package_name,
+                version,
+                executable,
+                bytes: package.download_bytes,
+                cover: owned.as_ref().and_then(|game| game.cover_url.clone()),
+                hero: owned.as_ref().and_then(|game| game.hero_url.clone()),
+            };
+            crate::xodus::write_marker(&folder, &marker)?;
+            crate::xodus::register(&folder, &marker)?;
+            Ok(Ended::Done)
+        }
+        other => bail!("Game Pass has no {} job", other.label()),
+    }
+}
+
+/// A package's name, version and program from `appxmanifest.xml`, as the
+/// installer wrote them; the program falls back to the largest `.exe` in
+/// the folder.
+fn appx_identity(folder: &Path) -> (Option<String>, Option<String>, Option<String>) {
+    let mut name = None;
+    let mut version = None;
+    let mut executable = None;
+    if let Ok(text) = fs::read_to_string(folder.join("appxmanifest.xml"))
+        && let Ok(document) = roxmltree::Document::parse(&text)
+    {
+        let root = document.root_element();
+        if let Some(identity) = root.children().find(|node| node.has_tag_name("Identity")) {
+            name = identity.attribute("Name").map(str::to_owned);
+            version = identity.attribute("Version").map(str::to_owned);
+        }
+        executable = root
+            .descendants()
+            .find(|node| node.has_tag_name("Application"))
+            .and_then(|node| node.attribute("Executable"))
+            .map(str::to_owned);
+    }
+    let executable = executable.or_else(|| largest_exe(folder));
+    (name, version, executable)
+}
+
+/// The largest `.exe` at the top of a folder, as a last resort.
+fn largest_exe(folder: &Path) -> Option<String> {
+    fs::read_dir(folder)
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+        })
+        .filter_map(|entry| {
+            let size = entry.metadata().ok()?.len();
+            Some((size, entry.file_name().to_string_lossy().into_owned()))
+        })
+        .max_by_key(|(size, _)| *size)
+        .map(|(_, name)| name)
+}
+
 /// The store ids of the DLC installed with a game Zendo installed.
 fn installed_dlc(store: Store, app: &str) -> Vec<String> {
     known(store)
@@ -548,7 +721,10 @@ fn words_for(job: &Job, folder: &Path) -> anyhow::Result<Vec<String>> {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let folder = folder.to_string_lossy().into_owned();
-    let words: Vec<&str> = match (job.store(), job.action) {
+    let words: Vec<&str> = match (
+        job.store().context("this job has no store engine")?,
+        job.action,
+    ) {
         (Store::Epic, Action::Install) => vec![
             "install",
             &app,
@@ -577,7 +753,9 @@ fn words_for(job: &Job, folder: &Path) -> anyhow::Result<Vec<String>> {
         | (_, Action::AddDlc | Action::RemoveDlc | Action::Move | Action::Import) => {
             bail!(
                 "{} has its own steps for {}",
-                job.store().engine_name(),
+                job.store()
+                    .context("this job has no store engine")?
+                    .engine_name(),
                 job.action.label()
             )
         }
@@ -1060,12 +1238,13 @@ fn safe_to_delete(path: &Path) -> bool {
 /// folder moved and the record not yet, or the record changed and the old
 /// copy still there.
 fn move_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
+    let store = job.store().context("this job has no store engine")?;
     let old = &job.path;
     let new = job.moved_to().context("the move has no folder to go to")?;
     if new == *old {
         bail!("{} is in that folder already", job.title);
     }
-    let recorded = recorded_path(job.store(), &job.app);
+    let recorded = recorded_path(store, &job.app);
     if recorded.as_ref() == Some(&new) {
         if old.exists() {
             delete_old(job, old, report)?;
@@ -1075,7 +1254,7 @@ fn move_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::R
     if recorded.as_ref() != Some(old) {
         bail!(
             "{} records {} in another folder than the move's",
-            job.store().engine_name(),
+            store.engine_name(),
             job.title
         );
     }
@@ -1188,7 +1367,7 @@ fn recorded_path(store: Store, app: &str) -> Option<PathBuf> {
 /// `move --skip-move` for the game and each DLC in its folder, Zendo's own
 /// record for gogdl, nile's `installed.json`.
 fn record_move(job: &Job, new: &Path, report: &mut dyn FnMut(Event)) -> anyhow::Result<()> {
-    let store = job.store();
+    let store = job.store().context("this job has no store engine")?;
     match store {
         Store::Epic => {
             let base = new.parent().context("the new folder has no parent")?;
@@ -1276,7 +1455,7 @@ fn move_args(app: &str, to: &Path) -> Vec<String> {
 /// what gogdl reads in the folder, the manifest of that build and Zendo's
 /// record. Nothing in the folder is changed or deleted, whatever happens.
 fn import_game(job: &Job, stop: &Stop, report: &mut dyn FnMut(Event)) -> anyhow::Result<Ended> {
-    let store = job.store();
+    let store = job.store().context("this job has no store engine")?;
     let folder = &job.path;
     if !folder.is_dir() {
         bail!("{} is not a folder", folder.display());
@@ -1401,7 +1580,20 @@ pub fn discard(job: &Job) -> anyhow::Result<()> {
     if job.action != Action::Install {
         return Ok(());
     }
-    let store = job.store();
+    if job.shop == Shop::Xbox {
+        let Some(folder) = &job.folder else {
+            return Ok(());
+        };
+        if folder.parent() != Some(job.path.as_path()) || !safe_to_delete(folder) {
+            return Ok(());
+        }
+        if folder.exists() {
+            fs::remove_dir_all(folder)
+                .with_context(|| format!("could not remove {}", folder.display()))?;
+        }
+        return Ok(());
+    }
+    let store = job.store().context("this job has no store engine")?;
     let (installed, problems) = installs(store);
     // Deleting is not undone: a record Zendo could not read is a reason to
     // stop, not a reason to decide the game is not installed.
@@ -1658,7 +1850,7 @@ mod tests {
     #[test]
     fn builds_each_engines_arguments() {
         let job = Job {
-            store: StoreKey::Epic,
+            shop: Shop::Epic,
             app: "Sugar".into(),
             title: "Sugar".into(),
             action: Action::Install,
@@ -1675,7 +1867,7 @@ mod tests {
             "install Sugar --base-path /home/me/Games --game-folder Sugar Rush --platform Windows --skip-sdl --skip-dlcs -y"
         );
         let job = Job {
-            store: StoreKey::Amazon,
+            shop: Shop::Amazon,
             ..job
         };
         assert_eq!(
@@ -1710,7 +1902,7 @@ mod tests {
     #[test]
     fn names_the_dlc_to_install_or_keep() {
         let job = Job {
-            store: StoreKey::Epic,
+            shop: Shop::Epic,
             app: "Sugar".into(),
             title: "Sugar".into(),
             action: Action::Install,
@@ -1727,7 +1919,7 @@ mod tests {
                 .contains(&"--with-dlcs".to_owned())
         );
         let job = Job {
-            store: StoreKey::Gog,
+            shop: Shop::Gog,
             app: "1207658924".into(),
             action: Action::Update,
             ..job
@@ -1742,9 +1934,98 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_job_written_before_the_shop_field() {
+        let old = r#"{"store":"epic","app":"a","title":"A","action":"install","platform":"Windows","path":"/tmp"}"#;
+        let job: Job = serde_json::from_str(old).unwrap();
+        assert_eq!(job.shop, Shop::Epic);
+        assert_eq!(job.id(), "epic:a");
+        let json = serde_json::to_string(&job).unwrap();
+        assert!(json.contains(r#""shop":"epic""#), "{json}");
+        assert!(!json.contains(r#""store":"#), "{json}");
+    }
+
+    #[test]
+    fn an_xbox_install_goes_under_game_pass_and_is_no_store_job() {
+        let game = Owned::new(Shop::Xbox, "9N98Z825TNFW", "Sugar Rush".into());
+        let job = Job::install(&game, "/home/me/Games".into(), Vec::new()).unwrap();
+        assert_eq!(job.shop, Shop::Xbox);
+        assert_eq!(job.id(), "xbox:9N98Z825TNFW");
+        assert_eq!(job.path, Path::new("/home/me/Games/GamePass"));
+        assert_eq!(job.platform, "Windows");
+        assert!(job.store().is_none());
+        assert_eq!(job.dlc.len(), 0);
+    }
+
+    #[test]
+    fn an_xbox_game_zendo_installed_gets_an_uninstall_job_only() {
+        let dir = std::env::temp_dir().join(format!("zendo-xbox-job-{}", std::process::id()));
+        let folder = dir.join("GamePass/Sugar Rush");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&folder).unwrap();
+        crate::xodus::write_marker(
+            &folder,
+            &crate::xodus::Marker {
+                schema: 1,
+                product: "9N98Z825TNFW".into(),
+                title: "Sugar Rush".into(),
+                publisher: None,
+                package: None,
+                version: None,
+                executable: None,
+                bytes: None,
+                cover: None,
+                hero: None,
+            },
+        )
+        .unwrap();
+        let mut game = Game::new(
+            "xbox:9N98Z825TNFW".into(),
+            "Sugar Rush".into(),
+            Source::Xbox,
+            Launch::Command {
+                program: "launch-game".into(),
+                args: vec!["ed9ca0cf65c9665d".into()],
+                dir: None,
+            },
+        );
+        game.details.install_path = Some(folder.clone());
+        let job = Job::for_game(&game, Action::Uninstall).unwrap();
+        assert_eq!(job.shop, Shop::Xbox);
+        assert_eq!(job.app, "9N98Z825TNFW");
+        assert_eq!(job.path, folder);
+        assert!(Job::for_game(&game, Action::Update).is_none());
+        assert!(Job::for_game(&game, Action::Repair).is_none());
+        // Without the marker it is the launcher's own install: not Zendo's.
+        fs::remove_file(folder.join(crate::xodus::RECORD)).unwrap();
+        assert!(Job::for_game(&game, Action::Uninstall).is_none());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_cancelled_xbox_install_clears_its_folder() {
+        let dir = std::env::temp_dir().join(format!("zendo-xbox-discard-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let pass = dir.join("GamePass");
+        let folder = pass.join("Sugar Rush");
+        let outside = dir.join("Elsewhere");
+        fs::create_dir_all(&folder).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let game = Owned::new(Shop::Xbox, "9N98Z825TNFW", "Sugar Rush".into());
+        let mut job = Job::install(&game, dir.clone(), Vec::new()).unwrap();
+        job.folder = Some(folder.clone());
+        discard(&job).unwrap();
+        assert!(!folder.exists(), "the half install is gone");
+        // A folder outside GamePass is left alone.
+        job.folder = Some(outside.clone());
+        discard(&job).unwrap();
+        assert!(outside.exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn keeps_a_dlc_job_in_the_queue() {
         let job = Job {
-            store: StoreKey::Gog,
+            shop: Shop::Gog,
             app: "1207658924".into(),
             title: "UT".into(),
             action: Action::AddDlc,

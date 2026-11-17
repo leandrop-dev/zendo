@@ -551,7 +551,7 @@ impl Glue {
         if let Some(size) = &game.details.size {
             rows.push(fact(t!("fact-install-size"), size.to_string()));
         }
-        if game.installed_by_zendo() {
+        if game.store_managed() {
             // What the last look for an update found.
             let (line, tone) =
                 queue::update_line(self.downloads.queue.borrow().updates.get(&game.id));

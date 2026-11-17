@@ -190,6 +190,38 @@ fn synthesized(owned: &Owned) -> Game {
     )
 }
 
+/// What a Game Pass game's page says about installing it: Zendo's own
+/// install when its backend and runtime are there, the launcher's otherwise.
+fn xbox_install_note(package: Option<&xodus::Package>, ready: bool, running: bool) -> String {
+    let Some(package) = package else {
+        return if ready && !running {
+            t!("xbox-install-here")
+        } else if running {
+            t!("xbox-close-launcher")
+        } else {
+            t!("xbox-install-in-launcher")
+        };
+    };
+    if !package.supported {
+        return t!("xbox-not-available");
+    }
+    if running {
+        return t!("xbox-close-launcher");
+    }
+    match (ready, package.download_bytes) {
+        (true, Some(bytes)) => t!(
+            "xbox-install-here-needs",
+            size = Size::Bytes(bytes).to_string()
+        ),
+        (true, None) => t!("xbox-install-here"),
+        (false, Some(bytes)) => t!(
+            "xbox-install-in-launcher-needs",
+            size = Size::Bytes(bytes).to_string()
+        ),
+        (false, None) => t!("xbox-install-in-launcher"),
+    }
+}
+
 impl Glue {
     /// Hooks the page's callbacks up.
     pub(super) fn connect_store(self: &Rc<Self>, window: &MainWindow) {
@@ -1067,20 +1099,11 @@ impl Glue {
             return String::new();
         }
         if owned.shop == Shop::Xbox {
-            let browser = self.store.browser.borrow();
-            return match browser.package(&owned.id) {
-                Some(package) if !package.supported => t!("xbox-not-available"),
-                Some(package) => package.download_bytes.map_or_else(
-                    || t!("xbox-install-in-launcher"),
-                    |bytes| {
-                        t!(
-                            "xbox-install-in-launcher-needs",
-                            size = Size::Bytes(bytes).to_string()
-                        )
-                    },
-                ),
-                None => t!("xbox-install-in-launcher"),
-            };
+            return xbox_install_note(
+                self.store.browser.borrow().package(&owned.id),
+                xodus::ready(),
+                xodus::running(),
+            );
         }
         if let Some(app) = owned.id.strip_prefix("steam:") {
             // Steam's dialog is open, or Steam is on it: how far it is.
@@ -1240,8 +1263,8 @@ impl Glue {
         };
         self.show_owned_page(parts, |data| {
             self.show_owned_install(data, &owned, installed);
-            // Game Pass is installed by its launcher, not by Zendo: the page
-            // says so and opens it.
+            // A Game Pass game may be installed by Zendo or by the launcher:
+            // the page says where it went and opens the launcher too.
             if owned.shop == Shop::Xbox {
                 data.set_owned_launcher(t!("xbox-open").into());
             }
@@ -1297,6 +1320,51 @@ mod tests {
     /// A Game Pass game's page: Zendo installs nothing, so it says so, with
     /// the Store's size, and opens the launcher that does.
     #[test]
+    fn a_game_pass_install_note_follows_the_backend() {
+        let package = xodus::Package {
+            supported: true,
+            status: "ready".into(),
+            download_bytes: Some(2_000_000_000),
+            format: Some("MSIXVC".into()),
+        };
+        let size = Size::Bytes(2_000_000_000).to_string();
+        assert_eq!(
+            xbox_install_note(Some(&package), true, false),
+            t!("xbox-install-here-needs", size = size.clone())
+        );
+        assert_eq!(
+            xbox_install_note(Some(&package), false, false),
+            t!("xbox-install-in-launcher-needs", size = size.clone())
+        );
+        let no_size = xodus::Package {
+            download_bytes: None,
+            ..package.clone()
+        };
+        assert_eq!(
+            xbox_install_note(Some(&no_size), true, false),
+            t!("xbox-install-here")
+        );
+        assert_eq!(
+            xbox_install_note(None, false, false),
+            t!("xbox-install-in-launcher")
+        );
+        assert_eq!(
+            xbox_install_note(Some(&package), true, true),
+            t!("xbox-close-launcher"),
+            "the launcher must be closed to write its state"
+        );
+        let unsupported = xodus::Package {
+            supported: false,
+            status: "unavailable".into(),
+            ..package
+        };
+        assert_eq!(
+            xbox_install_note(Some(&unsupported), true, false),
+            t!("xbox-not-available")
+        );
+    }
+
+    #[test]
     fn a_game_pass_page_says_where_it_is_installed() {
         let (window, glue) = store_page();
         glue.store.browser.borrow_mut().cached(vec![(
@@ -1320,12 +1388,17 @@ mod tests {
         glue.open_owned("xbox:9AAA");
         let data = window.global::<GameData>();
         assert_eq!(data.get_owned_launcher().as_str(), t!("xbox-open"));
+        let size = Size::Bytes(2_000_000_000).to_string();
+        let note = if xodus::running() {
+            t!("xbox-close-launcher")
+        } else if xodus::ready() {
+            t!("xbox-install-here-needs", size = size.clone())
+        } else {
+            t!("xbox-install-in-launcher-needs", size = size.clone())
+        };
         assert_eq!(
             data.get_owned_note().as_str(),
-            t!(
-                "xbox-install-in-launcher-needs",
-                size = Size::Bytes(2_000_000_000).to_string()
-            ),
+            note,
             "the size the Store gives, and where it is installed"
         );
 

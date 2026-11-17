@@ -182,9 +182,10 @@ impl Glue {
     pub(super) fn show_game_jobs(&self, game: &Game, data: &GameData<'_>) {
         let queue = self.downloads.queue.borrow();
         let managed = game.installed_by_zendo();
+        let store_managed = game.store_managed();
         let job = queue.job_for(&game.id);
         let update =
-            managed && matches!(queue.updates.get(&game.id), Some(UpdateState::Available(_)));
+            store_managed && matches!(queue.updates.get(&game.id), Some(UpdateState::Available(_)));
         data.set_update_label(
             if update {
                 t!("action-label", action = "update")
@@ -203,9 +204,14 @@ impl Glue {
         data.set_has_more(managed || steam.is_some());
         data.set_more_open(self.jobs.more.get());
         data.set_managed(managed);
+        data.set_store_managed(store_managed);
         data.set_job_free(job.is_none());
-        data.set_check_on(queue.updates.get(&game.id) != Some(&UpdateState::Checking));
-        data.set_move_on(job.is_none() && !self.game.running.borrow().is_open(&game.id));
+        data.set_check_on(
+            store_managed && queue.updates.get(&game.id) != Some(&UpdateState::Checking),
+        );
+        data.set_move_on(
+            store_managed && job.is_none() && !self.game.running.borrow().is_open(&game.id),
+        );
         data.set_uninstall_again(queue.confirm_uninstall.as_deref() == Some(game.id.as_str()));
         data.set_job_shown(job.is_some());
         if let Some((job, running)) = job {
@@ -290,6 +296,53 @@ mod tests {
         (window, glue)
     }
 
+    /// A window on the page of Sugar, a Game Pass game Zendo installed.
+    fn pass_page() -> (MainWindow, Rc<Glue>) {
+        let (window, glue) = page(0);
+        let dir = std::env::temp_dir().join(format!("zendo-xbox-page-{}", std::process::id()));
+        let folder = dir.join("GamePass/Sugar Rush");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&folder).unwrap();
+        zendo_core::xodus::write_marker(
+            &folder,
+            &zendo_core::xodus::Marker {
+                schema: 1,
+                product: "9N98Z825TNFW".into(),
+                title: "Sugar Rush".into(),
+                publisher: None,
+                package: None,
+                version: None,
+                executable: None,
+                bytes: None,
+                cover: None,
+                hero: None,
+            },
+        )
+        .unwrap();
+        let mut pass = Game::new(
+            "xbox:9N98Z825TNFW".into(),
+            "Sugar Rush".into(),
+            Source::Xbox,
+            Launch::Command {
+                program: "launch-game".into(),
+                args: vec!["ed9ca0cf65c9665d".into()],
+                dir: None,
+            },
+        );
+        pass.details.install_path = Some(folder);
+        let library = Library {
+            games: vec![pass],
+            problems: Vec::new(),
+        };
+        let outcome =
+            glue.browser
+                .borrow_mut()
+                .loaded(library, Some(Sort::Title), Vec::new(), Vec::new());
+        glue.apply(outcome);
+        glue.open_game("xbox:9N98Z825TNFW");
+        (window, glue)
+    }
+
     fn actions(glue: &Rc<Glue>) -> Vec<Action> {
         glue.downloads
             .queue
@@ -304,6 +357,21 @@ mod tests {
     fn clear_queue(glue: &Rc<Glue>) {
         glue.downloads.queue.borrow_mut().queue.clear();
         glue.queue_changed();
+    }
+
+    #[test]
+    fn a_game_pass_install_can_be_uninstalled_and_has_no_store_jobs() {
+        let (window, glue) = pass_page();
+        let data = window.global::<GameData>();
+        assert!(data.get_managed(), "Zendo installed it");
+        assert!(!data.get_store_managed(), "no store engine runs it");
+        assert!(data.get_has_more(), "so Uninstall is reachable");
+        assert_eq!(data.get_update_label(), "");
+        data.invoke_uninstall();
+        assert!(data.get_uninstall_again());
+        assert_eq!(actions(&glue), []);
+        data.invoke_uninstall();
+        assert_eq!(actions(&glue), [Action::Uninstall]);
     }
 
     #[test]

@@ -5,12 +5,15 @@
 //! keeps a profile in `$XDG_CONFIG_HOME/xodus-nexus` with
 //! `launcher-state.json`. A record there is a game the Microsoft Store
 //! installed; it is started through the launcher's own
-//! `shortcuts/launch-game <id>` script. Read only, as Steam and Heroic are
-//! read: Zendo lists these games and starts them, and never installs,
-//! updates or uninstalls them (`docs/reference.md`, "Nexus Launcher").
+//! `shortcuts/launch-game <id>` script. Zendo reads the records and starts
+//! the games, as it does Steam's and Heroic's. Since item 62 it also
+//! installs Game Pass games itself, into `<games>/GamePass`, and writes a
+//! record for each so the launcher lists it and prepares its runner; the
+//! `.zendo-xbox.json` marker in the folder says the install is Zendo's.
 
 use std::collections::HashMap;
 use std::fs;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
@@ -118,6 +121,530 @@ fn cli() -> Option<PathBuf> {
     let bytes = fs::read(file).ok()?;
     let current: Current = serde_json::from_slice(&bytes).ok()?;
     current.binary.is_file().then_some(current.binary)
+}
+
+/// Whether Zendo can install and start a Game Pass game: the launcher's
+/// backend and its runtime Wine are both there.
+#[must_use]
+pub fn ready() -> bool {
+    cli().is_some() && runtime_wine().is_some()
+}
+
+/// The folder the launcher's runtimes live in: its settings say where, else
+/// the data folder.
+fn runtime_root() -> Option<PathBuf> {
+    #[derive(Deserialize)]
+    struct State {
+        #[serde(default)]
+        settings: Settings,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Settings {
+        #[serde(default)]
+        runtime_root: Option<PathBuf>,
+    }
+    let from_settings = profile()
+        .and_then(|profile| fs::read(profile.join("launcher-state.json")).ok())
+        .and_then(|bytes| serde_json::from_slice::<State>(&bytes).ok())
+        .and_then(|state| state.settings.runtime_root)
+        .filter(|root| root.is_dir());
+    from_settings.or_else(|| {
+        paths::data_home()
+            .map(|dir| dir.join("xodus-nexus/runtimes"))
+            .filter(|root| root.is_dir())
+    })
+}
+
+/// The Wine of the launcher's runtime, when the launcher installed one and
+/// Zendo can start a game with it.
+#[must_use]
+pub fn runtime_wine() -> Option<PathBuf> {
+    runtime_wine_in(&runtime_root()?)
+}
+
+/// The Wine of the installed runtime under `root`: the `nexus-cachyos`
+/// build first, then the plain one, then any other in name order. Each
+/// variant's
+/// `current.json` names its build; the `wine` in it must be there.
+fn runtime_wine_in(root: &Path) -> Option<PathBuf> {
+    #[derive(Deserialize)]
+    struct Current {
+        #[serde(rename = "buildId")]
+        build_id: String,
+    }
+    let mut variants: Vec<PathBuf> = fs::read_dir(root.join("variants"))
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    variants.sort_by_key(|path| {
+        let name = path.file_name().and_then(|name| name.to_str());
+        match name {
+            Some("nexus-cachyos") => (0, path.clone()),
+            Some("nexus") => (1, path.clone()),
+            _ => (2, path.clone()),
+        }
+    });
+    for variant in variants {
+        let Ok(bytes) = fs::read(variant.join("current.json")) else {
+            continue;
+        };
+        let Ok(current) = serde_json::from_slice::<Current>(&bytes) else {
+            continue;
+        };
+        if !one_component(&current.build_id) {
+            continue;
+        }
+        let wine = variant
+            .join("releases")
+            .join(&current.build_id)
+            .join("files/bin/wine");
+        if wine.is_file() {
+            return Some(wine);
+        }
+    }
+    None
+}
+
+/// Whether a name read from a file is one folder and no more.
+fn one_component(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none()
+}
+
+/// The file Zendo writes in a folder it installed, and reads back.
+pub const RECORD: &str = ".zendo-xbox.json";
+
+/// What Zendo remembers about a Game Pass game it installed: enough to list
+/// it, start it and show where it came from without asking the Store.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Marker {
+    pub schema: u32,
+    /// The Microsoft Store product id.
+    pub product: String,
+    pub title: String,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub package: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub executable: Option<String>,
+    #[serde(default)]
+    pub bytes: Option<u64>,
+    #[serde(default)]
+    pub cover: Option<String>,
+    #[serde(default)]
+    pub hero: Option<String>,
+}
+
+/// Writes the marker into the game's folder.
+///
+/// # Errors
+///
+/// When the folder is gone or the file cannot be written.
+pub fn write_marker(folder: &Path, marker: &Marker) -> anyhow::Result<()> {
+    let path = folder.join(RECORD);
+    let text = serde_json::to_string_pretty(marker).context("the marker could not be written")?;
+    fs::write(&path, text).with_context(|| format!("could not write {}", path.display()))
+}
+
+/// The marker in a folder, when it wrote one Zendo can read.
+#[must_use]
+pub fn read_marker(folder: &Path) -> Option<Marker> {
+    let bytes = fs::read(folder.join(RECORD)).ok()?;
+    let marker: Marker = serde_json::from_slice(&bytes).ok()?;
+    (marker.schema == 1).then_some(marker)
+}
+
+/// Whether Nexus Launcher is running, by Electron's lock in its profile.
+#[must_use]
+pub fn running() -> bool {
+    profile().is_some_and(|profile| running_in(&profile))
+}
+
+fn running_in(profile: &Path) -> bool {
+    profile.join("SingletonLock").exists()
+}
+
+/// Zendo's record id for a product: stable, so a reinstall keeps the same
+/// launcher record and `compatdata` folder. FNV-1a, as 16 hex.
+#[must_use]
+pub fn record_id(product: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in format!("zendo:{product}").bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Where the launcher's state file is, once its profile exists.
+fn state_path() -> Option<PathBuf> {
+    paths::config_home().map(|dir| dir.join("xodus-nexus/launcher-state.json"))
+}
+
+/// The launcher's `compatdata` folder for one record: the prefix and the
+/// prepared runner it makes when the game is first played.
+#[must_use]
+pub fn compatdata(id: &str) -> Option<PathBuf> {
+    paths::data_home().map(|dir| dir.join("xodus-nexus/compatdata").join(id))
+}
+
+/// The launcher's state, read as JSON so the fields Zendo does not know
+/// survive a write.
+fn state_at(path: &Path) -> anyhow::Result<serde_json::Value> {
+    let bytes = fs::read(path).with_context(|| format!("could not read {}", path.display()))?;
+    serde_json::from_slice(&bytes).context("Nexus Launcher's state was odd")
+}
+
+/// Writes the state beside the old one, then renames it over, so a failed
+/// write leaves the launcher with its state.
+fn write_state(path: &Path, state: &serde_json::Value) -> anyhow::Result<()> {
+    let temporary = path.with_extension("zendo-tmp");
+    let text = serde_json::to_vec_pretty(state).context("the state could not be written")?;
+    fs::write(&temporary, text)
+        .with_context(|| format!("could not write {}", temporary.display()))?;
+    fs::rename(&temporary, path).with_context(|| format!("could not put {}", path.display()))
+}
+
+/// The account the launcher records for its games, from an existing record
+/// or the backend.
+fn account_of(state: &serde_json::Value) -> Option<String> {
+    let from_game = state["games"]
+        .as_array()?
+        .iter()
+        .find_map(|game| game["licenseAccount"].as_str().map(str::to_owned));
+    from_game.or_else(|| {
+        let answer: Library = serde_json::from_str(&backend(&["library", "--json"]).ok()?).ok()?;
+        answer.account
+    })
+}
+
+/// A moment as the launcher writes it: `2026-11-17T15:16:09.000Z`.
+fn iso_now() -> String {
+    let seconds = crate::time::now();
+    let (year, month, day) =
+        crate::time::civil_from_days(i64::try_from(seconds / 86_400).unwrap_or(i64::MAX));
+    let in_day = seconds % 86_400;
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.000Z",
+        in_day / 3600,
+        in_day % 3600 / 60,
+        in_day % 60
+    )
+}
+
+/// A cover as the inline `data:` URL the launcher keeps.
+fn data_url(bytes: &[u8]) -> String {
+    use base64::Engine as _;
+    let mime = if bytes.starts_with(b"\xff\xd8\xff") {
+        "image/jpeg"
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
+    } else {
+        "application/octet-stream"
+    };
+    format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
+}
+
+/// The record Nexus Launcher keeps for one of its games, as Zendo builds it
+/// for a folder it installed (`docs/reference.md`, "Nexus Launcher").
+fn record(
+    folder: &Path,
+    marker: &Marker,
+    id: &str,
+    cover: Option<&str>,
+    account: Option<&str>,
+) -> serde_json::Value {
+    let now = iso_now();
+    serde_json::json!({
+        "id": id,
+        "title": marker.title.clone(),
+        "path": folder,
+        "storeId": marker.product.clone(),
+        "publisher": marker.publisher.clone(),
+        "installedVersion": marker.version.clone(),
+        "packageName": marker.package.clone(),
+        "executable": marker.executable.clone(),
+        "coverDataUrl": cover,
+        "installState": "ready",
+        "vcRedistEncrypted": false,
+        "addedAt": now,
+        "installedAt": now,
+        "licenseAccount": account,
+        "offerProductId": marker.product.clone(),
+        "coverUrl": marker.cover.clone(),
+        "heroUrl": marker.hero.clone(),
+        "launchTools": {
+            "dualSenseCompatibility": false,
+            "mangoHud": false,
+            "gamescope": false,
+            "gamescopeArgs": "",
+            "launchOptions": ""
+        },
+        "locale": "",
+        "runtime": "nexus-cachyos",
+        "runtimePrefixes": {},
+        "runtimePrefixIdentity": {"layout": "game"}
+    })
+}
+
+/// Registers a game Zendo installed with Nexus Launcher: from now on the
+/// launcher lists it, prepares it and plays it. The cover and the account
+/// are best effort; the record is not.
+///
+/// # Errors
+///
+/// When the launcher is running, its state cannot be read or written, or the
+/// game was never run by it (no profile).
+pub fn register(folder: &Path, marker: &Marker) -> anyhow::Result<String> {
+    if running() {
+        anyhow::bail!("close Nexus Launcher first: it must not be running");
+    }
+    let path = state_path().context("Nexus Launcher has not run on this machine")?;
+    let mut state = state_at(&path)?;
+    let id = record_id(&marker.product);
+    let account = account_of(&state);
+    let cover = marker.cover.as_deref().and_then(fetch_cover);
+    let record = record(folder, marker, &id, cover.as_deref(), account.as_deref());
+    add_record(&mut state, record, &marker.product)?;
+    write_state(&path, &state)?;
+    Ok(id)
+}
+
+/// Adds the record, replacing one for the same id or product.
+fn add_record(
+    state: &mut serde_json::Value,
+    record: serde_json::Value,
+    product: &str,
+) -> anyhow::Result<()> {
+    let games = state["games"]
+        .as_array_mut()
+        .context("Nexus Launcher's state has no games list")?;
+    games.retain(|game| {
+        game["id"].as_str() != record["id"].as_str() && game["storeId"].as_str() != Some(product)
+    });
+    games.push(record);
+    Ok(())
+}
+
+/// Removes the record with that id, leaving the rest of the state alone.
+fn remove_record(state: &mut serde_json::Value, id: &str) -> anyhow::Result<()> {
+    let games = state["games"]
+        .as_array_mut()
+        .context("Nexus Launcher's state has no games list")?;
+    games.retain(|game| game["id"].as_str() != Some(id));
+    Ok(())
+}
+
+/// Removes the record with that id, leaving the launcher's other games and
+/// settings as they are.
+///
+/// # Errors
+///
+/// When the launcher is running, or its state cannot be read or written.
+pub fn unregister(id: &str) -> anyhow::Result<()> {
+    if running() {
+        anyhow::bail!("close Nexus Launcher first: it must not be running");
+    }
+    let path = state_path().context("Nexus Launcher has not run on this machine")?;
+    let mut state = state_at(&path)?;
+    remove_record(&mut state, id)?;
+    write_state(&path, &state)
+}
+
+/// The bytes of a cover, for the record's inline copy.
+fn fetch_cover(url: &str) -> Option<String> {
+    let bytes = crate::http::download_agent()
+        .get(url)
+        .call()
+        .ok()?
+        .into_body()
+        .read_to_vec()
+        .ok()?;
+    (!bytes.is_empty()).then(|| data_url(&bytes))
+}
+
+/// The launcher's backend as a command, with its arguments.
+fn command(args: &[&str]) -> anyhow::Result<std::process::Command> {
+    let cli = cli().context("Nexus Launcher's backend is not installed")?;
+    let mut command = std::process::Command::new(cli);
+    command.args(args);
+    Ok(command)
+}
+
+/// The room left beside a finished package, so a full disk does not have to
+/// end an install at the last byte.
+const HEADROOM: u64 = 1 << 30;
+
+/// The bytes free on the file system `path` is on, through `df`.
+///
+/// # Errors
+///
+/// When `df` is missing or cannot read the file system.
+pub fn free_bytes(path: &Path) -> anyhow::Result<u64> {
+    let output = std::process::Command::new("df")
+        .args(["-B1", "--output=avail"])
+        .arg(path)
+        .output()
+        .context("could not ask df for the free space")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "df could not read {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.lines()
+        .filter_map(|line| line.trim().parse::<u64>().ok())
+        .next_back()
+        .context("df gave no free space")
+}
+
+/// Whether `bytes` fit where `path` is, with [`HEADROOM`] to spare.
+///
+/// # Errors
+///
+/// When [`free_bytes`] cannot tell.
+pub fn fits(path: &Path, bytes: u64) -> anyhow::Result<bool> {
+    Ok(free_bytes(path)? >= bytes.saturating_add(HEADROOM))
+}
+
+/// One progress event of the backend's `streaming` protocol.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamEvent {
+    #[serde(default)]
+    completed_bytes: u64,
+    #[serde(default)]
+    total_bytes: u64,
+}
+
+/// A `NEXUS_PROGRESS` line's bytes done and total, when the line is one.
+fn stream_event(line: &str) -> Option<(u64, u64)> {
+    let payload = line.strip_prefix("NEXUS_PROGRESS ")?;
+    let event: StreamEvent = serde_json::from_str(payload).ok()?;
+    Some((event.completed_bytes, event.total_bytes))
+}
+
+/// Downloads and extracts a Store product into `folder` with the backend's
+/// `streaming`, reporting the bytes done and the total as it goes. The
+/// backend's journal in the folder makes a second run carry on from where
+/// the first stopped.
+///
+/// # Errors
+///
+/// When the backend is missing, refuses, or cannot be started.
+pub fn stream(
+    product: &str,
+    folder: &Path,
+    stop: &crate::downloads::Stop,
+    report: &mut dyn FnMut(u64, u64),
+) -> anyhow::Result<crate::downloads::Ended> {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::Stdio;
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::{Duration, Instant};
+
+    fs::create_dir_all(folder).with_context(|| format!("could not make {}", folder.display()))?;
+    let mut command = command(&[
+        "streaming",
+        product,
+        &folder.to_string_lossy(),
+        "--progress-json",
+    ])?;
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
+    let mut child = command
+        .spawn()
+        .context("could not start Nexus Launcher's backend")?;
+    let (sender, lines) = mpsc::channel::<String>();
+    let streams: [Option<Box<dyn Read + Send>>; 2] = [
+        child
+            .stdout
+            .take()
+            .map(|out| Box::new(out) as Box<dyn Read + Send>),
+        child
+            .stderr
+            .take()
+            .map(|err| Box::new(err) as Box<dyn Read + Send>),
+    ];
+    for stream in streams.into_iter().flatten() {
+        let sender = sender.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stream).lines().map_while(Result::ok) {
+                if sender.send(line).is_err() {
+                    return;
+                }
+            }
+        });
+    }
+    drop(sender);
+    let mut tail: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+    let mut interrupted: Option<Instant> = None;
+    let mut exited: Option<Instant> = None;
+    loop {
+        match lines.recv_timeout(Duration::from_millis(250)) {
+            Ok(line) => {
+                if let Some((done, total)) = stream_event(&line) {
+                    report(done, total);
+                }
+                if !line.trim().is_empty() {
+                    if tail.len() == 30 {
+                        tail.pop_front();
+                    }
+                    tail.push_back(line);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+        if stop.asked() {
+            match interrupted {
+                None => {
+                    crate::downloads::signal_group(child.id(), "-INT");
+                    interrupted = Some(Instant::now());
+                }
+                Some(at) if at.elapsed() > Duration::from_secs(15) => {
+                    crate::downloads::signal_group(child.id(), "-KILL");
+                    let _ = child.kill();
+                }
+                Some(_) => {}
+            }
+        }
+        if exited.is_none() && matches!(child.try_wait(), Ok(Some(_))) {
+            exited = Some(Instant::now());
+        }
+        if exited.is_some_and(|at| at.elapsed() > Duration::from_secs(5)) {
+            break;
+        }
+    }
+    let status = child
+        .wait()
+        .context("Nexus Launcher's backend did not end cleanly")?;
+    if stop.asked() {
+        return Ok(crate::downloads::Ended::Stopped);
+    }
+    if !status.success() {
+        let why = tail
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("exit {}", status.code().unwrap_or(-1)));
+        anyhow::bail!("Nexus Launcher's backend could not install: {why}");
+    }
+    Ok(crate::downloads::Ended::Done)
 }
 
 /// Whether an `AppImage`'s name is the one this machine runs: the release
@@ -307,6 +834,177 @@ mod tests {
             .iter()
             .find(|game| game.id == id)
             .expect("the game")
+    }
+
+    /// A runtimes folder with the variants given, each naming its build.
+    fn runtimes(name: &str, variants: &[(&str, &str, bool)]) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("zendo-xodus-runtime-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        for (family, build, wine) in variants {
+            let base = dir.join("variants").join(family);
+            fs::create_dir_all(&base).unwrap();
+            fs::write(
+                base.join("current.json"),
+                format!(r#"{{"schema":1,"family":"{family}","buildId":"{build}"}}"#),
+            )
+            .unwrap();
+            if *wine {
+                let bin = base.join("releases").join(build).join("files/bin");
+                fs::create_dir_all(&bin).unwrap();
+                fs::write(bin.join("wine"), "").unwrap();
+            }
+        }
+        dir
+    }
+
+    #[test]
+    fn takes_the_runtimes_wine_cachyos_first() {
+        let dir = runtimes(
+            "both",
+            &[("nexus", "aaa", true), ("nexus-cachyos", "bbb", true)],
+        );
+        let wine = runtime_wine_in(&dir).unwrap();
+        assert!(wine.ends_with("nexus-cachyos/releases/bbb/files/bin/wine"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn takes_the_plain_runtime_when_it_is_the_only_one() {
+        let dir = runtimes("plain", &[("nexus", "aaa", true)]);
+        let wine = runtime_wine_in(&dir).unwrap();
+        assert!(wine.ends_with("nexus/releases/aaa/files/bin/wine"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn refuses_a_build_id_that_is_a_path_and_a_missing_wine() {
+        let dir = runtimes("paths", &[("nexus", "..", true)]);
+        assert_eq!(runtime_wine_in(&dir), None, "a build id is one folder");
+        fs::remove_dir_all(&dir).unwrap();
+        let dir = runtimes("gone", &[("nexus", "aaa", false)]);
+        assert_eq!(runtime_wine_in(&dir), None, "the wine must be there");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn reads_the_streamings_progress_lines_and_ignores_the_rest() {
+        // As the backend wrote it for Retro Classics on 2026-11-17.
+        let line = r#"NEXUS_PROGRESS {"schema":1,"sequence":4,"event":"progress","phase":"downloading","completedBytes":1048576,"totalBytes":84879403,"bytesPerSecond":2097152,"canPause":true,"paused":false}"#;
+        assert_eq!(stream_event(line), Some((1_048_576, 84_879_403)));
+        assert_eq!(stream_event("Preparing download"), None);
+        assert_eq!(stream_event("NEXUS_PROGRESS not json"), None);
+    }
+
+    #[test]
+    fn says_whether_a_package_fits() {
+        let dir = std::env::temp_dir();
+        let Ok(free) = free_bytes(&dir) else {
+            return; // no df on this machine
+        };
+        assert!(free > 0);
+        assert!(fits(&dir, 1).unwrap());
+        assert!(!fits(&dir, u64::MAX).unwrap());
+    }
+
+    fn marker() -> Marker {
+        Marker {
+            schema: 1,
+            product: "9N98Z825TNFW".into(),
+            title: "Sugar Rush".into(),
+            publisher: Some("Microsoft Studios".into()),
+            package: Some("Microsoft.BadgerWin10".into()),
+            version: Some("1.18.19068.0".into()),
+            executable: Some("Sugar.exe".into()),
+            bytes: Some(1024),
+            cover: Some("https://example.test/cover.png".into()),
+            hero: None,
+        }
+    }
+
+    #[test]
+    fn writes_and_reads_its_marker() {
+        let dir = std::env::temp_dir().join(format!("zendo-xodus-marker-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let folder = dir.join("GamePass/Sugar Rush");
+        fs::create_dir_all(&folder).unwrap();
+        write_marker(&folder, &marker()).unwrap();
+        let read = read_marker(&folder).unwrap();
+        assert_eq!(read.product, "9N98Z825TNFW");
+        assert_eq!(read.version.as_deref(), Some("1.18.19068.0"));
+        assert_eq!(read.bytes, Some(1024));
+        // A marker from a later schema is not read.
+        let mut later = marker();
+        later.schema = 2;
+        write_marker(&folder, &later).unwrap();
+        assert!(read_marker(&folder).is_none());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn names_a_record_after_the_product() {
+        let id = record_id("9N98Z825TNFW");
+        assert_eq!(id.len(), 16);
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(id, record_id("9N98Z825TNFW"), "stable across calls");
+        assert_ne!(id, record_id("9MTVJ3HHTQGS"));
+    }
+
+    #[test]
+    fn builds_the_launchers_record() {
+        let value = record(
+            Path::new("/home/me/Games/GamePass/Sugar Rush"),
+            &marker(),
+            "0123456789abcdef",
+            Some("data:image/jpeg;base64,AA=="),
+            Some("me@example.test"),
+        );
+        assert_eq!(value["id"], "0123456789abcdef");
+        assert_eq!(value["storeId"], "9N98Z825TNFW");
+        assert_eq!(value["installState"], "ready");
+        assert_eq!(value["runtime"], "nexus-cachyos");
+        assert_eq!(value["runtimePrefixIdentity"]["layout"], "game");
+        assert_eq!(value["launchTools"]["mangoHud"], false);
+        assert_eq!(value["licenseAccount"], "me@example.test");
+        assert_eq!(value["coverDataUrl"], "data:image/jpeg;base64,AA==");
+        assert!(
+            value["addedAt"]
+                .as_str()
+                .is_some_and(|at| at.ends_with('Z') && at.len() == 24),
+            "{value}"
+        );
+    }
+
+    #[test]
+    fn keeps_one_record_for_a_product_and_removes_it() {
+        let mut state = serde_json::json!({
+            "games": [{"id": "other", "storeId": "OTHER"}],
+            "downloads": [{"id": "a-job"}],
+            "settings": {"closeToTray": false}
+        });
+        let first = record(Path::new("/g/One"), &marker(), "aaa", None, None);
+        let second = record(Path::new("/g/Two"), &marker(), "aaa", None, None);
+        add_record(&mut state, first, "9N98Z825TNFW").unwrap();
+        add_record(&mut state, second, "9N98Z825TNFW").unwrap();
+        assert_eq!(state["games"].as_array().unwrap().len(), 2, "one per game");
+        assert_eq!(state["downloads"][0]["id"], "a-job", "the rest survives");
+        assert_eq!(state["settings"]["closeToTray"], false);
+        remove_record(&mut state, "aaa").unwrap();
+        assert_eq!(state["games"].as_array().unwrap().len(), 1);
+        assert_eq!(state["games"][0]["id"], "other");
+    }
+
+    #[test]
+    fn sees_the_launchers_lock_and_makes_data_urls() {
+        let dir = std::env::temp_dir().join(format!("zendo-xodus-lock-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        assert!(!running_in(&dir));
+        fs::write(dir.join("SingletonLock"), "").unwrap();
+        assert!(running_in(&dir));
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(data_url(b"\xff\xd8\xffx").starts_with("data:image/jpeg;base64,"));
+        assert!(data_url(b"\x89PNG\r\n\x1a\n").starts_with("data:image/png;base64,"));
     }
 
     #[test]
@@ -759,10 +1457,7 @@ pub fn achievements(title: u64) -> anyhow::Result<Vec<crate::achievements::Achie
             name: item.name,
             description: item.description,
             hidden: item.secret,
-            unlocked: item
-                .unlocked_at
-                .as_deref()
-                .and_then(crate::time::parse_utc),
+            unlocked: item.unlocked_at.as_deref().and_then(crate::time::parse_utc),
             rarity: None,
             icon: item
                 .icon_url
@@ -850,6 +1545,8 @@ struct Choice {
 /// The backend's answer about the account's entitlements.
 #[derive(Deserialize)]
 struct Library {
+    #[serde(default)]
+    account: Option<String>,
     #[serde(default)]
     entitlements: Vec<Entitlement>,
 }

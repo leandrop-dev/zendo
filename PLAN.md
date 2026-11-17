@@ -39,6 +39,12 @@ Zendo's sources are Steam, Epic, GOG and Amazon, Game Pass
 and Xbox through Nexus Launcher, Greenlight for the console's screen, Heroic's
 sideloaded games, `.desktop` files and games added by hand.
 
+Game Pass installs are Zendo's own since item 62: a game is streamed into
+`<games folder>/GamePass`, recorded with a `.zendo-xbox.json` marker and
+registered in Nexus Launcher's `launcher-state.json`, so the launcher lists it
+and its prepared runner plays it; Zendo uninstalls the ones it installed. The
+record write is ADR 0002. Updates stay with the launcher (item 60c).
+
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
   translucency, blur (by window class), a bundled font, SVG icons, the KDE

@@ -6018,3 +6018,74 @@ Recorded in `docs/reference.md` ("Nexus Launcher") and `docs/backlog.md`
 (item 60); item 62 (installing Game Pass games from Zendo, and the launch
 path behind the launcher's back) is untouched. No code changed; tests were
 not rerun for this.
+
+## Item 62, installing Game Pass games from Zendo (2026-11-17)
+
+Zendo installs a Game Pass game into `<games folder>/GamePass/<title>` with
+Nexus Launcher's backend, registers it with the launcher, and uninstalls the
+ones it installed. The design changed once, during the live check
+(`docs/adr/0002-register-game-pass-with-nexus-launcher.md`, which supersedes
+ADR 0001).
+
+- **Installing**: a new `Shop::Xbox` job in the one download queue
+  (`crates/zendo-core/src/downloads.rs`). `downloads::Job`'s `store:
+  StoreKey` became `shop: Shop`, with `#[serde(alias = "store")]`, so a
+  `downloads.json` written before this still loads (test
+  `reads_a_job_written_before_the_shop_field`). `run_xbox` checks free space
+  with `df -B1 --output=avail` against `resolve-package`'s `downloadBytes`
+  (1 GiB headroom), then runs `xodus-cli streaming <product> <folder>
+  --progress-json` (`xodus::stream`), reading its `NEXUS_PROGRESS` JSON into
+  the queue's bar. Stop is a signal to the backend's process group; its
+  journal makes Resume carry on. The live check's pause, resume, stop and
+  resume all worked.
+- **The marker**: `.zendo-xbox.json` in the game's folder
+  (`xodus::Marker`, `write_marker`, `read_marker`), with the product, title,
+  publisher, package name and version from `appxmanifest.xml`, the executable
+  (`Application Executable`, else the largest `.exe`), the download bytes and
+  the Store's cover and hero URLs.
+- **The pivot**: ADR 0001 had Zendo launch with `xodus-cli run <folder>
+  <wine>` and never touch the launcher. The user tried Play: the backend
+  failed in D3D (`DXGI: CreateSwapChainForHwnd: Unsupported device type`,
+  exit 3) because the launcher prepares `compatdata/<id>` with its own
+  `xodus-proton-game`, staged vkd3d-proton/DXVK components and package
+  registration. A hand-written record in `launcher-state.json` (backed up
+  first) made the launcher list the game and prepare that folder, and the
+  user's Minecraft Legends played; Retro Classics crashed inside vkd3d-proton
+  under the launcher too (`vkEndCommandBuffer Exception 0xc0000005`, exit 3).
+  So Zendo writes the record (`xodus::register`/`unregister`): the state is
+  read and written as JSON so unknown fields survive, a sibling temporary file
+  is renamed over it, and the write is refused while the launcher runs
+  (`SingletonLock`). The record id is FNV-1a of `zendo:<product>`, so a
+  reinstall keeps its `compatdata`. The account and the inline cover are best
+  effort (the cover is fetched and base64-encoded, as the launcher's own
+  records carry it).
+- **Launching**: the launcher's record is the library source; `xodus::scan`
+  makes it a `Launch::Command` on `shortcuts/launch-game <id>`, the path
+  already used for launcher-installed games. `Launch::Xodus`, the marker
+  scan and `xodus::run_command` were removed.
+- **Uninstalling**: the marker decides ownership: `Game::installed_by_zendo`
+  is true for a `Source::Xbox` game whose folder has one,
+  `Job::for_game` makes only an Uninstall job for it, and `run_xbox` removes
+  the record, `compatdata/<id>` and the folder, refusing while the launcher
+  runs.
+- **The window**: the Store page says Zendo installs the game (with its size)
+  or that Nexus Launcher must be closed (`xbox-install-here`,
+  `xbox-close-launcher`, both languages); the Install button follows
+  `xodus::ready()` and `!xodus::running()`. A Game Pass game's page shows More
+  with Uninstall but no Check, Repair or Move: a new `GameData.store-managed`
+  gates those and `managed` keeps Uninstall.
+- **Left behind on purpose**: a game the launcher installed has no marker and
+  Zendo offers no Uninstall for it; a launcher-side removal leaves its
+  `compatdata` folder.
+
+Checked: `cargo test --workspace` green (175 zendo, 313 core, 92 shell);
+clippy reports only the warnings the newer toolchain already gave. Seen live
+with the user: Retro Classics (88,821,760 bytes) and Roblox installed from
+the Store page, listed by Nexus Launcher and removed through Zendo (folder,
+record and compatdata gone); Minecraft Legends, installed by Zendo after the
+launcher's copy was removed, played through Zendo's Play (the launcher's run
+exited 0 after 48.7 s); Retro Classics and Roblox crash inside vkd3d-proton
+under the launcher itself, so those titles do not play here yet. Not tried:
+pt-PT, a launcher update (the record schema may move), a launcher running on
+a non-default profile (the lock is read from the default one), DLC, and the
+MangoHud/gamescope wrappers.

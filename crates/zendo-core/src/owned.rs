@@ -121,7 +121,7 @@ pub enum Shop {
     Gog,
     Amazon,
     /// PC Game Pass, listed by the Microsoft Store through Nexus Launcher:
-    /// read from its backend, not installed by Zendo (item 60).
+    /// read from its backend, and installed by Zendo since item 62.
     Xbox,
 }
 
@@ -157,7 +157,7 @@ impl Shop {
     }
 
     /// The first half of its games' ids, and its cache file's name.
-    fn key(self) -> &'static str {
+    pub(crate) fn key(self) -> &'static str {
         match self {
             Self::Steam => "steam",
             Self::Epic => Store::Epic.source_key(),

@@ -445,6 +445,33 @@ for when it comes back; no code reads them today.
   Zendo watches `launcher-state.json` (`zendo-core/src/watch.rs`), so an
   install, update or removal made in the launcher's window is rescanned by
   itself.
+- **The record Zendo writes** (item 62, checked 2026-11-17): a `games[]`
+  entry with `id` (16 hex), `title`, `path`, `storeId`, `publisher`,
+  `installedVersion`, `packageName`, `executable`, `coverDataUrl` (a
+  `data:image/jpeg;base64,…` URL, about 150 KB for a 600x900 JPEG),
+  `installState: "ready"`, `vcRedistEncrypted: false`, `addedAt`/`installedAt`
+  (`2026-11-17T15:50:08.000Z`), `licenseAccount`, `offerProductId`,
+  `coverUrl`, `heroUrl`, `launchTools` (`dualSenseCompatibility`, `mangoHud`,
+  `gamescope`, `gamescopeArgs`, `launchOptions`), `locale`, `runtime`
+  (`nexus-cachyos`), `runtimePrefixes` (`{}`), `runtimePrefixIdentity`
+  (`{"layout":"game"}`). The launcher lists it at once and prepares
+  `~/.local/share/xodus-nexus/compatdata/<id>/` (a `pfx`, `xodus-proton-game`,
+  `xodus-proton-wine`, `tracked_files`, `version`) when the game is first
+  played.
+- **Launching without the prepared runner fails**: `xodus-cli run <folder>
+  <wine>` with the runtime's own `files/bin/wine` gets through the license and
+  prefix steps but the game dies in D3D (missing `libvkd3d*`, then
+  `DXGI: CreateSwapChainForHwnd: Unsupported device type`, exit 3) because
+  the prepared `xodus-proton-game` stages the runtime's vkd3d-proton/DXVK
+  components, sets `WINEPREFIX`, `WINEDLLPATH`, `LD_LIBRARY_PATH`,
+  `GST_*`, `ESPEAK_DATA_PATH`, the shader caches and the package
+  registration. `launcher-state.json` has a `SingletonLock` in its profile
+  while the launcher runs; the state is cached in memory, so a write then is
+  lost.
+- **Title compatibility is the runtime's**: on 2026-11-17, Minecraft Legends
+  played; Retro Classics and Roblox exited 3 with `vkd3d-proton:
+  vkEndCommandBuffer Exception 0xc0000005` under the launcher as well as
+  under Zendo.
 - Artwork and product facts: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
   <storeId>&market=US&languages=en-US&fieldsTemplate=Details`, checked
   2026-11-17: one query took 36 ids (1.8 MB), and its answer is a `Products`

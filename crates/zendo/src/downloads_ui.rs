@@ -19,7 +19,7 @@ use zendo_core::Size;
 use zendo_core::config::Config;
 use zendo_core::downloads::{self, Action, Event, Job, Stop};
 use zendo_core::info::{Dlc, Update};
-use zendo_core::owned::Owned;
+use zendo_core::owned::{Owned, Shop};
 use zendo_shell::file_dialog::{self, Kind};
 use zendo_shell::queue::{self, Effect, Queue, Report, Then};
 use zendo_shell::store_facts::InfoState;
@@ -76,12 +76,7 @@ fn row(job: &Job) -> JobRow {
     JobRow {
         id: job.id().into(),
         title: job.title.clone().into(),
-        line: format!(
-            "{} · {}",
-            queue::action_label(job.action),
-            job.store().label()
-        )
-        .into(),
+        line: format!("{} · {}", queue::action_label(job.action), job.shop.label()).into(),
         note: "".into(),
         error: "".into(),
         verdict: "".into(),
@@ -572,12 +567,7 @@ impl Glue {
         data.set_running(true);
         data.set_current_title(job.title.clone().into());
         data.set_current_line(
-            format!(
-                "{} · {}",
-                queue::action_doing(job.action),
-                job.store().label()
-            )
-            .into(),
+            format!("{} · {}", queue::action_doing(job.action), job.shop.label()).into(),
         );
         data.set_percent(running.progress.percent.unwrap_or(-1.0));
         data.set_progress_line(
@@ -665,7 +655,12 @@ impl Glue {
             .as_ref()
             .and_then(Config::install_dir)?;
         let browser = self.store.browser.borrow();
-        Job::install(browser.owned(id)?, dir, dlc)
+        let owned = browser.owned(id)?;
+        if owned.shop == Shop::Xbox && (!zendo_core::xodus::ready() || zendo_core::xodus::running())
+        {
+            return None;
+        }
+        Job::install(owned, dir, dlc)
     }
 
     /// Writes the buttons under a store game's title: Install and Import, or

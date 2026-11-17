@@ -435,19 +435,27 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   neither list the game nor start it through `launch-game`; `xodus-cli run
   <folder> <wine>` is the other way, and needs the runtime's own Wine (the
   system Wine 11.22 page-faulted). See item 62.
-- **62, installing Game Pass games from Zendo** [tentative, 2026-11-17]. The
-  experiment above showed it is possible but that it makes Zendo a second
-  manager of the same games folder: `streaming <product> <folder>` installs
-  (89 MB in under a minute for Retro Classics, `NEXUS_PROGRESS` lines with
-  `phase`, `completedBytes`, `totalBytes`, `canPause`), and the launcher's
-  state does not learn about it. A slice would need: a record of Zendo's own
-  for such installs (the way store-engine installs are recorded, or a marker
-  file in the folder), the folder's executable from `appxmanifest.xml` or the
-  largest `.exe`, a launch through `xodus-cli run <folder> <runtime wine>`
-  with the runtime found under `~/.local/share/xodus-nexus/runtimes/variants/`,
-  the queue's progress/pause/Stop from the protocol, and space checks like the
-  launcher's. It also means two ways to install one game, and a game the
-  launcher cannot repair or remove. Not started; the user's call.
+- **62 built 2026-11-17, installing Game Pass games from Zendo.** The user's
+  call, after 60c. Zendo streams a Store package with
+  `xodus-cli streaming <product> <folder> --progress-json` into
+  `<games folder>/GamePass/<title>` through the one download queue (a new
+  `Shop::Xbox` job; the queue's `Job` now names its `Shop`, with a serde alias
+  for old `downloads.json` files), checks free space first, and writes a
+  `.zendo-xbox.json` marker (product, title, publisher, package, version,
+  executable, bytes, cover and hero URLs). Launch and compatibility are the
+  launcher's: the marker is registered as a record in
+  `launcher-state.json` (ADR 0002), so Nexus Launcher lists the game, prepares
+  `compatdata/<id>/xodus-proton-game` and plays it through `launch-game <id>`;
+  writing the state requires the launcher closed (`SingletonLock`), and
+  Zendo uninstalls the games it made by removing the folder, the record and
+  that `compatdata` folder. **Seen live with the user**: Retro Classics and
+  Roblox installed, listed by the launcher and uninstalled through Zendo;
+  Minecraft Legends, installed by Zendo after the launcher's copy was
+  removed, played through Zendo. Retro Classics and Roblox crash inside
+  vkd3d-proton under the launcher itself (`vkEndCommandBuffer Exception
+  0xc0000005`, exit 3), so those titles do not play on this machine yet.
+  Out of scope: updates (60c), DLC, MangoHud/gamescope wrappers, and a game
+  installed by hand into `GamePass` without a marker (not Zendo's to remove).
 - **60d built 2026-11-17, the packages on the cards**: when the Game Pass list
   arrives a thread asks `resolve-package` for each game, so a card shows an
   UNSUPPORTED badge when this PC cannot install it, without the page being

@@ -183,6 +183,8 @@ export global GameData {
     callback update();
     // More: the row of less used actions, folded on each game.
     in property <bool> has-more;
+    // A game a store engine installed: Check for updates, Repair and Move.
+    in property <bool> store-managed;
     in property <bool> more-open;
     callback toggle-more();
     // The queue has a job for the game: the line says which, with See downloads.
@@ -1289,17 +1291,17 @@ export component GamePage inherits Rectangle {
                             padding-bottom: Space.m;
                             spacing: Space.m;
                             alignment: start;
-                            if GameData.managed: ActionButton {
+                            if GameData.store-managed: ActionButton {
                                 label: Tr.t("downloads-check-updates");
                                 enabled: GameData.check-on;
                                 clicked => { GameData.check-updates(); }
                             }
-                            if GameData.managed: ActionButton {
+                            if GameData.store-managed: ActionButton {
                                 label: Tr.with("action-label", "action", "repair");
                                 enabled: GameData.job-free;
                                 clicked => { GameData.repair(); }
                             }
-                            if GameData.managed: ActionButton {
+                            if GameData.store-managed: ActionButton {
                                 label: Tr.t("downloads-move");
                                 enabled: GameData.move-on;
                                 clicked => { GameData.move-game(); }

@@ -23,6 +23,7 @@ use std::thread;
 use zendo_core::Game;
 use zendo_core::downloads::{self, Action, Ended, Event, Job, Progress, Stop};
 use zendo_core::info::{self, Update};
+use zendo_core::stores::Store;
 
 use crate::t;
 
@@ -514,10 +515,7 @@ impl Queue {
     /// The games, of these, whose updates are to be asked about: the ones
     /// Zendo installed. They show as checking until [`Self::checked`].
     pub fn to_check<'a>(&mut self, games: impl Iterator<Item = &'a Game>) -> Vec<Game> {
-        let games: Vec<Game> = games
-            .filter(|game| game.installed_by_zendo())
-            .cloned()
-            .collect();
+        let games: Vec<Game> = games.filter(|game| game.store_managed()).cloned().collect();
         for game in &games {
             self.updates.insert(game.id.clone(), UpdateState::Checking);
         }
@@ -529,7 +527,7 @@ impl Queue {
     #[must_use]
     pub fn unasked<'a>(&self, games: impl Iterator<Item = &'a Game>) -> Vec<String> {
         games
-            .filter(|game| game.installed_by_zendo() && !self.updates.contains_key(&game.id))
+            .filter(|game| game.store_managed() && !self.updates.contains_key(&game.id))
             .map(|game| game.id.clone())
             .collect()
     }
@@ -662,7 +660,10 @@ pub fn progress_line(job: &Job, progress: &Progress) -> String {
         parts.push(t!("downloads-left", time = eta.as_str()));
     }
     if parts.is_empty() {
-        t!("downloads-starting", engine = job.store().engine_name())
+        t!(
+            "downloads-starting",
+            engine = job.store().map_or("", Store::engine_name)
+        )
     } else {
         parts.join(" · ")
     }
@@ -680,11 +681,11 @@ pub fn mebibytes(mib: f32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zendo_core::owned::StoreKey;
+    use zendo_core::owned::Shop;
 
     fn job(app: &str) -> Job {
         Job {
-            store: StoreKey::Epic,
+            shop: Shop::Epic,
             app: app.to_owned(),
             title: app.to_owned(),
             action: Action::Install,
@@ -915,5 +916,27 @@ mod tests {
             Some(&UpdateState::Checking)
         );
         assert_eq!(queue.unasked(games.iter()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_game_pass_install_is_not_asked_of_a_store_for_updates() {
+        let pass = Game::new(
+            "xbox:9N98Z825TNFW".into(),
+            "Sugar Rush".into(),
+            zendo_core::Source::Xbox,
+            zendo_core::Launch::Command {
+                program: "launch-game".into(),
+                args: vec!["ed9ca0cf65c9665d".into()],
+                dir: None,
+            },
+        );
+        let games = [pass];
+        let mut queue = Queue::default();
+        assert_eq!(
+            queue.to_check(games.iter()).len(),
+            0,
+            "no store engine knows its updates"
+        );
+        assert_eq!(queue.unasked(games.iter()).len(), 0);
     }
 }
