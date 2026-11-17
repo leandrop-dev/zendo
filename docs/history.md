@@ -5515,3 +5515,55 @@ Things to know: the installer is interactive, so Zendo only starts it and
 watches the process; it is downloaded over HTTPS with no checksum to check.
 The managed prefix is a plain Wine one, so `runner()` reads it as Wine. The
 Launchers row has no Remove: deleting the prefix would delete the games.
+
+## Item 58a, the Nexus Launcher import and launch (2026-11-17)
+
+The read-only half of item 58: the PC Game Pass games the Microsoft Store
+installed through Nexus Launcher, listed and started through the launcher's
+own script.
+
+- **`crates/zendo-core/src/xodus.rs`**: `profile()` is
+  `$XDG_CONFIG_HOME/xodus-nexus`, kept only when it is a folder.
+  `scan(profile)` reads `launcher-state.json` (its `games` array), and keeps a
+  record only when `installState` is `ready`, its `id` is not empty and its
+  `path` is absolute. `game()` builds `xbox:<id>` with the record's `title`
+  (or the id when it is empty), `Source::Xbox` and
+  `Launch::Command { program: <profile>/shortcuts/launch-game, args: [<id>] }`;
+  the record's `publisher` becomes the details' developer, `path` the install
+  folder and the platform is Windows.
+- **The script is checked before anything is started**: `shortcuts/launch-game`
+  must carry the launcher's `# X-Xodus-Nexus-Profile=` marker on line 2, as
+  omakade's own guard does. Without it the profile gives one problem and no
+  games, so a file that is not the launcher's is never run.
+- **Artwork, as the user chose**: the record's inline `coverDataUrl` is the
+  cover (a `data:` URL) and its `heroUrl` the wide art. `covers`' `download`
+  now reads a `data:` URL itself (`inline_image`: the payload after the comma,
+  base64, decoded, the format taken from the bytes' signature, at most 16 MB),
+  so a scan writes nothing and the covers fetch handles it with the rest. With
+  no inline cover, SteamGridDB still fills in as for any other source.
+  **Option 2, recorded for later**: Microsoft Store art from
+  `displaycatalog.mp.microsoft.com` by `storeId` (`Poster` at `w=600`,
+  `SuperHeroArt` else `TitledHeroArt` at `w=1920`). It looks better than the
+  launcher's inline picture but costs one request per game, so it is not in
+  this slice.
+- **`zendo-core/src/lib.rs`**: `Source::Xbox` (nine sources now), `Scan`'s
+  hookup after Battle.net's, and `Game::launcher()` says "Nexus Launcher" for
+  a `Launch::Command` from Xbox. `report.rs` and `settings_ui.rs` list the
+  source; the new words `sources-xbox` are in both languages. The Library's
+  chip comes from `Source::ALL`, so it needed nothing.
+
+Checked (2026-11-17): `cargo test --workspace` green (169 zendo, 301 core, 91
+shell). New tests: the profile's read (a ready game kept, an installing one,
+a relative path and one without a path left out), a title that is empty take
+the id, a foreign `launch-game` gives one problem and no games, and no
+profile gives neither; `inline_image` with a one-pixel PNG. In a throwaway
+home with a profile and a fake `launch-game`: `zendo list` printed
+`xbox:0123456789abcdef  Xbox  Halo Infinite`, and `zendo launch` ran the
+script with `0123456789abcdef` and exited 0; with a foreign script, `zendo
+list` printed one problem and no game. Not seen: the window (the chip, the
+card, the page), a real launcher or a real Game Pass game, the inline cover
+on screen, and pt-PT.
+
+Things to know: Nexus Launcher is not installed on this machine, so the real
+check waits for 58b, which brings the AppImage. A game whose shortcut is
+missing is not listed at all, since nothing could start it.

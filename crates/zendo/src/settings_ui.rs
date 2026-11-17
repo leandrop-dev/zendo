@@ -853,6 +853,7 @@ impl Glue {
             (Source::Gog, t!("sources-gog")),
             (Source::Amazon, t!("sources-amazon")),
             (Source::BattleNet, "Battle.net".to_owned()),
+            (Source::Xbox, t!("sources-xbox")),
             (Source::Heroic, t!("sources-heroic")),
             (Source::Desktop, t!("sources-desktop")),
             (Source::Local, t!("sources-local")),

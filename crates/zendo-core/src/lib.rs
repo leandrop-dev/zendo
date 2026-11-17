@@ -67,6 +67,7 @@ mod time;
 mod umu;
 pub mod watch;
 mod windows;
+pub mod xodus;
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
@@ -87,6 +88,8 @@ pub enum Source {
     /// Installed by the Battle.net client inside a Wine, Proton or Bottles
     /// prefix.
     BattleNet,
+    /// PC Game Pass, installed by the Microsoft Store through Nexus Launcher.
+    Xbox,
     /// Added to Heroic by hand ("sideloaded").
     Heroic,
     /// A `.desktop` file in the `Game` category.
@@ -97,12 +100,13 @@ pub enum Source {
 
 impl Source {
     /// Every source, in the order the window lists them.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Steam,
         Self::Epic,
         Self::Gog,
         Self::Amazon,
         Self::BattleNet,
+        Self::Xbox,
         Self::Heroic,
         Self::Desktop,
         Self::Local,
@@ -117,6 +121,7 @@ impl Source {
             Self::Gog => "GOG",
             Self::Amazon => "Amazon",
             Self::BattleNet => "Battle.net",
+            Self::Xbox => "Xbox",
             Self::Heroic => "Heroic",
             Self::Desktop => "Desktop",
             Self::Local => "Added",
@@ -316,6 +321,7 @@ impl Game {
                 let runner = uri.rsplit_once("runner=").map_or("", |(_, runner)| runner);
                 format!("Heroic ({runner})")
             }
+            (Launch::Command { .. }, Source::Xbox) => "Nexus Launcher".to_owned(),
             (Launch::Command { program, .. }, _) => program.clone(),
             (Launch::Engine { runner, .. }, _) => format!("Zendo ({runner})"),
             (Launch::Local { .. }, _) if launch::needs_proton(self) => {
@@ -426,6 +432,7 @@ impl Library {
         let mut scan = steam::scan(&steam::roots());
         scan.extend(heroic::scan(&heroic::roots()));
         scan.extend(battlenet::scan(&battlenet::prefixes()));
+        scan.extend(xodus::scan(xodus::profile().as_deref()));
         // After Heroic's: a game both installed keeps Heroic's launch.
         scan.extend(downloads::scan());
         scan.extend(desktop::scan(&desktop::dirs()));
@@ -548,7 +555,7 @@ mod tests {
     fn lists_each_source_once() {
         let unique: HashSet<Source> = Source::ALL.into_iter().collect();
         assert_eq!(unique.len(), Source::ALL.len());
-        assert_eq!(Source::ALL.len(), 8, "a source left out gets no chip");
+        assert_eq!(Source::ALL.len(), 9, "a source left out gets no chip");
     }
 
     #[test]

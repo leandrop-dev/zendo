@@ -266,8 +266,8 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58 to 59
-are next.
+55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a is
+built; 58b and 59 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -359,16 +359,25 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
 - **58, Game Pass through Nexus Launcher** [firm, sliced 2026-11-16].
   `domsvoboda/nexus-launcher` (MIT, formerly `xodus-nexus`). Read-only:
   `launcher-state.json` games with `installState == "ready"`, launched through
-  Nexus's own `shortcuts/launch-game <id>`, with Microsoft Store art. Sliced in
-  two:
-  - **58a, import and launch**: `zendo-core/src/xodus.rs`, a new
-    `Source::Xbox`, `Launch::Command` to `launch-game`, the Store art, the chip
-    and the page.
-  - **58b, download and sign in**: Settings → Sources downloads the Nexus
-    AppImage (GitHub's `sha256` digest, the `engines` machinery), opens it once
-    so it writes `shortcuts/` and the user installs its runtime and signs in;
-    Accounts gets an Xbox card that opens it and reads readiness from
-    `launcher-state.json`.
+  Nexus's own `shortcuts/launch-game <id>`. Sliced in two:
+  - **58a built 2026-11-17**: the import and the launch.
+    `zendo-core/src/xodus.rs`, `Source::Xbox` (nine sources), the script's
+    `# X-Xodus-Nexus-Profile=` marker checked before anything starts, and the
+    chip (from `Source::ALL`), the report and Settings rows. **The art is the
+    launcher's own**: the record's inline `coverDataUrl` (a `data:` URL, which
+    `covers::download` now reads) and its `heroUrl`. Checked in a throwaway
+    home with a fake `launch-game` through `zendo list` and `zendo launch`;
+    not seen: the window, a real launcher and game, pt-PT.
+    **Recorded for later (option 2)**: Microsoft Store art from
+    `displaycatalog.mp.microsoft.com` by `storeId` (`Poster` at `w=600`,
+    `SuperHeroArt` else `TitledHeroArt` at `w=1920`), if the inline picture
+    proves not enough or of a lesser quality. It needs one request per game,
+    so the scan does not do it.
+  - **58b, download and sign in** (next): Settings → Sources downloads the
+    Nexus AppImage (GitHub's `sha256` digest, the `engines` machinery), opens
+    it once so it writes `shortcuts/` and the user installs its runtime and
+    signs in; Accounts gets an Xbox card that opens it and reads readiness
+    from `launcher-state.json`.
 - **59, Xbox Series S** [firm, 2026-11-16]. Cloud gaming is 58. Remote play is
   a streaming client, not a library source: **Greenlight** (MIT, Flathub
   `io.github.unknownskl.greenlight`) started with

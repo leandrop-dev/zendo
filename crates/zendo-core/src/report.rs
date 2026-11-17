@@ -412,6 +412,7 @@ fn games(lines: &mut Vec<String>, library: &Library) {
         Source::Gog,
         Source::Amazon,
         Source::BattleNet,
+        Source::Xbox,
         Source::Heroic,
         Source::Desktop,
         Source::Local,

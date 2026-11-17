@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Context;
+use base64::Engine as _;
 use serde::Deserialize;
 
 use crate::config::Config;
@@ -315,6 +316,11 @@ const MAX_IMAGE: u64 = 16 * 1024 * 1024;
 
 /// Downloads an image: its bytes, and the extension their signature gives.
 pub(crate) fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<(Vec<u8>, &'static str)> {
+    // Nexus Launcher carries a game's cover inside its state file, as a
+    // `data:` URL: the image is here already, with nothing to download.
+    if let Some(inline) = url.strip_prefix("data:") {
+        return inline_image(inline);
+    }
     // Epic hands out some image addresses with bare spaces in them.
     let url = url.replace(' ', "%20");
     let response = agent
@@ -337,6 +343,25 @@ pub(crate) fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<(Vec<u8
         .read_to_vec()
         .with_context(|| format!("could not download {url}"))?;
     let ext = image_extension(&bytes).with_context(|| format!("{url} is not an image"))?;
+    Ok((bytes, ext))
+}
+
+/// The bytes of a `data:` URL's payload, and the extension their signature
+/// gives. The media type is not trusted for the format: the bytes are.
+fn inline_image(url: &str) -> anyhow::Result<(Vec<u8>, &'static str)> {
+    let (meta, payload) = url
+        .split_once(',')
+        .context("an inline image with no comma")?;
+    if !meta.ends_with(";base64") {
+        anyhow::bail!("an inline image that is not base64");
+    }
+    if payload.len() as u64 > MAX_IMAGE {
+        anyhow::bail!("an inline image too big to be one");
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .context("an inline image that is not base64")?;
+    let ext = image_extension(&bytes).context("an inline image that is not an image")?;
     Ok((bytes, ext))
 }
 
@@ -474,6 +499,17 @@ mod tests {
         );
         assert_eq!(stem("steam:620", Kind::Hero), "steam_620.hero");
         assert_eq!(Kind::Hero.miss_key("steam:620"), "steam:620#hero");
+    }
+
+    #[test]
+    fn reads_an_inline_image() {
+        // A one-pixel PNG, base64 as a data URL.
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        let (bytes, ext) = inline_image(png.strip_prefix("data:").unwrap()).expect("the image");
+        assert_eq!(ext, "png");
+        assert!(bytes.starts_with(b"\x89PNG"), "the bytes, not the type");
+        assert!(inline_image("image/png,abc").is_err(), "not base64");
+        assert!(inline_image("image/png;base64,bm90IGFuIGltYWdl").is_err());
     }
 
     #[test]

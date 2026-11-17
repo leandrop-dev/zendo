@@ -220,6 +220,7 @@ sources-about = Where Zendo looks for games. It reads these and never writes to 
 sources-epic = Epic Games, through Heroic
 sources-gog = GOG, through Heroic
 sources-amazon = Amazon Games, through Heroic
+sources-xbox = Game Pass, through Nexus Launcher
 sources-heroic = Added to Heroic by hand
 sources-desktop = .desktop files in the Game category
 sources-local = Added by hand in Zendo

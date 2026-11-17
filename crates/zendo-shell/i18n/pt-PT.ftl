@@ -225,6 +225,7 @@ sources-about = Onde o Zendo procura jogos. Lê-as e nunca escreve nelas; Atuali
 sources-epic = Epic Games, através do Heroic
 sources-gog = GOG, através do Heroic
 sources-amazon = Amazon Games, através do Heroic
+sources-xbox = Game Pass, através do Nexus Launcher
 sources-heroic = Adicionados ao Heroic à mão
 sources-desktop = Ficheiros .desktop da categoria Game
 sources-local = Adicionados à mão no Zendo
