@@ -231,17 +231,6 @@ sources-unreadable = Could not read { $problem }
 
 launchers-title = Launchers
 launchers-about = The programs that need a window of their own. Zendo brings them where it can and opens them; the sign-in and the games stay with them.
-battlenet-title = Battle.net
-battlenet-about = Blizzard's launcher: World of Warcraft, Overwatch, Diablo and the rest.
-battlenet-install = Download installer
-battlenet-run-installer = Run installer
-battlenet-installing = Installer open
-battlenet-open = Open Battle.net
-battlenet-installer = Battle.net installer
-battlenet-downloaded = The installer is ready. Run it, and sign in in its window.
-battlenet-installer-open = The installer's window is open. Finish it there; the games appear here as the client finds them.
-battlenet-opened = Battle.net is open.
-battlenet-sign-in = Sign in inside the client; Zendo lists the games it finds.
 xbox-title = Nexus Launcher
 xbox-about = The launcher for PC Game Pass: Zendo brings it and opens it; the games come from the Microsoft Store.
 xbox-install = Download launcher

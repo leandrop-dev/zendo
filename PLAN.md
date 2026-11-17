@@ -31,6 +31,14 @@ distro-agnostic and is supported on both CachyOS/Hyprland and Fedora/KDE
 Plasma. Item 37 (emulation), the list and details views, OptiScaler and
 recompiled games are on hold.
 
+On 2026-11-17 Battle.net was taken out at the user's request and kept as a
+possible future source beside EA app, Ubisoft Connect and others, to look at
+again after the first stable release: its client never showed a usable window
+under Proton, so no game was read (items 57 and 61 in `docs/backlog.md`).
+Zendo's sources are Steam, Epic, GOG and Amazon, Game Pass
+and Xbox through Nexus Launcher, Greenlight for the console's screen, Heroic's
+sideloaded games, `.desktop` files and games added by hand.
+
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
   translucency, blur (by window class), a bundled font, SVG icons, the KDE

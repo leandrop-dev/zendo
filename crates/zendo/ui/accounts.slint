@@ -57,8 +57,8 @@ export struct SteamCardData {
     kept-bad: bool,
 }
 
-// A launcher that signs in through its own window (Battle.net): what Zendo
-// found, and the button that opens it.
+// A launcher that signs in through its own window (Nexus Launcher): what
+// Zendo found, and the button that opens it.
 export struct LauncherCardData {
     // The small badge's text, already upper case.
     badge: string,
@@ -84,9 +84,7 @@ export global AccountsData {
     callback steam-cancel();
     callback steam-sign-out();
     in property <[AccountCard]> cards;
-    // The launchers' cards, under the stores'.
-    in property <LauncherCardData> battlenet;
-    callback battlenet-open();
+    // The launcher's card, under the stores'.
     in property <LauncherCardData> xbox;
     callback xbox-open();
     in property <bool> gog-playtime;
@@ -382,7 +380,7 @@ component SteamCard inherits Rectangle {
     }
 }
 
-// A launcher that signs in through its own window (Battle.net).
+// A launcher that signs in through its own window (Nexus Launcher).
 component LauncherCard inherits Rectangle {
     in property <LauncherCardData> card;
     in property <length> inner;
@@ -496,7 +494,6 @@ export component AccountsPage inherits Rectangle {
                 Card { index: 0; card: AccountsData.cards[0]; inner: root.inner; }
                 Card { index: 1; card: AccountsData.cards[1]; inner: root.inner; }
                 Card { index: 2; card: AccountsData.cards[2]; inner: root.inner; }
-                LauncherCard { card: AccountsData.battlenet; inner: root.inner; act => { AccountsData.battlenet-open(); } }
                 LauncherCard { card: AccountsData.xbox; inner: root.inner; act => { AccountsData.xbox-open(); } }
             }
         }

@@ -12,7 +12,6 @@
 pub mod achievements;
 pub mod appinfo;
 pub mod areweanticheatyet;
-pub mod battlenet;
 pub mod browse;
 pub mod cloud_saves;
 pub mod config;
@@ -86,9 +85,6 @@ pub enum Source {
     Epic,
     Gog,
     Amazon,
-    /// Installed by the Battle.net client inside a Wine, Proton or Bottles
-    /// prefix.
-    BattleNet,
     /// PC Game Pass, installed by the Microsoft Store through Nexus Launcher.
     Xbox,
     /// Added to Heroic by hand ("sideloaded").
@@ -101,12 +97,11 @@ pub enum Source {
 
 impl Source {
     /// Every source, in the order the window lists them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 8] = [
         Self::Steam,
         Self::Epic,
         Self::Gog,
         Self::Amazon,
-        Self::BattleNet,
         Self::Xbox,
         Self::Heroic,
         Self::Desktop,
@@ -121,7 +116,6 @@ impl Source {
             Self::Epic => "Epic",
             Self::Gog => "GOG",
             Self::Amazon => "Amazon",
-            Self::BattleNet => "Battle.net",
             Self::Xbox => "Xbox",
             Self::Heroic => "Heroic",
             Self::Desktop => "Desktop",
@@ -153,25 +147,6 @@ pub enum Launch {
         args: Vec<String>,
         dir: Option<PathBuf>,
     },
-    /// A Windows program in a prefix another client made (Battle.net): the
-    /// prefix is the game's own, not one Zendo creates per game.
-    Prefix {
-        prefix: PathBuf,
-        runner: WineRunner,
-        /// The bottle's name, for Bottles.
-        bottle: Option<String>,
-        program: PathBuf,
-        args: Vec<String>,
-    },
-}
-
-/// What runs a Windows program in a prefix someone else made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum WineRunner {
-    Wine,
-    Proton,
-    Bottles,
 }
 
 /// When and how much a game was played, from its launcher's records and
@@ -329,11 +304,6 @@ impl Game {
                 "Zendo (umu-launcher)".to_owned()
             }
             (Launch::Local { .. }, _) => "Zendo".to_owned(),
-            (Launch::Prefix { runner, .. }, _) => match runner {
-                WineRunner::Wine => "Zendo (wine)".to_owned(),
-                WineRunner::Proton => "Zendo (umu-launcher)".to_owned(),
-                WineRunner::Bottles => "Zendo (Bottles)".to_owned(),
-            },
         }
     }
 
@@ -359,23 +329,6 @@ impl Game {
                     format!("umu-run {line}")
                 } else {
                     line
-                }
-            }
-            Launch::Prefix {
-                runner,
-                bottle,
-                program,
-                args,
-                ..
-            } => {
-                let line = words(&program.to_string_lossy(), args);
-                match runner {
-                    WineRunner::Wine => format!("wine {line}"),
-                    WineRunner::Proton => format!("umu-run {line}"),
-                    WineRunner::Bottles => {
-                        let bottle = bottle.as_deref().unwrap_or("the bottle");
-                        format!("bottles-cli run -b {bottle} -e {line}")
-                    }
                 }
             }
         }
@@ -432,7 +385,6 @@ impl Library {
     pub fn scan() -> Self {
         let mut scan = steam::scan(&steam::roots());
         scan.extend(heroic::scan(&heroic::roots()));
-        scan.extend(battlenet::scan(&battlenet::prefixes()));
         scan.extend(xodus::scan(xodus::profile().as_deref()));
         // After Heroic's: a game both installed keeps Heroic's launch.
         scan.extend(downloads::scan());
@@ -556,7 +508,7 @@ mod tests {
     fn lists_each_source_once() {
         let unique: HashSet<Source> = Source::ALL.into_iter().collect();
         assert_eq!(unique.len(), Source::ALL.len());
-        assert_eq!(Source::ALL.len(), 9, "a source left out gets no chip");
+        assert_eq!(Source::ALL.len(), 8, "a source left out gets no chip");
     }
 
     #[test]

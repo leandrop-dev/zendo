@@ -1,8 +1,8 @@
 //! The Launchers group of Settings: the programs that need a window of their
-//! own. Battle.net, which Zendo brings as Blizzard's installer run in a
-//! prefix under the games folder, and Nexus Launcher, brought as its
-//! `AppImage`. Their sign-in and their games stay with them; the Accounts page
-//! opens them too. A part of the Library's glue (`library_ui`).
+//! own. Nexus Launcher, brought as its `AppImage`, and Greenlight, which
+//! streams an Xbox Series S's screen. Their sign-in and their games stay with
+//! them; the Accounts page opens them too. A part of the Library's glue
+//! (`library_ui`).
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use slint::{ComponentHandle, ModelRc, VecModel};
-use zendo_core::{battlenet, greenlight, xodus};
+use zendo_core::{greenlight, xodus};
 use zendo_shell::t;
 
 use super::settings::{bar_of, note_tone};
@@ -25,7 +25,6 @@ const BAR_EVERY: Duration = Duration::from_millis(150);
 /// Which launcher a download or a row is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Launcher {
-    BattleNet,
     Nexus,
     Greenlight,
 }
@@ -35,20 +34,6 @@ struct Download {
     done: u64,
     total: u64,
     stop: Arc<AtomicBool>,
-}
-
-/// What Battle.net's row shows, looked at as the page opens.
-#[derive(Default)]
-struct Battlenet {
-    /// The prefix and the client found.
-    installed: Option<(PathBuf, PathBuf)>,
-    games: usize,
-    /// The installer is downloaded and ready to run.
-    ready: bool,
-    /// The installer's window is open.
-    installing: bool,
-    /// What the last action on this row said.
-    note: Option<(String, bool)>,
 }
 
 /// What Nexus Launcher's row shows.
@@ -72,7 +57,6 @@ struct Series {
 }
 
 pub(super) struct SourcesState {
-    battlenet: RefCell<Battlenet>,
     nexus: RefCell<Nexus>,
     series: RefCell<Series>,
     download: RefCell<Option<Download>>,
@@ -82,7 +66,6 @@ pub(super) struct SourcesState {
 impl SourcesState {
     pub(super) fn new() -> Self {
         Self {
-            battlenet: RefCell::default(),
             nexus: RefCell::default(),
             series: RefCell::default(),
             download: RefCell::default(),
@@ -106,17 +89,11 @@ impl Glue {
         });
     }
 
-    /// Looks at both launchers again: Battle.net's prefix, client, games and
-    /// installer, and the `AppImage` and games of Nexus Launcher's.
+    /// Looks at the launchers again: the `AppImage` and games of Nexus
+    /// Launcher's, and Greenlight's program.
     pub(super) fn want_sources(&self) {
         if !self.persist {
             return;
-        }
-        {
-            let mut battlenet = self.sources.battlenet.borrow_mut();
-            battlenet.installed = battlenet::installed();
-            battlenet.games = battlenet::count();
-            battlenet.ready = battlenet::installer_path().is_some_and(|path| path.is_file());
         }
         {
             let mut nexus = self.sources.nexus.borrow_mut();
@@ -127,23 +104,12 @@ impl Glue {
         self.show_sources();
     }
 
-    /// A row's one button: open a client, run an installer, or bring one.
+    /// A row's one button: open a launcher, or bring one.
     fn launcher_act(self: &Rc<Self>, index: i32) {
         match index {
-            0 => self.battlenet_act(),
-            1 => self.nexus_act(),
-            2 => self.series_act(),
+            0 => self.nexus_act(),
+            1 => self.series_act(),
             _ => {}
-        }
-    }
-
-    fn battlenet_act(self: &Rc<Self>) {
-        if self.sources.battlenet.borrow().installed.is_some() {
-            self.open_battlenet();
-        } else if self.sources.battlenet.borrow().ready {
-            self.run_battlenet_installer();
-        } else {
-            self.download(Launcher::BattleNet);
         }
     }
 
@@ -188,17 +154,6 @@ impl Glue {
         self.show_sources();
     }
 
-    fn open_battlenet(self: &Rc<Self>) {
-        if !self.persist {
-            return;
-        }
-        self.sources.battlenet.borrow_mut().note = Some(match battlenet::open_client() {
-            Ok(()) => (t!("battlenet-opened"), true),
-            Err(err) => (format!("{err:#}"), false),
-        });
-        self.show_settings();
-    }
-
     /// Opens Nexus Launcher, which writes its profile the first time and
     /// needs its runtime and a sign-in done in its own window.
     fn open_nexus(self: &Rc<Self>) {
@@ -238,7 +193,7 @@ impl Glue {
         self.rescan();
     }
 
-    /// Brings a launcher: Blizzard's installer, or the Nexus `AppImage`.
+    /// Brings a launcher: its `AppImage`.
     fn download(self: &Rc<Self>, which: Launcher) {
         if self.sources.download.borrow().is_some() {
             return;
@@ -268,10 +223,6 @@ impl Glue {
                 });
             };
             let result = match which {
-                Launcher::BattleNet => battlenet::download_installer(&stop, &mut |done, total| {
-                    report(done, total.unwrap_or(done));
-                })
-                .map(drop),
                 Launcher::Nexus => xodus::release()
                     .and_then(|release| xodus::install(&release, &stop, &mut report))
                     .map(drop),
@@ -298,10 +249,6 @@ impl Glue {
         *self.sources.download.borrow_mut() = None;
         let note = match result {
             Ok(()) => match which {
-                Launcher::BattleNet => {
-                    self.sources.battlenet.borrow_mut().ready = true;
-                    (t!("battlenet-downloaded"), true)
-                }
                 Launcher::Nexus => {
                     self.sources.nexus.borrow_mut().appimage = xodus::installed();
                     (t!("xbox-downloaded"), true)
@@ -314,49 +261,10 @@ impl Glue {
             Err(err) => (err, false),
         };
         match which {
-            Launcher::BattleNet => self.sources.battlenet.borrow_mut().note = Some(note),
             Launcher::Nexus => self.sources.nexus.borrow_mut().note = Some(note),
             Launcher::Greenlight => self.sources.series.borrow_mut().note = Some(note),
         }
         self.show_settings();
-    }
-
-    fn run_battlenet_installer(self: &Rc<Self>) {
-        if self.sources.battlenet.borrow().installing || !self.persist {
-            return;
-        }
-        match battlenet::run_installer() {
-            Ok(mut child) => {
-                {
-                    let mut battlenet = self.sources.battlenet.borrow_mut();
-                    battlenet.installing = true;
-                    battlenet.note = Some((t!("battlenet-installer-open"), true));
-                }
-                self.show_settings();
-                let weak = self.window.clone();
-                std::thread::spawn(move || {
-                    let _ = child.wait();
-                    let _ =
-                        weak.upgrade_in_event_loop(|_| with_glue(Glue::battlenet_installer_done));
-                });
-            }
-            Err(err) => {
-                self.sources.battlenet.borrow_mut().note = Some((format!("{err:#}"), false));
-                self.show_settings();
-            }
-        }
-    }
-
-    /// The installer's window closed: look at the prefix again, and at the
-    /// library, which the client may have given games.
-    fn battlenet_installer_done(self: &Rc<Self>) {
-        {
-            let mut battlenet = self.sources.battlenet.borrow_mut();
-            battlenet.installing = false;
-            battlenet.note = None;
-        }
-        self.want_sources();
-        self.rescan();
     }
 
     /// Writes the rows and the bar.
@@ -366,12 +274,8 @@ impl Glue {
         };
         let data = window.global::<SettingsData>();
         let downloading = self.sources.download.borrow().is_some();
-        let (battlenet, nexus, series) = (
-            self.battlenet_row(downloading),
-            self.nexus_row(downloading),
-            self.series_row(downloading),
-        );
-        self.sources.model.set_vec(vec![battlenet, nexus, series]);
+        let (nexus, series) = (self.nexus_row(downloading), self.series_row(downloading));
+        self.sources.model.set_vec(vec![nexus, series]);
         let bar =
             self.sources
                 .download
@@ -379,7 +283,6 @@ impl Glue {
                 .as_ref()
                 .map_or_else(crate::Bar::default, |download| {
                     let what = match download.which {
-                        Launcher::BattleNet => t!("battlenet-installer"),
                         Launcher::Nexus => t!("xbox-launcher"),
                         Launcher::Greenlight => t!("series-launcher"),
                     };
@@ -391,43 +294,6 @@ impl Glue {
                     )
                 });
         data.set_launchers_bar(bar);
-    }
-
-    /// Battle.net's row.
-    fn battlenet_row(&self, downloading: bool) -> SetRow {
-        let state = self.sources.battlenet.borrow();
-        let games = state.games;
-        let installed = state.installed.is_some();
-        let (action, action_on) = if installed {
-            (t!("battlenet-open"), true)
-        } else if state.installing {
-            (t!("battlenet-installing"), false)
-        } else if state.ready {
-            (t!("battlenet-run-installer"), !downloading)
-        } else {
-            (t!("battlenet-install"), !downloading)
-        };
-        let (status, status_tone) = match (installed, games) {
-            (true, 1..) => (t!("count-games", count = games), 1),
-            (true, _) => (t!("launcher-installed"), 1),
-            (false, _) => (t!("launcher-not-installed"), 0),
-        };
-        let path = state
-            .installed
-            .as_ref()
-            .map_or_else(String::new, |(prefix, _)| prefix.display().to_string());
-        let (note, tone) = state.note.clone().unwrap_or_default();
-        row(
-            t!("battlenet-title"),
-            t!("battlenet-about"),
-            path,
-            &note.into(),
-            note_tone(tone),
-            action,
-            action_on,
-            status,
-            status_tone,
-        )
     }
 
     /// Nexus Launcher's row.
@@ -534,24 +400,20 @@ mod tests {
     use super::*;
 
     /// A row's note is about that row, and says so once: the section had a
-    /// note of its own too, so a downloaded installer's line was drawn three
+    /// note of its own too, so a downloaded launcher's line was drawn three
     /// times.
     #[test]
     fn a_note_belongs_to_the_row_it_is_about() {
         let (window, glue) = page(1);
-        glue.downloaded(Launcher::BattleNet, Ok(()));
+        glue.downloaded(Launcher::Nexus, Ok(()));
         let rows = window.global::<SettingsData>().get_launchers();
-        assert_eq!(
-            rows.row_count(),
-            3,
-            "Battle.net, Nexus Launcher and the Series S"
-        );
+        assert_eq!(rows.row_count(), 2, "Nexus Launcher and the Series S");
         let row = rows.row_data(0).unwrap();
-        assert_eq!(row.note.as_str(), t!("battlenet-downloaded"));
-        assert_eq!(row.action.as_str(), t!("battlenet-run-installer"));
-        let other = rows.row_data(1).unwrap();
-        assert_eq!(other.note.as_str(), "", "another row's line");
-        assert_eq!(other.action.as_str(), t!("xbox-install"));
-        assert_eq!(rows.row_data(2).unwrap().note.as_str(), "", "nor the third");
+        assert_eq!(row.note.as_str(), t!("xbox-downloaded"));
+        assert_eq!(
+            rows.row_data(1).unwrap().note.as_str(),
+            "",
+            "the other row's line"
+        );
     }
 }

@@ -1696,25 +1696,17 @@ mod tests {
         glue.key_checked("abc".into(), Ok(KeyCheck::Accepted));
         assert_eq!(settings.get_key_note(), t!("steamgriddb-saved"));
         assert!(!settings.get_key_changed());
-        // The Launchers group: Battle.net's row and Nexus Launcher's, neither
-        // installed in a test.
+        // The Launchers group: Nexus Launcher's row and the Series S's,
+        // neither installed in a test.
         settings.invoke_group_chosen(3);
         assert_eq!(settings.get_group(), 3);
         let launchers = settings.get_launchers();
-        assert_eq!(
-            launchers.row_count(),
-            3,
-            "Battle.net, Nexus and the Series S"
-        );
+        assert_eq!(launchers.row_count(), 2, "Nexus and the Series S");
         let row = launchers.row_data(0).unwrap();
-        assert_eq!(row.title.as_str(), "Battle.net");
-        assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
-        assert_eq!(row.action.as_str(), t!("battlenet-install"));
-        let row = launchers.row_data(1).unwrap();
         assert_eq!(row.title.as_str(), t!("xbox-title"));
         assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(row.action.as_str(), t!("xbox-install"));
-        let row = launchers.row_data(2).unwrap();
+        let row = launchers.row_data(1).unwrap();
         assert_eq!(row.title.as_str(), t!("series-title"));
         assert_eq!(row.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(
@@ -1730,16 +1722,10 @@ mod tests {
     }
 
     #[test]
-    fn the_accounts_page_has_the_launchers_cards() {
+    fn the_accounts_page_has_the_launchers_card() {
         let (window, _glue) = page(2);
         window.invoke_page_requested(Page::Accounts);
         let data = window.global::<AccountsData>();
-        let card = data.get_battlenet();
-        assert_eq!(card.status.as_str(), t!("launcher-not-installed"));
-        assert_eq!(card.action.as_str(), t!("battlenet-open"));
-        assert!(!card.action_on, "nothing to open when it is not installed");
-        assert_eq!(card.badge.as_str(), "BATTLE.NET");
-        assert_eq!(card.title.as_str(), t!("battlenet-title"));
         let card = data.get_xbox();
         assert_eq!(card.status.as_str(), t!("launcher-not-installed"));
         assert_eq!(card.action.as_str(), t!("xbox-open"));

@@ -305,6 +305,10 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
 
 ### Battle.net
 
+**Not in Zendo since 2026-11-17**: item 57 was removed and Battle.net is a
+possible future source (`docs/backlog.md`). These are the verified facts, kept
+for when it comes back; no code reads them today.
+
 - The Battle.net Agent keeps its install database at
   `<prefix>/drive_c/ProgramData/Battle.net/Agent/product.db`, where `<prefix>`
   is a Wine, Proton or Bottles prefix. It is a protobuf-like wire format, not
@@ -338,7 +342,8 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   plain prefix the client dies at its loading screen (`wine: Unhandled
   exception 0x80000003 ... starting debugger`) and the Agent never writes a
   product, so no game appears. It is run under `umu-run` with a Proton
-  instead (Zendo's own prefix always is; item 58c).
+  instead (Zendo's own prefix did, always, before item 57 was removed; item
+  58c).
 - The client is `drive_c/Program Files (x86)/Battle.net/Battle.net.exe` (or
   `Program Files`, `Battle.net Launcher.exe`). A game starts as
   `<client> --exec=launch <launch code>`:

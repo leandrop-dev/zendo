@@ -332,42 +332,26 @@ Read from omakade's docs and source on `main` on 2026-11-16 (`docs/GUIDE.md`,
 The verified contracts are in `docs/reference.md`, "New sources: Battle.net,
 Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
 
-- **57, Battle.net** [firm, sliced 2026-11-16]. A read-only import like Steam
-  and Heroic: the Agent's `product.db` in a Wine, Proton or Bottles prefix,
-  launched through that prefix's client (`Battle.net.exe --exec=launch <code>`
-  with `wine`, `umu-run` or `bottles-cli`). Sliced in two:
-  - **57a built 2026-11-16**: the import and launch.
-    `zendo-core/src/battlenet.rs`, `Source::BattleNet`, `Launch::Prefix` (a
-    shared prefix does not fit `Launch::Local`), the product-code catalogue,
-    last played from `Battle.net.config`, covers through SteamGridDB with local
-    art first, the chip and the game page, a fixture `product.db` in the tests,
-    and the launch through `wine`, `umu-run` or `bottles-cli`. Checked in a
-    throwaway home with a generated database through `zendo list` and `zendo
-    launch` and a fake `wine` and `umu-run`; not seen: a real client and
-    installation, a Bottles prefix, Play/Stop on screen, and covers.
-  - **57b built 2026-11-16**: the installer and the sign-in. Settings →
-    Launchers (the chip says Launchers, since the Library group already has a
-    Sources section) brings Blizzard's installer and runs it in
-    `Prefixes/Battle.net` with Wine; the Accounts page's Battle.net card opens
-    the client and shows the prefix and the games found. The download has a
-    bar and Stop; after the installer closes the library is rescanned. Not
-    seen on screen: the group's row and the card (the pointer clicked nothing
-    in the check), a real installer and client.
-  - The download is Blizzard's installer
-    (`downloader.battle.net/.../Battle.net-Setup.exe`); it has no checksum,
-    only HTTPS.
-  - **58c built 2026-11-17**: Zendo's own prefix runs on Proton. The user's
-    client crashed in stock Wine 11.22 (`wine: Unhandled exception
-    0x80000003`, `docs/history.md`), so `runner()` says Proton for a prefix at
-    any `Prefixes/Battle.net` (recognised by its place, no configuration
-    read), and the installer is started with `runner(&prefix)` rather than a
-    hard-coded Wine. Not seen: the client signing in under Proton.
+- **57, Battle.net** [removed 2026-11-17; a possible future source]. Built as
+  a read-only import (57a), the installer in Settings and the sign-in card
+  (57b), and Zendo's own prefix moved to Proton after the client crashed in
+  stock Wine (58c), then taken out whole at the user's request: the client
+  started under Proton but its window stayed blank (item 61), so no game was
+  ever imported from a real installation. Gone: `zendo-core/src/battlenet.rs`,
+  `Source::BattleNet`, `Launch::Prefix` and `WineRunner` (nothing else used
+  them), `launch::in_prefix`, the Settings → Launchers row, the Accounts card,
+  the Settings → Sources row, the report's count and the `battlenet-*`
+  messages in both `.ftl` files (`docs/history.md`, "Battle.net taken out").
+  The code is in git history up to the commit before the removal; the verified
+  formats and commands stay in `docs/reference.md`, and the window problem and
+  its candidate fixes stay in item 61.
 - **58, Game Pass through Nexus Launcher** [firm, sliced 2026-11-16].
   `domsvoboda/nexus-launcher` (MIT, formerly `xodus-nexus`). Read-only:
   `launcher-state.json` games with `installState == "ready"`, launched through
   Nexus's own `shortcuts/launch-game <id>`. Sliced in two:
   - **58a built 2026-11-17**: the import and the launch.
-    `zendo-core/src/xodus.rs`, `Source::Xbox` (nine sources), the script's
+    `zendo-core/src/xodus.rs`, `Source::Xbox` (nine sources then, eight
+    now), the script's
     `# X-Xodus-Nexus-Profile=` marker checked before anything starts, and the
     chip (from `Source::ALL`), the report and Settings rows. **The art is the
     launcher's own**: the record's inline `coverDataUrl` (a `data:` URL, which
@@ -470,24 +454,49 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   their pictures downloaded into the achievement icons' cache. Checked with
   Minecraft Legends (40 achievements, 40 icons); not seen on screen. `game-activity` (time played and last activity) is still unread and
   could fill a Game Pass game's time played.
-- **61, Battle.net's empty window under Proton** (from the user's testing,
-  2026-11-17): the client now starts (item 58c) and shows its window, but the
-  window is blank. The log
+- **61, Battle.net's empty window under Proton** [withdrawn 2026-11-17 with
+  item 57; kept for when Battle.net returns]. From the user's testing,
+  2026-11-17: the client started (58c) and showed its window, but the window
+  was blank. The log
   (`$XDG_STATE_HOME/zendo/logs/battlenet.log`) says Proton upgraded the
   plain-Wine prefix to CachyOS-11.0-100, that ProtonFixes found no title for
   `umu-battlenet` ("Game title not found in CSV", "No main stage global
   protonfix"), that the game drive's parent (/home) could not be used, and
   ends with "Executable is a unix path, launching with 'umu.exe'" and "ntsync:
   up and running" with no error. What to try, one at a time, each a small
-  change to `in_prefix`'s environment: `PROTON_USE_WINED3D=1` (the client's
+  change to the environment such a launch builds (`in_prefix` before item 57
+  removed it): `PROTON_USE_WINED3D=1` (the client's
   Chromium window often needs software D3D), `PROTON_ENABLE_CEF_SANDBOX=0`-ish
   flags to the executable (`--no-cef-sandbox`), a GE-Proton instead of
   CachyOS's, and `Battle.net.exe` started with `-d3d9`/`-d3d11`. The client's
-  own window needs a real check each time (item 58c's "not seen").
+  own window needs a real check each time (58c's "not seen").
 
-EA and Ubisoft are not listed: neither has a Linux launcher, and those games
-arrive through Steam or Heroic, which Zendo already imports. Emulation and
-RetroAchievements stay on hold (item 37).
+## Possible future sources (after the first stable release)
+
+Decided by the user on 2026-11-17: Zendo keeps to the sources it has (Steam,
+Epic, GOG and Amazon through Heroic, Game Pass and Xbox through Nexus
+Launcher, Greenlight, Heroic's sideloaded games, `.desktop` files and games
+added by hand) and their work. Battle.net, EA app, Ubisoft Connect and others
+are looked at again after the first stable release, once the user has
+investigated them first.
+
+- **Battle.net**: built, then taken out on 2026-11-17 (item 57). Its client
+  started under Proton but showed a blank window, so no game was ever read
+  from a real installation; the candidate fixes are in item 61. The verified
+  facts about the Agent's `product.db`, the client's files, the launch codes
+  and the installer are kept in `docs/reference.md`, and the code is in git
+  history up to the commit before the removal.
+- **EA app**: no Linux client; EA games arrive through Steam or Heroic, which
+  Zendo already imports. Not investigated beyond that.
+- **Ubisoft Connect**: the same: no Linux client, and Ubisoft games come
+  through Steam or Heroic. Not investigated.
+- **Others**: the user brings them, and their names are not recorded here
+  until they are looked at. What makes one worth a slice: a launcher that runs
+  on Linux or under Wine/Proton, a library file Zendo can read without
+  writing, and a launch command; a launcher with none of those is no source at
+  all.
+
+Emulation and RetroAchievements stay on hold (item 37).
 
 ## Release packaging (deferred 2026-11-16; a proper system to design)
 

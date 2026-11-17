@@ -14,7 +14,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use zendo_core::owned::{self, Shop};
 use zendo_core::stores::{self, AmazonLogin, Store};
-use zendo_core::{battlenet, xodus};
+use zendo_core::xodus;
 use zendo_shell::sign_in_window::{self, Handle};
 use zendo_shell::t;
 
@@ -65,7 +65,6 @@ pub(super) struct AccountsState {
     engines: RefCell<[Option<PathBuf>; 3]>,
     signing_in: RefCell<Option<SignIn>>,
     /// The launchers' cards, looked at as the page opens.
-    battlenet: RefCell<Launcher>,
     xbox: RefCell<Launcher>,
     cards: Rc<VecModel<AccountCard>>,
     focus: Cell<i32>,
@@ -78,7 +77,6 @@ impl AccountsState {
             accounts: RefCell::default(),
             engines: RefCell::default(),
             signing_in: RefCell::new(None),
-            battlenet: RefCell::default(),
             xbox: RefCell::default(),
             cards: Rc::new(VecModel::default()),
             focus: Cell::new(0),
@@ -236,8 +234,6 @@ impl Glue {
         let glue = Rc::clone(self);
         data.on_relabel(move || glue.show_accounts());
         let glue = Rc::clone(self);
-        data.on_battlenet_open(move || glue.open_battlenet_card());
-        let glue = Rc::clone(self);
         data.on_xbox_open(move || glue.open_xbox_card());
     }
 
@@ -294,17 +290,8 @@ impl Glue {
                 });
             });
         }
-        // The launchers are read, not signed in through: Battle.net's card
-        // asks the prefix and the Agent's database, Nexus Launcher's its
-        // AppImage and its profile.
-        let installed = battlenet::installed();
-        let games = battlenet::count();
-        {
-            let mut card = self.accounts.battlenet.borrow_mut();
-            card.installed = installed.is_some();
-            card.path = installed.map(|(prefix, _)| prefix);
-            card.games = games;
-        }
+        // The launcher is read, not signed in through: its card asks for
+        // its AppImage and its profile.
         let appimage = xodus::installed();
         {
             let mut card = self.accounts.xbox.borrow_mut();
@@ -651,8 +638,8 @@ impl Glue {
         self.show_accounts();
     }
 
-    /// Opens the Battle.net client found: its window is where the sign-in
-    /// happens, and Zendo reads the games from the prefix afterwards.
+    /// Opens Nexus Launcher, which writes its profile the first time and
+    /// needs its runtime and a sign-in done in its own window.
     fn open_xbox_card(self: &Rc<Self>) {
         if !self.persist {
             return;
@@ -667,18 +654,6 @@ impl Glue {
             .map_err(|err| format!("{err:#}"));
         self.accounts.xbox.borrow_mut().note = Some(match result {
             Ok(()) => (t!("xbox-opened"), true),
-            Err(err) => (err, false),
-        });
-        self.show_accounts();
-    }
-
-    fn open_battlenet_card(self: &Rc<Self>) {
-        if !self.persist {
-            return;
-        }
-        let result = battlenet::open_client().map_err(|err| format!("{err:#}"));
-        self.accounts.battlenet.borrow_mut().note = Some(match result {
-            Ok(()) => (t!("battlenet-opened"), true),
             Err(err) => (err, false),
         });
         self.show_accounts();
@@ -737,21 +712,6 @@ impl Glue {
         )
     }
 
-    /// Battle.net's card, from what the page looked at last.
-    fn battlenet_card(&self) -> crate::LauncherCardData {
-        let card = self.accounts.battlenet.borrow();
-        launcher_card(
-            &card,
-            "BATTLE.NET",
-            t!("battlenet-title"),
-            t!("battlenet-about"),
-            t!("launcher-installed"),
-            t!("launcher-not-installed"),
-            t!("battlenet-sign-in"),
-            t!("battlenet-open"),
-        )
-    }
-
     /// Writes everything the page shows, and the count beside its tab.
     pub(super) fn show_accounts(&self) {
         let Some(window) = self.window.upgrade() else {
@@ -775,7 +735,6 @@ impl Glue {
             .collect();
         self.accounts.cards.set_vec(cards);
         data.set_steam(self.steam_card());
-        data.set_battlenet(self.battlenet_card());
         data.set_xbox(self.xbox_card());
         data.set_gog_playtime(config.gog_playtime);
         data.set_gog_galaxy(config.gog_galaxy);

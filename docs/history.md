@@ -5953,3 +5953,40 @@ achievements. Against the real backend: 40 achievements for Minecraft Legends
 (title `61B215AE`, decimal 1639060910) in 3 s. Not seen on screen: a card
 saying "Needs …", a Game Pass game's achievements on its page, and the icons,
 which are absent on purpose. Not tried: pt-PT.
+
+## Battle.net taken out (2026-11-17)
+
+The user asked for Battle.net to come out for now and to stay a possible
+future source, beside EA app, Ubisoft Connect and others, to look at again
+after the first stable release. It had never worked: the client started under
+Proton but its window stayed blank (item 61), so no game was read from a real
+installation. Removed whole:
+
+- **`crates/zendo-core/src/battlenet.rs`**, and with it `Source::BattleNet`
+  (the sources go from nine to eight), `Library::scan`'s Battle.net pass,
+  `Launch::Prefix` and `WineRunner` (no other source built one),
+  `launch::in_prefix`, and the prefix and log rows a Battle.net game's
+  Technical card added in `game_ui.rs`.
+- **Settings → Launchers**: its row, the installer's download and run, and
+  its place in the download enum and the bar. Nexus Launcher and the Series S
+  are now rows 0 and 1.
+- **Accounts**: the BATTLE.NET card, its `battlenet-open` callback and its
+  state; Nexus Launcher's card stays alone under the stores.
+- **Text and lists**: the `battlenet-*` messages from `en.ftl` and
+  `pt-PT.ftl`, the Settings → Sources row and the report's source counts.
+- **Tests**: the module's 12 (one ignored) went with it; the Settings page's
+  launcher test now expects two rows and the Accounts page's one card.
+
+What was verified stays where it belongs: `docs/reference.md` keeps the
+Agent's `product.db`, the client's paths, the launch codes and the installer
+for the future source, and `docs/backlog.md` keeps the removal and item 61's
+blank-window notes. Zendo's own leftovers on disk are left alone, since
+nothing reads them now: the installer in `$XDG_CACHE_HOME/zendo/battlenet/`
+and the prefix Zendo made at `<games folder>/Prefixes/Battle.net` (the user
+can delete both). There is no migration: a state file with a saved filter
+on Battle.net would not load, and the user's `state.json` held no Battle.net
+game or filter (checked, 855 bytes). Checked: `cargo test --workspace` green
+(173 zendo, 299 core, 91 shell); `cargo fmt` clean on the touched files;
+clippy reports only the warnings the newer toolchain already gave (the
+`map_or_default` suggestions). Not seen: the window after the removal (the
+rows and the card left).
