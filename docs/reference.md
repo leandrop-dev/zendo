@@ -334,6 +334,11 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   `version` file, or `version` in the prefix root → Proton; else Wine. Flatpak
   is noted when the path is under `~/.var/app/com.usebottles.bottles/` or
   `~/.var/app/com.valvesoftware.Steam/`.
+- **The client on stock Wine**, checked 2026-11-17: with wine 11.22 in a
+  plain prefix the client dies at its loading screen (`wine: Unhandled
+  exception 0x80000003 ... starting debugger`) and the Agent never writes a
+  product, so no game appears. It is run under `umu-run` with a Proton
+  instead (Zendo's own prefix always is; item 58c).
 - The client is `drive_c/Program Files (x86)/Battle.net/Battle.net.exe` (or
   `Program Files`, `Battle.net Launcher.exe`). A game starts as
   `<client> --exec=launch <launch code>`:
@@ -382,17 +387,30 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
 - Starting one: `<profile>/shortcuts/launch-game <id>`; the launcher itself is
   `<profile>/shortcuts/launch-nexus` (no argument). Both are scripts Nexus
   writes, marked `# X-Xodus-Nexus-Profile=` on line 2 and private to the user;
-  omakade refuses anything else in that place. There is also a backend CLI at
-  the path `binaryPath` names in `<profile>/xodus-backends/current.json`
-  (`xodus-cli`, under `<profile>/xodus-backends/releases/`).
+  omakade refuses anything else in that place. Its backend CLI is below.
+- **The backend CLI**, checked on the user's machine 2026-11-17 (v0.2.15, at
+  the `binaryPath` of `current.json`): `library --json [--market US]` answers
+  the account's entitlements (`account`, `checkedAt`, and per entitlement
+  `productId` (12 `[0-9A-Z]`, the Store id), `status`, `endDate`, `isTrial`,
+  `sharingSource`, `satisfiedByProductId`);
+  `resolve-package` resolves Store packages without signing in; `streaming
+  <source> <destination>` downloads and extracts a game, `--progress-json`
+  over stdout and pause/resume JSON over stdin (`--control-stdin`), with
+  `--parallel` and `--download-limit-kib`; `download` fetches msixvc/xsp
+  files; `extract`, `license`, `saved-accounts`, `account`, `profile`,
+  `achievements`, `game-activity`, `run` and `social` read or start other
+  things. The `productId` is the Microsoft Store id (the art query's
+  `bigIds`).
 - Artwork: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
   <storeId>&market=US&languages=en-US`, keeping `Poster` images at `w=600` and
   `SuperHeroArt` (else `TitledHeroArt`) at `w=1920` from
   `store-images.s-microsoft.com`. The Xbox title id is `<TitleId>` in the
   game's `MicrosoftGame.config`.
-- It is a separate GUI, not a command-line engine: Zendo would list its games
-  read-only and start them through its script, the way Steam and Heroic are
-  handled, not install or update them itself.
+- It is a separate GUI with a command-line backend, not an engine with its own
+  licence or store API: Zendo reads the games it installed and starts them
+  through its script, as it does for Steam and Heroic, and can go further on
+  the CLI (item 60): list the account's Game Pass entitlements, and install
+  through `streaming` with the queue's progress and Stop.
 
 ### Xbox Series S (streaming)
 

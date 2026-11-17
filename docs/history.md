@@ -5626,3 +5626,38 @@ section's note is cleared when the window it announced closes.
 Not seen: the two rows and the card on screen after that fix, the download's
 bar in the window, and the launcher's own window with its runtime download
 and the Microsoft sign-in, which is the user's to do. Not tried: pt-PT.
+
+## Item 58c, Battle.net on Proton (2026-11-17)
+
+The user installed Battle.net from Zendo's Settings and the client never got
+past its loading screen; the Library stayed empty because the Agent's
+`product.db` never gained a product.
+
+- **What the log said** (`$XDG_STATE_HOME/zendo/logs/battlenet.log`, 2026-11-16
+  01:12): `wine: Unhandled exception 0x80000003 in thread 49c at address
+  68F300E1 (thread 049c), starting debugger...`, then only the client's
+  shutdown noise. `wine --version` is wine-11.22, and the prefix Zendo made,
+  `~/Games/Prefixes/Battle.net`, carries no `bottle.yml` and no `version`
+  file, so `runner()` read it as plain Wine: the client crashes in stock Wine
+  rather than hanging.
+- **The fix** (`crates/zendo-core/src/battlenet.rs`): Zendo's own prefix runs
+  on Proton. `managed(prefix)` recognises it by its place,
+  `Prefixes/Battle.net` under the games folder ([`managed_prefix`]), so no
+  configuration is read to tell, and `runner()` answers `Proton` for it, as it
+  already did for a Steam-style `pfx` or a `version` file at the prefix root.
+  `run_installer` now starts Blizzard's installer with `runner(&prefix)`
+  instead of a hard-coded Wine, so the installer, the client and every game
+  imported from that prefix all go through `umu-run`. With no Proton chosen in
+  Settings, `in_prefix` leaves `PROTONPATH` unset and umu-launcher fetches and
+  keeps its own UMU-Proton (umu-launcher 1.4.3 here), which is what it is for.
+
+Checked: `cargo test --workspace` green (170 zendo, 302 core, 91 shell); the
+runner test now also checks that `Prefixes/Battle.net` answers Proton. Clippy
+reports nothing in the file. Not seen: the client signing in under Proton,
+and a game imported from that prefix started through it. The prefix was made
+by Wine, so Proton's first run upgrades it.
+
+Things to know: a prefix at `<any>/Prefixes/Battle.net` is read as Zendo's
+own and so runs on Proton; a Battle.net prefix made by hand elsewhere keeps
+Wine unless it carries a Proton marker. `umu-run` or a Proton missing now
+gives its own error at Play or Open ("umu-launcher is needed…").

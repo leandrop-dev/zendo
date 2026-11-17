@@ -266,8 +266,8 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a and
-58b are built; 59 is next.
+55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
+58c are built; 59 and 60 are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -356,6 +356,12 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   - The download is Blizzard's installer
     (`downloader.battle.net/.../Battle.net-Setup.exe`); it has no checksum,
     only HTTPS.
+  - **58c built 2026-11-17**: Zendo's own prefix runs on Proton. The user's
+    client crashed in stock Wine 11.22 (`wine: Unhandled exception
+    0x80000003`, `docs/history.md`), so `runner()` says Proton for a prefix at
+    any `Prefixes/Battle.net` (recognised by its place, no configuration
+    read), and the installer is started with `runner(&prefix)` rather than a
+    hard-coded Wine. Not seen: the client signing in under Proton.
 - **58, Game Pass through Nexus Launcher** [firm, sliced 2026-11-16].
   `domsvoboda/nexus-launcher` (MIT, formerly `xodus-nexus`). Read-only:
   `launcher-state.json` games with `installState == "ready"`, launched through
@@ -392,6 +398,24 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   games. The slice is a thin entry (Settings → Sources, with the downloads)
   that opens Greenlight on the console. **xbPlay is Flathub-archived and
   end-of-life, with a copyright dispute, so it is not used.**
+
+- **60, Game Pass from Zendo** [firm, 2026-11-17]. The user's question after
+  58b: can Zendo show the Game Pass games on offer and install them, rather
+  than only read what Nexus Launcher installed? It can, on the launcher's own
+  backend, which is signed in already (checked 2026-11-17, the same machine):
+  `~/.config/xodus-nexus/xodus-backends/current.json` names `xodus-cli`
+  (v0.2.15), whose `library --json` answers the account's entitlements
+  (`productId`, status, dates) and whose `streaming <source> <dest>` downloads
+  and extracts a game with `--progress-json` and pause/resume over stdin; the
+  `productId` is the Microsoft Store id that option 2's art is keyed by
+  (`docs/reference.md`, "Nexus Launcher"). Sliced, to do with the user:
+  **60a** the owned list (a Store-like page or a section of the Store, titles
+  and Store art by `productId`, sizes from `resolve-package`), **60b** install
+  through the queue (a `streaming` job with its progress and Stop, the game
+  then imported as it is today), **60c** uninstall and update if the CLI
+  allows them. Not started; the contracts to confirm first are
+  `resolve-package`'s answer shape and whether `streaming` needs the
+  launcher's runtime installed.
 
 EA and Ubisoft are not listed: neither has a Linux launcher, and those games
 arrive through Steam or Heroic, which Zendo already imports. Emulation and

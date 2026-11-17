@@ -205,7 +205,13 @@ fn client(prefix: &Path) -> PathBuf {
     client_in(prefix).unwrap_or_else(|| prefix.join(CLIENTS[0]))
 }
 
-/// What runs the client: a Bottles prefix, a Proton one, or Wine.
+/// What runs the client: a Bottles prefix, a Proton one, Wine, or Zendo's
+/// own Battle.net prefix.
+///
+/// Zendo's own prefix runs on Proton even though nothing marks it as one:
+/// Blizzard's client crashes in stock Wine before its sign-in (a breakpoint
+/// exception at its loading screen, `docs/history.md` item 58c), and
+/// `umu-run` with a Proton is the way it runs on Linux.
 fn runner(prefix: &Path) -> WineRunner {
     if prefix.join("bottle.yml").is_file() {
         return WineRunner::Bottles;
@@ -214,11 +220,22 @@ fn runner(prefix: &Path) -> WineRunner {
         && prefix
             .parent()
             .is_some_and(|parent| parent.join("version").is_file());
-    if steam_style || prefix.join("version").is_file() {
+    if steam_style || prefix.join("version").is_file() || managed(prefix) {
         WineRunner::Proton
     } else {
         WineRunner::Wine
     }
+}
+
+/// Whether the prefix is the one Zendo makes for Battle.net, the games
+/// folder's `Prefixes/Battle.net` ([`managed_prefix`]): read by its place,
+/// so no configuration is needed to tell.
+fn managed(prefix: &Path) -> bool {
+    prefix.file_name().is_some_and(|name| name == "Battle.net")
+        && prefix
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "Prefixes")
 }
 
 /// The bottle's name, read from `bottle.yml`; the folder's when the file
@@ -304,8 +321,9 @@ pub fn count() -> usize {
     scan(&prefixes()).games.len()
 }
 
-/// Runs Blizzard's installer in Zendo's prefix, with Wine. The window it
-/// opens is the user's to click through; the process ends when it does.
+/// Runs Blizzard's installer in Zendo's prefix, with what runs that prefix
+/// (a Proton, as [`runner`] says). The window it opens is the user's to
+/// click through; the process ends when it does.
 ///
 /// # Errors
 ///
@@ -321,7 +339,7 @@ pub fn run_installer() -> anyhow::Result<std::process::Child> {
     let mut warning = None;
     let command = crate::launch::in_prefix(
         &prefix,
-        WineRunner::Wine,
+        runner(&prefix),
         None,
         &installer,
         &[],
@@ -944,6 +962,12 @@ mod tests {
         fs::write(bottles.join("bottle.yml"), "Name: \"Games\"\n").unwrap();
         assert_eq!(runner(&bottles), WineRunner::Bottles);
         assert_eq!(bottle(&bottles).as_deref(), Some("Games"));
+
+        // Zendo's own prefix, whatever made it: Battle.net's client crashes
+        // in stock Wine, so it runs on Proton.
+        let managed = dir.join("Prefixes/Battle.net");
+        fs::create_dir_all(&managed).unwrap();
+        assert_eq!(runner(&managed), WineRunner::Proton);
 
         fs::remove_dir_all(&dir).unwrap();
     }
