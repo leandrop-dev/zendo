@@ -1,0 +1,103 @@
+%{!?zendover:%global zendover 1.0.0}
+
+# The window's Slint code is generated as one large unit: with Fedora's
+# defaults (-Cdebuginfo=2, one codegen unit) rustc used about 17 GB building
+# the window's tests in %%check and was killed (mock, 2026-11-15).
+%global rustflags_debuginfo 1
+%global rustflags_codegen_units 16
+
+Name:           zendo
+Version:        %{zendover}
+Release:        1%{?dist}
+Summary:        Every game in one library: Steam, Epic, GOG, Amazon and your own
+License:        MIT AND OFL-1.1 AND GPL-3.0-only
+URL:            https://github.com/leandrop-dev/zendo
+Source0:        zendo-%{zendover}.tar.gz
+# cargo vendor --locked, made by packaging/fedora/make-srpm.sh
+Source1:        zendo-%{zendover}-vendor.tar.gz
+
+ExclusiveArch:  x86_64
+
+BuildRequires:  cargo-rpm-macros >= 28
+BuildRequires:  rust >= 1.98
+BuildRequires:  pkgconfig(gtk+-3.0)
+BuildRequires:  pkgconfig(webkit2gtk-4.1)
+BuildRequires:  pkgconfig(libsoup-3.0)
+BuildRequires:  pkgconfig(javascriptcoregtk-4.1)
+BuildRequires:  pkgconfig(libudev)
+BuildRequires:  desktop-file-utils
+# %%check: the tests make and unpack archives and run checksums
+BuildRequires:  tar
+BuildRequires:  xz
+BuildRequires:  bsdtar
+BuildRequires:  7zip
+BuildRequires:  coreutils
+
+# Loaded at run time by the window (Slint, on winit and EGL), so rpm cannot see them
+Requires:       libglvnd-egl
+Requires:       libglvnd-glx
+Requires:       fontconfig
+Requires:       libxkbcommon
+Requires:       libxkbcommon-x11
+Requires:       libX11
+Requires:       libXcursor
+Requires:       libXi
+Requires:       libwayland-client
+Requires:       libwayland-egl
+Requires:       hicolor-icon-theme
+# Settings -> Engines downloads and unpacks the engines and Protons
+Requires:       python3
+Requires:       tar
+Requires:       xz
+Requires:       coreutils
+# Unpacks mods and GOG Galaxy's dummy-service.zip
+Requires:       (7zip or bsdtar)
+Recommends:     xdg-utils
+Suggests:       steam
+Suggests:       gamescope
+Suggests:       mangohud
+Suggests:       gamemode
+
+%description
+Zendo is a game launcher: one library for Steam, Epic, GOG and Amazon games
+and games installed by hand, launched with the right tools (Proton through
+umu-launcher, MangoHud, GameMode, gamescope), with covers, achievements and
+mods. The store engines (legendary, gogdl, nile, comet), umu-launcher and
+the Protons are downloaded from Settings, not packaged here.
+
+%prep
+%autosetup -n zendo-%{zendover} -a1
+%cargo_prep -v vendor
+
+%build
+%cargo_build
+%{cargo_vendor_manifest}
+# the workspace root is a virtual manifest; the licences are the app's
+(cd crates/zendo && %{cargo_license_summary})
+(cd crates/zendo && %{cargo_license}) > LICENSE.dependencies
+
+%install
+install -Dpm0755 target/rpm/zendo %{buildroot}%{_bindir}/zendo
+install -Dpm0644 data/zendo.desktop %{buildroot}%{_datadir}/applications/zendo.desktop
+for size in 16 22 24 32 48 64 128 256 512; do
+    install -Dpm0644 data/icons/zendo-$size.png \
+        %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/zendo.png
+done
+
+%check
+desktop-file-validate %{buildroot}%{_datadir}/applications/zendo.desktop
+%cargo_test
+
+%files
+%license LICENSE
+%license LICENSE.dependencies
+%license cargo-vendor.txt
+%license crates/zendo/fonts/OFL.txt
+%doc README.md
+%{_bindir}/zendo
+%{_datadir}/applications/zendo.desktop
+%{_datadir}/icons/hicolor/*/apps/zendo.png
+
+%changelog
+* Tue Nov 17 2026 Leandro Paixão <leo@codemonk.eu> - 1.0.0-1
+- First stable release

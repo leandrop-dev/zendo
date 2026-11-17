@@ -6,6 +6,7 @@ A game launcher for Linux: every game in one library, started with the
 right tools.
 
 [![License: MIT and GPLv3](https://img.shields.io/badge/license-MIT%20%2B%20GPLv3-f25623?style=flat-square)](LICENSE)
+[![CI](https://github.com/leandrop-dev/zendo/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrop-dev/zendo/actions/workflows/ci.yml)
 ![Linux](https://img.shields.io/badge/Linux-171717?style=flat-square&logo=linux&logoColor=ccd0cf)
 ![Rust](https://img.shields.io/badge/Rust-Slint-171717?style=flat-square&logo=rust&logoColor=ccd0cf)
 
@@ -301,8 +302,25 @@ launcher is needed only for its own games:
 
 ## Install
 
-On Arch and its relatives (including CachyOS), `zendo-git` builds the
-latest commit on main; its PKGBUILD is in `packaging/arch/zendo-git/`:
+On Arch and its relatives (including CachyOS), releases are published to a
+pacman repository on GitHub Pages. Add it once:
+
+```ini
+[zendo]
+SigLevel = Optional TrustAll
+Server = https://leandrop-dev.github.io/zendo/$arch
+```
+
+to `/etc/pacman.conf`, then:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S zendo
+```
+
+The repository is not signed yet, which is why `SigLevel` trusts it; only
+the release workflow writes it. To follow `main` instead, `zendo-git` builds
+the latest commit; its PKGBUILD is in `packaging/arch/zendo-git/`:
 
 ```bash
 git clone https://github.com/leandrop-dev/zendo.git
@@ -310,11 +328,7 @@ cd zendo/packaging/arch/zendo-git
 makepkg -si            # add --nocheck to skip the test suite
 ```
 
-It installs `zendo` in `/usr/bin`, its menu entry and its icon. Steam,
-Heroic, umu-launcher, gamescope, MangoHud, GameMode and 7-Zip are optional;
-pacman lists what each one adds.
-
-On Fedora (x86_64, 45 and Rawhide), the latest commit on main is built in
+On Fedora (x86_64, 45 and Rawhide), the last release is built in
 [COPR](https://copr.fedorainfracloud.org/coprs/leandrop/zendo/):
 
 ```bash
