@@ -393,11 +393,22 @@ Read from omakade's source on `main` (blob `8a9ed1d`): `src/sources/battlenet/`,
   the account's entitlements (`account`, `checkedAt`, and per entitlement
   `productId` (12 `[0-9A-Z]`, the Store id), `status`, `endDate`, `isTrial`,
   `sharingSource`, `satisfiedByProductId`);
-  `resolve-package` resolves Store packages without signing in; `streaming
-  <source> <destination>` downloads and extracts a game, `--progress-json`
+  `resolve-package <product> [--json] [--market US] [--include-dlc]` answers,
+  without signing in, a `status` (`ready`, `choice`, `unavailable`) and
+  `choices[]` with `platform` (`Windows.Desktop`, `Windows.Xbox`),
+  `packageFormat` (`MSIXVC`, `EAPPX`, `XVC`), `downloadBytes`, `installBytes`,
+  `supported` and the package's own `productId`/`contentId` (checked
+  2026-11-17: Minecraft `ready`/supported/2087256064 bytes/MSIXVC; Cuphead
+  `unavailable`, an EAPPX of 5399841994 bytes, `supported: false`);
+  `streaming
+  <product> <folder>` downloads and extracts a game, `--progress-json`
   over stdout and pause/resume JSON over stdin (`--control-stdin`), with
-  `--parallel` and `--download-limit-kib`; `download` fetches msixvc/xsp
-  files; `extract`, `license`, `saved-accounts`, `account`, `profile`,
+  `--parallel` and `--download-limit-kib` (it needs the launcher's runtime
+  installed; an unknown product answers "Invalid Store product or market");
+  `download <product> --dry-run` refuses with "Select an installable package
+  in Nexus before starting this download"; `run <path> <wine>` starts one with
+  a Wine given, and its own error for a missing path is "Cannot launch this
+  game: No such file or directory"; `extract`, `license`, `saved-accounts`, `account`, `profile`,
   `achievements`, `game-activity`, `run` and `social` read or start other
   things. The `productId` is the Microsoft Store id (the art query's
   `bigIds`).

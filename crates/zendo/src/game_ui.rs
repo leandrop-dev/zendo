@@ -409,6 +409,7 @@ impl Glue {
         data.set_owned(true);
         data.set_owned_installed(parts.installed);
         data.set_owned_note(parts.note.into());
+        data.set_owned_launcher(slint::SharedString::new());
         data.set_title(parts.title.into());
         data.set_source_line(parts.source.into());
         data.set_pinned(false);
@@ -446,6 +447,8 @@ impl Glue {
         };
         let data = window.global::<GameData>();
         data.set_owned(false);
+        // A store game's launcher button is not a library game's.
+        data.set_owned_launcher(slint::SharedString::new());
         let now = running::now();
 
         let mut source = vec![format::source(game.source)];

@@ -1,7 +1,7 @@
 //! The launchers' files, watched so the library can rescan by itself when
 //! one changes: Steam's `libraryfolders.vdf` and each `appmanifest_*.acf`,
-//! Heroic's `installed.json` records, and the `.desktop` applications
-//! folders. [`signature`] gives their modification times as one sorted list;
+//! Heroic's `installed.json` records, Nexus Launcher's
+//! `launcher-state.json`, and the `.desktop` applications folders. [`signature`] gives their modification times as one sorted list;
 //! a list that differs from the last one means something changed and the
 //! library should be read again. Only launchers' files are watched, never
 //! Zendo's own, so Zendo's changes do not rescan it.
@@ -40,6 +40,11 @@ pub fn signature() -> Vec<(PathBuf, u64)> {
     }
     for dir in desktop::dirs() {
         note(&mut times, &dir);
+    }
+    // Nexus Launcher writes an install here, and Game Pass games are read
+    // from it.
+    if let Some(profile) = crate::xodus::profile() {
+        note(&mut times, &profile.join("launcher-state.json"));
     }
     times.sort();
     times

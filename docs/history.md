@@ -5790,3 +5790,94 @@ Zendo lists is one the account has; whether it can be installed on this PC is
 `resolve-package`'s answer, which is 60b's. Two editions of one game (DOOM
 Eternal's Battlemode build and standard edition) are two products and so two
 cards, as the Store lists them.
+
+## Item 60b, the Game Pass page's size and its launcher (2026-11-17)
+
+The second slice of item 60: what the Store would install for a Game Pass
+game, said on its page, and the way to the program that installs it.
+
+- **What the backend can say** (checked 2026-11-17, `xodus-cli
+  resolve-package <product> --json`): `choices` with `platform`
+  (`Windows.Desktop` for a PC, `Windows.Xbox` for a console), `packageFormat`
+  (`MSIXVC`, `EAPPX`, `XVC`), `downloadBytes`, `installBytes` and `supported`,
+  and a top-level `status` (`ready`, `choice`, `unavailable`). Minecraft is
+  `supported: true`, `ready`, 2087256064 bytes, MSIXVC; Cuphead is
+  `unavailable`, its desktop build an EAPPX of 5399841994 bytes with
+  `supported: false`. The Store, not the launcher, answers this, so it needs
+  nothing installed but the backend.
+- **`xodus::package(product)`** runs that and picks the desktop build (else
+  the first), with `supported`, `status`, the size and the format.
+- **The game's page** (`store_ui.rs`): an Xbox store game's `want_info` asks
+  that instead of a store engine, keeps the answer by game id, and
+  `install_note` says where it goes: "Install it in Nexus Launcher; it needs
+  2.1 GB…", or "The Store has no install of it for this PC" when it is not
+  supported. The action row gets **Open Nexus Launcher**
+  (`GameData.owned-launcher` and its `open-launcher` callback, empty for every
+  other store game and reset when a library game's page opens), so the game is
+  a click and a sign-in away without hunting Settings. Words: three
+  `xbox-install-*`/`xbox-not-available` in both languages.
+- **Why Zendo does not run the install itself yet.** `xodus-cli streaming
+  <product> <folder>` does exist (progress as `--progress-json`, pause and
+  resume over stdin), but it needs the launcher's runtime installed, and
+  `download <product>` refuses with "Select an installable package in Nexus
+  before starting this download", i.e. the CLI expects the launcher's own
+  selection; an install made behind the launcher's back would also not be in
+  `launcher-state.json`, which is what Zendo reads to list the game and what
+  `shortcuts/launch-game <id>` needs to start it. `run <path> <wine>` could
+  start one without that state, but that is a second launching path to design.
+  Recorded in `docs/backlog.md` (60c) with the one experiment that would
+  settle it: install a small title with `streaming` and see whether the
+  launcher's state gains it.
+
+Checked: `cargo test --workspace` green (172 zendo, 308 core, 91 shell). New:
+the package picking (a desktop build preferred over a console one), the page
+test (a supported game's note with its size and the launcher button; an
+unsupported one's note), and two ignored tests against the real backend, one
+of which resolved Minecraft and Cuphead as above. Not seen on screen: the
+button, the note with a real size, and a game installed in the launcher and
+then listed by Zendo. Not tried: pt-PT.
+
+## The Game Pass list after the first real install (2026-11-17)
+
+The user installed Minecraft Legends through Nexus Launcher and tried the
+Store again. Two bugs, both fixed:
+
+- **The Library did not see it until Refresh.** Nothing watched the launcher's
+  state. `watch::signature` now notes
+  `$XDG_CONFIG_HOME/xodus-nexus/launcher-state.json`, so an install (or an
+  uninstall) there rescans within the ten seconds the watcher ticks at, as
+  Steam's and Heroic's files do.
+- **The Store never marked a Game Pass game installed, and its page still
+  offered "Open Nexus Launcher".** The library's id was the launcher's own
+  (`xbox:<16 hex>`), while the Store's list is keyed by the Store's product id
+  (`xbox:<storeId>`), so the two could never meet. `xodus::game()` now names
+  the game `xbox:<storeId>` and keeps the launcher's id where it belongs, in
+  `launch-game`'s argument; a record without a `storeId` falls back to the
+  launcher's id. Checked against the user's own state in a throwaway home:
+  `zendo list` printed `xbox:9N98Z825TNFW  Xbox  Minecraft Legends - Windows`.
+
+Also checked, since the user had installed the launcher's runtimes (Xodus
+backend, Standard and CachyOS): they do not change `supported`.
+`resolve-package` still answers `unavailable` and `supported: false` for
+Cuphead, so the flag is about the Store's entitlement for a PC, not about the
+runtime. The whole list's packages, resolved one by one on 2026-11-17:
+
+```
+   0.01 GB  yes  ready        MSIXVC  Minecraft Launcher
+   0.09 GB  yes  ready        MSIXVC  Retro Classics
+   0.19 GB  no   unavailable  MSIXBUNDLE Roblox - Not Supported
+   0.20 GB  no   unavailable  EAPPXBUNDLE Candy Crush Saga
+   0.39 GB  yes  ready        MSIXVC  Roblox - Windows
+   2.09 GB  yes  ready        MSIXVC  Minecraft for Windows
+   5.40 GB  no   unavailable  EAPPX   Cuphead
+  10.45 GB  yes  ready        MSIXVC  Pool Blitz
+  12.47 GB  yes  ready        MSIXVC  Minecraft Legends - Windows
+  25.10 GB  yes  ready        MSIXVC  DRAGON BALL XENOVERSE 2
+  96.70 GB  yes  ready        MSIXVC  DOOM Eternal Standard Edition (PC)
+ 120.45 GB  yes  ready        MSIXVC  Fallout 76 (PC)
+ 338.18 GB  yes  ready        MSIXVC  Call of Duty®
+```
+
+(The rest are editions of the same titles.) `cargo test --workspace` green
+(172 zendo, 309 core, 91 shell) with the new id test. Not seen on screen: the
+badge and the page after the fix.

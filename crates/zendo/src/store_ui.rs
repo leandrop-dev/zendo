@@ -8,7 +8,7 @@
 //! Steam is `steam_installs_ui`'s (51c).
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use slint::platform::Key;
@@ -122,6 +122,9 @@ pub(super) struct StoreState {
     /// The first scan was read, so the settings, Steam's sign-in among them,
     /// are in.
     first_scan: Cell<bool>,
+    /// What the Store would install for each Game Pass game, by game id, as
+    /// the launcher's backend resolved it.
+    xbox: RefCell<HashMap<String, xodus::Package>>,
 }
 
 impl StoreState {
@@ -143,6 +146,7 @@ impl StoreState {
             open: RefCell::new(None),
             lists_loaded: Cell::new(false),
             first_scan: Cell::new(false),
+            xbox: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -233,6 +237,10 @@ impl Glue {
         });
         let glue = Rc::clone(self);
         data.on_refresh(move || glue.refresh_stores());
+        let glue = Rc::clone(self);
+        window
+            .global::<GameData>()
+            .on_open_launcher(move || glue.open_launcher());
         let glue = Rc::clone(self);
         data.on_go_accounts(move || glue.navigate(Page::Accounts));
         let glue = Rc::clone(self);
@@ -462,6 +470,10 @@ impl Glue {
             self.want_steam_details(id, app);
             return;
         }
+        if let Some(app) = id.strip_prefix("xbox:") {
+            self.want_xbox_package(id, app);
+            return;
+        }
         let Some((store, app)) = owned::store_of(id) else {
             return;
         };
@@ -496,6 +508,65 @@ impl Glue {
                 with_glue(|glue| glue.info_arrived(&id, result));
             });
         });
+        self.show_game();
+    }
+
+    /// Asks the Store, through the launcher's backend, what it would install
+    /// for a Game Pass game: whether this PC can, and its size. Nothing is
+    /// installed by Zendo; Nexus Launcher does that (item 60b).
+    fn want_xbox_package(&self, id: &str, app: &str) {
+        self.store
+            .browser
+            .borrow_mut()
+            .info
+            .insert(id.to_owned(), InfoState::Asking);
+        let (id, app) = (id.to_owned(), app.to_owned());
+        let weak = self.window.clone();
+        std::thread::spawn(move || {
+            let result = xodus::package(&app).map_err(|err| format!("{err:#}"));
+            let _ = weak.upgrade_in_event_loop(move |_| {
+                with_glue(|glue| glue.xbox_package_arrived(&id, result));
+            });
+        });
+        self.show_game();
+    }
+
+    /// Opens Nexus Launcher from a Game Pass game's page, where the game is
+    /// installed; reaped when it ends.
+    pub(super) fn open_launcher(self: &Rc<Self>) {
+        if !self.persist {
+            return;
+        }
+        match xodus::open() {
+            Ok(mut child) => {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
+            Err(err) => self.say(format!("{err:#}")),
+        }
+    }
+
+    /// The Store answered about a Game Pass game's package.
+    pub(super) fn xbox_package_arrived(&self, id: &str, result: Result<xodus::Package, String>) {
+        let state = match result {
+            Ok(package) => {
+                self.store
+                    .xbox
+                    .borrow_mut()
+                    .insert(id.to_owned(), package.clone());
+                InfoState::Got(info::GameInfo {
+                    download_size: package.download_bytes,
+                    ..info::GameInfo::default()
+                })
+            }
+            Err(err) => InfoState::Failed(err),
+        };
+        self.store
+            .browser
+            .borrow_mut()
+            .info
+            .insert(id.to_owned(), state);
         self.show_game();
     }
 
@@ -963,6 +1034,22 @@ impl Glue {
         if installed {
             return String::new();
         }
+        if owned.shop == Shop::Xbox {
+            let packages = self.store.xbox.borrow();
+            return match packages.get(&owned.id) {
+                Some(package) if !package.supported => t!("xbox-not-available"),
+                Some(package) => package.download_bytes.map_or_else(
+                    || t!("xbox-install-in-launcher"),
+                    |bytes| {
+                        t!(
+                            "xbox-install-in-launcher-needs",
+                            size = Size::Bytes(bytes).to_string()
+                        )
+                    },
+                ),
+                None => t!("xbox-install-in-launcher"),
+            };
+        }
         if let Some(app) = owned.id.strip_prefix("steam:") {
             // Steam's dialog is open, or Steam is on it: how far it is.
             if let Some(note) = self.steam_install_note(app) {
@@ -1121,6 +1208,11 @@ impl Glue {
         };
         self.show_owned_page(parts, |data| {
             self.show_owned_install(data, &owned, installed);
+            // Game Pass is installed by its launcher, not by Zendo: the page
+            // says so and opens it.
+            if owned.shop == Shop::Xbox {
+                data.set_owned_launcher(t!("xbox-open").into());
+            }
             let images = self.show_cards(&game, data);
             // The store's own summary leads; Steam's page says it otherwise.
             if let Some(summary) = summary {
@@ -1168,6 +1260,57 @@ mod tests {
         glue.store_scanned();
         window.invoke_page_requested(Page::Store);
         (window, glue)
+    }
+
+    /// A Game Pass game's page: Zendo installs nothing, so it says so, with
+    /// the Store's size, and opens the launcher that does.
+    #[test]
+    fn a_game_pass_page_says_where_it_is_installed() {
+        let (window, glue) = store_page();
+        glue.store.browser.borrow_mut().cached(vec![(
+            Shop::Xbox,
+            vec![Owned::new(Shop::Xbox, "9AAA", "Halo Infinite".into())],
+        )]);
+        glue.store.browser.borrow_mut().set_accounts(
+            HashSet::from([Shop::Epic, Shop::Xbox]),
+            vec![Shop::Epic, Shop::Xbox],
+        );
+        glue.store.xbox.borrow_mut().insert(
+            "xbox:9AAA".into(),
+            xodus::Package {
+                supported: true,
+                status: "ready".into(),
+                download_bytes: Some(2_000_000_000),
+                format: Some("MSIXVC".into()),
+            },
+        );
+        glue.open_owned("xbox:9AAA");
+        let data = window.global::<GameData>();
+        assert_eq!(data.get_owned_launcher().as_str(), t!("xbox-open"));
+        assert_eq!(
+            data.get_owned_note().as_str(),
+            t!(
+                "xbox-install-in-launcher-needs",
+                size = Size::Bytes(2_000_000_000).to_string()
+            ),
+            "the size the Store gives, and where it is installed"
+        );
+
+        // The Store has no build for this PC: the page says that instead.
+        glue.store.xbox.borrow_mut().insert(
+            "xbox:9AAA".into(),
+            xodus::Package {
+                supported: false,
+                status: "unavailable".into(),
+                download_bytes: Some(5_399_841_994),
+                format: Some("EAPPX".into()),
+            },
+        );
+        glue.show_owned();
+        assert_eq!(
+            window.global::<GameData>().get_owned_note().as_str(),
+            t!("xbox-not-available")
+        );
     }
 
     fn labels(model: &ModelRc<ChipData>) -> Vec<String> {

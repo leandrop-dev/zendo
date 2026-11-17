@@ -189,8 +189,14 @@ fn game(record: &Record, shortcut: &Path) -> Option<Game> {
         "" => id.to_owned(),
         title => title.to_owned(),
     };
+    // The Store's product id is the one the Store page knows the game by, so
+    // the library's id is its own; the launcher's id is what starts it.
+    let library_id = match record.store_id.as_deref().map(str::trim) {
+        Some(product) if !product.is_empty() => product.to_owned(),
+        _ => id.to_owned(),
+    };
     let mut game = Game::new(
-        format!("xbox:{id}"),
+        format!("xbox:{library_id}"),
         title,
         Source::Xbox,
         Launch::Command {
@@ -234,6 +240,9 @@ struct Record {
     publisher: Option<String>,
     #[serde(default)]
     path: Option<String>,
+    /// The Store's product id, which the account's entitlements are keyed by.
+    #[serde(default, rename = "storeId")]
+    store_id: Option<String>,
     #[serde(default)]
     install_state: Option<String>,
     #[serde(default)]
@@ -302,7 +311,9 @@ mod tests {
         let scan = scan(Some(&dir));
         assert!(scan.problems.is_empty(), "{:?}", scan.problems);
         assert_eq!(scan.games.len(), 1, "only the ready, absolute game");
-        let game = by_id(&scan, "xbox:0123456789abcdef");
+        // The Store's product id names it, so the Store page knows it; the
+        // launcher's id is what starts it.
+        let game = by_id(&scan, "xbox:9NNX1VVR9WKB");
         assert_eq!(game.title, "Halo Infinite");
         assert_eq!(game.source, Source::Xbox);
         assert_eq!(
@@ -322,6 +333,17 @@ mod tests {
             game.cover_url.as_deref(),
             Some("data:image/png;base64,iVBORw0KGgo=")
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_record_without_its_store_id_takes_the_launchers() {
+        let dir = profile(
+            "nostore",
+            r#"{"games":[{"id":"aaa","title":"A","path":"/games/a","installState":"ready"}]}"#,
+        );
+        let scan = scan(Some(&dir));
+        assert_eq!(by_id(&scan, "xbox:aaa").title, "A");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -447,6 +469,35 @@ mod tests {
     }
 
     #[test]
+    fn picks_the_desktop_package_and_says_whether_it_can_install() {
+        let resolved: super::Resolved = serde_json::from_str(
+            r#"{"choices":[
+                 {"contentId":"a","downloadBytes":5506641920,"kind":"Game","packageFormat":"XVC","platform":"Windows.Xbox","supported":false},
+                 {"contentId":"b","downloadBytes":5399841994,"kind":"Game","packageFormat":"EAPPX","platform":"Windows.Desktop","supported":false}],
+                "market":"US","rootProductId":"9NJRX71M5X9P","schema":1,"status":"unavailable"}"#,
+        )
+        .unwrap();
+        let picked = resolved
+            .choices
+            .iter()
+            .find(|choice| choice.platform == "Windows.Desktop")
+            .expect("the desktop build");
+        assert_eq!(picked.download_bytes, Some(5_399_841_994), "the PC's build");
+        assert_eq!(picked.package_format, "EAPPX");
+        assert!(
+            !picked.supported || resolved.status == "unavailable",
+            "Cuphead is not available on a PC"
+        );
+
+        let ready: super::Resolved = serde_json::from_str(
+            r#"{"choices":[{"downloadBytes":2087256064,"kind":"Game","packageFormat":"MSIXVC","platform":"Windows.Desktop","supported":true}],"status":"choice"}"#,
+        )
+        .unwrap();
+        assert!(ready.choices[0].supported && ready.status != "unavailable");
+        assert_eq!(ready.choices[0].download_bytes, Some(2_087_256_064));
+    }
+
+    #[test]
     fn a_title_that_is_empty_takes_the_short_one() {
         let product = Product {
             id: "9AAA".into(),
@@ -566,6 +617,79 @@ fn owned_game(product: &Product) -> Option<Owned> {
     Some(game)
 }
 
+/// What the Store would install for a product on this machine: whether it
+/// can at all, and how many bytes it would download.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Package {
+    /// Whether this PC can install it.
+    pub supported: bool,
+    /// The Store's own word for the product: `choice` when it has a package,
+    /// `unavailable` when it has none for this machine.
+    pub status: String,
+    /// The bytes of the build picked, when the Store says.
+    pub download_bytes: Option<u64>,
+    /// The build picked, for the Technical card: `EAPPX`, `MSIXVC`, `XVC`.
+    pub format: Option<String>,
+}
+
+/// What the Store would install for a product, from the backend's
+/// `resolve-package`: this asks the Store, not the launcher, so it needs
+/// nothing installed but the backend.
+///
+/// # Errors
+///
+/// When the backend is not installed, cannot be run, or answers oddly.
+pub fn package(product: &str) -> anyhow::Result<Package> {
+    let cli = cli().context("Nexus Launcher's backend is not installed")?;
+    let output = std::process::Command::new(&cli)
+        .args(["resolve-package", product, "--json", "--market", MARKET])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .context("could not run Nexus Launcher's backend")?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Nexus Launcher's backend could not resolve {product}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let answer: Resolved = serde_json::from_slice(&output.stdout)
+        .context("Nexus Launcher's backend's package was odd")?;
+    // The desktop build is the one a PC runs; the Xbox one is for a console.
+    let picked = answer
+        .choices
+        .iter()
+        .find(|choice| choice.platform == "Windows.Desktop")
+        .or_else(|| answer.choices.first());
+    Ok(Package {
+        supported: picked.is_some_and(|choice| choice.supported) && answer.status != "unavailable",
+        status: answer.status,
+        download_bytes: picked.and_then(|choice| choice.download_bytes),
+        format: picked.map(|choice| choice.package_format.clone()),
+    })
+}
+
+/// The backend's answer about a product's packages.
+#[derive(Deserialize)]
+struct Resolved {
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    choices: Vec<Choice>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Choice {
+    #[serde(default)]
+    platform: String,
+    #[serde(default)]
+    package_format: String,
+    #[serde(default)]
+    download_bytes: Option<u64>,
+    #[serde(default)]
+    supported: bool,
+}
+
 /// The backend's answer about the account's entitlements.
 #[derive(Deserialize)]
 struct Library {
@@ -655,6 +779,25 @@ mod online {
             std::env::consts::ARCH
         ));
         assert_eq!(release.asset.sha256.len(), 64, "a digest to check against");
+    }
+
+    /// Asks the real backend what two products would install; run with
+    /// `cargo test -p zendo-core xodus::online -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the network and a signed-in Nexus Launcher"]
+    fn resolves_real_packages() {
+        for product in ["9NBLGGH2JHXJ", "9NJRX71M5X9P"] {
+            let package = super::package(product).unwrap();
+            println!(
+                "{product} supported={} status={} bytes={:?} format={:?}",
+                package.supported, package.status, package.download_bytes, package.format
+            );
+            assert!(!package.status.is_empty());
+            assert!(
+                !package.supported || package.download_bytes.is_some(),
+                "an installable build has a size"
+            );
+        }
     }
 
     /// Downloads the real `AppImage` into a throwaway home; run with

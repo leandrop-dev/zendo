@@ -267,7 +267,8 @@ so they never collide with items 1 to 54.
 ### Bugs (55a to 55c)
 
 55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
-58c are built; 59 is built; 60a is built; 60b and 60c are next.
+58c are built; 59 is built; 60a and 60b are built; 60c and the install
+question below are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -425,12 +426,48 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   Xbox chip with the stores' cards, sorts, search and cover fetch. Checked
   against the user's account: 22 games of 36 entitlements, in 1.9 s; not seen
   on screen.
-  **60b** install through the queue (a `streaming` job with its progress and
-  Stop, the game then imported as it is today), with sizes from
-  `resolve-package` on the game's page; **60c** uninstall and update if the
-  CLI allows them. Contracts still to confirm for 60b: whether `streaming`
-  needs the launcher's runtime installed, and how the game's folder and
-  executable come out of it.
+  **60b built 2026-11-17**: the page's facts and the hand-off.
+  `xodus::package` runs `resolve-package` (the desktop build's `supported`,
+  `status`, `downloadBytes` and format), and a Game Pass game's page says
+  where it goes ("Install it in Nexus Launcher; it needs 2.1 GB…", or "The
+  Store has no install of it for this PC"), with an **Open Nexus Launcher**
+  button. Checked against the real backend (Minecraft installable, Cuphead
+  not); not seen on screen. **60c** uninstall and update if the CLI allows
+  them. **The open question, for a piece of its own**: installing *through*
+  Zendo. `xodus-cli streaming <product> <folder>` exists (progress JSON,
+  pause/resume over stdin) but needs the launcher's runtime, and the CLI
+  expects the launcher's own package selection (`download` refuses without
+  it); an install made behind the launcher's back is not in
+  `launcher-state.json`, so Zendo could neither list it nor start it with
+  `launch-game <id>` (`run <path> <wine>` is a second path to design). One
+  small title installed with `streaming` would settle whether the state gains
+  it; Retro Classics (90 MB, supported) is the one to try.
+- **60d, the Game Pass list's packages in the background** (from the user's
+  testing, 2026-11-17): a card says nothing about whether this PC can install
+  the game; only its page does. `resolve-package` answers for a whole list at
+  about 1.4 s a product (22 titles: 10 MB to 338 GB, four of them
+  unavailable), so a thread could fill them all when the list arrives, and the
+  cards could carry the size or a "not for this PC" mark, with the page's
+  answer instant afterwards.
+- **60e, Game Pass achievements** (asked 2026-11-17): the launcher's backend
+  has `achievements` ("Read achievements for one Xbox title without signing in
+  or unlocking anything") and `game-activity` (time played and last activity).
+  Neither is used yet; they could fill a library game's Achievements card,
+  which today is Steam's and the stores' only.
+- **61, Battle.net's empty window under Proton** (from the user's testing,
+  2026-11-17): the client now starts (item 58c) and shows its window, but the
+  window is blank. The log
+  (`$XDG_STATE_HOME/zendo/logs/battlenet.log`) says Proton upgraded the
+  plain-Wine prefix to CachyOS-11.0-100, that ProtonFixes found no title for
+  `umu-battlenet` ("Game title not found in CSV", "No main stage global
+  protonfix"), that the game drive's parent (/home) could not be used, and
+  ends with "Executable is a unix path, launching with 'umu.exe'" and "ntsync:
+  up and running" with no error. What to try, one at a time, each a small
+  change to `in_prefix`'s environment: `PROTON_USE_WINED3D=1` (the client's
+  Chromium window often needs software D3D), `PROTON_ENABLE_CEF_SANDBOX=0`-ish
+  flags to the executable (`--no-cef-sandbox`), a GE-Proton instead of
+  CachyOS's, and `Battle.net.exe` started with `-d3d9`/`-d3d11`. The client's
+  own window needs a real check each time (item 58c's "not seen").
 
 EA and Ubisoft are not listed: neither has a Linux launcher, and those games
 arrive through Steam or Heroic, which Zendo already imports. Emulation and

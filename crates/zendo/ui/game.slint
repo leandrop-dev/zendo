@@ -116,6 +116,10 @@ export global GameData {
     in property <string> owned-dlc;
     in property <bool> owned-dlc-on;
     callback open-library();
+    // A Game Pass game: Zendo installs nothing for it, so the page opens
+    // Nexus Launcher, which does; empty for every other store game.
+    in property <string> owned-launcher;
+    callback open-launcher();
     callback owned-install();
     callback owned-import();
     callback owned-resume();
@@ -1109,6 +1113,11 @@ export component GamePage inherits Rectangle {
                             clicked => { GameData.open-library(); }
                         }
                         // Install and Import, until the game is queued.
+                        if GameData.owned-launcher != "": ActionButton {
+                            label: GameData.owned-launcher;
+                            primary: true;
+                            clicked => { GameData.open-launcher(); }
+                        }
                         if GameData.owned-job == 1: ActionButton {
                             label: Tr.t("install");
                             primary: true;
