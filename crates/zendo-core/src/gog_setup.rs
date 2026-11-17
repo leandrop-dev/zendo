@@ -287,14 +287,12 @@ fn own_steps(
     };
     let support = Store::Gog
         .dir()
-        .map(|dir| dir.join("support").join(app))
-        .unwrap_or_default();
+        .map_or_default(|dir| dir.join("support").join(app));
     let game_dir = game
         .details
         .install_path
         .as_deref()
-        .map(wine_path)
-        .unwrap_or_default();
+        .map_or_default(wine_path);
     let products = manifest
         .products
         .iter()
@@ -433,9 +431,7 @@ fn download(folder: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(folder).with_context(|| format!("could not make {}", folder.display()))?;
     let ids = every_needed().into_iter().collect::<Vec<_>>().join(",");
     let folder = folder.to_string_lossy();
-    let workers = crate::config::Config::load_file()
-        .map(|config| config.workers_args())
-        .unwrap_or_default();
+    let workers = crate::config::Config::load_file().map_or_default(|config| config.workers_args());
     let mut args = vec!["redist", "--ids", &ids, "--path", &folder];
     args.extend(workers.iter().map(String::as_str));
     Store::Gog

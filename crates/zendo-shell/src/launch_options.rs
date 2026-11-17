@@ -119,15 +119,9 @@ impl Sheet {
             id: game.id.clone(),
             title: game.title.clone(),
             windows,
-            width: options
-                .gamescope_width
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            height: options
-                .gamescope_height
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            frame_cap: options.frame_cap.map(|n| n.to_string()).unwrap_or_default(),
+            width: options.gamescope_width.map_or_default(|n| n.to_string()),
+            height: options.gamescope_height.map_or_default(|n| n.to_string()),
+            frame_cap: options.frame_cap.map_or_default(|n| n.to_string()),
             protons: if windows {
                 proton_choices(options.proton.as_deref(), persist)
             } else {

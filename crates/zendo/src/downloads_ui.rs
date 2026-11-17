@@ -179,8 +179,7 @@ impl Glue {
                 .borrow()
                 .queue
                 .first()
-                .map(Job::id)
-                .unwrap_or_default()
+                .map_or_default(Job::id)
         } else {
             id.to_owned()
         }
@@ -504,8 +503,7 @@ impl Glue {
                 let error = queue.errors.get(&job.id());
                 JobRow {
                     error: error
-                        .map(|error| t!("downloads-failed", error = error.as_str()))
-                        .unwrap_or_default()
+                        .map_or_default(|error| t!("downloads-failed", error = error.as_str()))
                         .into(),
                     first: if error.is_some() {
                         t!("try-again")

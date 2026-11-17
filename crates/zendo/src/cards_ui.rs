@@ -611,8 +611,7 @@ impl Glue {
             .borrow()
             .game(id)
             .and_then(|game| game.steam_app)
-            .map(|app| app.to_string())
-            .unwrap_or_default();
+            .map_or_default(|app| app.to_string());
         if let Some(window) = self.window.upgrade() {
             window
                 .global::<GameData>()

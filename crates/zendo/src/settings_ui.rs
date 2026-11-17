@@ -822,8 +822,7 @@ impl Glue {
             Fact {
                 path: open.is_some(),
                 url: open
-                    .map(|folder| folder.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                    .map_or_default(|folder| folder.to_string_lossy().into_owned())
                     .into(),
                 ..row(
                     label,

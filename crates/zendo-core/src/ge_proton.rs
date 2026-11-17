@@ -185,8 +185,7 @@ fn parse_releases(
                 build,
                 published: entry
                     .published_at
-                    .map(|date| date.chars().take(10).collect())
-                    .unwrap_or_default(),
+                    .map_or_default(|date| date.chars().take(10).collect()),
                 file: tarball.name.clone(),
                 tarball: tarball.browser_download_url.clone(),
                 size: tarball.size,

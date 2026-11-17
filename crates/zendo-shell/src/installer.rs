@@ -329,9 +329,7 @@ impl InstallerState {
             .and_then(|path| sheet.pending.image(path));
         let about = About {
             picture,
-            name: focused
-                .map(|option| option.name.clone())
-                .unwrap_or_default(),
+            name: focused.map_or_default(|option| option.name.clone()),
             text: focused.map_or_else(String::new, |option| {
                 if option.description.is_empty() {
                     t!("installer-no-description")

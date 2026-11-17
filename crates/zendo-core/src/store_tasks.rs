@@ -48,11 +48,8 @@ pub fn listed(game: &Game) -> Vec<StoreTask> {
             .install_path
             .as_deref()
             .and_then(|folder| gog_tasks(folder, app))
-            .map(|tasks| other_gog_tasks(&tasks))
-            .unwrap_or_default(),
-        Source::Epic => epic_metadata(app)
-            .map(|metadata| epic_options(&metadata))
-            .unwrap_or_default(),
+            .map_or_default(|tasks| other_gog_tasks(&tasks)),
+        Source::Epic => epic_metadata(app).map_or_default(|metadata| epic_options(&metadata)),
         _ => Vec::new(),
     }
 }

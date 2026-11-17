@@ -609,11 +609,7 @@ impl Glue {
                     ChipData {
                         id,
                         label: chip.label.into(),
-                        count: chip
-                            .count
-                            .map(|count| count.to_string())
-                            .unwrap_or_default()
-                            .into(),
+                        count: chip.count.map_or_default(|count| count.to_string()).into(),
                         chosen: chip.chosen,
                     }
                 })

@@ -177,8 +177,7 @@ fn gpus() -> Vec<String> {
             let device = entry.path().join("device");
             let read = |file: &str| {
                 fs::read_to_string(device.join(file))
-                    .map(|text| text.trim().trim_start_matches("0x").to_owned())
-                    .unwrap_or_default()
+                    .map_or_default(|text| text.trim().trim_start_matches("0x").to_owned())
             };
             let driver = fs::read_link(device.join("driver"))
                 .ok()
@@ -229,8 +228,7 @@ fn tool_line(name: &str, found: Option<Located>, version_arg: Option<&str>) -> S
     };
     let version = version_arg
         .and_then(|arg| version(&path, arg))
-        .map(|version| format!(", {version}"))
-        .unwrap_or_default();
+        .map_or_default(|version| format!(", {version}"));
     let origin = match origin {
         Origin::Zendo => " (Zendo's copy)",
         Origin::Path => "",

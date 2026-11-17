@@ -375,11 +375,7 @@ mod tests {
     }
 
     fn status(glue: &Glue) -> String {
-        glue.browser
-            .borrow()
-            .status()
-            .map(str::to_owned)
-            .unwrap_or_default()
+        glue.browser.borrow().status().map_or_default(str::to_owned)
     }
 
     #[test]

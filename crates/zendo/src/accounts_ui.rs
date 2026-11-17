@@ -740,8 +740,7 @@ impl Glue {
         data.set_gog_galaxy(config.gog_galaxy);
         let pasted = signing_in
             .as_ref()
-            .map(|sign_in| sign_in.pasted.clone())
-            .unwrap_or_default();
+            .map_or_default(|sign_in| sign_in.pasted.clone());
         if data.get_code() != pasted {
             data.set_code(pasted.into());
         }

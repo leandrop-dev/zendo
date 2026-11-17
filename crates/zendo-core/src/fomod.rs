@@ -229,27 +229,24 @@ impl Installer {
         if !named(config, "config") {
             bail!("ModuleConfig.xml is not a FOMOD installer");
         }
-        let mut steps: Vec<Step> = child(config, "installSteps")
-            .map(|steps| {
-                let mut list: Vec<Step> = children(steps, "installStep").map(step).collect();
-                sort(&mut list, order(steps), |step| &step.name);
-                list
-            })
-            .unwrap_or_default();
+        let mut steps: Vec<Step> = child(config, "installSteps").map_or_default(|steps| {
+            let mut list: Vec<Step> = children(steps, "installStep").map(step).collect();
+            sort(&mut list, order(steps), |step| &step.name);
+            list
+        });
         steps.retain(|step| !step.groups.is_empty());
         let conditional = child(config, "conditionalFileInstalls")
             .and_then(|node| child(node, "patterns"))
-            .map(|patterns| {
+            .map_or_default(|patterns| {
                 children(patterns, "pattern")
                     .map(|pattern| {
                         (
                             child(pattern, "dependencies").map_or(Condition::Holds, condition),
-                            child(pattern, "files").map(installs).unwrap_or_default(),
+                            child(pattern, "files").map_or_default(installs),
                         )
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         Ok(Self {
             name: child(config, "moduleName")
                 .map(text)
@@ -257,9 +254,7 @@ impl Installer {
                 .unwrap_or_default(),
             image: child(config, "moduleImage").and_then(|node| path_attribute(node, "path")),
             needs: child(config, "moduleDependencies").map(condition),
-            required: child(config, "requiredInstallFiles")
-                .map(installs)
-                .unwrap_or_default(),
+            required: child(config, "requiredInstallFiles").map_or_default(installs),
             steps,
             conditional,
         })
@@ -627,13 +622,11 @@ fn sort<T>(list: &mut [T], order: Order, name: impl Fn(&T) -> &str) {
 }
 
 fn step(node: Node) -> Step {
-    let groups = child(node, "optionalFileGroups")
-        .map(|groups| {
-            let mut list: Vec<Group> = children(groups, "group").map(group).collect();
-            sort(&mut list, order(groups), |group| &group.name);
-            list
-        })
-        .unwrap_or_default();
+    let groups = child(node, "optionalFileGroups").map_or_default(|groups| {
+        let mut list: Vec<Group> = children(groups, "group").map(group).collect();
+        sort(&mut list, order(groups), |group| &group.name);
+        list
+    });
     Step {
         name: attribute(node, "name").unwrap_or_default(),
         visible: child(node, "visible").map(condition),
@@ -653,13 +646,11 @@ fn group(node: Node) -> Group {
         "selectall" => GroupKind::All,
         _ => GroupKind::Any,
     };
-    let options = child(node, "plugins")
-        .map(|plugins| {
-            let mut list: Vec<Choice> = children(plugins, "plugin").map(choice).collect();
-            sort(&mut list, order(plugins), |option| &option.name);
-            list
-        })
-        .unwrap_or_default();
+    let options = child(node, "plugins").map_or_default(|plugins| {
+        let mut list: Vec<Choice> = children(plugins, "plugin").map(choice).collect();
+        sort(&mut list, order(plugins), |option| &option.name);
+        list
+    });
     Group {
         name: attribute(node, "name").unwrap_or_default(),
         kind,
@@ -668,18 +659,16 @@ fn group(node: Node) -> Group {
 }
 
 fn choice(node: Node) -> Choice {
-    let flags = child(node, "conditionFlags")
-        .map(|flags| {
-            children(flags, "flag")
-                .filter_map(|flag| Some((attribute(flag, "name")?, text(flag))))
-                .collect()
-        })
-        .unwrap_or_default();
+    let flags = child(node, "conditionFlags").map_or_default(|flags| {
+        children(flags, "flag")
+            .filter_map(|flag| Some((attribute(flag, "name")?, text(flag))))
+            .collect()
+    });
     Choice {
         name: attribute(node, "name").unwrap_or_default(),
-        description: child(node, "description").map(text).unwrap_or_default(),
+        description: child(node, "description").map_or_default(text),
         image: child(node, "image").and_then(|image| path_attribute(image, "path")),
-        files: child(node, "files").map(installs).unwrap_or_default(),
+        files: child(node, "files").map_or_default(installs),
         flags,
         kind: child(node, "typeDescriptor").map_or(
             Kind {
@@ -721,18 +710,16 @@ fn kind(node: Node) -> Kind {
     };
     Kind {
         default: option_type(child(depends, "defaultType")),
-        patterns: child(depends, "patterns")
-            .map(|patterns| {
-                children(patterns, "pattern")
-                    .map(|pattern| {
-                        (
-                            child(pattern, "dependencies").map_or(Condition::Holds, condition),
-                            option_type(child(pattern, "type")),
-                        )
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
+        patterns: child(depends, "patterns").map_or_default(|patterns| {
+            children(patterns, "pattern")
+                .map(|pattern| {
+                    (
+                        child(pattern, "dependencies").map_or(Condition::Holds, condition),
+                        option_type(child(pattern, "type")),
+                    )
+                })
+                .collect()
+        }),
     }
 }
 
@@ -779,9 +766,7 @@ fn installs(node: Node) -> Vec<Install> {
     node.children()
         .filter(|item| named(*item, "file") || named(*item, "folder"))
         .map(|item| Install {
-            source: attribute(item, "source")
-                .map(|source| normalise(&source))
-                .unwrap_or_default(),
+            source: attribute(item, "source").map_or_default(|source| normalise(&source)),
             destination: attribute(item, "destination").map(|path| normalise(&path)),
             into_folder: attribute(item, "destination")
                 .is_some_and(|path| path.trim().is_empty() || path.ends_with(['/', '\\'])),

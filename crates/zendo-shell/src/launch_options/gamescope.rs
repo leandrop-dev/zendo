@@ -63,7 +63,7 @@ pub struct Fields {
 }
 
 fn shown(value: Option<u32>) -> String {
-    value.map(|n| n.to_string()).unwrap_or_default()
+    value.map_or_default(|n| n.to_string())
 }
 
 impl Fields {

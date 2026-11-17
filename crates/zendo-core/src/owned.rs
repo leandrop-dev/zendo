@@ -1123,13 +1123,12 @@ fn from_gamesdb(record: &Value) -> Option<Owned> {
     owned.genres = game
         .get("genres")
         .and_then(Value::as_array)
-        .map(|genres| {
+        .map_or_default(|genres| {
             genres
                 .iter()
                 .filter_map(|genre| genre.get("name")?.get("*")?.as_str().map(str::to_owned))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     owned.summary = localized(record.get("summary"))
         .or_else(|| localized(game.get("summary")))
         .as_deref()
@@ -1137,7 +1136,7 @@ fn from_gamesdb(record: &Value) -> Option<Owned> {
     owned.platforms = record
         .get("supported_operating_systems")
         .and_then(Value::as_array)
-        .map(|systems| {
+        .map_or_default(|systems| {
             systems
                 .iter()
                 .filter_map(|system| match system.get("slug")?.as_str()? {
@@ -1147,8 +1146,7 @@ fn from_gamesdb(record: &Value) -> Option<Owned> {
                     _ => None,
                 })
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     Some(owned)
 }
 

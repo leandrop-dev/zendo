@@ -109,15 +109,13 @@ struct LibraryFile {
 
 /// Titles and portrait images by app name, from a Heroic library file.
 fn library(file: &Path, scan: &mut Scan) -> HashMap<String, LibraryGame> {
-    read_json::<LibraryFile>(file, scan)
-        .map(|library| {
-            library
-                .games
-                .into_iter()
-                .map(|game| (game.app_name.clone(), game))
-                .collect()
-        })
-        .unwrap_or_default()
+    read_json::<LibraryFile>(file, scan).map_or_default(|library| {
+        library
+            .games
+            .into_iter()
+            .map(|game| (game.app_name.clone(), game))
+            .collect()
+    })
 }
 
 /// legendary's `installed.json`: app name to installed game. A DLC is an

@@ -487,10 +487,7 @@ pub fn arrange(
             unreadable: found.header.is_none(),
             // The masters it names, sorted into the two below once the
             // order is known.
-            missing: found
-                .header
-                .map(|header| header.masters)
-                .unwrap_or_default(),
+            missing: found.header.map_or_default(|header| header.masters),
             name: found.name,
             from: found.from,
             rank,

@@ -401,10 +401,7 @@ impl SteamInstalls {
 /// Blocks: run it on a thread.
 #[must_use]
 pub fn look(from: Option<u64>) -> (Vec<AppState>, Vec<VerifyEvent>) {
-    (
-        steam::states(),
-        from.map(steam::verifies).unwrap_or_default(),
-    )
+    (steam::states(), from.map_or_default(steam::verifies))
 }
 
 /// The apps installed or uninstalled at a look, each once, by title.

@@ -216,10 +216,7 @@ pub fn site_url(domain: &str, mod_id: u64, file_id: Option<u64>) -> String {
 pub fn have(overview: Option<&Overview>, domain: &str) -> (HashSet<u64>, HashSet<(u64, u64)>) {
     let mut mods = HashSet::new();
     let mut files = HashSet::new();
-    for info in overview
-        .map(|overview| overview.mods.as_slice())
-        .unwrap_or_default()
-    {
+    for info in overview.map_or_default(|overview| overview.mods.as_slice()) {
         match &info.nexus {
             Some(source) if source.domain == domain => {
                 mods.insert(source.mod_id);

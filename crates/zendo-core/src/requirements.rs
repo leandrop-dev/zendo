@@ -222,7 +222,7 @@ fn parse_gog(text: &str, system: System) -> Option<Vec<Row>> {
             .iter()
             .find(|level| level.get("type").and_then(Value::as_str) == Some(wanted))
             .and_then(|level| level.get("requirements")?.as_array())
-            .map(|lines| {
+            .map_or_default(|lines| {
                 lines
                     .iter()
                     .filter_map(|line| {
@@ -232,7 +232,6 @@ fn parse_gog(text: &str, system: System) -> Option<Vec<Row>> {
                     })
                     .collect()
             })
-            .unwrap_or_default()
     };
     rows(level("minimum"), level("recommended"))
 }
@@ -340,8 +339,7 @@ fn parse_steam(text: &str, app: u32, system: System) -> Option<Vec<Row>> {
             .get(name)
             .and_then(Value::as_str)
             .and_then(owned::plain_text)
-            .map(|text| steam_lines(&text))
-            .unwrap_or_default()
+            .map_or_default(|text| steam_lines(&text))
     };
     rows(level("minimum"), level("recommended"))
 }

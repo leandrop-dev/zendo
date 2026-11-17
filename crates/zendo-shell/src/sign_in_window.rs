@@ -84,7 +84,6 @@ fn name_of(store: Store) -> &'static str {
 
 /// `zendo sign-in-window <store> <url>`: shows the page until the sign-in
 /// ends or the window is closed.
-#[must_use]
 pub fn main(store: &str, url: &str) -> ExitCode {
     let shown = match store {
         "steam" => steam::show(false, url),
@@ -119,7 +118,6 @@ pub fn main(store: &str, url: &str) -> ExitCode {
 /// `zendo nexus-window <url> <folder>`: shows a page of Nexus Mods until it
 /// gives a mod manager link or downloads a file into `folder`, then writes
 /// the link, or `file:` and the file's path.
-#[must_use]
 pub fn nexus_main(url: &str, folder: &Path) -> ExitCode {
     match nexus_site::show(url, folder) {
         Ok(Some(found)) => {

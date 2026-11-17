@@ -96,7 +96,7 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
         let start = if folder.is_dir() {
             folder
         } else {
-            folder.parent().map(PathBuf::from).unwrap_or_default()
+            folder.parent().map_or_default(PathBuf::from)
         };
         let _ = dialog.set_current_folder(start);
     }

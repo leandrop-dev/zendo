@@ -196,7 +196,7 @@ fn parse(text: &str) -> anyhow::Result<Found> {
         bail!("Nexus's search: {}", error.message);
     }
     let mods = reply.data.context("Nexus's search: no answer")?.mods;
-    let tidy = |text: Option<String>| text.map(|text| text.trim().to_owned()).unwrap_or_default();
+    let tidy = |text: Option<String>| text.map_or_default(|text| text.trim().to_owned());
     Ok(Found {
         total: mods.total_count,
         hits: mods

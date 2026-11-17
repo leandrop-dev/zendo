@@ -72,11 +72,7 @@ pub fn fetch(id: &str) -> anyhow::Result<Vec<Entry>> {
         .read_to_string()
         .context("GOG's answer broke off")?;
     let product: Product = serde_json::from_str(&text).context("GOG's answer is not a product")?;
-    Ok(product
-        .changelog
-        .as_deref()
-        .map(entries)
-        .unwrap_or_default())
+    Ok(product.changelog.as_deref().map_or_default(entries))
 }
 
 /// Reads GOG's changelog HTML into entries. Tags Zendo does not know

@@ -167,11 +167,7 @@ fn chip_data(chips: Vec<StoreChip>, picks: &mut Vec<StorePick>) -> Vec<ChipData>
             ChipData {
                 id,
                 label: chip.label.into(),
-                count: chip
-                    .count
-                    .map(|count| count.to_string())
-                    .unwrap_or_default()
-                    .into(),
+                count: chip.count.map_or_default(|count| count.to_string()).into(),
                 chosen: chip.chosen,
             }
         })
@@ -797,8 +793,7 @@ impl Glue {
             .map(|line| {
                 let about = if line.installable {
                     line.size
-                        .map(|bytes| Size::Bytes(bytes).to_string())
-                        .unwrap_or_default()
+                        .map_or_default(|bytes| Size::Bytes(bytes).to_string())
                 } else {
                     t!("dlc-comes-with")
                 };

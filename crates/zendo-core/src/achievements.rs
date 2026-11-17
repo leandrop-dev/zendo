@@ -560,7 +560,6 @@ fn with_icons(found: Vec<Found>) -> Vec<Achievement> {
         .collect()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

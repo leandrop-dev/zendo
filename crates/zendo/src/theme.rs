@@ -172,7 +172,7 @@ fn all_themes(dir: Option<&Path>) -> (Vec<Theme>, Vec<String>) {
         .iter()
         .filter_map(|(id, text)| Theme::parse(id, text).ok())
         .collect();
-    let (own, problems) = dir.map(Theme::read_dir).unwrap_or_default();
+    let (own, problems) = dir.map_or_default(Theme::read_dir);
     for theme in own {
         match themes.iter_mut().find(|known| known.id == theme.id) {
             Some(known) => *known = theme,

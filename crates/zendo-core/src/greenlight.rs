@@ -148,7 +148,7 @@ mod tests {
         assert!(!super::appimage_is("greenlight.flatpak"));
     }
 
-    /// The AppImage Zendo brought comes first: a Flatpak there too, or a
+    /// The `AppImage` Zendo brought comes first: a Flatpak there too, or a
     /// program on `PATH`, does not hide it.
     #[test]
     fn opens_the_appimage_before_a_flatpak() {

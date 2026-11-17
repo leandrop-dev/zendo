@@ -648,8 +648,7 @@ fn installed_dlc(store: Store, app: &str) -> Vec<String> {
     known(store)
         .into_iter()
         .find(|game| game.app == app)
-        .map(|game| game.install.dlc.into_iter().map(|dlc| dlc.id).collect())
-        .unwrap_or_default()
+        .map_or_default(|game| game.install.dlc.into_iter().map(|dlc| dlc.id).collect())
 }
 
 /// Installs or uninstalls Epic DLC, one at a time: legendary takes one app
@@ -691,9 +690,7 @@ fn epic_dlc(
 
 /// The download workers the user set, read when a job starts.
 fn workers() -> Vec<String> {
-    crate::config::Config::load_file()
-        .map(|config| config.workers_args())
-        .unwrap_or_default()
+    crate::config::Config::load_file().map_or_default(|config| config.workers_args())
 }
 
 /// legendary's and nile's arguments for a job, with `workers` for those
@@ -718,8 +715,7 @@ fn words_for(job: &Job, folder: &Path) -> anyhow::Result<Vec<String>> {
         .into_owned();
     let name = folder
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     let folder = folder.to_string_lossy().into_owned();
     let words: Vec<&str> = match (
         job.store().context("this job has no store engine")?,
@@ -1085,15 +1081,13 @@ fn gog_record_field(app: &str, field: &str) -> Option<String> {
 }
 
 fn subfolders(dir: &Path) -> HashSet<PathBuf> {
-    fs::read_dir(dir)
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.is_dir())
-                .collect()
-        })
-        .unwrap_or_default()
+    fs::read_dir(dir).map_or_default(|entries| {
+        entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect()
+    })
 }
 
 fn gog_record_file() -> anyhow::Result<PathBuf> {
@@ -1170,13 +1164,12 @@ fn gog_installed_dlc(app: &str) -> anyhow::Result<Vec<String>> {
         .find(|record| is_record_of(record, app))
         .and_then(|record| record.get("installedDLCs"))
         .and_then(serde_json::Value::as_array)
-        .map(|ids| {
+        .map_or_default(|ids| {
             ids.iter()
                 .filter_map(serde_json::Value::as_str)
                 .map(str::to_owned)
                 .collect()
-        })
-        .unwrap_or_default())
+        }))
 }
 
 /// gogdl has no uninstall: Zendo deletes the folder it recorded, after

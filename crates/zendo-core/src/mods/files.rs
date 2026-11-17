@@ -84,6 +84,5 @@ pub(super) fn check_relative(folder: &Path) -> anyhow::Result<()> {
 /// A mod's name from its archive: `SkyUI_5_2_SE.7z` is `SkyUI_5_2_SE`.
 pub(super) fn file_name(path: &Path) -> String {
     path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .map_or_default(|name| name.to_string_lossy().into_owned())
 }

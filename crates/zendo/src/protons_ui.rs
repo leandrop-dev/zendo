@@ -582,21 +582,14 @@ impl Glue {
         data.set_proton_older(
             !list.asking && list.error.is_none() && (list.releases.len() > list.shown || list.more),
         );
-        data.set_proton_bar(
-            state
-                .download
-                .borrow()
-                .as_ref()
-                .map(|download| {
-                    bar_of(
-                        &download.name,
-                        download.done,
-                        download.total,
-                        download.stop.load(Ordering::Relaxed),
-                    )
-                })
-                .unwrap_or_default(),
-        );
+        data.set_proton_bar(state.download.borrow().as_ref().map_or_default(|download| {
+            bar_of(
+                &download.name,
+                download.done,
+                download.total,
+                download.stop.load(Ordering::Relaxed),
+            )
+        }));
         let (note, good) = state.note.borrow().clone().unwrap_or_default();
         data.set_proton_note(note.into());
         data.set_proton_note_tone(note_tone(good));

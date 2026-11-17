@@ -257,8 +257,7 @@ impl Config {
     pub fn workers_args(&self) -> Vec<String> {
         self.download_workers
             .filter(|workers| *workers > 0)
-            .map(|workers| vec!["--max-workers".to_owned(), workers.to_string()])
-            .unwrap_or_default()
+            .map_or_default(|workers| vec!["--max-workers".to_owned(), workers.to_string()])
     }
 
     /// Where store games go: `install_dir` with a leading `~` expanded, or

@@ -517,8 +517,7 @@ impl Glue {
             .state
             .borrow()
             .update_for(game, mod_id)
-            .map(shell::update_label)
-            .unwrap_or_default()
+            .map_or_default(shell::update_label)
     }
 
     /// Update on a mod of the open game: downloaded straight away with

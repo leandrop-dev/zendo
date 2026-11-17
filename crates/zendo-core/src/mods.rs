@@ -1081,9 +1081,7 @@ impl Place {
         match &list.folder {
             Some(folder) => (folder.clone(), true),
             None => (
-                self.known
-                    .map(|known| known.folder.to_owned())
-                    .unwrap_or_default(),
+                self.known.map_or_default(|known| known.folder.to_owned()),
                 false,
             ),
         }

@@ -195,22 +195,20 @@ impl Glue {
             .borrow()
             .as_ref()
             .filter(|_| session.is_some())
-            .map(|family| {
+            .map_or_default(|family| {
                 t!(
                     "steam-family",
                     name = family.name.as_str(),
                     count = family.members
                 )
-            })
-            .unwrap_or_default();
+            });
         let (note, note_good) = self.steam.note.borrow().clone().unwrap_or_default();
         let family_note = self
             .steam
             .family_note
             .borrow()
             .as_ref()
-            .map(|error| t!("steam-family-failed", error = error.as_str()))
-            .unwrap_or_default();
+            .map_or_default(|error| t!("steam-family-failed", error = error.as_str()));
         let config = self.settings_config();
         let (kept, kept_bad) = kept_text(config.kept(Key::SteamSession));
         SteamCardData {

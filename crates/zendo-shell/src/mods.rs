@@ -291,8 +291,7 @@ impl ModsState {
     pub fn start_naming(&mut self, id: &str, renaming: bool) {
         let current = self
             .overview(id)
-            .map(|overview| overview.profile.clone())
-            .unwrap_or_default();
+            .map_or_default(|overview| overview.profile.clone());
         let naming = Naming {
             name: if renaming {
                 current.clone()
@@ -551,8 +550,7 @@ fn run_inner(work: Work, game: &Game) -> anyhow::Result<Outcome> {
                 } else {
                     let name = archive
                         .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                        .unwrap_or_default();
+                        .map_or_default(|name| name.to_string_lossy().into_owned());
                     (mods::add(game, &archive)?, t!("mods-added", name = name))
                 };
             return Ok(Outcome::Added(added, note));
@@ -590,8 +588,7 @@ pub fn add_from_site(
     }
     let name = archive
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     let added = mods::add(game, archive);
     let _ = std::fs::remove_file(archive);
     Ok((added?, t!("mods-added", name = name)))

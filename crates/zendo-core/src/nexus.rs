@@ -447,8 +447,7 @@ pub fn identify(
 ) -> anyhow::Result<Option<(u64, Fetched)>> {
     let name = archive
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     let candidates = match mod_id {
         Some(id) => vec![id],
         None => ids_in_name(&name).into_iter().take(3).collect(),
@@ -611,8 +610,7 @@ pub fn handler() -> Handler {
         .stderr(std::process::Stdio::null())
         .output()
         .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default();
+        .map_or_default(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
     match answer.as_str() {
         "" => Handler::Nothing,
         HANDLER => zendo_handler(),

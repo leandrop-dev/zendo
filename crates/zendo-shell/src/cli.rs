@@ -46,7 +46,6 @@ pub type RunWindow = fn(bool, Option<String>) -> anyhow::Result<()>;
 
 /// Runs the command line `zendo` was started with. `run_window` opens the
 /// window, for the commands that want one.
-#[must_use]
 pub fn main(run_window: RunWindow) -> ExitCode {
     // A path on Linux need not be UTF-8: say so rather than panic.
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
@@ -136,7 +135,7 @@ fn open_link(link: &str, run_window: RunWindow) -> anyhow::Result<()> {
 
 fn list(all: bool, json: bool) -> anyhow::Result<()> {
     let library = Library::scan();
-    let sort = State::load().map(|state| state.sort).unwrap_or_default();
+    let sort = State::load().map_or_default(|state| state.sort);
     let mut games: Vec<&Game> = library
         .games
         .iter()

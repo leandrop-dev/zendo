@@ -438,8 +438,7 @@ fn parse_locations(text: &str) -> anyhow::Result<Vec<Location>> {
         .get("Windows")
         .and_then(|platform| platform.cloud_storage.as_ref())
         .filter(|cloud| cloud.enabled)
-        .map(|cloud| cloud.locations.clone())
-        .unwrap_or_default())
+        .map_or_default(|cloud| cloud.locations.clone()))
 }
 
 /// A location's path, its placeholders put into the prefix, as Proton

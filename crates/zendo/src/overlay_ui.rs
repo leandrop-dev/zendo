@@ -125,9 +125,7 @@ impl Glue {
         } else if installed {
             t!(
                 "overlay-is-installed",
-                path = eos_overlay::folder()
-                    .map(|folder| folder.display().to_string())
-                    .unwrap_or_default()
+                path = eos_overlay::folder().map_or_default(|folder| folder.display().to_string())
             )
         } else if engine {
             t!("overlay-not-installed")

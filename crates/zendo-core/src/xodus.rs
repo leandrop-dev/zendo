@@ -1300,8 +1300,8 @@ mod tests {
     #[test]
     fn no_profile_is_no_game_and_no_problem() {
         let scan = scan(None);
-        assert!(scan.games.is_empty());
-        assert!(scan.problems.is_empty());
+        assert_eq!(scan.games, [] as [Game; 0]);
+        assert_eq!(scan.problems, [] as [std::string::String; 0]);
     }
 }
 
@@ -1662,7 +1662,7 @@ mod online {
                 "{product} supported={} status={} bytes={:?} format={:?}",
                 package.supported, package.status, package.download_bytes, package.format
             );
-            assert!(!package.status.is_empty());
+            assert_ne!(package.status, "");
             assert!(
                 !package.supported || package.download_bytes.is_some(),
                 "an installable build has a size"

@@ -93,9 +93,7 @@ impl Place {
                 name: updates.map_or(name, |entry| entry.name.clone()),
                 installer,
                 present: self.present(&list),
-                chosen: updates
-                    .map(|entry| entry.chosen.clone())
-                    .unwrap_or_default(),
+                chosen: updates.map_or_default(|entry| entry.chosen.clone()),
                 root: installer_root,
                 what,
             }));
@@ -493,8 +491,7 @@ pub(super) fn read_installer(root: &Path) -> anyhow::Result<Installer> {
 pub(super) fn archive_name(archive: &Path) -> String {
     let mut name = archive
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     for ext in [".tar.gz", ".tar.xz", ".tar.bz2", ".tar.zst", ".tgz"] {
         if name.to_lowercase().ends_with(ext) {
             name.truncate(name.len() - ext.len());

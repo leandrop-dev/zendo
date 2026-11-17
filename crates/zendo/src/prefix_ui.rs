@@ -286,8 +286,7 @@ impl Glue {
         let folder = if self.persist {
             launch::prefix(game)
                 .filter(|prefix| prefix.is_dir())
-                .map(|prefix| prefix.to_string_lossy().into_owned())
-                .unwrap_or_default()
+                .map_or_default(|prefix| prefix.to_string_lossy().into_owned())
         } else {
             String::new()
         };

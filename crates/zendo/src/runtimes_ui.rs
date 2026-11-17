@@ -239,8 +239,7 @@ impl Glue {
                     sub: status.into(),
                     path: found
                         .as_ref()
-                        .map(|found| found.path().display().to_string())
-                        .unwrap_or_default()
+                        .map_or_default(|found| found.path().display().to_string())
                         .into(),
                     action: if this_downloading {
                         "".into()

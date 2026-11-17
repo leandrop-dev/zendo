@@ -432,8 +432,7 @@ impl Glue {
                 .error
                 .as_ref()
                 .filter(|(field, _)| *field == which)
-                .map(|(_, text)| text.clone())
-                .unwrap_or_default()
+                .map_or_default(|(_, text)| text.clone())
         };
         data.set_error(error_in(Field::Other).into());
         data.set_arguments_error(error_in(Field::Arguments).into());

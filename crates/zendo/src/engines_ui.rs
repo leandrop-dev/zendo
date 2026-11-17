@@ -339,8 +339,7 @@ impl Glue {
                     path: row
                         .found
                         .as_ref()
-                        .map(|found| found.path.display().to_string())
-                        .unwrap_or_default()
+                        .map_or_default(|found| found.path.display().to_string())
                         .into(),
                     note: note.into(),
                     note_tone: if bad { 2 } else { 0 },
@@ -371,15 +370,14 @@ impl Glue {
             .download
             .borrow()
             .as_ref()
-            .map(|download| {
+            .map_or_default(|download| {
                 bar_of(
                     download.engine.label(),
                     download.done,
                     download.total,
                     download.stop.load(Ordering::Relaxed),
                 )
-            })
-            .unwrap_or_default();
+            });
         data.set_engines_bar(bar);
         let (note, good) = self.engines.note.borrow().clone().unwrap_or_default();
         data.set_engines_note(note.into());

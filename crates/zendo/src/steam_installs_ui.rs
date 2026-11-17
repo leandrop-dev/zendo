@@ -157,8 +157,7 @@ impl Glue {
             .browser
             .borrow()
             .owned(id)
-            .map(|owned| owned.title.clone())
-            .unwrap_or_default();
+            .map_or_default(|owned| owned.title.clone());
         let line = self
             .steam_installs
             .installs

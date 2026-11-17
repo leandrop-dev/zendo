@@ -541,8 +541,7 @@ impl Glue {
             found
                 .file
                 .as_ref()
-                .map(|file| file.display().to_string())
-                .unwrap_or_default()
+                .map_or_default(|file| file.display().to_string())
                 .into(),
         );
         let rows: Vec<PluginRow> = found
