@@ -431,6 +431,20 @@ for when it comes back; no code reads them today.
   (system Wine 11.22 page-faulted on Retro Classics; the launcher's runtimes
   are Proton builds under `~/.local/share/xodus-nexus/runtimes/variants/{nexus,nexus-cachyos}/releases/<hash>/`). The `productId` is the Microsoft Store id (the art query's
   `bigIds`).
+- **Update and uninstall are the launcher's own**, checked 2026-11-17 for item
+  60c: the CLI has no uninstall and no update command (`--help` lists
+  `resolve-package`, `download`, `streaming`, `run`, `library`, `achievements`,
+  `game-activity`, `license`, `extract`, the account/keyring commands and
+  `social`), `resolve-package` answers no version (only `contentId`,
+  `downloadBytes`, `packageFormat`, `supported`, `status`), and the Store
+  catalogue's package `Version` is `"0"`. `launcher-state.json` does hold
+  `games[].installedVersion` (Minecraft Legends `1.18.19068.0`) and
+  `downloads[].selectedContentId`, and the latter equals the current
+  `resolve-package` `contentId` (`f8afac2c-44cd-4302-afc3-b6dc979e6656` on
+  2026-11-17), so nothing told whether a new content id means a new build.
+  Zendo watches `launcher-state.json` (`zendo-core/src/watch.rs`), so an
+  install, update or removal made in the launcher's window is rescanned by
+  itself.
 - Artwork and product facts: `https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=
   <storeId>&market=US&languages=en-US&fieldsTemplate=Details`, checked
   2026-11-17: one query took 36 ids (1.8 MB), and its answer is a `Products`

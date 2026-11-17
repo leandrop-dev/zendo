@@ -5990,3 +5990,31 @@ game or filter (checked, 855 bytes). Checked: `cargo test --workspace` green
 clippy reports only the warnings the newer toolchain already gave (the
 `map_or_default` suggestions). Not seen: the window after the removal (the
 rows and the card left).
+
+## Item 60c closed: the launcher keeps update and uninstall (2026-11-17)
+
+Item 60c was "uninstall and update if the CLI allows them". Checked against
+the user's backend (v0.2.15, `current.json`'s `binaryPath`) and closed
+without code, because it allows neither:
+
+- `xodus-cli --help` lists `keyring-*`, `resolve-package`, `download`,
+  `license`, `extract`, `extract-eappx`, `saved-accounts`, `account`,
+  `profile`, `native-social`, `social`, `game-activity`, `achievements`,
+  `library`, `login`, `logout`, `streaming`, `run`, `clep`, `sp-license`,
+  `offline-pc` and `help`: no uninstall, no update.
+- `resolve-package 9N98Z825TNFW --json --market US` answers `contentId`
+  (`f8afac2c-44cd-4302-afc3-b6dc979e6656`), `downloadBytes` (12470362112),
+  `installBytes: null`, `packageFormat` (`MSIXVC`), `supported` and `status`:
+  no version. The Store catalogue's package `Version` is `"0"`.
+- `launcher-state.json` does carry `games[].installedVersion`
+  (`1.18.19068.0` for Minecraft Legends) and `downloads[].selectedContentId`,
+  and that id equals the `resolve-package` `contentId` above. Comparing the
+  two could mark an update, but no update existed to see whether a new build
+  changes the content id, so it was not built on a guess.
+- Zendo already watches `launcher-state.json` (`zendo-core/src/watch.rs`), so
+  the launcher's own install, update and uninstall are followed by a rescan.
+
+Recorded in `docs/reference.md` ("Nexus Launcher") and `docs/backlog.md`
+(item 60); item 62 (installing Game Pass games from Zendo, and the launch
+path behind the launcher's back) is untouched. No code changed; tests were
+not rerun for this.

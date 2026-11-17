@@ -415,9 +415,14 @@ Nexus Launcher, Xbox streaming". Sliced with the user on 2026-11-16.
   where it goes ("Install it in Nexus Launcher; it needs 2.1 GB…", or "The
   Store has no install of it for this PC"), with an **Open Nexus Launcher**
   button. Checked against the real backend (Minecraft installable, Cuphead
-  not); not seen on screen. **60c** uninstall and update if the CLI allows
-  them. **The open question, for a piece of its own**: installing *through*
-  Zendo. `xodus-cli streaming <product> <folder>` exists (progress JSON,
+  not); not seen on screen. **60c closed 2026-11-17: the CLI allows neither.**
+  It has no uninstall or update command, `resolve-package` gives no version,
+  and the Store catalogue's package `Version` is `"0"`; the launcher's
+  `launcher-state.json` (with `installedVersion` and
+  `downloads[].selectedContentId`) is already watched, so what the launcher
+  installs, updates or removes is rescanned. The facts are in
+  `docs/reference.md`, "Nexus Launcher". **The open question, for a piece of
+  its own**: installing *through* Zendo. `xodus-cli streaming <product> <folder>` exists (progress JSON,
   pause/resume over stdin) but needs the launcher's runtime, and the CLI
   expects the launcher's own package selection (`download` refuses without
   it); an install made behind the launcher's back is not in
