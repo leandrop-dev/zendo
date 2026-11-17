@@ -7964,7 +7964,7 @@ dependencies = [
 
 [[package]]
 name = "zendo"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "anyhow",
  "i-slint-backend-testing",
