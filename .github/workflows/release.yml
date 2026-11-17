@@ -19,10 +19,12 @@ jobs:
         run: |
           pacman -S --noconfirm base-devel rust curl
           useradd -m builder
-          version="${GITHUB_REF_NAME#v}"
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(printf '%s' "$tag" | tr '-' '_')
           pkg=/tmp/zendo-pkg
           cp -r packaging/arch/zendo "$pkg"
           sed -i "s/^pkgver=.*/pkgver=$version/" "$pkg/PKGBUILD"
+          sed -i "s/^_tag=.*/_tag=$tag/" "$pkg/PKGBUILD"
           curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz" -o "/tmp/zendo-$version.tar.gz"
           sha=$(sha256sum "/tmp/zendo-$version.tar.gz" | cut -d' ' -f1)
           sed -i "s/^sha256sums=.*/sha256sums=('$sha')/" "$pkg/PKGBUILD"

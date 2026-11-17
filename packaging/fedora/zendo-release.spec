@@ -1,4 +1,5 @@
 %{!?zendover:%global zendover 1.0.0}
+%{!?tagversion:%global tagversion %{zendover}}
 
 # The window's Slint code is generated as one large unit: with Fedora's
 # defaults (-Cdebuginfo=2, one codegen unit) rustc used about 17 GB building
@@ -12,9 +13,9 @@ Release:        1%{?dist}
 Summary:        Every game in one library: Steam, Epic, GOG, Amazon and your own
 License:        MIT AND OFL-1.1 AND GPL-3.0-only
 URL:            https://github.com/leandrop-dev/zendo
-Source0:        zendo-%{zendover}.tar.gz
+Source0:        zendo-%{tagversion}.tar.gz
 # cargo vendor --locked, made by packaging/fedora/make-srpm.sh
-Source1:        zendo-%{zendover}-vendor.tar.gz
+Source1:        zendo-%{tagversion}-vendor.tar.gz
 
 ExclusiveArch:  x86_64
 
@@ -66,7 +67,7 @@ mods. The store engines (legendary, gogdl, nile, comet), umu-launcher and
 the Protons are downloaded from Settings, not packaged here.
 
 %prep
-%autosetup -n zendo-%{zendover} -a1
+%autosetup -n zendo-%{tagversion} -a1
 %cargo_prep -v vendor
 
 %build

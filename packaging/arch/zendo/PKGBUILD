@@ -2,6 +2,9 @@
 
 pkgname=zendo
 pkgver=0.0.0
+# The git tag, without the leading v: a pre-release keeps its hyphen here,
+# since Arch versions cannot have one.
+_tag=0.0.0
 pkgrel=1
 pkgdesc="Every game in one library: Steam, Epic, GOG, Amazon and your own, with Proton and mods"
 arch=('x86_64')
@@ -43,25 +46,25 @@ conflicts=('zendo-git')
 # makepkg's LTO turns ring's C code into GCC LTO objects, which Rust's
 # linker cannot read; Rust's own optimisation is unaffected.
 options=('!lto')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+source=("$pkgname-$_tag.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
 sha256sums=('SKIP')
 
 build() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
   cargo build --frozen --release --package zendo
 }
 
 check() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
   cargo test --frozen --workspace
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname-$_tag"
   install -Dm755 target/release/zendo "$pkgdir/usr/bin/zendo"
   install -Dm644 data/zendo.desktop "$pkgdir/usr/share/applications/zendo.desktop"
   local size
