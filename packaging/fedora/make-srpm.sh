@@ -23,8 +23,11 @@ mv "$root/vendor" "$root/vendor-tar/vendor"
 tar czf "$root/zendo-$version-vendor.tar.gz" -C "$root/vendor-tar" .
 
 cp "$root/zendo-$version.tar.gz" "$root/zendo-$version-vendor.tar.gz" "$out/"
-rpmbuild -bs "$(dirname "$0")/zendo-release.spec" \
-  --define "zendover $rpmversion" \
-  --define "tagversion $version" \
+# The SRPM keeps the spec unexpanded, and COPR rebuilds from it without our
+# --define values, so write them into a copy of the spec instead.
+sed -e "s/^%{!?zendover:.*/%global zendover $rpmversion/" \
+    -e "s/^%{!?tagversion:.*/%global tagversion $version/" \
+    "$(dirname "$0")/zendo-release.spec" > "$root/zendo-release.spec"
+rpmbuild -bs "$root/zendo-release.spec" \
   --define "_sourcedir $out" \
   --define "_srcrpmdir $out"

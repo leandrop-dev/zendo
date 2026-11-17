@@ -49,6 +49,12 @@ options=('!lto')
 source=("$pkgname-$_tag.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
 sha256sums=('SKIP')
 
+prepare() {
+  cd "$pkgname-$_tag"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
 build() {
   cd "$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
