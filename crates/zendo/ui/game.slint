@@ -915,6 +915,12 @@ export component GamePage inherits Rectangle {
     // The room for the page's content: its width less the margins and the
     // scroll bar.
     property <length> inner: root.width - 2 * Space.xl - 14px;
+    // The two columns' widths. A card is given its column's width as a
+    // binding, not left to the layout, because a wrapped text's height is
+    // measured at the width it has, and the layout's own measurement is taken
+    // at the width it hands out (item 55c).
+    property <length> wide-column: (root.inner - Space.xl) * 0.6;
+    property <length> narrow-column: root.has-main ? (root.inner - Space.xl) * 0.4 : root.inner;
     // Whether the page's wide column has anything to say.
     property <bool> has-main: GameData.about != "" || GameData.no-match != "" || GameData.shots.length > 0
         || GameData.dlc.length > 0 || GameData.sessions.length > 0 || GameData.ach.length > 0
@@ -932,9 +938,16 @@ export component GamePage inherits Rectangle {
         }
         width: parent.width;
         height: parent.height;
-        VerticalLayout {
-            // An explicit width: a wrapped text's height is measured at it,
-            // and the scroll's content height stays right (item 55c).
+        // The scroll's content height is the page's *preferred* height, not
+        // the height the ScrollView works out for itself: that one is the
+        // layout's minimum, and a card drawn but left out of it made the
+        // scroll run past the page or stop short of it (item 55c). Given
+        // exactly its preferred height, the page is laid out at the height the
+        // scroll uses, so the two always match; and a card that arrives later
+        // changes the preferred height, so the bottom stays reachable.
+        content-height: max(scroll-content.preferred-height, self.visible-height);
+        scroll-content := VerticalLayout {
+            // An explicit width: a wrapped text's height is measured at it.
             width: parent.width - 14px;
             x: 0px;
             page := VerticalLayout {
@@ -1385,11 +1398,14 @@ export component GamePage inherits Rectangle {
                 HorizontalLayout {
                     spacing: Space.xl;
                     if root.has-main: VerticalLayout {
-                        width: (root.inner - Space.xl) * 0.6;
+                        width: root.wide-column;
                         alignment: start;
                         spacing: Space.xl;
-                        if GameData.ac-show && GameData.ac-first: AntiCheatCard { }
+                        if GameData.ac-show && GameData.ac-first: AntiCheatCard {
+                            width: root.wide-column;
+                        }
                         if GameData.about != "": Card {
+                            width: root.wide-column;
                             heading: Tr.t("game-about");
                             Text {
                                 text: GameData.about;
@@ -1399,6 +1415,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         if GameData.no-match != "": Card {
+                            width: root.wide-column;
                             heading: Tr.t("game-about");
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1417,6 +1434,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         if GameData.shots.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("screenshots-title");
                             Flickable {
                                 height: 150px;
@@ -1441,8 +1459,11 @@ export component GamePage inherits Rectangle {
                                 }
                             }
                         }
-                        if GameData.ac-show && !GameData.ac-first: AntiCheatCard { }
+                        if GameData.ac-show && !GameData.ac-first: AntiCheatCard {
+                            width: root.wide-column;
+                        }
                         if GameData.dlc.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("dlc-title");
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1503,9 +1524,14 @@ export component GamePage inherits Rectangle {
                                 }
                             }
                         }
-                        if ModsData.show: ModsCard { }
-                        if GameData.prefix-show: PrefixCard { }
+                        if ModsData.show: ModsCard {
+                            width: root.wide-column;
+                        }
+                        if GameData.prefix-show: PrefixCard {
+                            width: root.wide-column;
+                        }
                         if GameData.changelog.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("changelog-title");
                             VerticalLayout {
                                 spacing: Space.s;
@@ -1527,6 +1553,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         if GameData.sessions.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("stats-game-title");
                             VerticalLayout {
                                 spacing: Space.l;
@@ -1567,6 +1594,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         if GameData.ach.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("achievements-title");
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1645,6 +1673,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         if GameData.req.length > 0: Card {
+                            width: root.wide-column;
                             heading: Tr.t("requirements-title");
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1699,6 +1728,7 @@ export component GamePage inherits Rectangle {
                         }
                         // Cards that could not be asked, with the way to ask again.
                         for failed in GameData.failures: Card {
+                            width: root.wide-column;
                             heading: failed.label;
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1718,10 +1748,11 @@ export component GamePage inherits Rectangle {
                         }
                     }
                     VerticalLayout {
-                        width: root.has-main ? (root.inner - Space.xl) * 0.4 : root.inner;
+                        width: root.narrow-column;
                         alignment: start;
                         spacing: Space.xl;
                         Card {
+                            width: root.narrow-column;
                             heading: Tr.t("game-details");
                             VerticalLayout {
                                 spacing: Space.m;
@@ -1729,6 +1760,7 @@ export component GamePage inherits Rectangle {
                             }
                         }
                         Card {
+                            width: root.narrow-column;
                             heading: Tr.t("game-technical");
                             action-label: GameData.technical-open ? "−" : "+";
                             action-clicked => { GameData.toggle-technical(); }

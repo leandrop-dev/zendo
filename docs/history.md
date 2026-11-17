@@ -5314,7 +5314,7 @@ shows). `cargo test` green (168 zendo, 285 core, 91 shell); `cargo build
 -p zendo` clean. Not seen on screen: a real game opening and closing with the
 tray on (needs the session bus and a game that opens a window).
 
-## Item 55c, the game page's scroll (2026-11-16, not fixed)
+## Item 55c, the game page's scroll (2026-11-16, fixed 2026-11-17)
 
 The user's report: on a game's page the scroll is sometimes longer and
 sometimes shorter than the content, and the bottom can be out of reach. It is
@@ -5339,10 +5339,35 @@ the known item 52c1 note ("the pages' content height flips on every rebuild").
   requirements, the achievements) are below. The content height is the stale
   one from before the cards arrived: it does not grow with them. That is the
   "too little scroll" half.
-- **Not fixed.** Both halves are the same stale measurement: the page's height
-  is taken before the network cards are added and is not taken again. A fix
-  belongs in the page's measurement (or in forcing the `ScrollView` to
-  re-measure when the cards change). Left open.
+- **The cause, found 2026-11-17.** Both halves are the same measurement, and it
+  is the wrapped text's: a card's text is measured at the width the layout
+  hands it *during the layout pass*, not at the width the page is drawn at. A
+  width assigned inside that pass does not dirty the page's cached sizes above
+  it, so the page keeps the first figure. Measured headless on a real
+  `MainWindow` (the testing backend, `mock_elapsed_time` for the tree pass, the
+  page opened with a game and an About card): the About text measured 2 lines
+  at a 100 px card, while it drew 11 lines at 341 px; the page reported
+  1047 px while the cards ran to 1127 px. Slint's own content height made the
+  other half: it is the layout's *minimum*, measured the same way, so it can
+  also be too tall.
+- **Fixed** in `crates/zendo/ui/game.slint`, two changes:
+  1. The two columns' widths are properties (`wide-column`, `narrow-column`),
+     and every card in them takes its column's width as a binding, so a
+     wrapped text is measured at the width it is drawn at and the change
+     reaches the page once the window has its width.
+  2. The scroll's `content-height` is `max(scroll-content.preferred-height,
+     sv.visible-height)`, not the ScrollView's own figure: the page is laid
+     out at exactly the height the scroll uses, so the two always match, and a
+     card that arrives later still changes it.
+- **Measured after the fix** (the same headless page): 1151 px against the
+  cards' 1127 px plus the page's 24 px bottom padding, and with a
+  400-sentence About 3572 px, the page and the scroll equal. Removing only the
+  About card's `width` binding puts it back to 1047 px, so the width binding is
+  what fixes it. `cargo test --workspace` green (169 zendo, 296 core, 91
+  shell).
+- **Checked by the user on screen** (2026-11-17, `cargo run --release` in the
+  project, the pages gone through by hand): all better. Not tried: a narrow
+  window, pt-PT and a light KDE scheme.
 
 ## Items 56a to 56c, the improvements (2026-11-16)
 

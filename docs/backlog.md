@@ -266,8 +266,8 @@ so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a and 55b are built; 55c is open (investigated 2026-11-16); 56a to 56c are
-built; 57a and 57b are built; 58 to 59 are next.
+55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58 to 59
+are next.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):
@@ -297,13 +297,18 @@ built; 57a and 57b are built; 58 to 59 are next.
      such path. Add an effect (`ShowOnClose` or `ShowWhenIdle`) in
      `running.rs` and handle it in `game_ui.rs`, beside `HideOnLaunch`.
      (On Wayland the window is hidden, not minimised, so this is a show.)
-- **55c, the game page's scroll** (its own task, still open): the known item
-  52c1 bug (`docs/history.md`): the page's content height flips, the
-  Screenshots card especially, and the `ScrollView` clamps to a stale height,
-  so the bottom cannot be reached. The user: "sometimes we have too much
-  scroll, sometimes too less ... aren't we able to make the scroll fit
-  content?" Investigated 2026-11-16 (`docs/history.md`): a measured 88px
-  overestimate; an explicit width and a re-clamp were added, not a fix.
+- **55c built 2026-11-17, the game page's scroll**: the known item 52c1 bug
+  (`docs/history.md`): the page's content height flipped, the Screenshots card
+  especially, and the `ScrollView` kept a stale height, so the bottom could not
+  be reached. The user: "sometimes we have too much scroll, sometimes too
+  less ... aren't we able to make the scroll fit content?" The cause was
+  found on 2026-11-17: a card's wrapped text is measured at the width the
+  layout hands it during the layout pass, not at the width it is drawn at, and
+  a width assigned in that pass does not re-measure the page above it. Two
+  changes in `ui/game.slint` fix it: each card in the two columns takes its
+  column's width as a binding, and the scroll's `content-height` is the page's
+  preferred height. The user ran `cargo run --release` and went through the
+  pages: better. Not tried: a narrow window, pt-PT, a light scheme.
 
 ### Improvements (56a to 56c)
 
