@@ -34,10 +34,18 @@ npm run build   # build/, what tauri.conf.json's frontendDist points at
 - `src/routes/+layout.ts`: the SPA switch (`ssr = false`).
 - `src/routes/+layout.svelte`: the shell; starts the store, listens for F11 and
   Escape, and draws the top bar around the page.
-- `src/routes/`: one route per page. All but the Library are placeholders
-  until their slices.
-- `src/lib/components/top-bar.svelte`: the tabs, the Downloads and Settings
-  buttons and the Settings row.
+- `src/routes/`: one route per page. The Library has the grid; the others are
+  placeholders until their slices.
+- `src/routes/+page.svelte`: the Library page: the source and sort chips, the
+  organize chips, the grid, and the keyboard's moves.
+- `src/lib/components/library/`: the card, the virtualized grid and the chip
+  rows.
+- `src/lib/components/top-bar.svelte`: the tabs, the view chips and search on
+  the Library, the Downloads and Settings buttons and the Settings row.
+- `src/lib/library.svelte.ts`: the Library's store; the cards by id, the
+  shown order, the chips and the cursor, all from Rust.
+- `src/lib/grid.ts`: the grid's arithmetic (cards across, rows on screen),
+  with its tests.
 - `src/lib/state.svelte.ts`: the shell's store; the words, the palette and the
   events Rust pushes.
 - `src/lib/theme.ts`: the palette as CSS variables, and Zendo's own for a

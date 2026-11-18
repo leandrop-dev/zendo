@@ -44,7 +44,7 @@ slint-build = "1.18"
 # The window in Tauri 2, beside the Slint one until the port's parity
 # checklist passes. Its own wry and webkit2gtk requirements are the ones the
 # sign-in window already pins, so both shells share the same builds.
-tauri = "2"
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-build = "2"
 sys-locale = "0.3.2"
 unic-langid = "0.9"

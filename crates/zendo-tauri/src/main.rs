@@ -12,6 +12,7 @@ use anyhow::Context;
 use tauri::Manager;
 
 mod commands;
+mod library;
 mod platform;
 
 fn main() -> ExitCode {
@@ -48,15 +49,26 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
 
     tauri::Builder::default()
         .manage(platform::Shell::new(themes, config.minimize_to_tray))
+        .manage(library::LibraryState::new())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
             commands::window_fullscreen_toggle,
+            library::library_list,
+            library::library_pick,
+            library::library_search,
+            library::library_cycle_sort,
+            library::library_click,
+            library::library_step,
+            library::library_fit,
+            library::library_back,
+            library::library_show_hidden,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
                 platform::start(app.handle(), &window, fullscreen)?;
             }
+            library::scan(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

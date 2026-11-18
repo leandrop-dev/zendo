@@ -6378,3 +6378,58 @@ nothing), so the pointer and keyboard paths are code-read only. Not checked
 either: the tray (a throwaway home has no session bus, so there is no
 StatusNotifierWatcher to hold the icon), a real controller, and the window on
 KDE Plasma.
+
+The user then ran the shell in their own session and reported it working:
+clicks, keys, F11 and Escape, the tray and the controller were taken as seen
+rather than retested one by one, as with the item 54 checklist.
+
+## The Tauri port, slice 2a: the Library grid (2026-11-18)
+
+The Library page's core: the grid, the chips, the search, the sort and the
+cursor, over the state the two windows share.
+
+- **`zendo_shell::library`**: the Slint crate's `Browser` moved there, tests
+  and all, and `crates/zendo/src/library.rs` re-exports it. `card_of` gives a
+  game's card wherever it is in the list, `shown_ids` the filtered order, and
+  `is_empty` the usual companion to `len`.
+- **The commands** in `crates/zendo-tauri/src/library.rs`: `library_list`
+  (every card once), `library_pick`, `library_search`, `library_cycle_sort`,
+  `library_click`, `library_step`, `library_fit`, `library_back` and
+  `library_show_hidden`. The scan runs on a thread at start and says
+  `library_loaded`; the sort is written to `state.json`, as the Slint window
+  does. Chip actions travel as keys (`view:all`, `sort:title`,
+  `source:gog`, `status:playing`, `category:…`, `saved:…`), which a test
+  round-trips through every action.
+- **Covers** are served by Tauri's asset protocol, with `protocol-asset`
+  enabled and the scope `$CACHE/zendo/covers/**`; the card turns the path
+  into an asset URL. No loopback server.
+- **The frontend**: `library.svelte.ts` keeps the cards by id and the shown
+  order; filters return only the shown ids and the chips. The grid is
+  virtualized by rows (only the rows on screen and two each side are in the
+  DOM), with `grid.ts` holding the arithmetic and its tests. A card is the
+  Slint window's 192x370, drawn with an outline so the size stays exact. The
+  views sit in the top bar beside the search; the sources, the sorts and the
+  organize chips sit on the page.
+- **The cursor**: arrows, Home, End, PageUp and PageDown move it; Escape
+  takes back the marks and then the search; Ctrl+F goes to the search; the
+  pad's moves, Sort, Back and Show hidden go through the same commands. The
+  grid scrolls the cursor's row into view.
+- Left for 2b: marks and the bulk chips, the Collections sheet, cover
+  downloads and the file watch, and the FPS harness on a large library.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings` and `cargo test --workspace` (589 passed, 32 ignored).
+
+The built binary was run with the user's real home, read-only and with no
+session bus (the scan only reads; no sort was picked), because the covers
+live there: the three real games drew with their covers through the asset
+protocol, the chips read ALL 3, GOG 1, AMAZON 1, XBOX 1, FAVORITES 0 and
+RECENT 3, the sorts LAST PLAYED, MOST PLAYED and A-Z, and the Library tab
+counted 3. Through the dev server, a temporary call set the search to
+"cyber", which left one card, the tab count 1 and the word in the field; the
+hook was removed before the commit.
+
+Not checked: the grid's frame rate on a large library (the plan's FPS
+harness; the spike measured 60 fps with this shape), and clicks and keys,
+which this session's virtual input still cannot deliver.

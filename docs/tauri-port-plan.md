@@ -124,7 +124,10 @@ and removed once already).
    ported.
 2. **Library**: grid with virtualization, chips, search, sort, views, marks and
    bulk edits, the cursor (keyboard and pad), cover downloads, the file watch,
-   collections.
+   collections. Built 2026-11-18 as **2a**: the grid, the chips, the search,
+   the sort, the views, the cards with covers (the asset protocol) and the
+   cursor. **2b** carries the marks and bulk chips, the Collections sheet,
+   cover downloads and the file watch.
 3. **Game page**: header, actions (Play, Stop, Favorite, Hide, Manage), status,
    tiles, sessions, details, local games, Steam facts and requirements, DLC,
    ProtonDB, achievements, Wine prefix, GOG changelog, cloud saves, the Mods
@@ -221,9 +224,10 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    Tailwind, shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
 2. Port the shell: words, colours, tray, controller, keyboard, full screen and
    the command line. Slice 1, built 2026-11-18.
-3. Port the Library grid as slice 2 and wire `library_list`, `cover_get` and
-   the cover server or asset protocol, with the view and sort chips and the
-   search field.
+3. Port the Library: the grid, the chips, the search, the sort and the cursor,
+   with `library_list` and the covers over the asset protocol. Slice 2a, built
+   2026-11-18. Then 2b: marks and bulk edits, collections, cover downloads and
+   the file watch.
 4. Add the FPS harness and the parity checklist, then proceed slice by slice.
 5. Keep the Slint window until the checklist is signed off.
 
@@ -236,12 +240,10 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next is slice 2: the Library grid, with `library_list` and `cover_get`, the
-  view and sort chips and the search. Move the `Browser` logic from
-  `crates/zendo/src/library.rs` to `zendo-shell` as that page is ported, as
-  the Slint port did. The target is the same 60 fps and the same parity
-  checklist as the Slint cut-over.
+- Next is slice 2b: marks and the bulk chips, the Collections sheet, cover
+  downloads and the file watch, with the FPS harness on a large library. Then
+  slice 3 (the game page).
 - The last run could not check clicks or keys: this session's `ydotool` and
-  `wtype` delivered nothing. The tray needs a session bus. Both wait for a
-  run with the user's input working.
+  `wtype` delivered nothing. The grid's keys and the pad were code-read only;
+  the user tested the shell's input and tray in their own session.
 - The decisions above are firm; do not reopen them without the user.

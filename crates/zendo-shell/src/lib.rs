@@ -18,6 +18,7 @@ pub mod gamepad;
 pub mod i18n;
 pub mod installer;
 pub mod launch_options;
+pub mod library;
 pub mod links;
 pub mod mods;
 pub mod nexus;

@@ -3,6 +3,8 @@
 	import { page } from '$app/state';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import Settings from '@lucide/svelte/icons/settings';
+	import Chips from '#lib/components/library/chips.svelte';
+	import { library } from '#lib/library.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
 	// The tabs of the top bar, and the pages the Settings button holds. The
@@ -44,10 +46,26 @@
 				class="border px-3 py-2 text-[13px] font-bold uppercase {tabClass(current)}"
 			>
 				{app.t(tab.label)}
+				{#if tab.route === '/' && library.ready}
+					<span class="ml-1.5 text-xs text-dim">{library.shown.length}</span>
+				{/if}
 			</a>
 		{/each}
 
 		<div class="flex-1"></div>
+
+		{#if route === '/'}
+			<Chips chips={library.chips.views} />
+			<input
+				id="library-search"
+				type="search"
+				aria-label={app.t('library-search')}
+				placeholder={app.t('library-search')}
+				value={library.search}
+				oninput={(event) => library.setSearch(event.currentTarget.value)}
+				class="h-[34px] w-[220px] border border-line bg-surface px-2 text-sm placeholder:text-dim focus:border-accent-mark focus:outline-none"
+			/>
+		{/if}
 
 		<a
 			href={resolve('/downloads')}

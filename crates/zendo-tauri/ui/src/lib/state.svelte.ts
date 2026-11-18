@@ -4,6 +4,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { bootstrap, inTauri, toggleFullscreen, type Bootstrap, type Palette } from './api.js';
 import { applyPalette, DEFAULT_PALETTE } from './theme.js';
+import { library } from './library.svelte.js';
 
 class App {
 	/// What `bootstrap` returned; `null` until it does, and in a browser.
@@ -57,8 +58,27 @@ class App {
 	/// grid's moves arrive with the Library (slice 2); Game Mode's with
 	/// slice 6.
 	async pad(move: string): Promise<void> {
-		if (move === 'toggle-game-mode') {
-			await this.toggleFullscreen();
+		switch (move) {
+			case 'left':
+			case 'right':
+			case 'up':
+			case 'down':
+				await library.step(move);
+				break;
+			case 'sort':
+				await library.cycleSort();
+				break;
+			case 'show-hidden':
+				await library.showHidden();
+				break;
+			case 'back':
+				await library.back();
+				break;
+			case 'toggle-game-mode':
+				await this.toggleFullscreen();
+				break;
+			default:
+				break;
 		}
 	}
 }

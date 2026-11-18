@@ -56,3 +56,93 @@ export async function tr(id: string, args: Record<string, string | number> = {})
 export async function toggleFullscreen(): Promise<boolean> {
 	return invoke<boolean>('window_fullscreen_toggle');
 }
+
+// A game's card, as the grid draws it.
+export type Card = {
+	id: string;
+	title: string;
+	caption: string;
+	caption_accent: boolean;
+	faded: boolean;
+	badge: string | null;
+	badge_running: boolean;
+	// The share of achievements, 0 to 1; null when the game has none.
+	progress: number | null;
+	marked: boolean;
+	// The cover's path in the cache.
+	cover: string | null;
+};
+
+// A library chip: the view, a source, an order, or an organize action.
+export type Chip = {
+	key: string;
+	label: string;
+	count: number | null;
+	chosen: boolean;
+};
+
+export type Chips = {
+	views: Chip[];
+	sources: Chip[];
+	sorts: Chip[];
+	organize: Chip[];
+};
+
+// What the page says in place of the grid.
+export type Empty = { title: string; about: string | null };
+
+// The Library: every game's card once, and the ones the filter shows.
+export type LibraryList = {
+	ready: boolean;
+	cards: Card[];
+	shown: string[];
+	chips: Chips;
+	cursor: number;
+	empty: Empty | null;
+	status: string | null;
+	search: string;
+	marked: string[];
+};
+
+// The Library after a filter, a sort, a search or a cursor move.
+export type LibraryFiltered = Omit<LibraryList, 'cards'>;
+
+// The Library.
+
+export async function libraryList(): Promise<LibraryList> {
+	return invoke<LibraryList>('library_list');
+}
+
+export async function libraryPick(key: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_pick', { key });
+}
+
+export async function librarySearch(text: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_search', { text });
+}
+
+export async function libraryCycleSort(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_cycle_sort');
+}
+
+export async function libraryClick(id: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_click', { id });
+}
+
+// left, right, up, down, page-up, page-down, first or last.
+export async function libraryStep(step: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_step', { step });
+}
+
+// The grid's columns and height, so paging and the cursor know the grid.
+export async function libraryFit(columns: number, height: number): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_fit', { columns, height });
+}
+
+export async function libraryBack(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_back');
+}
+
+export async function libraryShowHidden(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_show_hidden');
+}

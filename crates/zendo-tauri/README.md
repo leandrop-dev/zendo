@@ -3,8 +3,8 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0 and 1 are in place: the scaffold and the shell. The Library grid and
-the pages follow.
+Slices 0, 1 and 2a are in place: the scaffold, the shell, and the Library
+grid. The rest of the Library and the other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -14,6 +14,10 @@ the pages follow.
   tray could be made; otherwise it quits.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
+- `src/library.rs`: the Library's commands over `zendo_shell::library`: the
+  list (every card once), the chips, the search, the sort, the cursor and the
+  two toggles. Covers are files in `$CACHE/zendo/covers`, read through the
+  asset protocol (enabled in `tauri.conf.json` with that scope).
 - `tauri.conf.json`: the window (title `Zendo`, 1360x860, minimum 1100x560),
   the dev loop and the build. The product name is `zendo`, which is the window
   class the compositors' rules key on; `main` sets GTK's program name to it,
@@ -26,10 +30,12 @@ the pages follow.
 
 - `theme_changed`: the palette, when `kdeglobals` changed while the theme is
   the KDE scheme.
+- `library_loaded`: the first scan is in; the page asks for the list.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
-  `next-shelf`). The frontend decides what each does; the grid's moves arrive
-  with the Library.
+  `next-shelf`). The frontend decides what each does: the grid moves the
+  cursor, Sort cycles the order, Show hidden toggles the view, Select toggles
+  full screen until Game Mode.
 
 ## The dev loop
 
