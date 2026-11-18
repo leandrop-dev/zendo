@@ -6255,6 +6255,7 @@ The review's fixes shipped as a patch release.
 Checked: the Release workflow green for `arch`, `fedora` and `release`; the
 assets list and `SHA256SUMS` read back (Arch `cc0b190a…`, SRPM `4856035f…`,
 source `b2bfbea3…`); the Pages package, its db and the 1.0.0 package all
-answer 200; the COPR log says build 11346480 succeeded. Not checked: an
-install from the repository on a second machine, and COPR's repodata
-directly.
+answer 200; the COPR log says build 11346480 succeeded; and the user installed
+1.0.1 from the pacman repository on Arch, where the window launches. Not
+checked: COPR's repodata directly, and an install from the repository on the
+other family machines.
