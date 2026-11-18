@@ -19,6 +19,7 @@ use zendo_core::config::Config;
 use zendo_core::covers::{Fetcher, Kind};
 use zendo_core::{Game, Library, Source, State as CoreState, Status, View};
 use zendo_shell::library::{Browser, CardData, Chip, Chips, Empty, Pick, Save};
+use zendo_shell::running::Running;
 
 /// How often the launchers' files are looked at, as the Slint window does.
 const WATCH: Duration = Duration::from_secs(10);
@@ -31,6 +32,8 @@ pub struct LibraryState {
     scanning: AtomicBool,
     /// The covers are being fetched.
     downloading: AtomicBool,
+    /// The game a page may be showing, and what it is doing.
+    pub(crate) running: Mutex<Running>,
 }
 
 impl LibraryState {
@@ -40,6 +43,7 @@ impl LibraryState {
             ready: AtomicBool::new(false),
             scanning: AtomicBool::new(false),
             downloading: AtomicBool::new(false),
+            running: Mutex::new(Running::default()),
         }
     }
 }
@@ -101,6 +105,48 @@ fn watch(app: AppHandle) {
             rescan(app.clone());
         }
     });
+}
+
+impl LibraryState {
+    /// A game by its id, scanning first when nothing has yet: a page opened
+    /// straight from a link finds its game.
+    pub(crate) fn game(&self, id: &str) -> Option<Game> {
+        if !self.ready.load(Ordering::Relaxed) {
+            let state = CoreState::load().unwrap_or_default();
+            let library = Library::scan();
+            if let Ok(mut browser) = self.browser.lock() {
+                browser.loaded(
+                    library,
+                    Some(state.sort),
+                    state.categories(),
+                    state.filters(),
+                );
+            }
+            self.ready.store(true, Ordering::Relaxed);
+        }
+        let browser = self.browser.lock().ok()?;
+        browser.game(id).cloned()
+    }
+
+    /// Changes the Library and writes what it asked to remember.
+    pub(crate) fn change(
+        &self,
+        change: impl FnOnce(&mut Browser) -> zendo_shell::library::Outcome,
+    ) {
+        let Ok(mut browser) = self.browser.lock() else {
+            return;
+        };
+        let outcome = change(&mut browser);
+        drop(browser);
+        save(outcome.save);
+    }
+
+    /// The running games.
+    pub(crate) fn running(&self) -> std::sync::MutexGuard<'_, Running> {
+        self.running
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 /// What a new cover tells the page.

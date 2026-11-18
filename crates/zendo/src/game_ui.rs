@@ -79,15 +79,6 @@ impl GameState {
 }
 
 /// Stores write platforms as `Windows`, `windows`, `linux`; shown alike.
-fn platform_label(platform: &str) -> String {
-    match platform.to_lowercase().as_str() {
-        "windows" => "Windows".to_owned(),
-        "linux" => "Linux".to_owned(),
-        "mac" | "osx" => "macOS".to_owned(),
-        _ => platform.to_owned(),
-    }
-}
-
 /// A game Steam installed, by its app id.
 pub(super) fn steam_app(game: &Game) -> Option<&str> {
     (game.source == Source::Steam)
@@ -143,39 +134,13 @@ fn path_fact(label: impl Into<String>, path: &Path) -> Fact {
 /// The four numbers worth seeing first: the time played, when it was last
 /// played, the achievements unlocked and the share of them.
 fn tiles_of(game: &Game, now: u64) -> Vec<Tile> {
-    let dash = || "—".to_owned();
-    let (unlocked, share) = game.achievements.map_or_else(
-        || (dash(), dash()),
-        |(unlocked, total)| {
-            (
-                format!("{unlocked} / {total}"),
-                format::progress_of((unlocked, total))
-                    .map_or_else(dash, |share| format!("{:.0}%", share * 100.0)),
-            )
-        },
-    );
-    let tile = |label: String, value: String| Tile {
-        label: label.into(),
-        value: value.into(),
-    };
-    vec![
-        tile(
-            t!("fact-play-time"),
-            if game.played.minutes > 0 {
-                format::play_time(game.played.minutes)
-            } else {
-                dash()
-            },
-        ),
-        tile(
-            t!("fact-last-played"),
-            game.played
-                .last
-                .map_or_else(dash, |last| format::ago(last, now)),
-        ),
-        tile(t!("achievements-title"), unlocked),
-        tile(t!("stat-completion"), share),
-    ]
+    zendo_shell::game::tiles_of(game, now)
+        .into_iter()
+        .map(|tile| Tile {
+            label: tile.label.into(),
+            value: tile.value.into(),
+        })
+        .collect()
 }
 
 impl Glue {
@@ -451,11 +416,8 @@ impl Glue {
         data.set_owned_launcher(slint::SharedString::new());
         let now = running::now();
 
-        let mut source = vec![format::source(game.source)];
-        source.extend(game.details.developer.clone());
-        source.extend(game.details.platform.as_deref().map(platform_label));
         data.set_title(game.title.clone().into());
-        data.set_source_line(source.join(" · ").into());
+        data.set_source_line(zendo_shell::game::source_line(&game).into());
         data.set_favorite_badge(t!("badge-favorite").into());
         data.set_hidden_badge(t!("badge-hidden").into());
         data.set_pinned(game.pinned);
@@ -543,7 +505,10 @@ impl Glue {
             fact(t!("fact-started-by"), game.launcher()),
         ];
         if let Some(platform) = &game.details.platform {
-            rows.push(fact(t!("fact-platform"), platform_label(platform)));
+            rows.push(fact(
+                t!("fact-platform"),
+                zendo_shell::game::platform_label(platform),
+            ));
         }
         if let Some(version) = &game.details.version {
             rows.push(fact(t!("fact-version"), version.clone()));

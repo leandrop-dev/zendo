@@ -45,6 +45,10 @@ thread_local! {
     static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
 }
 
+/// The window is hidden for a game's launch, not by the user: the game's end
+/// brings it back.
+static HID_FOR_GAME: AtomicBool = AtomicBool::new(false);
+
 /// Wires the window: its start size, the tray, the controller and the colour
 /// scheme.
 pub fn start(app: &AppHandle, window: &WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
@@ -70,6 +74,32 @@ pub fn start(app: &AppHandle, window: &WebviewWindow, fullscreen: bool) -> tauri
     let themes = Arc::clone(&app.state::<Shell>().themes);
     watch_theme(app.clone(), themes);
     Ok(())
+}
+
+/// A game is up: hides the window to the tray, when the setting asks for it
+/// and the tray is there.
+pub(crate) fn hide_for_launch(app: &AppHandle) {
+    if !app.state::<Shell>().tray.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main")
+        && window.is_visible().unwrap_or(false)
+    {
+        HID_FOR_GAME.store(true, Ordering::Relaxed);
+        let _ = window.hide();
+    }
+}
+
+/// The game ended: brings back a window hidden for its launch, and only that
+/// one (one the user hid to the tray stays there).
+pub(crate) fn show_after_game(app: &AppHandle) {
+    if !HID_FOR_GAME.swap(false, Ordering::Relaxed) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Puts the icon in the tray when the Window setting asks for it; `true` when

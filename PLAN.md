@@ -50,7 +50,8 @@ On 2026-11-18 the window's port to Tauri 2 and SvelteKit began on branch
 a placeholder page), 1 (the shell: words, colours, tray, controller, keyboard,
 full screen and the command line) and 2 (the Library: the grid, chips, search,
 sort, views, cursor, marks, bulk edits, cover downloads and the file watch,
-with 62 fps on 2,700 games) are built,
+with 62 fps on 2,700 games) and 3a (the game page's header and actions) are
+built,
 and the Slint window stays in place and releasable until the port's parity
 checklist passes (`docs/tauri-port-plan.md`).
 

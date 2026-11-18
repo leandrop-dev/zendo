@@ -3,9 +3,10 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1 and 2 are in place: the scaffold, the shell, and the Library
+Slices 0, 1, 2 and 3a are in place: the scaffold, the shell, the Library
 (grid, chips, search, sort, cursor, marks, bulk edits, cover downloads and the
-file watch). The other pages follow.
+file watch), and the game page's header and actions. The rest of that page and
+the other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -15,6 +16,9 @@ file watch). The other pages follow.
   tray could be made; otherwise it quits.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
+- `src/game.rs`: the game page's commands: `game_get`, `game_launch`,
+  `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
+  over `zendo_shell::running` for the launch.
 - `src/library.rs`: the Library's commands over `zendo_shell::library`: the
   list (every card once), the chips, the search, the sort, the cursor, the
   marks, and the bulk edits. It scans on a thread, watches the launchers'
@@ -37,6 +41,10 @@ file watch). The other pages follow.
 - `cover_changed`: a downloaded cover, with the game's id and its path.
 - `library_status`: a line the page shows, such as the count of images that
   could not be downloaded.
+- `library_changed`: a mark or a count changed on a game's page; the Library
+  asks for its list again.
+- `game_run` and `game_line`: the running game's state (idle, starting,
+  running, stopping) and the line under its actions.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

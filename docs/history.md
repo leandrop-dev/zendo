@@ -6472,3 +6472,50 @@ warnings`, `cargo test --workspace` (589 passed, 32 ignored).
 Not checked: a real cover download (it needs the network and a SteamGridDB
 key), and the mark and bulk clicks (this session's input still delivers
 nothing; the user tested the shell's input in their own session).
+
+## The Tauri port, slice 3a: the game page's header (2026-11-18)
+
+- **`zendo_shell::game`**: the line under a title and the four tiles moved
+  there from `crates/zendo/src/game_ui.rs`, with `platform_label`; the Slint
+  page maps them into its own structs, so both windows agree on the words and
+  the sums.
+- **The commands** in `crates/zendo-tauri/src/game.rs`: `game_get` (the game
+  is scanned for when a page is opened before the Library's scan),
+  `game_launch`, `game_stop`, and `game_set_pinned`, `game_set_hidden` and
+  `game_set_status` over the shared `Browser`. A launch runs
+  `zendo_shell::running::follow`; the page hears `game_run` (idle, starting,
+  running, stopping) and `game_line`, and the Library hears `library_changed`
+  so its cards and chips follow a mark. The effects that matter now are
+  applied: the launch counted, the minutes added, the window hidden to the
+  tray and brought back, and Stop asked on a thread; the saves', presence and
+  queue effects wait for their own cards.
+- **The frontend**: `/game/[id]` draws the wide art faint behind the header,
+  the cover, the title with its Favorite and Hidden badges, Play (disabled
+  while starting or running), Force stop, Favorite and Hide, the four status
+  chips and the four tiles. Escape goes back. A card opens its game on click,
+  as the Slint window's do, and Enter opens the card under the cursor; the
+  cursor stays where it was.
+- Left for 3b and 3c: sessions and details, local games, Steam's facts and
+  requirements, DLC, ProtonDB, achievements, the Wine prefix, GOG's changelog,
+  cloud saves and the Mods card. Sessions are not recorded yet
+  (`Effect::Session` is ignored), so a played session is counted in minutes
+  but not kept as one.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (591 passed, 32 ignored).
+
+- **The real page**, seen: Minecraft Legends - Windows, opened by a temporary
+  jump from the grid: the hero, the cover, `Xbox · Xbox Game Studios ·
+  Windows`, Play, Favorite, Hide, Ready when you are, the four status chips
+  and the tiles (1 min, yesterday, 0 / 40, 0 %).
+- **A change, seen**: a seeded five-game throwaway library had its first game
+  opened this way, then a temporary call set its status to playing; the chip
+  came back chosen. That run found a real bug: the set commands answered with
+  the game as it was **before** the change, so the chip only moved on the next
+  load even though `state.json` had been written. They now re-read the game
+  (`fresh`) before answering.
+
+Not checked: Play and Stop on a real game (no input in this session, and a
+launch is not something to start unattended), and the click paths the input
+cannot reach.

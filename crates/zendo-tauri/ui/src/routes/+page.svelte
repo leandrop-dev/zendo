@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import Chips from '#lib/components/library/chips.svelte';
 	import Grid from '#lib/components/library/grid.svelte';
@@ -28,6 +30,12 @@
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			void library.back();
+		} else if (event.key === 'Enter') {
+			const id = library.current?.id;
+			if (id) {
+				event.preventDefault();
+				void goto(resolve('/game/[id]', { id }));
+			}
 		}
 	}
 

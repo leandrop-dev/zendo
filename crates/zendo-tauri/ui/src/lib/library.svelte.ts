@@ -62,6 +62,10 @@ class Library {
 		await listen('library_loaded', () => {
 			void this.list();
 		});
+		// A game's page changed a mark or a count: the cards and chips follow.
+		await listen('library_changed', () => {
+			void this.list();
+		});
 		await listen<{ id: string; path: string }>('cover_changed', (event) => {
 			const card = this.cards[event.payload.id];
 			if (card) {

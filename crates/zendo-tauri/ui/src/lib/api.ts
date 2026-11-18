@@ -157,3 +157,44 @@ export async function libraryShowHidden(): Promise<LibraryFiltered> {
 export async function libraryToggleMark(id?: string): Promise<LibraryFiltered> {
 	return invoke<LibraryFiltered>('library_toggle_mark', { id: id ?? null });
 }
+
+// A game's page: the header, the tiles, the statuses and how it is running.
+export type GamePage = {
+	id: string;
+	title: string;
+	source_line: string;
+	cover: string | null;
+	hero: string | null;
+	pinned: boolean;
+	hidden: boolean;
+	status: string | null;
+	// 0 idle (Play), 1 starting, 2 running (Stop), 3 stopping.
+	run_state: number;
+	line: string;
+	tiles: { label: string; value: string }[];
+	statuses: { key: string; label: string; chosen: boolean }[];
+};
+
+export async function gameGet(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_get', { id });
+}
+
+export async function gameLaunch(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_launch', { id });
+}
+
+export async function gameStop(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_stop', { id });
+}
+
+export async function gameSetPinned(id: string, pinned: boolean): Promise<GamePage> {
+	return invoke<GamePage>('game_set_pinned', { id, pinned });
+}
+
+export async function gameSetHidden(id: string, hidden: boolean): Promise<GamePage> {
+	return invoke<GamePage>('game_set_hidden', { id, hidden });
+}
+
+export async function gameSetStatus(id: string, status: string | null): Promise<GamePage> {
+	return invoke<GamePage>('game_set_status', { id, status });
+}

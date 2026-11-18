@@ -12,6 +12,7 @@ use anyhow::Context;
 use tauri::Manager;
 
 mod commands;
+mod game;
 mod library;
 mod platform;
 
@@ -64,6 +65,12 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             library::library_back,
             library::library_show_hidden,
             library::library_toggle_mark,
+            game::game_get,
+            game::game_launch,
+            game::game_stop,
+            game::game_set_pinned,
+            game::game_set_hidden,
+            game::game_set_status,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

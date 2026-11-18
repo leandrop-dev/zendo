@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import {
 		CARD_HEIGHT,
@@ -92,6 +94,13 @@
 		};
 	});
 
+	/// A card opens its game, as the Slint window's cards do; the cursor
+	/// stays where it was for the Back.
+	async function open(id: string): Promise<void> {
+		await library.click(id);
+		await goto(resolve('/game/[id]', { id }));
+	}
+
 	onMount(() => {
 		if (!viewport) {
 			return;
@@ -139,7 +148,7 @@
 								card={library.cards[id]}
 								selected={library.cursor === row * columns + at}
 								marked={library.marked.includes(id)}
-								onclick={() => void library.click(id)}
+								onclick={() => void open(id)}
 								onmark={() => void library.toggleMark(id)}
 							/>
 						{/if}
