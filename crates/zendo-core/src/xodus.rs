@@ -249,7 +249,10 @@ pub struct Marker {
 pub fn write_marker(folder: &Path, marker: &Marker) -> anyhow::Result<()> {
     let path = folder.join(RECORD);
     let text = serde_json::to_string_pretty(marker).context("the marker could not be written")?;
-    fs::write(&path, text).with_context(|| format!("could not write {}", path.display()))
+    // Written whole or not at all: a marker caught half written would make
+    // the game Zendo's no longer, for good.
+    paths::write_atomic(&path, text.as_bytes())
+        .with_context(|| format!("could not write {}", path.display()))
 }
 
 /// The marker in a folder, when it wrote one Zendo can read.
@@ -302,13 +305,11 @@ fn state_at(path: &Path) -> anyhow::Result<serde_json::Value> {
 }
 
 /// Writes the state beside the old one, then renames it over, so a failed
-/// write leaves the launcher with its state.
+/// write leaves the launcher with its state; the temporary name is the
+/// writer's own, as two writes can overlap.
 fn write_state(path: &Path, state: &serde_json::Value) -> anyhow::Result<()> {
-    let temporary = path.with_extension("zendo-tmp");
     let text = serde_json::to_vec_pretty(state).context("the state could not be written")?;
-    fs::write(&temporary, text)
-        .with_context(|| format!("could not write {}", temporary.display()))?;
-    fs::rename(&temporary, path).with_context(|| format!("could not put {}", path.display()))
+    paths::write_atomic(path, &text).with_context(|| format!("could not put {}", path.display()))
 }
 
 /// The account the launcher records for its games, from an existing record

@@ -302,6 +302,12 @@ struct Glue {
     persist: bool,
 }
 
+/// Says something in the footer once the window is installed: what went
+/// wrong at the start, such as an unreadable `config.toml`.
+pub fn say_startup(line: String) {
+    with_glue(|glue| glue.say(line));
+}
+
 /// Puts the Library in the window and starts reading the games.
 pub fn install(
     window: &MainWindow,
@@ -522,6 +528,19 @@ impl Glue {
     /// Carries an outcome to the window: the write to `state.json`, the rows
     /// to draw again, the scroll, and whatever else changed.
     fn apply(&self, outcome: Outcome) {
+        let changed = self.draw(outcome);
+        // The chips are counted over every game: only what changed what the
+        // page lists needs them again.
+        if changed {
+            self.sync();
+        }
+    }
+
+    /// Draws the cards an outcome changes and says whether anything the
+    /// chips count may have changed. Callers that only draw a cover ignore
+    /// the answer: a download of 2,700 of them must not count the library
+    /// 2,700 times.
+    fn draw(&self, outcome: Outcome) -> bool {
         let Outcome { save, rows, scroll } = outcome;
         let changed = save.is_some() || rows != Rows::Same;
         if let Some(save) = save {
@@ -539,11 +558,7 @@ impl Glue {
         }
         self.scroll(&scroll);
         self.sync_cursor();
-        // The chips are counted over every game: only what changed what the
-        // page lists needs them again.
-        if changed {
-            self.sync();
-        }
+        changed
     }
 
     fn persist(&self, save: &Save) {
@@ -819,7 +834,8 @@ impl Glue {
                 // way round: only one of them takes it.
                 self.store_image(id, kind, &path);
                 let outcome = self.browser.borrow_mut().set_image(id, kind, path);
-                self.apply(outcome);
+                // A cover redraws its row; no chip counts covers.
+                self.draw(outcome);
             }
             Ok(None) => {}
             Err(_) => self.images_failed.set(self.images_failed.get() + 1),

@@ -7,7 +7,6 @@
 //! Window section is left off, and this is never created.
 
 use std::thread;
-use std::time::Duration;
 
 use tray_icon::menu::{Menu, MenuEvent, MenuItem};
 use tray_icon::{Icon, MouseButton, TrayIconBuilder, TrayIconEvent};
@@ -67,27 +66,42 @@ impl Tray {
 /// Hands the tray's messages, as they come (left clicks and the menu's
 /// items), to `sink` from a thread of its own, until `sink` returns `false`.
 pub fn events(mut sink: impl FnMut(TrayMessage) -> bool + Send + 'static) {
+    // The clicks and the menu are two channels: one thread blocks on each
+    // and passes them to the one that calls `sink`, so nothing sleeps in a
+    // loop to look for them.
+    let (sender, receiver) = std::sync::mpsc::channel::<TrayMessage>();
+    let clicks = sender.clone();
     thread::spawn(move || {
-        loop {
-            if let Ok(TrayIconEvent::Click {
-                button: MouseButton::Left,
-                ..
-            }) = TrayIconEvent::receiver().try_recv()
-                && !sink(TrayMessage::Toggle)
+        while let Ok(event) = TrayIconEvent::receiver().recv() {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) && clicks.send(TrayMessage::Toggle).is_err()
             {
                 return;
             }
-            if let Ok(event) = MenuEvent::receiver().try_recv() {
-                let message = match event.id().as_ref() {
-                    "open" => TrayMessage::Open,
-                    "quit" => TrayMessage::Quit,
-                    _ => continue,
-                };
-                if !sink(message) {
-                    return;
-                }
+        }
+    });
+    thread::spawn(move || {
+        while let Ok(event) = MenuEvent::receiver().recv() {
+            let message = match event.id().as_ref() {
+                "open" => TrayMessage::Open,
+                "quit" => TrayMessage::Quit,
+                _ => continue,
+            };
+            if sender.send(message).is_err() {
+                return;
             }
-            thread::sleep(Duration::from_millis(100));
+        }
+    });
+    thread::spawn(move || {
+        for message in receiver {
+            if !sink(message) {
+                return;
+            }
         }
     });
 }

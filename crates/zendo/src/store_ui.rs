@@ -345,10 +345,10 @@ impl Glue {
             let (listed_here, connected_here) = match shop {
                 Shop::Xbox => (xbox, xbox),
                 Shop::Steam => (steam, steam),
-                engine => {
-                    let store = engine.store().expect("a shop with an engine");
-                    (!self.store_signed_out(store), self.store_signed_in(store))
-                }
+                engine => match engine.store() {
+                    Some(store) => (!self.store_signed_out(store), self.store_signed_in(store)),
+                    None => (false, false),
+                },
             };
             if listed_here {
                 listed.insert(shop);
@@ -854,7 +854,9 @@ impl Glue {
     /// and the chips when what the page lists changed.
     pub(super) fn apply_store(&self, outcome: Outcome) {
         let Outcome { rows, scroll, .. } = outcome;
-        let changed = rows != Rows::Same;
+        // Only a cover marks a row this way; the chips count games, not
+        // covers, so they are not built again for one.
+        let changed = !matches!(rows, Rows::Same | Rows::Marks(_));
         match rows {
             Rows::Same => {}
             Rows::Marks(places) => {

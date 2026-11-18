@@ -65,13 +65,26 @@ pub fn scan(dirs: &[PathBuf]) -> Scan {
 }
 
 fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
+    collect_under(dir, files, 0);
+}
+
+/// How deep below an `applications` folder a `.desktop` file can be.
+const DEPTH: u8 = 4;
+
+fn collect_under(dir: &Path, files: &mut Vec<PathBuf>, depth: u8) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     for entry in entries.filter_map(Result::ok) {
         let path = entry.path();
-        if path.is_dir() {
-            collect(&path, files);
+        let kind = entry.file_type();
+        // A folder is walked without following a link to it: a link back to
+        // this folder, or to `/`, would never end. A linked `.desktop` file
+        // is still a game.
+        if kind.is_ok_and(|kind| kind.is_dir()) {
+            if depth < DEPTH {
+                collect_under(&path, files, depth + 1);
+            }
         } else if path.extension().is_some_and(|ext| ext == "desktop") {
             files.push(path);
         }
@@ -223,6 +236,24 @@ mod tests {
         let scan = scan(&[user, fixture()]);
         let ids: Vec<&str> = scan.games.iter().map(|game| game.id.as_str()).collect();
         assert_eq!(ids, ["desktop:games-supertux"]);
+    }
+
+    #[test]
+    fn a_link_to_a_folder_is_not_walked_forever() {
+        let dir = std::env::temp_dir().join(format!("zendo-desktop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("games")).unwrap();
+        fs::copy(
+            fixture().join("games/supertux.desktop"),
+            dir.join("games/supertux.desktop"),
+        )
+        .unwrap();
+        // A link back to the folder it is in, and one to the root.
+        std::os::unix::fs::symlink(&dir, dir.join("games/loop")).unwrap();
+        std::os::unix::fs::symlink("/", dir.join("games/root")).unwrap();
+        let scan = scan(std::slice::from_ref(&dir));
+        assert_eq!(scan.games.len(), 1, "the file is found once");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

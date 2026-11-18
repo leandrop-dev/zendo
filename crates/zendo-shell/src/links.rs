@@ -83,6 +83,7 @@ fn accept(listener: &UnixListener, sink: &mut impl FnMut(String) -> bool) {
         if BufReader::new(stream.take(LONGEST))
             .read_line(&mut line)
             .is_ok()
+            && line.ends_with('\n')
         {
             let received = line.trim();
             if !received.is_empty() && !sink(received.to_owned()) {

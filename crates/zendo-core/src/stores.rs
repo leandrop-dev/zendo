@@ -258,9 +258,11 @@ impl Store {
         let text = String::from_utf8_lossy(&output.stdout);
         match text.trim() {
             "" | "null" => Ok(None),
+            // gogdl prints the tokens on stdout: they are not quoted into
+            // an error the window shows.
             text => serde_json::from_str(text)
                 .map(Some)
-                .with_context(|| failure("gogdl", &output)),
+                .with_context(|| "gogdl auth: its answer was not the tokens Zendo expected"),
         }
     }
 

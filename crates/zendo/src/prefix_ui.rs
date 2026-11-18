@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 use zendo_core::Game;
+use zendo_core::config::Config;
 use zendo_core::gog_setup;
 use zendo_core::known_fixes::{self, Fixes};
 use zendo_core::launch;
@@ -282,9 +283,14 @@ impl Glue {
         let running = self.game.running.borrow().is_running(id);
         data.set_prefix_free(self.tools_free(id));
         data.set_prefix_gog(gog_setup::applies(game));
-        // Reads the user's config for the games folder: not in tests.
+        // Reads the games folder from the settings already in the window:
+        // not the disk, which a redraw during a download would hit often.
         let folder = if self.persist {
-            launch::prefix(game)
+            self.config
+                .borrow()
+                .as_ref()
+                .and_then(Config::install_dir)
+                .map(|dir| launch::prefix_in(&dir, game))
                 .filter(|prefix| prefix.is_dir())
                 .map_or_default(|prefix| prefix.to_string_lossy().into_owned())
         } else {

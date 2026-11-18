@@ -250,9 +250,9 @@ impl Art {
                 picker.note = Some(t!("art-no-game", query = picker.query.trim()));
                 None
             }
-            Ok(games) => {
-                let first = games[0].id;
-                picker.games = games;
+            Ok(mut games) => {
+                let first = games.first()?.id;
+                picker.games = std::mem::take(&mut games);
                 self.list(first, 0)
             }
             Err(err) => {

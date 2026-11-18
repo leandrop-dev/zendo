@@ -743,9 +743,29 @@ impl Glue {
                 Effect::RefreshGogTotal(id) => self.refresh_gog_total(&id),
                 Effect::Presence => self.update_presence(),
                 Effect::NextJob => self.next_job(),
+                Effect::StopAsking { id, watch, kill } => self.stop_on_a_thread(id, watch, kill),
             }
         }
         self.show_game();
+    }
+
+    /// Asks a game to close, or kills it, on a thread: the asking walks
+    /// `/proc` and connects to each X display, which a wedged one can hold
+    /// up for long enough to freeze the window.
+    fn stop_on_a_thread(&self, id: String, watch: Watch, kill: bool) {
+        let weak = self.window.clone();
+        std::thread::spawn(move || {
+            // A force kill says nothing: the game is gone whatever its
+            // windows did.
+            if kill {
+                launch::kill(&watch);
+                return;
+            }
+            let asked = launch::stop(&watch);
+            let _ = weak.upgrade_in_event_loop(move |_| {
+                with_glue(|glue| glue.run_event(RunMessage::StopAnswered(id, asked)));
+            });
+        });
     }
 
     /// Tells Discord who is playing, when the Discord setting is on.

@@ -559,7 +559,13 @@ pub fn files_for(
             .any(|other| other.eq_ignore_ascii_case(name))
     };
     let lines = |lines: Vec<String>| {
-        let mut text = lines.join("\r\n");
+        // A file name may hold a line break, which would write a line of
+        // its own into the game's list: such a name is left out.
+        let mut text = lines
+            .into_iter()
+            .filter(|line| !line.chars().any(char::is_control))
+            .collect::<Vec<_>>()
+            .join("\r\n");
         text.push_str("\r\n");
         text
     };
@@ -840,6 +846,12 @@ pub(crate) mod tests {
         assert_eq!(
             files_for(SKYRIM_SE.style, &order, &implicit(&SKYRIM_SE)),
             [("Plugins.txt", "Mod.esp\r\n*Other.esp\r\n".to_owned())]
+        );
+        // A name with a line break would write a line of its own.
+        let sneaky: Vec<(String, bool)> = vec![("Evil.esp\r\n*Hidden.esp".to_owned(), true)];
+        assert_eq!(
+            files_for(SKYRIM_SE.style, &sneaky, &[]),
+            [("Plugins.txt", "\r\n".to_owned())]
         );
         assert_eq!(
             files_for(SKYRIM.style, &order, &implicit(&SKYRIM)),

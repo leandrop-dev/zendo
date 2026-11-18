@@ -24,6 +24,7 @@
 use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::Write as _;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -57,8 +58,10 @@ pub struct Started {
 pub enum Watch {
     /// The process group Zendo started it in.
     Group(Group),
-    /// The game's install folder, for a game its launcher runs.
-    Folder(PathBuf),
+    /// The game's install folder, for a game its launcher runs, and when
+    /// Zendo asked that launcher to start it, in clock ticks since boot:
+    /// a program already open on a file in the folder is not the game's.
+    Folder { folder: PathBuf, since: u64 },
     /// Not at all: a link with no install folder known.
     Nothing,
 }
@@ -106,6 +109,13 @@ impl Group {
         }
     }
 
+    /// When the group's first process started, in clock ticks since boot;
+    /// `None` when it could not be read.
+    #[must_use]
+    pub fn started(&self) -> Option<u64> {
+        self.since
+    }
+
     /// The group's processes alive now; none, for good, once it ended.
     fn members(&self) -> Vec<u32> {
         if self.ended.load(Ordering::Relaxed) {
@@ -146,9 +156,17 @@ impl Group {
 /// to note the launch is not an error: the game is already running.
 pub fn start(game: &Game) -> anyhow::Result<Started> {
     if !matches!(game.launch, Launch::Uri { .. }) {
-        let before = LaunchOptions::load(&game.id)?.before;
-        if !before.trim().is_empty() {
-            run_script(game, &before, Script::Before)?;
+        let options = LaunchOptions::load(&game.id)?;
+        // A before script is run when the game is about to start: its
+        // prefix is there for it, as it is for the game.
+        if needs_proton(game)
+            && let Some(prefix) = prefix(game)
+        {
+            fs::create_dir_all(&prefix)
+                .with_context(|| format!("could not make {}", prefix.display()))?;
+        }
+        if !options.before.trim().is_empty() {
+            run_script(game, &options.before, Script::Before)?;
         }
     }
     let mut warning = None;
@@ -210,9 +228,10 @@ pub fn start(game: &Game) -> anyhow::Result<Started> {
         .with_context(|| format!("could not start {}", game.title))?;
     // Read before the child is waited for, so it is there to read.
     let group = Group::led_by(child.id());
+    let since = group.started().unwrap_or(0);
     let watch = match folder {
         None => Watch::Group(group),
-        Some(Some(folder)) => Watch::Folder(folder),
+        Some(Some(folder)) => Watch::Folder { folder, since },
         Some(None) => Watch::Nothing,
     };
     let _ = State::update(|state| state.launched(&game.id));
@@ -397,7 +416,7 @@ pub fn launch(game: &Game) -> anyhow::Result<()> {
 pub fn running(watch: &Watch) -> bool {
     match watch {
         Watch::Group(group) => !group.members().is_empty(),
-        Watch::Folder(folder) => !in_folder(folder).is_empty(),
+        Watch::Folder { folder, since } => !in_folder(folder, *since).is_empty(),
         Watch::Nothing => false,
     }
 }
@@ -408,7 +427,7 @@ pub fn running(watch: &Watch) -> bool {
 pub fn any_window_mapped(watch: &Watch) -> bool {
     let pids: std::collections::HashSet<u32> = match watch {
         Watch::Group(group) => group.members().into_iter().collect(),
-        Watch::Folder(folder) => in_folder(folder).into_iter().collect(),
+        Watch::Folder { folder, since } => in_folder(folder, *since).into_iter().collect(),
         Watch::Nothing => return false,
     };
     crate::windows::any_mapped(&pids)
@@ -423,7 +442,7 @@ pub fn any_window_mapped(watch: &Watch) -> bool {
 pub fn stop(watch: &Watch) -> bool {
     let pids: std::collections::HashSet<u32> = match watch {
         Watch::Group(group) => group.members().into_iter().collect(),
-        Watch::Folder(folder) => in_folder(folder).into_iter().collect(),
+        Watch::Folder { folder, since } => in_folder(folder, *since).into_iter().collect(),
         Watch::Nothing => return false,
     };
     if crate::windows::ask_to_close(&pids) > 0 {
@@ -441,7 +460,7 @@ pub fn kill(watch: &Watch) {
 fn signal(watch: &Watch, signal: &str) {
     let pids = match watch {
         Watch::Group(group) => group.members(),
-        Watch::Folder(folder) => in_folder(folder)
+        Watch::Folder { folder, since } => in_folder(folder, *since)
             .into_iter()
             .filter(|&pid| pid > 1 && pid != std::process::id())
             .collect(),
@@ -502,15 +521,19 @@ fn processes() -> Vec<Process> {
         .collect()
 }
 
-/// The processes of a game its launcher runs: those whose program is in
-/// its folder or whose arguments name it, and everything they started.
+/// The processes of a game its launcher runs: those started since `since`
+/// (clock ticks since boot, 0 for any) whose program is in its folder or
+/// whose arguments name it, and everything they started. A program open on
+/// the folder before the launch, an editor or a file manager, is not it.
 #[must_use]
-pub fn in_folder(folder: &Path) -> Vec<u32> {
+pub fn in_folder(folder: &Path, since: u64) -> Vec<u32> {
     let all = processes();
     let own = std::process::id();
     let mut found: Vec<u32> = all
         .iter()
-        .filter(|process| process.pid != own && names_folder(process.pid, folder))
+        .filter(|process| {
+            process.pid != own && process.start >= since && names_folder(process.pid, folder)
+        })
         .map(|process| process.pid)
         .collect();
     // Their children, and theirs: Proton's wine processes, the game itself.
@@ -1094,8 +1117,18 @@ fn open_log(log: &Path, command: &Command) -> anyhow::Result<Output> {
     if let Some(dir) = log.parent() {
         fs::create_dir_all(dir).with_context(|| format!("could not make {}", dir.display()))?;
     }
-    let mut file =
-        File::create(log).with_context(|| format!("could not write {}", log.display()))?;
+    // The heading prints the launch's environment, which may hold tokens
+    // (the launch options say so): the owner alone may read it. An older
+    // log keeps its own mode, so it is set again.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(log)
+        .with_context(|| format!("could not write {}", log.display()))?;
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("could not keep {} private", log.display()))?;
     writeln!(
         file,
         "Started by Zendo at {} (Unix time)\n{}\n",
@@ -1490,10 +1523,13 @@ mod tests {
             .process_group(0)
             .spawn()
             .unwrap();
-        let watch = Watch::Folder(game.clone());
+        let watch = Watch::Folder {
+            folder: game.clone(),
+            since: 0,
+        };
         let mut found = Vec::new();
         for _ in 0..50 {
-            found = in_folder(&game);
+            found = in_folder(&game, 0);
             if found.len() >= 2 {
                 break;
             }
@@ -1501,8 +1537,14 @@ mod tests {
         }
         assert!(found.contains(&child.id()));
         assert!(found.len() >= 2, "the sleep it started is found too");
-        assert!(!running(&Watch::Folder(dir.join("My Gam"))));
-        assert!(!running(&Watch::Folder(dir.join("My Game 2"))));
+        assert!(!running(&Watch::Folder {
+            folder: dir.join("My Gam"),
+            since: 0
+        }));
+        assert!(!running(&Watch::Folder {
+            folder: dir.join("My Game 2"),
+            since: 0
+        }));
         kill(&watch);
         let _ = child.wait();
         for _ in 0..50 {
@@ -1512,6 +1554,38 @@ mod tests {
             thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(!running(&watch));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_program_open_on_the_folder_before_the_launch_is_not_the_game() {
+        let dir = std::env::temp_dir().join(format!("zendo-folder-old-{}", std::process::id()));
+        let game = dir.join("My Game");
+        fs::create_dir_all(&game).unwrap();
+        // An editor open on a file in the folder: its arguments name it.
+        let script = format!("sleep 30 & wait # {}/notes.txt", game.display());
+        let mut child = Command::new("sh")
+            .args(["-c", &script, &format!("{}/Game.exe", game.display())])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let mut found = Vec::new();
+        for _ in 0..50 {
+            found = in_folder(&game, 0);
+            if !found.is_empty() {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!found.is_empty(), "found without a lower bound");
+        // A launch after it started takes only what started since.
+        let since = Group::led_by(child.id()).started().unwrap() + 1;
+        assert!(in_folder(&game, since).is_empty(), "the old one is not it");
+        kill(&Watch::Folder {
+            folder: game.clone(),
+            since: 0,
+        });
+        let _ = child.wait();
         fs::remove_dir_all(&dir).unwrap();
     }
 

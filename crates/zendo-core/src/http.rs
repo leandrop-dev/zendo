@@ -22,7 +22,12 @@ pub(crate) const USER_AGENT: &str = concat!(
 const STALL: Duration = Duration::from_secs(60);
 
 fn builder() -> ConfigBuilder<AgentScope> {
-    ureq::Agent::config_builder().user_agent(USER_AGENT)
+    // A redirect never turns a request plaintext: ureq strips only
+    // `Authorization` and `Cookie` from one, so Nexus's `apikey` header
+    // would otherwise follow a store's `3xx` to `http://`.
+    ureq::Agent::config_builder()
+        .user_agent(USER_AGENT)
+        .https_only(true)
 }
 
 /// An agent for calls answered whole within `timeout`.

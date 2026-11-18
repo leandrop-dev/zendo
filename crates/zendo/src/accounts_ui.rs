@@ -66,6 +66,10 @@ pub(super) struct AccountsState {
     signing_in: RefCell<Option<SignIn>>,
     /// The launchers' cards, looked at as the page opens.
     xbox: RefCell<Launcher>,
+    /// How many stores are being asked who is signed in: none is asked
+    /// again while those answers are on their way, so switching pages
+    /// quickly does not stack engine processes.
+    asking: Cell<u32>,
     cards: Rc<VecModel<AccountCard>>,
     focus: Cell<i32>,
     paste: Cell<i32>,
@@ -78,6 +82,7 @@ impl AccountsState {
             engines: RefCell::default(),
             signing_in: RefCell::new(None),
             xbox: RefCell::default(),
+            asking: Cell::new(0),
             cards: Rc::new(VecModel::default()),
             focus: Cell::new(0),
             paste: Cell::new(0),
@@ -277,9 +282,12 @@ impl Glue {
 
     /// Asks each engine who is signed in, each on a thread.
     pub(super) fn check_accounts(&self) {
-        if !self.persist {
+        if !self.persist || self.accounts.asking.get() > 0 {
             return;
         }
+        self.accounts
+            .asking
+            .set(u32::try_from(Store::ALL.len()).unwrap_or(0));
         for store in Store::ALL {
             let weak = self.window.clone();
             std::thread::spawn(move || {
@@ -308,6 +316,9 @@ impl Glue {
         result: Result<Option<String>, String>,
         engine: Option<PathBuf>,
     ) {
+        self.accounts
+            .asking
+            .set(self.accounts.asking.get().saturating_sub(1));
         self.accounts.engines.borrow_mut()[index(store)] = engine;
         self.set_account(
             store,

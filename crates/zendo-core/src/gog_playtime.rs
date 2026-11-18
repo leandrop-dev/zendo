@@ -77,7 +77,7 @@ pub fn send(game: &Game, started: u64, ended: u64) -> anyhow::Result<()> {
     // calls do not hold it. A session added meanwhile waits for the next
     // call.
     let queue = paths::locked(&file, || {
-        let mut queue = load(&file);
+        let mut queue = load(&file)?;
         queue.extend(new);
         if queue.is_empty() {
             return Ok(Vec::new());
@@ -107,7 +107,7 @@ pub fn send(game: &Game, started: u64, ended: u64) -> anyhow::Result<()> {
     let (left, error) = result;
     let kept = minutes_kept(&left);
     paths::locked(&file, || {
-        let mut queue = load(&file);
+        let mut queue = load(&file)?;
         // What could not be sent goes before what arrived while sending.
         queue.splice(0..0, left);
         save(&file, &queue)
@@ -271,12 +271,19 @@ fn file(name: &str) -> Option<PathBuf> {
     paths::data_home().map(|dir| dir.join("zendo").join(name))
 }
 
-/// The sessions waiting; none when the file is missing or unreadable.
-fn load(file: &Path) -> Vec<Session> {
-    fs::read(file)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+/// The sessions waiting; none when the file is missing.
+///
+/// # Errors
+///
+/// When the file is there but cannot be read or is not a list of sessions:
+/// an empty queue is not assumed, as saving it would delete the file.
+fn load(file: &Path) -> anyhow::Result<Vec<Session>> {
+    match fs::read(file) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .with_context(|| format!("{} is not a list of sessions", file.display())),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(err) => Err(err).with_context(|| format!("could not read {}", file.display())),
+    }
 }
 
 fn save(file: &Path, queue: &[Session]) -> anyhow::Result<()> {
@@ -377,5 +384,18 @@ mod tests {
             text,
             r#"{"game":"1207658930","started":1762700000,"time":61}"#
         );
+    }
+
+    #[test]
+    fn a_corrupt_queue_is_an_error_not_an_empty_one() {
+        let dir = std::env::temp_dir().join(format!("zendo-playtime-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("gog-playtime.json");
+        assert_eq!(load(&file).unwrap(), Vec::new(), "missing is empty");
+        fs::write(&file, "not json").unwrap();
+        assert!(load(&file).is_err(), "corrupt is not empty");
+        assert!(file.exists(), "reading it does not delete it");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

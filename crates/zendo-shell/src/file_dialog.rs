@@ -8,7 +8,9 @@
 //! when there is one, so it is the dialog every other app shows. The path
 //! chosen goes to stdout; closing it writes nothing.
 
+use std::ffi::OsString;
 use std::io::Write;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
 
@@ -127,7 +129,11 @@ pub fn main(kind: Kind, title: &str) -> ExitCode {
         return ExitCode::SUCCESS;
     };
     let mut stdout = std::io::stdout();
-    if writeln!(stdout, "{}", path.display())
+    // The bytes of the name, not its display: a file name need not be
+    // UTF-8, and a lossy one would name a file that is not there.
+    if stdout
+        .write_all(path.as_os_str().as_bytes())
+        .and_then(|()| stdout.write_all(b"\n"))
         .and_then(|()| stdout.flush())
         .is_err()
     {
@@ -158,8 +164,10 @@ pub fn pick(kind: Kind, title: &str) -> anyhow::Result<Option<PathBuf>> {
             .map_or_else(|| output.status.to_string(), str::to_owned);
         bail!("the file dialog failed: {reason}");
     }
-    let path = String::from_utf8_lossy(&output.stdout)
-        .trim_end_matches('\n')
-        .to_owned();
+    let mut bytes = output.stdout;
+    while matches!(bytes.last(), Some(b'\n' | b'\r')) {
+        bytes.pop();
+    }
+    let path = OsString::from_vec(bytes);
     Ok((!path.is_empty()).then(|| PathBuf::from(path)))
 }

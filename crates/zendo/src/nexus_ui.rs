@@ -563,7 +563,9 @@ impl Glue {
 fn download_row(download: &zendo_shell::nexus::Download) -> DownloadRow {
     let (fraction, words) = download.progress();
     DownloadRow {
-        id: i32::try_from(download.id).unwrap_or(i32::MAX),
+        // `-1` for an id too big for the row: Stop then does nothing
+        // rather than stopping another download.
+        id: i32::try_from(download.id).unwrap_or(-1),
         name: download.name.as_str().into(),
         words: words.into(),
         fraction,

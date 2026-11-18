@@ -589,7 +589,7 @@ impl Browser {
             (self.scroll_top / pitch) as usize,
             ((self.scroll_top + self.viewport) / pitch).ceil() as usize,
         );
-        first.saturating_sub(2)..last + 2
+        first.saturating_sub(2)..last.saturating_add(2)
     }
 
     pub fn say(&mut self, status: Option<String>) {

@@ -26,6 +26,10 @@ pub const IDLE: Duration = Duration::from_secs(15);
 /// or sooner with Stop waiting.
 const GIVE_UP: Duration = Duration::from_mins(3);
 
+/// A look whose thread died is taken over after this long: reading Steam's
+/// manifests takes a moment, a broken thread never answers.
+const LOOK_GIVE_UP: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Default)]
 pub struct SteamInstalls {
     /// Installs asked of Steam that it has not started yet, by app.
@@ -44,6 +48,9 @@ pub struct SteamInstalls {
     updating: HashSet<String>,
     /// Whether Steam's manifests are being read now.
     looking: bool,
+    /// When that look began: one whose thread died must not stop every
+    /// later look for the rest of the session.
+    looking_since: Option<Instant>,
 }
 
 #[derive(Debug)]
@@ -262,10 +269,15 @@ impl SteamInstalls {
     /// to read begin (`Some(None)` when none is followed). Hand it to
     /// [`look`] on a thread, then the answer to [`Self::looked`].
     pub fn begin_look(&mut self) -> Option<Option<u64>> {
-        if self.looking {
+        if self.looking
+            && self
+                .looking_since
+                .is_some_and(|at| at.elapsed() < LOOK_GIVE_UP)
+        {
             return None;
         }
         self.looking = true;
+        self.looking_since = Some(Instant::now());
         Some(self.verifying.values().map(|v| v.from).min())
     }
 
@@ -295,6 +307,7 @@ impl SteamInstalls {
     /// library; and the verifies Steam's log tells of.
     pub fn looked(&mut self, states: Vec<AppState>, log: &[VerifyEvent]) -> Looked {
         self.looking = false;
+        self.looking_since = None;
         // A game Steam verifies is busy a while, not newly installed.
         let checked: HashSet<String> = self.verifying.keys().cloned().collect();
         let verified = self.verifies_done(log);

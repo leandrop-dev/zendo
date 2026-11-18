@@ -92,6 +92,9 @@ pub enum RunMessage {
     Shown(String),
     /// They did not, in time.
     Missed(String),
+    /// The game was asked to close (it has no window to ask): whether it
+    /// was, for the line at the foot.
+    StopAnswered(String, bool),
     Ended(String),
     /// Its saves are syncing, after it ended.
     SavesSyncing(String),
@@ -130,6 +133,13 @@ pub enum Effect {
     NextJob,
     /// GOG's total now holds the session just sent.
     RefreshGogTotal(String),
+    /// A Stop was pressed: ask the game to close, or kill it, on a thread
+    /// (the asking walks `/proc` and speaks to X, which can wait).
+    StopAsking {
+        id: String,
+        watch: Watch,
+        kill: bool,
+    },
     /// The game's Play, badge or card changed.
     Changed(String),
 }
@@ -320,7 +330,8 @@ impl Running {
                 effects.push(Effect::RefreshGogTotal(id));
                 effects
             }
-            RunMessage::Stop(id) => self.stop(id, names),
+            RunMessage::Stop(id) => self.stop(id),
+            RunMessage::StopAnswered(id, asked) => Self::stop_answered(id, asked, names),
         }
     }
 
@@ -357,20 +368,25 @@ impl Running {
     }
 
     /// Stop was pressed: asks the game to close, and on the second press
-    /// kills it. Nothing before there is something to stop.
-    fn stop(&mut self, id: String, names: &dyn Fn(&str) -> Names) -> Vec<Effect> {
+    /// kills it. Nothing before there is something to stop. The asking is
+    /// slow (Zendo walks `/proc` and speaks to each X display), so it
+    /// happens on a thread: this only decides what it does.
+    fn stop(&mut self, id: String) -> Vec<Effect> {
         let Some(session) = self.games.get_mut(&id) else {
             return Vec::new();
         };
-        let Some(watch) = session.watch.as_ref().filter(|_| session.seen) else {
+        let Some(watch) = session.watch.as_ref().filter(|_| session.seen).cloned() else {
             return Vec::new();
         };
-        if session.stopping {
-            launch::kill(watch);
-            return Vec::new();
+        let kill = session.stopping;
+        if !kill {
+            session.stopping = true;
         }
-        session.stopping = true;
-        let asked = launch::stop(watch);
+        vec![Effect::StopAsking { id, watch, kill }]
+    }
+
+    /// The asking came back: whether the game was asked through its window.
+    fn stop_answered(id: String, asked: bool, names: &dyn Fn(&str) -> Names) -> Vec<Effect> {
         let title = names(&id).title;
         vec![
             Effect::Say(if asked {
@@ -532,7 +548,7 @@ pub fn follow(game: Game, send: impl Fn(RunMessage) -> bool + Send + 'static) {
                     thread::sleep(POLL);
                 }
             }
-            Some(watch @ Watch::Folder(_)) => {
+            Some(watch @ Watch::Folder { .. }) => {
                 let asked = Instant::now();
                 while !launch::running(&watch) {
                     if asked.elapsed() > WAIT {
@@ -669,7 +685,10 @@ mod tests {
         let mut running = Running::default();
         running.begin("steam:620");
         let started = Started {
-            watch: Watch::Folder("/games/Portal 2".into()),
+            watch: Watch::Folder {
+                folder: "/games/Portal 2".into(),
+                since: 0,
+            },
             log: None,
             warning: None,
         };
@@ -718,12 +737,53 @@ mod tests {
         let mut running = Running::default();
         running.begin("steam:620");
         let started = Started {
-            watch: Watch::Folder("/games/Portal 2".into()),
+            watch: Watch::Folder {
+                folder: "/games/Portal 2".into(),
+                since: 0,
+            },
             log: None,
             warning: None,
         };
         running.apply(RunMessage::Started("steam:620".into(), Ok(started)), &names);
         running.apply(RunMessage::Stop("steam:620".into()), &names);
         assert!(!running.games["steam:620"].stopping);
+    }
+
+    #[test]
+    fn a_stop_asks_on_a_thread_then_says_how_it_went() {
+        let mut running = Running::default();
+        running.begin("steam:620");
+        let started = Started {
+            watch: Watch::Folder {
+                folder: "/games/Portal 2".into(),
+                since: 0,
+            },
+            log: None,
+            warning: None,
+        };
+        running.apply(RunMessage::Started("steam:620".into(), Ok(started)), &names);
+        running.apply(RunMessage::Seen("steam:620".into()), &names);
+        let effects = running.apply(RunMessage::Stop("steam:620".into()), &names);
+        assert!(matches!(
+            effects[..],
+            [Effect::StopAsking { kill: false, .. }]
+        ));
+        assert!(running.games["steam:620"].stopping);
+        // The second press kills rather than asks again.
+        let effects = running.apply(RunMessage::Stop("steam:620".into()), &names);
+        assert!(matches!(
+            effects[..],
+            [Effect::StopAsking { kill: true, .. }]
+        ));
+        let effects = running.apply(RunMessage::StopAnswered("steam:620".into(), true), &names);
+        assert_eq!(
+            said(&effects),
+            Some("Asked Sugar to close; it may ask to save first")
+        );
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Changed(id) if id == "steam:620"))
+        );
     }
 }

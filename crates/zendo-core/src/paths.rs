@@ -104,27 +104,29 @@ enum Access {
 }
 
 fn write_with(path: &Path, bytes: &[u8], access: Access) -> io::Result<()> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
     let dir = path.parent().filter(|dir| !dir.as_os_str().is_empty());
     if let Some(dir) = dir {
         fs::create_dir_all(dir)?;
     }
-    let temporary = temporary(path);
-    let written = (|| {
+    // A name of this writer's own, made fresh: a link or a leftover at a
+    // guessed name is never written through.
+    let (temporary, mut file) = loop {
+        let temporary = temporary(path);
         let mut options = fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
+        options.write(true).create_new(true);
         if access == Access::Owner {
             options.mode(0o600);
         }
-        let mut file = options.open(&temporary)?;
-        // The mode applies only to a new file; a leftover keeps its own.
-        if access == Access::Owner {
-            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        match options.open(&temporary) {
+            Ok(file) => break (temporary, file),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(err) => return Err(err),
         }
-        file.write_all(bytes)?;
-        file.sync_all()
-    })();
+    };
+    let written = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
     if let Err(err) = written {
         let _ = fs::remove_file(&temporary);
         return Err(err);

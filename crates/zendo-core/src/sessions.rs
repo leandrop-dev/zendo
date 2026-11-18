@@ -36,7 +36,7 @@ pub struct Session {
     /// When it began, Unix seconds.
     pub start: u64,
     pub minutes: u64,
-    /// The local time's offset from UTC, in seconds, when it ended: the
+    /// The local time's offset from UTC, in seconds, when it began: the
     /// day, month and weekday it counts for are the local ones.
     #[serde(default)]
     pub offset: i32,

@@ -2,6 +2,7 @@
 //! blocks while it waits for events, so it runs on a thread of its own and
 //! hands them to a closure.
 
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
@@ -45,14 +46,22 @@ fn poll(mut sink: impl FnMut(Pad) -> bool) {
     let Ok(mut gilrs) = Gilrs::new() else {
         return;
     };
-    let mut stick = Stick::default();
+    // A stick leans on each controller on its own: two pads share nothing.
+    let mut sticks: HashMap<gilrs::GamepadId, Stick> = HashMap::new();
     loop {
         let Some(event) = gilrs.next_event_blocking(Some(Duration::from_millis(500))) else {
             continue;
         };
+        let id = event.id;
         let pad = match event.event {
             EventType::ButtonPressed(button, _) => button_pad(button),
-            EventType::AxisChanged(axis, value, _) => stick.lean(axis, value),
+            EventType::AxisChanged(axis, value, _) => {
+                sticks.entry(id).or_default().lean(axis, value)
+            }
+            EventType::Disconnected => {
+                sticks.remove(&id);
+                None
+            }
             _ => None,
         };
         if let Some(pad) = pad

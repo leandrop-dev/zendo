@@ -23,12 +23,12 @@ const LOOK: Duration = Duration::from_secs(2);
 /// an `nxm://` link it was started for.
 pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     i18n::set_from_settings();
-    let config = Config::load_file().ok();
-    let opaque = config.as_ref().is_some_and(|config| config.opaque);
-    let hide_to_tray = config
-        .as_ref()
-        .is_some_and(|config| config.minimize_to_tray);
-    let theme = config.and_then(|config| config.theme);
+    let loaded = Config::load_file();
+    let config_error = loaded.as_ref().err().map(|err| format!("{err:#}"));
+    let config = loaded.as_ref().ok();
+    let opaque = config.is_some_and(|config| config.opaque);
+    let hide_to_tray = config.is_some_and(|config| config.minimize_to_tray);
+    let theme = config.and_then(|config| config.theme.clone());
 
     // The backend first: the app id, which the compositor matches the window
     // by (the class `zendo`, which blur rules name), needs one.
@@ -44,6 +44,11 @@ pub fn run(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         Theme::dir().as_deref(),
     )));
     library_ui::install(&window, Rc::clone(&themes), link, fullscreen);
+    // A settings file that cannot be read is said, not silently replaced
+    // by the defaults for the whole session.
+    if let Some(note) = config_error {
+        library_ui::say_startup(note);
+    }
     if opaque {
         window.set_translucency(1.0);
     }

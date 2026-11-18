@@ -589,9 +589,10 @@ pub fn add_from_site(
     let name = archive
         .file_name()
         .map_or_default(|name| name.to_string_lossy().into_owned());
-    let added = mods::add(game, archive);
+    let added = mods::add(game, archive)?;
+    // Kept until the add worked: a failed one can be tried again.
     let _ = std::fs::remove_file(archive);
-    Ok((added?, t!("mods-added", name = name)))
+    Ok((added, t!("mods-added", name = name)))
 }
 
 /// What a change to the profiles says.

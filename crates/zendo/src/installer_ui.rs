@@ -10,9 +10,11 @@
 //! is open, and only Cancel and Escape close it (closing drops the unpacked
 //! mod, so a click outside does not).
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
 use zendo_core::mods::{self, Pending};
@@ -33,9 +35,10 @@ pub(super) struct InstallerUiState {
     state: RefCell<InstallerState>,
     rows: Rc<VecModel<InstallerRow>>,
     /// The picture asked for, and the number of the ask, so that a late
-    /// answer for an option no longer described is dropped.
+    /// answer for an option no longer described is dropped. The number is
+    /// shared, so a decode that a newer ask made useless is not done.
     asked: RefCell<Option<PathBuf>>,
-    generation: Cell<u64>,
+    generation: Arc<AtomicU64>,
     picture: RefCell<Option<Image>>,
 }
 
@@ -45,7 +48,7 @@ impl InstallerUiState {
             state: RefCell::default(),
             rows: Rc::new(VecModel::default()),
             asked: RefCell::default(),
-            generation: Cell::new(0),
+            generation: Arc::new(AtomicU64::new(0)),
             picture: RefCell::default(),
         }
     }
@@ -256,14 +259,21 @@ impl Glue {
     fn installer_picture(&self, data: &InstallerData<'_>, wanted: Option<PathBuf>) {
         if *self.installer.asked.borrow() != wanted {
             self.installer.asked.borrow_mut().clone_from(&wanted);
-            self.installer
+            let generation = self
+                .installer
                 .generation
-                .set(self.installer.generation.get() + 1);
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
             *self.installer.picture.borrow_mut() = None;
             if let Some(path) = wanted.filter(|_| self.persist) {
-                let generation = self.installer.generation.get();
+                let current = Arc::clone(&self.installer.generation);
                 let weak = self.window.clone();
                 std::thread::spawn(move || {
+                    // A newer option was described meanwhile: its picture is
+                    // the one to read, not this one.
+                    if current.load(Ordering::Relaxed) != generation {
+                        return;
+                    }
                     let pixels = std::fs::read(&path)
                         .ok()
                         .and_then(|bytes| slint_covers::decode_bytes(&bytes, PICTURE_WIDTH));
@@ -285,7 +295,7 @@ impl Glue {
     /// A picture was read and decoded; it shows when it is still the one
     /// asked for.
     pub(super) fn installer_picture_ready(&self, generation: u64, pixels: Decoded) {
-        if generation != self.installer.generation.get() {
+        if generation != self.installer.generation.load(Ordering::Relaxed) {
             return;
         }
         let Some(pixels) = pixels else {
@@ -574,7 +584,7 @@ mod tests {
         assert!(!data.get_has_picture());
         // The fifth ask is the one in force; an answer for the fourth is
         // ignored.
-        glue.installer.generation.set(5);
+        glue.installer.generation.store(5, Ordering::Relaxed);
         let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(2, 2);
         glue.installer_picture_ready(4, Some(pixels.clone()));
         assert!(!data.get_has_picture());

@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1214,15 +1214,19 @@ fn gog_uninstall(job: &Job) -> anyhow::Result<()> {
 }
 
 /// A game's folder is absolute, at least three levels deep (as in
-/// `/mnt/games/Game`), not the home folder, one above it or one right in
-/// it (`~/Games` itself), and not a link.
+/// `/mnt/games/Game`), nothing above it (`..` from the record would name
+/// another folder than the one written), not the home folder, one above it
+/// or one right in it (`~/Games` itself), and not a link.
 fn safe_to_delete(path: &Path) -> bool {
+    let normal = path
+        .components()
+        .all(|part| matches!(part, Component::RootDir | Component::Normal(_)));
     let deep_enough = path.is_absolute() && path.components().count() >= 4;
     let home = paths::home();
     let near_home = home
         .as_deref()
         .is_some_and(|home| home.starts_with(path) || path.parent() == Some(home));
-    deep_enough && !near_home && !path.is_symlink()
+    normal && deep_enough && !near_home && !path.is_symlink()
 }
 
 /// Moves a game's folder into [`Job::to`], then has the engine's record
@@ -2185,6 +2189,9 @@ mod tests {
         assert!(!safe_to_delete(Path::new("/home/me")));
         assert!(!safe_to_delete(Path::new("/home")));
         assert!(!safe_to_delete(Path::new("Games/Game/x")));
+        // A record with `..` names another folder than the one written.
+        assert!(!safe_to_delete(Path::new("/mnt/games/../../../home/me")));
+        assert!(!safe_to_delete(Path::new("/mnt/games/../Game")));
         if let Some(home) = paths::home() {
             assert!(!safe_to_delete(&home));
             assert!(!safe_to_delete(&home.join("Games")));

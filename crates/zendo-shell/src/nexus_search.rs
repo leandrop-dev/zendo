@@ -259,7 +259,7 @@ pub fn file_facts(file: &FileInfo) -> String {
         facts.push(file_kind(category));
     }
     if let Some(kb) = file.size_kb {
-        facts.push(Size::Bytes(kb * 1024).to_string());
+        facts.push(Size::Bytes(kb.saturating_mul(1024)).to_string());
     }
     facts.join(" · ")
 }

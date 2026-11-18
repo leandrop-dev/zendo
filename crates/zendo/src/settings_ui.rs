@@ -153,6 +153,9 @@ pub(super) struct SettingsState {
     workers: Rc<VecModel<ChipData>>,
     sources: Rc<VecModel<Fact>>,
     files: Rc<VecModel<Fact>>,
+    /// The settings waiting to be written, in the order they were made:
+    /// one writer, so the file follows the presses and not a thread race.
+    saves: RefCell<Option<std::sync::mpsc::Sender<Setting>>>,
 }
 
 impl SettingsState {
@@ -171,6 +174,7 @@ impl SettingsState {
             workers: Rc::new(VecModel::default()),
             sources: Rc::new(VecModel::default()),
             files: Rc::new(VecModel::default()),
+            saves: RefCell::default(),
         }
     }
 }
@@ -324,14 +328,7 @@ impl Glue {
             glue.show_settings();
         });
         let glue = Rc::clone(self);
-        data.on_key_edited(move |typed| {
-            {
-                let mut key = glue.settings.key.borrow_mut();
-                key.value = typed.to_string();
-                key.note = None;
-            }
-            glue.show_settings();
-        });
+        data.on_key_edited(move |typed| glue.key_typed(&typed));
         let glue = Rc::clone(self);
         data.on_key_toggle_shown(move || {
             {
@@ -408,36 +405,73 @@ impl Glue {
 
     // Writing a change.
 
-    /// Applies a change to the window at once and writes it on a thread. The
-    /// page goes on as if it worked; one that fails comes back and puts the
-    /// settings back.
+    /// Typing in the `SteamGridDB` key field: the field, the button and the
+    /// note change only, not the page's twenty models for each letter.
+    pub(super) fn key_typed(&self, typed: &str) {
+        let mut key = self.settings.key.borrow_mut();
+        key.value = typed.to_string();
+        key.note = None;
+        let saved = self
+            .config
+            .borrow()
+            .as_ref()
+            .and_then(|config| config.steamgriddb_key.clone())
+            .unwrap_or_default();
+        let changed = key.value.trim() != saved;
+        drop(key);
+        if let Some(window) = self.window.upgrade() {
+            let data = window.global::<SettingsData>();
+            data.set_key_changed(changed);
+            let (note, tone) = if saved.is_empty() {
+                (t!("key-none"), 3)
+            } else {
+                (String::new(), 0)
+            };
+            data.set_key_note(note.into());
+            data.set_key_tone(tone);
+        }
+    }
+
+    /// Applies a change to the window at once and queues it to be written.
+    /// The page goes on as if it worked; one that fails comes back with the
+    /// file's settings and what went wrong.
     pub(super) fn save_setting(self: &Rc<Self>, setting: Setting) {
-        let previous = self.config.borrow().clone();
         setting.apply(self.config.borrow_mut().get_or_insert_with(Config::default));
         self.config_changed();
         if !self.persist {
             self.after_saved(&setting);
             return;
         }
-        let written = setting.clone();
-        let weak = self.window.clone();
-        std::thread::spawn(move || {
-            let result =
-                Config::update(|config| written.apply(config)).map_err(|err| format!("{err:#}"));
-            let _ = weak.upgrade_in_event_loop(move |_| {
-                with_glue(|glue| glue.config_saved(previous, &setting, result));
-            });
-        });
+        // One writer takes the changes in the order they were made: a
+        // thread per press let whichever took the lock last decide the file.
+        let sender = self
+            .settings
+            .saves
+            .borrow_mut()
+            .get_or_insert_with(|| {
+                let (sender, receiver) = std::sync::mpsc::channel::<Setting>();
+                let weak = self.window.clone();
+                std::thread::spawn(move || {
+                    while let Ok(writing) = receiver.recv() {
+                        let result = Config::update(|config| writing.apply(config))
+                            .map_err(|err| format!("{err:#}"));
+                        let _ = weak.upgrade_in_event_loop(move |_| {
+                            with_glue(|glue| glue.config_saved(&writing, result));
+                        });
+                    }
+                });
+                sender
+            })
+            .clone();
+        // The writer ends only when the window does, so a refusal here is
+        // the window closing: there is nowhere left to say it.
+        let _ = sender.send(setting);
     }
 
     /// A write came back: the file's settings when it worked, or what went
-    /// wrong with the window back as the file has it.
-    pub(super) fn config_saved(
-        self: &Rc<Self>,
-        previous: Option<Config>,
-        setting: &Setting,
-        result: Result<Config, String>,
-    ) {
+    /// wrong, with the settings as the file has them now: a snapshot taken
+    /// before the write may predate another change already applied.
+    pub(super) fn config_saved(self: &Rc<Self>, setting: &Setting, result: Result<Config, String>) {
         match result {
             Ok(config) => {
                 *self.config.borrow_mut() = Some(config);
@@ -445,8 +479,10 @@ impl Glue {
                 self.after_saved(setting);
             }
             Err(err) => {
-                *self.config.borrow_mut() = previous;
-                self.config_changed();
+                if let Ok(config) = Config::load_file() {
+                    *self.config.borrow_mut() = Some(config);
+                    self.config_changed();
+                }
                 self.say(err);
             }
         }

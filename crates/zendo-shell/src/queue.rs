@@ -619,11 +619,20 @@ pub enum Report {
 /// reports any more.
 pub fn run(job: Job, stop: Stop, send: impl Fn(Report) -> bool + Send + 'static) {
     thread::spawn(move || {
+        // Nothing wants the reports any more, so nothing wants the job: it
+        // is interrupted rather than left to download for a window that
+        // closed.
+        let mut wanted = true;
         let result = downloads::run(&job, &stop, &mut |event| {
-            send(Report::Event(event));
+            if wanted && !send(Report::Event(event)) {
+                wanted = false;
+                stop.stop();
+            }
         })
         .map_err(|err| format!("{err:#}"));
-        send(Report::Ended(result));
+        if wanted {
+            send(Report::Ended(result));
+        }
     });
 }
 
