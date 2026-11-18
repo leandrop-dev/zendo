@@ -6233,3 +6233,28 @@ Checked: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets`
 (0 warnings), `cargo test --workspace` (584 passed, 32 ignored). Not checked:
 the window on a screen (an empty throwaway home would show little), and the
 Settings, Accounts and Stats pages with real data.
+
+## Release 1.0.1 (2026-11-18)
+
+The review's fixes shipped as a patch release.
+
+- **Tag and CI**: `v1.0.1` on `c5bf26b`, cut only after CI on that commit went
+  green in 4m28s (fmt, clippy with `-D warnings`, 584 tests).
+- **Arch**: `zendo-1.0.1-1-x86_64.pkg.tar.zst` built in the
+  `archlinux:latest` container (9m12s) and published to Pages; the fetched
+  `zendo.db` names it and gives its version as `1.0.1-1`. The 1.0.0 package
+  stays on Pages (`keep_files`), though the rebuilt db lists only 1.0.1.
+- **Fedora**: `zendo-1.0.1-1.fc45.src.rpm` made from the tag; COPR build
+  11346480 succeeded (created 01:12, finished 01:44). The spec is as for
+  1.0.0, with the version macros `make-srpm.sh` writes.
+- **GitHub Release**: `Zendo v1.0.1`, not a prerelease, with the source
+  tarball, `SHA256SUMS`, the Arch package and the SRPM.
+- **Versions**: the three crates inherit `1.0.1`, and `zendo --version`
+  prints it.
+
+Checked: the Release workflow green for `arch`, `fedora` and `release`; the
+assets list and `SHA256SUMS` read back (Arch `cc0b190a…`, SRPM `4856035f…`,
+source `b2bfbea3…`); the Pages package, its db and the 1.0.0 package all
+answer 200; the COPR log says build 11346480 succeeded. Not checked: an
+install from the repository on a second machine, and COPR's repodata
+directly.
