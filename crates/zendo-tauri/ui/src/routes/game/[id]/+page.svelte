@@ -79,6 +79,10 @@
 		const unlisten = listen<{ id: string; state: number }>('game_run', (event) => {
 			if (game && event.payload.id === game.id) {
 				game.run_state = event.payload.state;
+				// The end of a game writes a session and its minutes: ask again.
+				if (event.payload.state === 0) {
+					void load();
+				}
 			}
 		});
 		const lines = listen<{ id: string; line: string }>('game_line', (event) => {
@@ -221,6 +225,42 @@
 					</div>
 				{/each}
 			</div>
+
+			{#if game.sessions.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('stats-game-title')}</h2>
+					<div class="flex flex-wrap gap-6">
+						{#each game.sessions as fact (fact.label)}
+							<div>
+								<p class="text-[11px] text-dim uppercase">{fact.label}</p>
+								<p class="mt-1 text-lg font-bold">{fact.value}</p>
+							</div>
+						{/each}
+					</div>
+					{#if game.recent.length > 0}
+						<ul class="mt-4 flex flex-col gap-1">
+							{#each game.recent as row (row.label)}
+								<li class="flex gap-4 text-[13px]">
+									<span class="w-[110px] shrink-0 text-dim">{row.label}</span>
+									<span>{row.value}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+			{/if}
+
+			<section class="border border-line bg-surface p-4">
+				<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('game-details')}</h2>
+				<dl class="flex flex-col gap-1">
+					{#each game.details as row (row.label)}
+						<div class="flex gap-4 text-[13px]">
+							<dt class="w-[160px] shrink-0 text-dim">{row.label}</dt>
+							<dd class="break-all">{row.value}</dd>
+						</div>
+					{/each}
+				</dl>
+			</section>
 		</div>
 	</div>
 {/if}

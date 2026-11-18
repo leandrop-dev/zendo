@@ -476,25 +476,14 @@ impl Glue {
     /// nothing until the game has one.
     fn sessions_of(&self, id: &str) -> (Vec<Fact>, Vec<Fact>) {
         let all = self.game.sessions.borrow();
-        let Some(own) = sessions::of_game(&all, id) else {
-            return (Vec::new(), Vec::new());
+        let (summary, recent) = zendo_shell::game::sessions_of(&all, id);
+        let convert = |facts: Vec<zendo_shell::game::Fact>| -> Vec<Fact> {
+            facts
+                .into_iter()
+                .map(|row| fact(row.label, row.value))
+                .collect()
         };
-        let summary = vec![
-            fact(t!("stats-sessions"), own.count.to_string()),
-            fact(t!("stats-average"), format::play_time(own.average)),
-            fact(t!("stats-longest"), format::play_time(own.longest)),
-        ];
-        let recent = own
-            .recent
-            .iter()
-            .map(|session| {
-                fact(
-                    sessions::date_of(session),
-                    format::play_time(session.minutes),
-                )
-            })
-            .collect();
-        (summary, recent)
+        (convert(summary), convert(recent))
     }
 
     /// The details worth a look: the store and install, and what Zendo has

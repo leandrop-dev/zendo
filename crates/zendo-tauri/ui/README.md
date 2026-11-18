@@ -35,8 +35,8 @@ npm run build   # build/, what tauri.conf.json's frontendDist points at
 - `src/routes/+layout.svelte`: the shell; starts the store, listens for F11 and
   Escape, and draws the top bar around the page.
 - `src/routes/`: one route per page. The Library has the grid, `/game/[id]`
-  the game page's header and actions; the others are placeholders until their
-  slices.
+  the game page (header, actions, sessions and details); the others are
+  placeholders until their slices.
 - `src/routes/+page.svelte`: the Library page: the source and sort chips, the
   organize and bulk chips, the grid, and the keyboard's moves.
 - `src/lib/components/library/`: the card (with its mark button), the

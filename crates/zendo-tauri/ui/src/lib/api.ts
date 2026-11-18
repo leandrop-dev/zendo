@@ -173,6 +173,11 @@ export type GamePage = {
 	line: string;
 	tiles: { label: string; value: string }[];
 	statuses: { key: string; label: string; chosen: boolean }[];
+	details: { label: string; value: string; path: boolean }[];
+	// The session counts and lengths, empty until the game has one.
+	sessions: { label: string; value: string; path: boolean }[];
+	// The latest sessions, by date.
+	recent: { label: string; value: string; path: boolean }[];
 };
 
 export async function gameGet(id: string): Promise<GamePage> {

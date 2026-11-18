@@ -3,6 +3,7 @@
 //! page stay with each window.
 
 use zendo_core::Game;
+use zendo_core::sessions::{self, Session};
 
 use crate::{format, t};
 
@@ -11,6 +12,15 @@ use crate::{format, t};
 pub struct Tile {
     pub label: String,
     pub value: String,
+}
+
+/// A label and its value in a card: a fact, or a session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fact {
+    pub label: String,
+    pub value: String,
+    /// The value is a folder or a file that can be opened.
+    pub path: bool,
 }
 
 /// The line under the title: the store, the developer and the platform.
@@ -56,6 +66,71 @@ pub fn tiles_of(game: &Game, now: u64) -> Vec<Tile> {
         tile(t!("achievements-title"), unlocked),
         tile(t!("stat-completion"), share),
     ]
+}
+
+/// The words about the game itself: its store, how it starts, where it is,
+/// and how often Zendo started it. The store's own facts and the queue's
+/// line come with their cards.
+#[must_use]
+pub fn details(game: &Game) -> Vec<Fact> {
+    let mut rows = vec![
+        fact(t!("fact-store"), format::source(game.source)),
+        fact(t!("fact-started-by"), game.launcher()),
+    ];
+    if let Some(platform) = &game.details.platform {
+        rows.push(fact(t!("fact-platform"), platform_label(platform)));
+    }
+    if let Some(version) = &game.details.version {
+        rows.push(fact(t!("fact-version"), version.clone()));
+    }
+    if let Some(size) = &game.details.size {
+        rows.push(fact(t!("fact-install-size"), size.to_string()));
+    }
+    if let Some(path) = &game.details.install_path {
+        rows.push(Fact {
+            label: t!("fact-install-path"),
+            value: path.display().to_string(),
+            path: true,
+        });
+    }
+    rows.push(fact(
+        t!("fact-started-from-zendo"),
+        t!("count-times", count = game.played.launches),
+    ));
+    rows
+}
+
+/// A game's sessions: how many, their average and their longest, and the
+/// latest ones, as date and length. Empty until it has one.
+#[must_use]
+pub fn sessions_of(sessions: &[Session], id: &str) -> (Vec<Fact>, Vec<Fact>) {
+    let Some(own) = sessions::of_game(sessions, id) else {
+        return (Vec::new(), Vec::new());
+    };
+    let summary = vec![
+        fact(t!("stats-sessions"), own.count.to_string()),
+        fact(t!("stats-average"), format::play_time(own.average)),
+        fact(t!("stats-longest"), format::play_time(own.longest)),
+    ];
+    let recent = own
+        .recent
+        .iter()
+        .map(|session| {
+            fact(
+                sessions::date_of(session),
+                format::play_time(session.minutes),
+            )
+        })
+        .collect();
+    (summary, recent)
+}
+
+fn fact(label: String, value: String) -> Fact {
+    Fact {
+        label,
+        value,
+        path: false,
+    }
 }
 
 /// The platform as people write it.

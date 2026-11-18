@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use zendo_core::launch;
 use zendo_core::{Game, State as CoreState, Status};
-use zendo_shell::game::tiles_of;
+use zendo_shell::game::{details, sessions_of, tiles_of};
 use zendo_shell::running::{self, Effect, Names, RunMessage};
 
 use crate::library::LibraryState;
@@ -33,6 +33,18 @@ pub struct GameDto {
     line: String,
     tiles: Vec<TileDto>,
     statuses: Vec<StatusDto>,
+    details: Vec<FactDto>,
+    /// The session counts and lengths, empty until the game has one.
+    sessions: Vec<FactDto>,
+    /// The latest sessions, by date.
+    recent: Vec<FactDto>,
+}
+
+#[derive(Debug, Serialize)]
+struct FactDto {
+    label: String,
+    value: String,
+    path: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -180,6 +192,7 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
             Some(_) => 2,
         }
     };
+    let (session_summary, session_recent) = sessions_of(&all_sessions(), &game.id);
     GameDto {
         id: game.id.clone(),
         title: game.title.clone(),
@@ -206,7 +219,25 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
                 chosen: game.status == Some(*status),
             })
             .collect(),
+        details: facts(details(game)),
+        sessions: facts(session_summary),
+        recent: facts(session_recent),
     }
+}
+
+/// The facts as the page takes them.
+fn facts(rows: Vec<zendo_shell::game::Fact>) -> Vec<FactDto> {
+    rows.into_iter()
+        .map(|row| FactDto {
+            label: row.label,
+            value: row.value,
+            path: row.path,
+        })
+        .collect()
+}
+
+fn all_sessions() -> Vec<zendo_core::sessions::Session> {
+    zendo_core::sessions::load().unwrap_or_default()
 }
 
 /// Applies what the game did and tells the page.
@@ -239,6 +270,23 @@ fn handle_run(app: &AppHandle, message: RunMessage) {
                 let _ = CoreState::update(|state| state.add_minutes(&changed, minutes));
                 state.change(|browser| browser.add_minutes(&changed, minutes));
                 let _ = app.emit("library_changed", ());
+            }
+            Effect::Session {
+                id: played,
+                since,
+                minutes,
+            } => {
+                let title = state
+                    .game(&played)
+                    .map_or_else(|| played.clone(), |game| game.title);
+                let session = zendo_core::sessions::Session {
+                    id: played,
+                    title,
+                    start: since,
+                    minutes,
+                    offset: zendo_core::sessions::local_offset(since),
+                };
+                let _ = zendo_core::sessions::record(&session);
             }
             Effect::HideOnLaunch => platform::hide_for_launch(app),
             Effect::ShowOnClose => platform::show_after_game(app),

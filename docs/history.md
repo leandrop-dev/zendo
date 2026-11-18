@@ -6519,3 +6519,31 @@ warnings`, `cargo test --workspace` (591 passed, 32 ignored).
 Not checked: Play and Stop on a real game (no input in this session, and a
 launch is not something to start unattended), and the click paths the input
 cannot reach.
+
+## The Tauri port, slice 3b: sessions and details (2026-11-18)
+
+- **Sessions are recorded**: the Tauri shell now handles the running module's
+  `Effect::Session`, writing the same `sessions.jsonl` the Slint window writes
+  (id, title, start, minutes, the local offset). The page asks for its game
+  again when a run ends, so the tiles and the sessions card follow.
+- **`zendo_shell::game`** gained `details` (store, started by, platform,
+  version, size, install path, and how often Zendo started it) and
+  `sessions_of` (count, average, longest, the latest ten by date); the Slint
+  page's `sessions_of` now maps the shared one, so both windows group a game's
+  sessions the same way.
+- **The page** draws a Sessions card (the three counts, then each recent
+  session's date and length) and a Game details card, below the tiles.
+- Left for 3c and 3d: local games, Steam's facts and requirements, DLC,
+  ProtonDB, achievements (3c); the Wine prefix, GOG's changelog, cloud saves
+  and the Mods card (3d). Details paths are shown, not yet clickable.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (591 passed, 32 ignored).
+
+A seeded five-game throwaway home had three sessions written for its first
+game; the page drew the Sessions card with 3, an average of 40 min and a
+longest of 1 h 12 min, the three dates with their lengths, and the details
+card. The first attempt showed no sessions: the file was written as
+`sessions.json`, and the store is `sessions.jsonl`. Both cards were seen after
+the rename.
