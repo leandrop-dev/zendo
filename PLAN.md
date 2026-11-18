@@ -45,6 +45,12 @@ registered in Nexus Launcher's `launcher-state.json`, so the launcher lists it
 and its prepared runner plays it; Zendo uninstalls the ones it installed. The
 record write is ADR 0002. Updates stay with the launcher (item 60c).
 
+On 2026-11-18 the window's port to Tauri 2 and SvelteKit began on branch
+`f/ui-revamp`: slice 0 (the crates, the SvelteKit app, the Tauri dev loop and
+a placeholder page) is built, and the Slint window stays in place and
+releasable until the port's parity checklist passes
+(`docs/tauri-port-plan.md`).
+
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
   translucency, blur (by window class), a bundled font, SVG icons, the KDE
@@ -147,7 +153,9 @@ docs/backlog.md]:
 ## Stack
 
 Rust, one `zendo` binary with a [Slint](https://slint.dev) window [firm, since
-2026-11-15; Iced before that]. Slint was chosen after the item 45 spike over
+2026-11-15; Iced before that]. A Tauri 2 + SvelteKit window is being built
+beside it on `f/ui-revamp` (`docs/tauri-port-plan.md`); Slint ships until the
+port's parity checklist passes. Slint was chosen after the item 45 spike over
 staying on Iced (3 to 9 fps on 2,700 covers against Slint's 61 to 75). Also
 rejected:
 
@@ -166,9 +174,10 @@ window's words are Fluent, handed to Slint through a `Tr` global.
 Layout: `crates/zendo-core` (library scan, launching, state, config, covers,
 stores, mods), `crates/zendo-shell` (what needs no toolkit: words, tray,
 controller, links, the helper windows, the command line, and the state and
-words of each page's sheets and jobs) and `crates/zendo` (the Slint window,
+words of each page's sheets and jobs), `crates/zendo` (the Slint window,
 and the binary, whose `list`, `launch`, `hide`, `unhide`, `covers` and other
-commands serve keybinds and scripts).
+commands serve keybinds and scripts) and `crates/zendo-tauri` (the Tauri shell
+and its SvelteKit `ui/`, on `f/ui-revamp`).
 
 Slint's `ListView` is vertical and virtual only, so the Library's grid is rows
 of fixed-size cards, and the arrow keys know the column count from

@@ -3,6 +3,11 @@
 The work left. Items 1 to 20, 27 to 38, 41 to 54 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
+The work next is the port from Slint to Tauri 2 and SvelteKit, on branch
+`f/ui-revamp` and in slices, in `docs/tauri-port-plan.md` (slice 0, the
+scaffold, built 2026-11-18). The items below stay as the reference for what
+the port has to reach.
+
 ## The port from Iced to Slint (built 2026-11-14 to 2026-11-15)
 
 Decided by the user on 2026-11-14 after item 45's spike (`docs/history.md`,

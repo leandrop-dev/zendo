@@ -1,0 +1,7 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "The main window's permissions: Tauri's core commands only, with every Zendo command allowed by its own capability as it lands.",
+	"windows": ["main"],
+	"permissions": ["core:default"]
+}

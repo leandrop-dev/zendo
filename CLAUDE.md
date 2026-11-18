@@ -13,6 +13,9 @@ The rest is read on demand, never all at once:
 - `docs/history.md`: what was built, when, and what was checked. Read it when
   you need to know why something is the way it is, or before changing an area
   whose history matters.
+- `docs/tauri-port-plan.md`: the port of the window to Tauri 2 and SvelteKit,
+  in slices. Read it before working on `crates/zendo-tauri` or the window's
+  replacement.
 - `docs/reference.md`: verified facts about the stores, the engines and their
   files. Read it before driving an engine, reading a launcher's files or
   calling a store's API.

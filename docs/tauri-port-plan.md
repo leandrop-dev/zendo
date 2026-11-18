@@ -50,7 +50,7 @@ its native renderer is too young. Tauri won on stability, speed and tooling.
 
 ## Frontend stack
 
-- SvelteKit 2 with `@sveltejs/adapter-static`, `fallback: 'index.html'` and
+- SvelteKit 3 with `@sveltejs/adapter-static` 4, `fallback: 'index.html'` and
   `ssr = false` in the root layout (SPA mode; Tauri has no server).
 - Svelte 5 (runes) and TypeScript.
 - Tailwind CSS 4, shadcn-svelte (Bits UI primitives, Lucide icons,
@@ -195,26 +195,27 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - **Packaging**: the Tauri bundler plus the Arch PKGBUILD and Fedora COPR; the
   run-time libraries change from Slint's to WebKitGTK's. Update the spec,
   README and the licence line.
-- **API churn**: pin SvelteKit 2, Svelte 5, Tailwind 4 and Tauri 2; they are
+- **API churn**: pin SvelteKit 3, Svelte 5, Tailwind 4 and Tauri 2; they are
   stable lines.
 
 ## Decisions (settled 2026-11-18)
 
-- **SvelteKit in SPA mode**: `@sveltejs/adapter-static` with
-  `fallback: 'index.html'` and `ssr = false` in the root layout. Not plain
-  Vite plus Svelte.
+- **SvelteKit in SPA mode**: SvelteKit 3 (changed from 2 with the user on
+  2026-11-18, since 3 is the line the CLI and `sv` now scaffold) with
+  `@sveltejs/adapter-static` 4, `fallback: 'index.html'` and `ssr = false` in
+  the root layout. Not plain Vite plus Svelte.
 - **i18n stays in Rust**: Fluent in `zendo-shell`, exposed to the frontend
   over IPC. The frontend does not reimplement the translations, so the two
   `.ftl` files stay the single source of words.
 - **Tray stays `ksni`**, in `zendo-shell`.
 - **Controller and tray stay in `zendo-shell`**, not in `zendo-tauri`.
-- Branch: `f/ui-revamp` (created). The plan stays uncommitted until the port
-  starts.
+- Branch: `f/ui-revamp`. The plan is its first commit; the port started with
+  slice 0 on 2026-11-18.
 
 ## First steps
 
 1. Scaffold `crates/zendo-tauri` and `crates/zendo-tauri/ui` (SvelteKit,
-   Tailwind, shadcn-svelte, Tauri dev loop).
+   Tailwind, shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
 2. Port the Library grid as slice 1 and wire `library_list`, `cover_get` and
    the cover server or asset protocol.
 3. Add the FPS harness and the parity checklist, then proceed slice by slice.
@@ -222,13 +223,14 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 
 ## Handoff for the next session
 
-- Branch `f/ui-revamp`; this plan is `docs/tauri-port-plan.md` and is
-  uncommitted. Commit it as the branch's first commit if the next session
-  uses a fresh worktree; in the same working directory it is already there.
-- The two spikes are outside the repo and can be deleted once the port
-  starts: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
+- Branch `f/ui-revamp`. Slice 0 is in place: the crate, the SvelteKit app, the
+  dev loop and a placeholder page. Its commands and checks are in
+  `crates/zendo-tauri/README.md`.
+- The two spikes are outside the repo and can be deleted now that the port has
+  started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Begin at slice 0 (scaffold); then slice 1 (the Library grid with
-  `library_list` and `cover_get`). The target is the same 60 fps and the same
-  parity checklist as the Slint cut-over.
+- Next is slice 1 (the shell: top bar, tabs, chips, theme, i18n, tray,
+  controller, keyboard, fullscreen and the command line), then slice 2 (the
+  Library grid with `library_list` and `cover_get`). The target is the same
+  60 fps and the same parity checklist as the Slint cut-over.
 - The decisions above are firm; do not reopen them without the user.

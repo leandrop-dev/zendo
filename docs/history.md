@@ -6259,3 +6259,53 @@ answer 200; the COPR log says build 11346480 succeeded; and the user installed
 1.0.1 from the pacman repository on Arch, where the window launches. Not
 checked: COPR's repodata directly, and an install from the repository on the
 other family machines.
+
+## The Tauri port, slice 0: the scaffold (2026-11-18)
+
+The window's planned replacement (`docs/tauri-port-plan.md`) started on
+`f/ui-revamp`, one commit per slice. Slice 0 is the scaffold only: the Slint
+window in `crates/zendo` is untouched and stays the shipping one until the
+port's parity checklist passes.
+
+- **`crates/zendo-tauri`**, a new workspace member: `tauri` 2.12 and
+  `tauri-build` 2 with `tauri.conf.json` (product `zendo`, title `Zendo`,
+  1360x860 with a 1100x560 minimum, `devUrl` on port 1420, frontend dist
+  `ui/build`, the bundler off until the release pipeline), the main window's
+  capability (`core:default` only, with each Zendo command to get its own as it
+  lands), the four icons cut from `data/icons`, and `build.rs`. The window's
+  class is `zendo`: GTK takes it from the program name, which in development is
+  the binary (`zendo-tauri`), so `main` sets the program name to `zendo` before
+  Tauri starts. Product name alone does not do it.
+- **`crates/zendo-tauri/ui`**, SvelteKit 3.3.1 (3 was chosen over the plan's 2
+  when the scaffold showed `sv` now writes 3; `adapter-static` 4.0.1) in SPA
+  mode: `ssr = false` and `prerender = false` in the root layout, `fallback:
+  'index.html'`, Tailwind 4.3 through `@tailwindcss/vite`, shadcn-svelte 1.8.1
+  initialised from the `vega` preset (neutral, Lucide; the monospace font is
+  the design pass's decision, not the preset's), `prettier`, `eslint`, and
+  `vitest` 5 with `@testing-library/svelte` in jsdom.
+- The placeholder page reads the app version through `@tauri-apps/api`'s
+  `getVersion`, which proves the capability, the IPC and the Rust side are
+  wired; in a plain browser it says so instead (`ui/src/lib/tauri.ts`).
+- The dev loop: `ui/node_modules/.bin/tauri dev` from the crate. Tauri runs
+  `beforeDevCommand` from the frontend directory it derives from
+  `frontendDist`, so the command is `npm run dev`, not the plan's
+  `npm --prefix ui run dev` (that doubled the path; fixed and checked).
+
+Checked: `npm run build` (the adapter wrote `ui/build`, fallback
+`index.html`), `npm run check` (0 errors, 0 warnings), `npm run lint`,
+`npm test` (1 test), `cargo check`, `cargo clippy --workspace --all-targets --
+-D warnings`, `cargo fmt --all --check` and `cargo test --workspace` (584
+passed, 32 ignored, as before). `ui/node_modules/.bin/tauri build --debug`
+built the shell with `ui/build` embedded, and that binary, run without Vite,
+drew the same page and the version read over IPC.
+
+The window was run under Hyprland in a throwaway home with no session bus
+(`env -i ... HOME=<scratch> DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent`),
+the user's Slint Zendo left alone. The first run came up as class
+`zendo-tauri`, so Hyprland tiled it instead of applying its float rule; after
+the program name was set to `zendo`, the same run had title `Zendo`, class
+`zendo`, the configured 1360x860 and the float rule applied. The placeholder
+showed `zendo 1.0.1`, proving the version came over IPC from `Cargo.toml`
+through `tauri.conf.json`'s omitted version. Its one control, Read again, was
+clicked once; it re-reads the same version, so nothing changes on screen. Not
+checked: the window on KDE Plasma, and a release (bundled) build.

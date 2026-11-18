@@ -1,0 +1,20 @@
+[package]
+name = "zendo-tauri"
+description = "Zendo's window in Tauri: the commands, the events and the webview shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# For the window's class: GTK answers it with the program name, and the
+# compositors' rules match `zendo` (see `main`).
+gtk.workspace = true
+tauri.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[lints]
+workspace = true
