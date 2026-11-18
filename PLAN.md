@@ -51,7 +51,7 @@ a placeholder page), 1 (the shell: words, colours, tray, controller, keyboard,
 full screen and the command line) and 2 (the Library: the grid, chips, search,
 sort, views, cursor, marks, bulk edits, cover downloads and the file watch,
 with 62 fps on 2,700 games), 3a (the game page's header and actions) and 3b
-(its sessions and details) are built,
+(its sessions and details) and 3c (local games) are built,
 and the Slint window stays in place and releasable until the port's parity
 checklist passes (`docs/tauri-port-plan.md`).
 

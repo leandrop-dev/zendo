@@ -141,6 +141,22 @@ impl LibraryState {
         save(outcome.save);
     }
 
+    /// Reads every source again, in place, and is ready: for a change made
+    /// outside the scan's own thread, as adding a game is.
+    pub(crate) fn reload(&self) {
+        let state = CoreState::load().unwrap_or_default();
+        let library = Library::scan();
+        if let Ok(mut browser) = self.browser.lock() {
+            browser.loaded(
+                library,
+                Some(state.sort),
+                state.categories(),
+                state.filters(),
+            );
+        }
+        self.ready.store(true, Ordering::Relaxed);
+    }
+
     /// The running games.
     pub(crate) fn running(&self) -> std::sync::MutexGuard<'_, Running> {
         self.running

@@ -10,7 +10,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use zendo_core::launch;
-use zendo_core::{Game, State as CoreState, Status};
+use zendo_core::{Game, Source, State as CoreState, Status};
 use zendo_shell::game::{details, sessions_of, tiles_of};
 use zendo_shell::running::{self, Effect, Names, RunMessage};
 
@@ -33,6 +33,8 @@ pub struct GameDto {
     line: String,
     tiles: Vec<TileDto>,
     statuses: Vec<StatusDto>,
+    /// A game added by hand: its page edits and removes it.
+    local: bool,
     details: Vec<FactDto>,
     /// The session counts and lengths, empty until the game has one.
     sessions: Vec<FactDto>,
@@ -219,6 +221,7 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
                 chosen: game.status == Some(*status),
             })
             .collect(),
+        local: game.source == Source::Local,
         details: facts(details(game)),
         sessions: facts(session_summary),
         recent: facts(session_recent),

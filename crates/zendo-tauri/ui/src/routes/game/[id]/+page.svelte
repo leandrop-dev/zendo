@@ -13,8 +13,10 @@
 		gameSetStatus,
 		gameStop,
 		inTauri,
+		localRemove,
 		type GamePage
 	} from '#lib/api.js';
+	import LocalForm from '#lib/components/local-form.svelte';
 	import { app } from '#lib/state.svelte.js';
 
 	// A game's page: the wide art faint behind the header, the cover, the
@@ -22,6 +24,9 @@
 	// under them are the next parts of this slice.
 	let game = $state<GamePage | null>(null);
 	let error = $state<string | null>(null);
+	// A game added by hand: the sheet to edit it, and Remove pressed once.
+	let editing = $state(false);
+	let removing = $state(false);
 	let id = $derived(page.params.id ?? '');
 
 	let cover = $derived(
@@ -196,6 +201,29 @@
 						>
 							{game.hidden ? app.t('game-unhide') : app.t('game-hide')}
 						</button>
+						{#if game.local}
+							<button
+								type="button"
+								onclick={() => (editing = true)}
+								class="border border-line px-4 py-2 text-[13px] text-foreground uppercase hover:bg-raised"
+							>
+								{app.t('edit')}
+							</button>
+							<button
+								type="button"
+								onclick={async () => {
+									if (!removing) {
+										removing = true;
+									} else {
+										await localRemove(id);
+										back();
+									}
+								}}
+								class="border border-bad px-4 py-2 text-[13px] text-bad uppercase"
+							>
+								{removing ? app.t('really-remove') : app.t('remove')}
+							</button>
+						{/if}
 					</div>
 
 					<p class="text-sm text-dim">{game.line}</p>
@@ -263,4 +291,15 @@
 			</section>
 		</div>
 	</div>
+
+	{#if editing}
+		<LocalForm
+			{id}
+			onclose={() => (editing = false)}
+			onsaved={() => {
+				editing = false;
+				void load();
+			}}
+		/>
+	{/if}
 {/if}

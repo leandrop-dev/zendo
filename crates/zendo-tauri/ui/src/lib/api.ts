@@ -173,6 +173,8 @@ export type GamePage = {
 	line: string;
 	tiles: { label: string; value: string }[];
 	statuses: { key: string; label: string; chosen: boolean }[];
+	// A game added by hand: its page edits and removes it.
+	local: boolean;
 	details: { label: string; value: string; path: boolean }[];
 	// The session counts and lengths, empty until the game has one.
 	sessions: { label: string; value: string; path: boolean }[];
@@ -202,4 +204,36 @@ export async function gameSetHidden(id: string, hidden: boolean): Promise<GamePa
 
 export async function gameSetStatus(id: string, status: string | null): Promise<GamePage> {
 	return invoke<GamePage>('game_set_status', { id, status });
+}
+
+// A game added by hand: what the form holds.
+export type LocalDraft = {
+	id: string | null;
+	title: string;
+	program: string;
+	arguments: string;
+};
+
+export async function localGet(id: string): Promise<LocalDraft> {
+	return invoke<LocalDraft>('local_get', { id });
+}
+
+// What the form says under the program field: a Linux program or a Windows
+// one, which runs through Proton.
+export async function localAbout(program: string): Promise<string> {
+	return invoke<string>('local_about', { program });
+}
+
+// The Choose button; null when the dialog was closed.
+export async function localPickProgram(): Promise<string | null> {
+	return invoke<string | null>('local_pick_program');
+}
+
+// Adds the game, or saves it, and answers its id.
+export async function localSave(draft: LocalDraft): Promise<string> {
+	return invoke<string>('local_save', { draft });
+}
+
+export async function localRemove(id: string): Promise<void> {
+	return invoke<void>('local_remove', { id });
 }

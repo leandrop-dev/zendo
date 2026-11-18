@@ -3,8 +3,10 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import Chips from '#lib/components/library/chips.svelte';
+	import LocalForm from '#lib/components/local-form.svelte';
 	import Grid from '#lib/components/library/grid.svelte';
 	import { library } from '#lib/library.svelte.js';
+	import { app } from '#lib/state.svelte.js';
 
 	// The grid's keys: the arrows and the pages move the cursor, and Escape
 	// takes back the marks and then the search, as the Slint window does.
@@ -39,6 +41,9 @@
 		}
 	}
 
+	// The Add game sheet, the Library's own; the game page opens it to edit.
+	let adding = $state(false);
+
 	onMount(() => {
 		window.addEventListener('keydown', key);
 		return () => window.removeEventListener('keydown', key);
@@ -49,6 +54,13 @@
 	<div class="flex flex-wrap items-center gap-2 px-6 pt-6 pb-1">
 		<Chips chips={library.chips.sources} />
 		<div class="flex-1"></div>
+		<button
+			type="button"
+			onclick={() => (adding = true)}
+			class="border border-line px-3 py-1 text-[13px] text-foreground uppercase hover:bg-raised"
+		>
+			{app.t('library-add-game')}
+		</button>
 		<Chips chips={library.chips.sorts} />
 	</div>
 	{#if library.chips.organize.length > 0}
@@ -70,5 +82,15 @@
 
 	{#if library.status}
 		<p class="border-t border-line px-6 py-2 text-sm text-dim">{library.status}</p>
+	{/if}
+
+	{#if adding}
+		<LocalForm
+			onclose={() => (adding = false)}
+			onsaved={(id) => {
+				adding = false;
+				void goto(resolve('/game/[id]', { id }));
+			}}
+		/>
 	{/if}
 </div>

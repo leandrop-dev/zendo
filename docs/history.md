@@ -6547,3 +6547,35 @@ longest of 1 h 12 min, the three dates with their lengths, and the details
 card. The first attempt showed no sessions: the file was written as
 `sessions.json`, and the store is `sessions.jsonl`. Both cards were seen after
 the rename.
+
+## The Tauri port, slice 3c: local games (2026-11-18)
+
+- **The commands** in `crates/zendo-tauri/src/local.rs`: `local_get` for the
+  page's Edit, `local_about` (the Fluent line under the program field),
+  `local_pick_program` (Zendo's own file dialog, run as `pick-file` by the same
+  binary, on a blocker thread), `local_save` and `local_remove`. Both writes
+  call `zendo_core::local`'s checks, read the library again in place
+  (`LibraryState::reload`) and say `library_loaded`, so the grid and the page
+  see the change at once. A local game's page knows it is one (`local` in the
+  game DTO).
+- **The form**: one sheet on both pages, with the title, the program (read
+  only, chosen by the dialog), the arguments, the about line, the cover note,
+  and the error `local::LocalGame::check` gives. The Library's row has its Add
+  game button; a local game's page has Edit and Remove, Remove pressed twice.
+- The remaining store-dependent cards (Steam's facts and requirements, DLC,
+  ProtonDB, achievements) are now 3d, and the Wine prefix, GOG's changelog,
+  cloud saves and the Mods card are 3e: none of the 3d cards can be checked
+  in this environment, which has no Steam game and no store account to ask.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (591 passed, 32 ignored).
+
+A throwaway home with one local game (`/bin/true`) showed its page: `Added ·
+Linux`, Play, Favorite, Hide, **Edit** and **Remove** (no such buttons on a
+store game), and its details (Added, Zendo, Linux, `/bin`, 0 times). The Add
+game sheet was drawn over the Library with its title, program and Choose,
+arguments, about line, cover note and Cancel/Add.
+
+Not checked: filling the sheet and saving, the file dialog (both need input
+or a desktop session), and Remove's second press.

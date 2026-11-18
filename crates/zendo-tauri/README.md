@@ -16,6 +16,9 @@ the other pages follow.
   tray could be made; otherwise it quits.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
+- `src/local.rs`: games added by hand: the form's get, its about line, the
+  file dialog, and save and remove, each reading the library again after it
+  writes.
 - `src/game.rs`: the game page's commands: `game_get`, `game_launch`,
   `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
   over `zendo_shell::running` for the launch.

@@ -14,6 +14,7 @@ use tauri::Manager;
 mod commands;
 mod game;
 mod library;
+mod local;
 mod platform;
 
 fn main() -> ExitCode {
@@ -71,6 +72,11 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             game::game_set_pinned,
             game::game_set_hidden,
             game::game_set_status,
+            local::local_get,
+            local::local_about,
+            local::local_pick_program,
+            local::local_save,
+            local::local_remove,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
