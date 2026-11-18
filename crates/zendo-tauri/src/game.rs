@@ -16,6 +16,7 @@ use zendo_shell::running::{self, Effect, Names, RunMessage};
 
 use crate::library::LibraryState;
 use crate::platform;
+use crate::prefix::{PrefixDto, prefix_of};
 
 /// A game's page: the header, the tiles, the statuses and how it is running.
 #[derive(Debug, Serialize)]
@@ -40,6 +41,8 @@ pub struct GameDto {
     sessions: Vec<FactDto>,
     /// The latest sessions, by date.
     recent: Vec<FactDto>,
+    /// The Wine prefix card's data, for a Windows game Zendo starts.
+    prefix: Option<PrefixDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -225,6 +228,7 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
         details: facts(details(game)),
         sessions: facts(session_summary),
         recent: facts(session_recent),
+        prefix: prefix_of(game),
     }
 }
 

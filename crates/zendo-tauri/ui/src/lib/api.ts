@@ -180,6 +180,8 @@ export type GamePage = {
 	sessions: { label: string; value: string; path: boolean }[];
 	// The latest sessions, by date.
 	recent: { label: string; value: string; path: boolean }[];
+	// The Wine prefix card, for a Windows game Zendo starts.
+	prefix: { folder: string | null; fixes: string[]; gog: boolean } | null;
 };
 
 export async function gameGet(id: string): Promise<GamePage> {
@@ -236,4 +238,9 @@ export async function localSave(draft: LocalDraft): Promise<string> {
 
 export async function localRemove(id: string): Promise<void> {
 	return invoke<void>('local_remove', { id });
+}
+
+// Opens the Wine prefix's folder with the desktop's file manager.
+export async function prefixOpen(path: string): Promise<void> {
+	return invoke<void>('prefix_open', { path });
 }

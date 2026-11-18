@@ -14,6 +14,7 @@
 		gameStop,
 		inTauri,
 		localRemove,
+		prefixOpen,
 		type GamePage
 	} from '#lib/api.js';
 	import LocalForm from '#lib/components/local-form.svelte';
@@ -272,6 +273,35 @@
 									<span class="w-[110px] shrink-0 text-dim">{row.label}</span>
 									<span>{row.value}</span>
 								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+			{/if}
+
+			{#if game.prefix}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('prefix-title')}</h2>
+					<p class="mb-3 text-[13px] text-dim">{app.t('prefix-about')}</p>
+					{#if game.prefix.folder}
+						<div class="flex flex-wrap items-center gap-3">
+							<span class="font-mono text-[13px] break-all">{game.prefix.folder}</span>
+							<button
+								type="button"
+								onclick={() => void prefixOpen(game!.prefix!.folder!)}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+							>
+								{app.t('files-open-folder')}
+							</button>
+						</div>
+					{/if}
+					{#if game.prefix.fixes.length > 0}
+						<h3 class="mt-4 mb-2 text-[11px] text-dim uppercase">
+							{app.t('prefix-known-fixes-title')}
+						</h3>
+						<ul class="flex flex-col gap-1">
+							{#each game.prefix.fixes as fix (fix)}
+								<li class="text-[13px]">{fix}</li>
 							{/each}
 						</ul>
 					{/if}

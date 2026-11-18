@@ -137,8 +137,10 @@ and removed once already).
    **3b** (sessions recorded and shown, and the details card) and **3c** (local
    games: the add/edit sheet, the file dialog, and Remove). **3d** carries
    Steam's facts and requirements, DLC, ProtonDB and achievements (none
-   checkable without a Steam game or a store account); **3e** the Wine prefix,
-   GOG's changelog, cloud saves and the Mods card.
+   checkable without a Steam game or a store account); **3e** the Wine prefix card
+   (built 2026-11-18 as its read-only first part: the folder, Open folder and
+   the known fixes' lines) with its tools, GOG's changelog, cloud saves and
+   the Mods card still to come.
 4. **Settings, Accounts, About**: General, Keys, Library, Engines, Proton,
    Theme, Diagnostics; Epic, GOG and Amazon and the Xbox card; About; the
    Collections sheet.
@@ -235,23 +237,25 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    edits, cover downloads and the file watch. Slice 2, built 2026-11-18 (2a
    and 2b); the Collections sheet is slice 4's.
 4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
-   slice by slice. Slice 3 is in parts: 3a, 3b and 3c built; 3d and 3e next.
+   slice by slice. Slice 3 is in parts: 3a, 3b, 3c and 3e-1 built; 3d, the
+prefix tools, the changelog, cloud saves and the Mods card next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
 
-- Branch `f/ui-revamp`. Slices 0, 1, 2, 3a, 3b and 3c are in place: the
+- Branch `f/ui-revamp`. Slices 0, 1, 2, 3a, 3b, 3c and 3e-1 are in place: the
   crate, the SvelteKit app, the dev loop, the shell, the Library, the game
-  page's header, actions, sessions and details, and local games. Its commands
-  and checks are in `crates/zendo-tauri/README.md`.
+  page's header, actions, sessions, details, local games, and the Wine prefix
+  card. Its commands and checks are in `crates/zendo-tauri/README.md`.
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next is slice 3d: Steam's facts and requirements, DLC, ProtonDB and
-  achievements. These ask the stores or the network, so they need a machine
-  with a Steam game and an account to check them; this one has neither. Then
-  3e: the Wine prefix, GOG's changelog, cloud saves and the Mods card. The
-  Library's Collections chip waits for slice 4's sheet.
+- Next: the Wine prefix's tools (Wine settings, winetricks, components, Run a
+  program, GOG setup, applying fixes); GOG's changelog, cloud saves and the
+  Mods card; then 3d (Steam's facts, DLC, ProtonDB and achievements). 3d asks
+  the stores or the network and needs a machine with a Steam game and an
+  account; this one has neither. The Library's Collections chip waits for
+  slice 4's sheet.
 - The FPS harness is `ZENDO_FPS=1`, with the seeder at
   `crates/zendo-tauri/scripts/seed-library.py` for a large throwaway library;
   it measured 62 fps on 2,700 games in a debug build. `history.md` has the

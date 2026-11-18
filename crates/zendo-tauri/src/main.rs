@@ -16,6 +16,7 @@ mod game;
 mod library;
 mod local;
 mod platform;
+mod prefix;
 
 fn main() -> ExitCode {
     // The window's class on X11 (its WM_CLASS) and its app id on Wayland come
@@ -77,6 +78,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             local::local_pick_program,
             local::local_save,
             local::local_remove,
+            prefix::prefix_open,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

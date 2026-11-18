@@ -6579,3 +6579,31 @@ arguments, about line, cover note and Cancel/Add.
 
 Not checked: filling the sheet and saving, the file dialog (both need input
 or a desktop session), and Remove's second press.
+
+## The Tauri port, slice 3e-1: the Wine prefix card (2026-11-18)
+
+- **The card's data** (`crates/zendo-tauri/src/prefix.rs`): `prefix_of` gives
+  a page whose game `zendo_core::prefix_tools::applies` a folder (the settings
+  folder plus `Prefixes/<name>`, when it is there), GOG's setup's availability
+  and the known fixes' lines from Heroic's list. `prefix_open` opens the folder
+  with the desktop's file manager through `zendo_shell::open`. The game DTO
+  carries the card.
+- **The page** draws the Wine prefix card after the details: its about line,
+  the folder with Open folder, and the known fixes when the store gave any.
+- **Left for the next part**: the tools that act on the prefix (Wine's
+  settings, winetricks, components, a program run in it, GOG's setup and
+  applying the known fixes), and GOG's changelog, cloud saves and the Mods
+  card. They need the prefix tools' processes and, for the last three, a GOG
+  account and Nexus.
+
+Checked: `npm run check`, `npm run lint`, `npm test`, `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (591 passed, 32 ignored).
+
+A throwaway home with a local Windows game (a fake `.exe`) and its prefix
+folder drew the card: `Wine's settings, winetricks and Windows programs …`,
+the folder `/tmp/…/Games/Prefixes/seeded` and Open folder. Its details read
+Added, Zendo (umu-launcher), Windows.
+
+Not checked: Open folder (no input), the tools (not ported), and the fixes'
+lines (a store game with a list).

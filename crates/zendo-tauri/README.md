@@ -16,6 +16,8 @@ the other pages follow.
   tray could be made; otherwise it quits.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
+- `src/prefix.rs`: the Wine prefix card's data (the folder, Open folder, the
+  known fixes) for a Windows game Zendo starts.
 - `src/local.rs`: games added by hand: the form's get, its about line, the
   file dialog, and save and remove, each reading the library again after it
   writes.
