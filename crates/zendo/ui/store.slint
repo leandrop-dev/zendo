@@ -41,11 +41,12 @@ export global StoreData {
 
 export component StorePage inherits Rectangle {
     // How many cards fit across, as the Library's grid counts them.
-    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - 12px + Grid.spacing) / (Grid.card-width + Grid.spacing)));
-    property <length> left: (root.width - 12px - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
+    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - Grid.bar + Grid.spacing) / (Grid.card-width + Grid.spacing)));
+    property <length> left: (root.width - Grid.bar - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
 
-    changed columns => { StoreData.columns-changed(root.columns); }
-    init => { StoreData.columns-changed(root.columns); }
+    // The first width is the laid-out one: at creation it is still 0 and
+    // would count one column, which Rust would draw the whole grid for.
+    changed width => { if root.width > 0 { StoreData.columns-changed(root.columns); } }
 
     VerticalLayout {
         // The stores, the sorts, what is being asked, and Refresh at the right.
@@ -101,6 +102,10 @@ export component StorePage inherits Rectangle {
                 refresh-touch := TouchArea {
                     mouse-cursor: pointer;
                     enabled: StoreData.refresh-on;
+                    accessible-role: button;
+                    accessible-label: StoreData.refresh-label;
+                    accessible-enabled: StoreData.refresh-on;
+                    accessible-action-default => { if StoreData.refresh-on { StoreData.refresh(); } }
                     clicked => { StoreData.refresh(); }
                 }
             }

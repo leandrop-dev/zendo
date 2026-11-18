@@ -185,11 +185,13 @@ export component SearchField inherits Rectangle {
     }
     if root.text == "": Text {
         x: Space.m;
+        width: root.width - 2 * Space.m;
         height: root.height;
         text: root.placeholder;
         color: Colors.dim;
         font-size: 14px;
         vertical-alignment: center;
+        overflow: elide;
     }
 }
 
@@ -228,7 +230,7 @@ export component ActionButton inherits Rectangle {
             font-size: root.small ? 11px : root.primary ? 16px : 13px;
             font-weight: root.primary || root.danger || root.small ? 700 : 400;
             vertical-alignment: center;
-            color: root.fill != transparent ? (Colors.light ? #ffffff : #101010) : root.tint;
+            color: root.fill != transparent ? Colors.on-accent : root.tint;
         }
     }
 
@@ -349,7 +351,7 @@ export component Toggle inherits Rectangle {
                 height: 16px;
                 y: 3px;
                 x: root.on ? parent.width - self.width - 3px : 3px;
-                background: root.on ? (Colors.light ? #ffffff : #101010) : Colors.dim;
+                background: root.on ? Colors.on-accent : Colors.dim;
             }
         }
         Text {
@@ -407,7 +409,7 @@ export component RowButton inherits Rectangle {
             font-weight: 700;
             height: parent.height;
             vertical-alignment: center;
-            color: root.danger || root.primary ? (Colors.light ? #ffffff : #101010) : Colors.foreground;
+            color: root.danger || root.primary ? Colors.on-accent : Colors.foreground;
         }
     }
     touch := TouchArea {

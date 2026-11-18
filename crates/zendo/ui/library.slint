@@ -88,6 +88,8 @@ export global Grid {
     out property <length> card-height: self.cover-height + self.caption-height + 4px + 2 * self.card-padding;
     out property <length> spacing: 16px;
     out property <length> margin: 24px;
+    // The room the scroll bar takes, which a grid's width leaves out.
+    out property <length> bar: 14px;
 }
 
 component Badge inherits Rectangle {
@@ -237,13 +239,14 @@ export component CardView inherits Rectangle {
 export component LibraryPage inherits Rectangle {
     // How many cards fit across: the window's width less the margins, the
     // scroll bar's room, and one gap more than there are between cards.
-    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - 12px + Grid.spacing) / (Grid.card-width + Grid.spacing)));
+    property <int> columns: max(1, floor((root.width - 2 * Grid.margin - Grid.bar + Grid.spacing) / (Grid.card-width + Grid.spacing)));
     // Where the first card starts, so the grid is centred and a short last
     // row stays in its columns.
-    property <length> left: (root.width - 12px - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
+    property <length> left: (root.width - Grid.bar - (root.columns * (Grid.card-width + Grid.spacing) - Grid.spacing)) / 2;
 
-    changed columns => { LibraryData.columns-changed(root.columns); }
-    init => { LibraryData.columns-changed(root.columns); }
+    // The first width is the laid-out one: at creation it is still 0 and
+    // would count one column, which Rust would draw the whole grid for.
+    changed width => { if root.width > 0 { LibraryData.columns-changed(root.columns); } }
 
     VerticalLayout {
         // The stores and the sorts, and Refresh at the right.
@@ -314,6 +317,10 @@ export component LibraryPage inherits Rectangle {
                     refresh-touch := TouchArea {
                         mouse-cursor: pointer;
                         enabled: !LibraryData.scanning;
+                        accessible-role: button;
+                        accessible-label: LibraryData.scanning ? Tr.t("library-scanning") : Tr.t("library-refresh");
+                        accessible-enabled: !LibraryData.scanning;
+                        accessible-action-default => { if !LibraryData.scanning { LibraryData.refresh(); } }
                         clicked => { LibraryData.refresh(); }
                     }
                 }

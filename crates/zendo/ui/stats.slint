@@ -129,7 +129,9 @@ component Chart inherits Card {
 
 export component StatsPage inherits Rectangle {
     property <length> column: min(1100px, root.width);
-    property <length> inner: root.column - 2 * Space.xl;
+    // The ScrollView's bar takes 14px of the column, so the content and
+    // the cards in it are that much narrower.
+    property <length> inner: root.column - 14px - 2 * Space.xl;
     // The room inside a card.
     property <length> card-inner: root.inner - 2 * Space.l;
     property <length> track: 260px;

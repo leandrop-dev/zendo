@@ -223,6 +223,9 @@ export component GameModeScreen inherits Rectangle {
                     }
                     TouchArea {
                         mouse-cursor: pointer;
+                        accessible-role: button;
+                        accessible-label: tile.title;
+                        accessible-action-default => { GameModeData.pick(at); }
                         clicked => { GameModeData.pick(at); }
                     }
                 }
@@ -239,7 +242,7 @@ export component GameModeScreen inherits Rectangle {
 
     // The Start menu, over the screen.
     if GameModeData.menu-open: Rectangle {
-        background: #00000099;
+        background: Colors.scrim;
         TouchArea {
             clicked => { GameModeData.close-menu(); }
         }
@@ -273,6 +276,10 @@ export component GameModeScreen inherits Rectangle {
                     }
                     choice-touch := TouchArea {
                         mouse-cursor: pointer;
+                        accessible-role: radio-button;
+                        accessible-label: choice.label;
+                        accessible-checked: choice.chosen;
+                        accessible-action-default => { GameModeData.choose(choice.id); }
                         clicked => { GameModeData.choose(choice.id); }
                     }
                 }

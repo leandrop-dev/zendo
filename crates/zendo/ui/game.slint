@@ -354,6 +354,9 @@ component FactRow inherits HorizontalLayout {
             }
             link-touch := TouchArea {
                 mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: root.fact.value;
+                accessible-action-default => { GameData.open-path(root.fact.url); }
                 clicked => { GameData.open-path(root.fact.url); }
             }
         }
@@ -424,6 +427,10 @@ component AntiCheatCard inherits Card {
                 note-touch := TouchArea {
                     enabled: note.url != "";
                     mouse-cursor: note.url != "" ? pointer : default;
+                    accessible-role: button;
+                    accessible-label: note.label;
+                    accessible-enabled: note.url != "";
+                    accessible-action-default => { if note.url != "" { GameData.open-path(note.url); } }
                     clicked => { GameData.open-path(note.url); }
                 }
             }
@@ -973,6 +980,9 @@ export component GamePage inherits Rectangle {
                         }
                         back-touch := TouchArea {
                             mouse-cursor: pointer;
+                            accessible-role: button;
+                            accessible-label: back-text.text;
+                            accessible-action-default => { GameData.back(); }
                             clicked => { GameData.back(); }
                         }
                     }

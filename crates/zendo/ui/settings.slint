@@ -412,6 +412,9 @@ export component SettingsPage inherits Rectangle {
                                     x: 0;
                                     mouse-cursor: pointer;
                                     width: get-key.preferred-width;
+                                    accessible-role: button;
+                                    accessible-label: Tr.t("steamgriddb-get-key");
+                                    accessible-action-default => { SettingsData.key-get(); }
                                     clicked => { SettingsData.key-get(); }
                                 }
                             }
@@ -473,6 +476,9 @@ export component SettingsPage inherits Rectangle {
                                     x: 0;
                                     mouse-cursor: pointer;
                                     width: nexus-get-key.preferred-width;
+                                    accessible-role: button;
+                                    accessible-label: Tr.t("nexus-get-key");
+                                    accessible-action-default => { NexusData.key-get(); }
                                     clicked => { NexusData.key-get(); }
                                 }
                             }

@@ -21,6 +21,10 @@ export global Colors {
     in property <color> bad: #e05a4c;
     // Dark text on a light background.
     in property <bool> light: false;
+    // What dims the page behind a sheet.
+    out property <color> scrim: #000000.with-alpha(0.6);
+    // Text and marks on an accent or primary fill.
+    out property <color> on-accent: light ? #ffffff : #101010;
 }
 
 export global Space {

@@ -39,7 +39,7 @@ component Field inherits VerticalLayout {
 }
 
 export component LocalSheet inherits Rectangle {
-    background: #000000.with-alpha(0.6);
+    background: Colors.scrim;
     // Nothing behind the sheet hears a click; one outside the card closes it.
     TouchArea {
         clicked => { LocalData.close(); }

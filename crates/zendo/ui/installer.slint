@@ -93,12 +93,20 @@ component OptionLine inherits Rectangle {
     TouchArea {
         enabled: root.item.kind != 0 && root.item.enabled;
         mouse-cursor: self.enabled ? pointer : default;
+        // The role cannot depend on the row (Slint wants a constant), and a
+        // list mixes radio rows and boxes: a checkbox that reports its
+        // checked state is the honest common one.
+        accessible-role: checkbox;
+        accessible-label: root.item.label;
+        accessible-checked: root.item.on;
+        accessible-enabled: root.item.enabled;
+        accessible-action-default => { if self.enabled { root.clicked(); } }
         clicked => { root.clicked(); }
     }
 }
 
 export component InstallerSheet inherits Rectangle {
-    background: #000000.with-alpha(0.6);
+    background: Colors.scrim;
     // Nothing behind the sheet hears a click, and none closes it.
     TouchArea { }
 

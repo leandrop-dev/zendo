@@ -90,7 +90,7 @@ export component DownloadLine inherits VerticalLayout {
 
 // The question over the window, first to hear Escape.
 export component ChooserSheet inherits Rectangle {
-    background: #000000.with-alpha(0.6);
+    background: Colors.scrim;
     // Nothing behind the sheet hears a click; one outside the card closes it.
     TouchArea {
         clicked => { NexusData.cancel-choose(); }

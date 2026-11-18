@@ -491,9 +491,11 @@ export component AccountsPage inherits Rectangle {
                     }
                 }
                 SteamCard { steam: AccountsData.steam; inner: root.inner; }
-                Card { index: 0; card: AccountsData.cards[0]; inner: root.inner; }
-                Card { index: 1; card: AccountsData.cards[1]; inner: root.inner; }
-                Card { index: 2; card: AccountsData.cards[2]; inner: root.inner; }
+                for account[at] in AccountsData.cards: Card {
+                    index: at;
+                    card: account;
+                    inner: root.inner;
+                }
                 LauncherCard { card: AccountsData.xbox; inner: root.inner; act => { AccountsData.xbox-open(); } }
             }
         }
