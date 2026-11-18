@@ -118,7 +118,10 @@ and removed once already).
 1. **Shell**: top bar, tabs, view and sort chips, theme (KDE scheme through
    `zendo-core`, Zendo's own fallback), i18n, tray hiding, controller, keyboard,
    fullscreen toggle, the command line commands (`list`, `launch`, `hide`,
-   `unhide`, `covers`).
+   `unhide`, `covers`). Built 2026-11-18, except the view and sort chips and
+   the search field: they act on the Library's `Browser` state, so they come
+   with slice 2, where that state moves to `zendo-shell` and the grid is
+   ported.
 2. **Library**: grid with virtualization, chips, search, sort, views, marks and
    bulk edits, the cursor (keyboard and pad), cover downloads, the file watch,
    collections.
@@ -210,27 +213,35 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - **Tray stays `ksni`**, in `zendo-shell`.
 - **Controller and tray stay in `zendo-shell`**, not in `zendo-tauri`.
 - Branch: `f/ui-revamp`. The plan is its first commit; the port started with
-  slice 0 on 2026-11-18.
+  slice 0 on 2026-11-18, and slice 1 the same day.
 
 ## First steps
 
 1. Scaffold `crates/zendo-tauri` and `crates/zendo-tauri/ui` (SvelteKit,
    Tailwind, shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
-2. Port the Library grid as slice 1 and wire `library_list`, `cover_get` and
-   the cover server or asset protocol.
-3. Add the FPS harness and the parity checklist, then proceed slice by slice.
-4. Keep the Slint window until the checklist is signed off.
+2. Port the shell: words, colours, tray, controller, keyboard, full screen and
+   the command line. Slice 1, built 2026-11-18.
+3. Port the Library grid as slice 2 and wire `library_list`, `cover_get` and
+   the cover server or asset protocol, with the view and sort chips and the
+   search field.
+4. Add the FPS harness and the parity checklist, then proceed slice by slice.
+5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
 
-- Branch `f/ui-revamp`. Slice 0 is in place: the crate, the SvelteKit app, the
-  dev loop and a placeholder page. Its commands and checks are in
+- Branch `f/ui-revamp`. Slices 0 and 1 are in place: the crate, the SvelteKit
+  app, the dev loop, the shell's words and colours, the tray, the controller,
+  full screen and the command line. Its commands and checks are in
   `crates/zendo-tauri/README.md`.
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next is slice 1 (the shell: top bar, tabs, chips, theme, i18n, tray,
-  controller, keyboard, fullscreen and the command line), then slice 2 (the
-  Library grid with `library_list` and `cover_get`). The target is the same
-  60 fps and the same parity checklist as the Slint cut-over.
+- Next is slice 2: the Library grid, with `library_list` and `cover_get`, the
+  view and sort chips and the search. Move the `Browser` logic from
+  `crates/zendo/src/library.rs` to `zendo-shell` as that page is ported, as
+  the Slint port did. The target is the same 60 fps and the same parity
+  checklist as the Slint cut-over.
+- The last run could not check clicks or keys: this session's `ydotool` and
+  `wtype` delivered nothing. The tray needs a session bus. Both wait for a
+  run with the user's input working.
 - The decisions above are firm; do not reopen them without the user.

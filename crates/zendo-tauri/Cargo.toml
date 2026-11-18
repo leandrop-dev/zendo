@@ -8,10 +8,15 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 # For the window's class: GTK answers it with the program name, and the
 # compositors' rules match `zendo` (see `main`).
 gtk.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tauri.workspace = true
+zendo-core.workspace = true
+zendo-shell.workspace = true
 
 [build-dependencies]
 tauri-build.workspace = true

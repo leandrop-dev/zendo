@@ -1,7 +1,23 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
-@import '@fontsource-variable/inter';
+
+/* Zendo's type: JetBrains Mono (OFL-1.1), the same files the Slint window
+   embeds. `static/fonts` links to `crates/zendo/fonts`, so there is one copy. */
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('/fonts/JetBrainsMono-Bold.ttf') format('truetype');
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -107,6 +123,16 @@
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
+	--color-sidebar: var(--zendo-sidebar);
+	--color-surface: var(--zendo-surface);
+	--color-raised: var(--zendo-raised);
+	--color-line: var(--zendo-line);
+	--color-dim: var(--zendo-dim);
+	--color-accent-mark: var(--zendo-accent);
+	--color-good: var(--zendo-good);
+	--color-bad: var(--zendo-bad);
+	--font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
 	--radius-lg: var(--radius);
@@ -126,4 +152,36 @@
 	html {
 		@apply font-sans;
 	}
+}
+
+/* Zendo's own colours until `bootstrap` sends the user's palette: the same
+   values as `crates/zendo-shell/themes/zendo.toml`. They also stand in for a
+   browser preview, where the IPC is not there. */
+:root {
+	--background: #171717;
+	--foreground: #ccd0cf;
+	--card: #222222;
+	--card-foreground: #ccd0cf;
+	--popover: #222222;
+	--popover-foreground: #ccd0cf;
+	--primary: #f25623;
+	--primary-foreground: #171717;
+	--secondary: #2c2c2c;
+	--secondary-foreground: #ccd0cf;
+	--muted: #2c2c2c;
+	--muted-foreground: #808483;
+	--accent: #2c2c2c;
+	--accent-foreground: #ccd0cf;
+	--destructive: #e05a4c;
+	--border: #303030;
+	--input: #303030;
+	--ring: #f25623;
+	--zendo-sidebar: #121212;
+	--zendo-surface: #222222;
+	--zendo-raised: #2c2c2c;
+	--zendo-line: #303030;
+	--zendo-dim: #808483;
+	--zendo-accent: #f25623;
+	--zendo-good: #7fb069;
+	--zendo-bad: #e05a4c;
 }

@@ -46,10 +46,11 @@ and its prepared runner plays it; Zendo uninstalls the ones it installed. The
 record write is ADR 0002. Updates stay with the launcher (item 60c).
 
 On 2026-11-18 the window's port to Tauri 2 and SvelteKit began on branch
-`f/ui-revamp`: slice 0 (the crates, the SvelteKit app, the Tauri dev loop and
-a placeholder page) is built, and the Slint window stays in place and
-releasable until the port's parity checklist passes
-(`docs/tauri-port-plan.md`).
+`f/ui-revamp`: slices 0 (the crates, the SvelteKit app, the Tauri dev loop and
+a placeholder page) and 1 (the shell: words, colours, tray, controller,
+keyboard, full screen and the command line, with the pages still to come) are
+built, and the Slint window stays in place and releasable until the port's
+parity checklist passes (`docs/tauri-port-plan.md`).
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found

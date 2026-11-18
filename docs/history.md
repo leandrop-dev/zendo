@@ -6309,3 +6309,72 @@ showed `zendo 1.0.1`, proving the version came over IPC from `Cargo.toml`
 through `tauri.conf.json`'s omitted version. Its one control, Read again, was
 clicked once; it re-reads the same version, so nothing changes on screen. Not
 checked: the window on KDE Plasma, and a release (bundled) build.
+
+## The Tauri port, slice 1: the shell (2026-11-18)
+
+The shell of `docs/tauri-port-plan.md`'s slice 1, beside the Slint window,
+which is untouched and still ships.
+
+- **The top bar and the routes**: `ZENDO •`, the Library, Store and Stats
+  tabs, the Downloads and Settings icon buttons, and the Settings row
+  (Settings, Accounts, About) on the three pages the Settings button holds.
+  Each is a SvelteKit route with a placeholder page saying the page is still
+  to come. The current tab is marked by the **route id**, not the pathname:
+  the packaged app's document is `index.html`, so its pathname was not `/`.
+- **The theme** moved from `crates/zendo/src/theme.rs` to
+  `zendo_shell::theme`, palette and all, with `crates/zendo/themes/zendo.toml`
+  now in `crates/zendo-shell/themes/`; the Slint crate re-exports it, so both
+  windows share one set of colours. The Tauri shell sends the palette at
+  start, applies it as CSS variables (shadcn-svelte's and the shell's own
+  `--zendo-*`), and follows `kdeglobals` every 2 seconds, pushing
+  `theme_changed` when the colours differ. Zendo's own palette is the
+  fallback, and a browser preview gets it with no IPC.
+- **The words** stay Fluent in Rust: `bootstrap` sends the catalogue of
+  messages that take no values (the ones that do go through the `tr` command
+  with arguments), so the frontend never reimplements a translation. The i18n
+  test now also scans the Tauri frontend's `.svelte`, `.ts` and `.js` for
+  `t("id")` calls, and skips `node_modules`, `build` and the other generated
+  directories.
+- **The platform**: the tray (`ksni`, in `zendo-shell`) is put up when
+  `minimize_to_tray` asks; closing the window then hides it and the tray's
+  Toggle/Open/Quit work on it. The controller (`gilrs`, in `zendo-shell`)
+  pushes `pad` moves to the frontend; Select toggles full screen until Game
+  Mode arrives in slice 6. F11 toggles full screen and Escape leaves it.
+  `--game-mode`/`--fullscreen` opens the window full screen at start.
+- **The command line** is `zendo_shell::cli`'s, run by the Tauri binary, so
+  `list`, `launch`, `hide`, `unhide`, `pin`, `categorize`, `status`, `covers`,
+  `logs`, `report` and the Nexus links behave as before.
+- **The type** is JetBrains Mono, the same files the Slint window embeds;
+  `ui/static/fonts/` links to `crates/zendo/fonts/`, and the adapter's copy
+  follows the link, so there is one copy in git.
+- Left for slice 2 on purpose: the view and sort chips and the search field.
+  They act on the `Browser` state that the Library page moves to `zendo-shell`
+  when the grid is ported; drawing them first would duplicate that logic.
+  The tabs' counts wait for the pages that count them too.
+
+Checked: `npm run check` (0 errors, 0 warnings), `npm run lint`, `npm test`,
+`npm run build`, `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `cargo test --workspace` (585 passed, 32
+ignored), and `ui/node_modules/.bin/tauri build --debug`.
+
+The built binary was run in throwaway homes with no session bus, the user's
+Slint Zendo left alone:
+
+- Portuguese and a synthetic BreezeDark `kdeglobals` (`theme = "system"`,
+  `language = "pt-PT"`): the tabs read BIBLIOTECA, LOJA and ESTATÍSTICAS, the
+  page background was the scheme's `37,39,47`, and the accent was its blue.
+  Editing `AccentColor` while it ran turned the marks orange within the
+  watcher's 2 seconds.
+- No settings: English words and Zendo's own palette (orange on `#171717`).
+- `--game-mode`: the window opened full screen at 2560x1080.
+- `zendo-tauri --version`, `--help`, `list --json` (an empty library) and
+  `covers` behaved as the Slint binary's do.
+- Routing, and the Settings row, were seen by briefly navigating to
+  `/settings` in `onMount` (removed before the commit).
+
+Not checked: clicks and keys. The session's virtual input delivered nothing
+this run (`ydotool` left the cursor at 0,0 and `wtype`'s Tab and F11 changed
+nothing), so the pointer and keyboard paths are code-read only. Not checked
+either: the tray (a throwaway home has no session bus, so there is no
+StatusNotifierWatcher to hold the icon), a real controller, and the window on
+KDE Plasma.

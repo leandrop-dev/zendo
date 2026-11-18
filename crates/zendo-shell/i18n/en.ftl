@@ -33,6 +33,7 @@ page-downloads = Downloads
 page-accounts = Accounts
 page-settings = Settings
 page-about = About
+page-coming = This page is still to come
 top-bar-signed-in = { $count } of { $stores }
 
 ## Sources and orders

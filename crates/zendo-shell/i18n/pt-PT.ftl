@@ -32,6 +32,7 @@ page-downloads = Transferências
 page-accounts = Contas
 page-settings = Definições
 page-about = Sobre
+page-coming = Esta página ainda está por vir
 top-bar-signed-in = { $count } de { $stores }
 
 ## Origens e ordens

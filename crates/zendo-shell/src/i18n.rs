@@ -150,6 +150,48 @@ pub fn format_in(language: Language, id: &str, args: Option<&FluentArgs>) -> Opt
     )
 }
 
+/// Every message of a language that takes no values, formatted: the words a
+/// frontend can show without an IPC call each. Messages with values go
+/// through [`tr`] with their arguments instead.
+#[must_use]
+pub fn catalogue(language: Language) -> Vec<(String, String)> {
+    let bundle = &BUNDLES[language.index()];
+    let mut messages = Vec::new();
+    for id in ids(language.source()) {
+        let Some(pattern) = bundle.get_message(&id).and_then(|message| message.value()) else {
+            continue;
+        };
+        let mut errors = Vec::new();
+        let text = bundle.format_pattern(pattern, None, &mut errors);
+        if errors.is_empty() {
+            messages.push((id, text.into_owned()));
+        }
+    }
+    messages.sort();
+    messages
+}
+
+/// The window's language's messages without values: see [`catalogue`].
+#[must_use]
+pub fn current_catalogue() -> Vec<(String, String)> {
+    catalogue(current())
+}
+
+/// The message ids an FTL file defines, read line by line: a message starts a
+/// line with its id and ` =`; the lines under it are indented.
+fn ids(source: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    for line in source.lines() {
+        if let Some((id, _)) = line.split_once(" =")
+            && !id.is_empty()
+            && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            ids.push(id.to_owned());
+        }
+    }
+    ids
+}
+
 /// A message in the window's language: `t!("id")`, or with values that
 /// the message uses as `{ $name }`: `t!("id", name = value, count = 3)`.
 #[macro_export]
@@ -254,12 +296,17 @@ mod tests {
     /// Every `t!("…")` in the window's code names a message English has,
     /// and every message is used.
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one walk over every kind of source the words appear in"
+    )]
     fn every_message_used_exists() {
         let english = messages(Language::English.source());
         // The `src` of every crate in the workspace: the window's code is
         // in more than one.
         let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        // The Slint window's `ui` folder too: its texts ask `Tr.t("id")`.
+        // The Slint window's `ui` folder too: its texts ask `Tr.t("id")`. The
+        // Tauri frontend asks `t("id")` from its own `ui`.
         let mut files: Vec<_> = fs::read_dir(&crates)
             .unwrap()
             .flat_map(|entry| {
@@ -272,6 +319,13 @@ mod tests {
         let mut used = BTreeSet::new();
         while let Some(path) = files.pop() {
             if path.is_dir() {
+                // Builds and installed packages carry copies of the sources.
+                if matches!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    Some("node_modules" | ".svelte-kit" | "build" | "target" | "gen" | "pkg")
+                ) {
+                    continue;
+                }
                 files.extend(
                     fs::read_dir(&path)
                         .unwrap()
@@ -299,6 +353,36 @@ mod tests {
                         }
                         used.insert(id);
                     }
+                }
+                continue;
+            }
+            // The Tauri frontend's words: `t("id")` and `t('id')`.
+            if path
+                .extension()
+                .is_some_and(|ext| ext == "svelte" || ext == "ts" || ext == "js")
+            {
+                let text = text_of(&path);
+                let mut rest = text.as_str();
+                while let Some((before, after)) = rest.split_once("t(") {
+                    rest = after;
+                    let Some(quote @ ('"' | '\'')) = after.chars().next() else {
+                        continue;
+                    };
+                    if before
+                        .chars()
+                        .next_back()
+                        .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    {
+                        continue;
+                    }
+                    let id = after[1..].split(quote).next().unwrap_or_default();
+                    if id.is_empty() {
+                        continue;
+                    }
+                    if !english.contains_key(id) {
+                        unknown.push(format!("{}: {id}", path.display()));
+                    }
+                    used.insert(id.to_owned());
                 }
                 continue;
             }
@@ -362,6 +446,22 @@ mod tests {
         assert_eq!(Language::from_tag("C"), None);
         assert_eq!(Language::from_tag("de-DE"), None);
         assert_eq!(Language::chosen(Some("pt-PT")), Language::Portuguese);
+    }
+
+    /// The catalogue has every message that takes no values, and none that
+    /// does: those go through `t!` with their arguments.
+    #[test]
+    fn the_catalogue_is_the_messages_that_need_no_values() {
+        let catalogue = catalogue(Language::English);
+        assert!(
+            catalogue
+                .iter()
+                .any(|(id, text)| id == "page-library" && text == "Library")
+        );
+        let listed: BTreeSet<String> = catalogue.into_iter().map(|(id, _)| id).collect();
+        for (id, variables) in messages(Language::English.source()) {
+            assert_eq!(listed.contains(&id), variables.is_empty(), "{id}");
+        }
     }
 
     #[test]

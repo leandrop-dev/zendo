@@ -9325,9 +9325,14 @@ dependencies = [
 name = "zendo-tauri"
 version = "1.0.1"
 dependencies = [
+ "anyhow",
  "gtk",
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
+ "zendo-core",
+ "zendo-shell",
 ]
 
 [[package]]
