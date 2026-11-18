@@ -34,6 +34,8 @@ export type Bootstrap = {
 	fullscreen: boolean;
 	/// Whether closing the window hides it to the tray.
 	tray: boolean;
+	// The FPS harness is on (ZENDO_FPS in the environment).
+	fps: boolean;
 };
 
 // True inside the Tauri window. In a plain browser (`vite dev` on its own)
@@ -86,6 +88,10 @@ export type Chips = {
 	sources: Chip[];
 	sorts: Chip[];
 	organize: Chip[];
+	// The bulk chips, while games are marked.
+	bulk: Chip[];
+	// "3 marked", while any are.
+	marked: string | null;
 };
 
 // What the page says in place of the grid.
@@ -145,4 +151,9 @@ export async function libraryBack(): Promise<LibraryFiltered> {
 
 export async function libraryShowHidden(): Promise<LibraryFiltered> {
 	return invoke<LibraryFiltered>('library_show_hidden');
+}
+
+// Marks a game, or leaves it; nothing is the card under the cursor.
+export async function libraryToggleMark(id?: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_toggle_mark', { id: id ?? null });
 }

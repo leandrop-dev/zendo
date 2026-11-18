@@ -6433,3 +6433,42 @@ hook was removed before the commit.
 Not checked: the grid's frame rate on a large library (the plan's FPS
 harness; the spike measured 60 fps with this shape), and clicks and keys,
 which this session's virtual input still cannot deliver.
+
+## The Tauri port, slice 2b: marks, the watch, covers and the harness (2026-11-18)
+
+- **Marks and bulk edits**: the card's mark box is a button of its own above
+  the card's button (no nested buttons), marks travel back as ids, and the
+  bulk chips (pin, unpin, hide, unhide, clear) as keys. `state.json` now takes
+  pinned, hidden and status writes from the page, not only the sort. The "N
+  marked" line and the bulk chips show while anything is marked.
+- **Collections**: the organize chips (statuses, categories, saved views)
+  work; the Collections chip is left out until slice 4, when the sheet is
+  ported. A chip that opened nothing would be worse than no chip.
+- **The file watch**: every 10 seconds `zendo_core::watch::signature()`; a
+  changed signature rescans on a thread and says `library_loaded`. The first
+  look only notes the files.
+- **Cover downloads**: after every scan the missing covers, then the wide
+  images, are fetched one at a time on a thread, as the Slint window does. The
+  keyring is read only when `download_covers` asks for it. Each cover updates
+  its card and says `cover_changed`; failures are counted and said once with
+  `images-failed`.
+- **The FPS harness**: with `ZENDO_FPS` in the environment the grid scrolls
+  itself through the whole list and shows the frame rate and the worst half
+  second; `scripts/seed-library.py` writes N `.desktop` games and a cover for
+  each into a throwaway home (it needs Pillow for the JPEGs).
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (589 passed, 32 ignored).
+
+- **The watch**, seen: a home with 30 seeded games ran, a 31st `.desktop` file
+  and its cover were written while it did, and the tab, ALL and DESKTOP read
+  31 within the 10-second tick.
+- **The harness**, seen: 2,700 seeded games with covers, scrolling itself at 9
+  pixels a frame with 12 covers on screen, read 62 fps on average; the worst
+  half second was 11, which is the startup window, not a scroll. That is the
+  spike's 60 fps with the same shape, in a debug build.
+
+Not checked: a real cover download (it needs the network and a SteamGridDB
+key), and the mark and bulk clicks (this session's input still delivers
+nothing; the user tested the shell's input in their own session).

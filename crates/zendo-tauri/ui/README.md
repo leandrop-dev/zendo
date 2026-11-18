@@ -37,13 +37,14 @@ npm run build   # build/, what tauri.conf.json's frontendDist points at
 - `src/routes/`: one route per page. The Library has the grid; the others are
   placeholders until their slices.
 - `src/routes/+page.svelte`: the Library page: the source and sort chips, the
-  organize chips, the grid, and the keyboard's moves.
-- `src/lib/components/library/`: the card, the virtualized grid and the chip
-  rows.
+  organize and bulk chips, the grid, and the keyboard's moves.
+- `src/lib/components/library/`: the card (with its mark button), the
+  virtualized grid (and its FPS harness) and the chip rows.
 - `src/lib/components/top-bar.svelte`: the tabs, the view chips and search on
   the Library, the Downloads and Settings buttons and the Settings row.
 - `src/lib/library.svelte.ts`: the Library's store; the cards by id, the
-  shown order, the chips and the cursor, all from Rust.
+  shown order, the chips and the cursor, all from Rust, plus the covers and
+  statuses it hears about.
 - `src/lib/grid.ts`: the grid's arithmetic (cards across, rows on screen),
   with its tests.
 - `src/lib/state.svelte.ts`: the shell's store; the words, the palette and the

@@ -15,6 +15,7 @@ import {
 	librarySearch,
 	libraryShowHidden,
 	libraryStep,
+	libraryToggleMark,
 	type Card,
 	type Chips,
 	type Empty,
@@ -31,7 +32,14 @@ class Library {
 	cards = $state<Record<string, Card>>({});
 	/// The ids the filter shows, in the sort's order.
 	shown = $state<string[]>([]);
-	chips = $state<Chips>({ views: [], sources: [], sorts: [], organize: [] });
+	chips = $state<Chips>({
+		views: [],
+		sources: [],
+		sorts: [],
+		organize: [],
+		bulk: [],
+		marked: null
+	});
 	cursor = $state(0);
 	empty = $state<Empty | null>(null);
 	status = $state<string | null>(null);
@@ -53,6 +61,18 @@ class Library {
 		}
 		await listen('library_loaded', () => {
 			void this.list();
+		});
+		await listen<{ id: string; path: string }>('cover_changed', (event) => {
+			const card = this.cards[event.payload.id];
+			if (card) {
+				this.cards = {
+					...this.cards,
+					[card.id]: { ...card, cover: event.payload.path }
+				};
+			}
+		});
+		await listen<string>('library_status', (event) => {
+			this.status = event.payload;
 		});
 		await this.list();
 	}
@@ -130,6 +150,11 @@ class Library {
 
 	async showHidden(): Promise<void> {
 		await this.run(libraryShowHidden);
+	}
+
+	/// Marks a game, or leaves it; no id marks the card under the cursor.
+	async toggleMark(id?: string): Promise<void> {
+		await this.run(() => libraryToggleMark(id));
 	}
 }
 

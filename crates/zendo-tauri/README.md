@@ -3,8 +3,9 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1 and 2a are in place: the scaffold, the shell, and the Library
-grid. The rest of the Library and the other pages follow.
+Slices 0, 1 and 2 are in place: the scaffold, the shell, and the Library
+(grid, chips, search, sort, cursor, marks, bulk edits, cover downloads and the
+file watch). The other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -15,9 +16,11 @@ grid. The rest of the Library and the other pages follow.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
 - `src/library.rs`: the Library's commands over `zendo_shell::library`: the
-  list (every card once), the chips, the search, the sort, the cursor and the
-  two toggles. Covers are files in `$CACHE/zendo/covers`, read through the
-  asset protocol (enabled in `tauri.conf.json` with that scope).
+  list (every card once), the chips, the search, the sort, the cursor, the
+  marks, and the bulk edits. It scans on a thread, watches the launchers'
+  files every 10 seconds, and fetches the covers that are missing. Covers are
+  files in `$CACHE/zendo/covers`, read through the asset protocol (enabled in
+  `tauri.conf.json` with that scope).
 - `tauri.conf.json`: the window (title `Zendo`, 1360x860, minimum 1100x560),
   the dev loop and the build. The product name is `zendo`, which is the window
   class the compositors' rules key on; `main` sets GTK's program name to it,
@@ -30,7 +33,10 @@ grid. The rest of the Library and the other pages follow.
 
 - `theme_changed`: the palette, when `kdeglobals` changed while the theme is
   the KDE scheme.
-- `library_loaded`: the first scan is in; the page asks for the list.
+- `library_loaded`: a scan is in; the page asks for the list again.
+- `cover_changed`: a downloaded cover, with the game's id and its path.
+- `library_status`: a line the page shows, such as the count of images that
+  could not be downloaded.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the
@@ -59,6 +65,18 @@ ui/node_modules/.bin/tauri build [--debug]
 ```
 
 ## Checks
+
+The FPS harness, which needs no input: `ZENDO_FPS=1` makes the grid scroll
+itself through the whole list and show the frame rate and the worst half
+second. `scripts/seed-library.py --home <dir> --count 2700` writes a large
+throwaway library and its covers (it needs Pillow):
+
+```sh
+scripts/seed-library.py --home /tmp/zendo-fps --count 2700
+env -i PATH="$PATH" HOME=/tmp/zendo-fps \
+    XDG_DATA_HOME=/tmp/zendo-fps/.local/share \
+    XDG_CACHE_HOME=/tmp/zendo-fps/.cache ZENDO_FPS=1 target/debug/zendo-tauri
+```
 
 ```sh
 npm --prefix ui run check   # svelte-check

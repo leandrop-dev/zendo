@@ -63,12 +63,13 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             library::library_fit,
             library::library_back,
             library::library_show_hidden,
+            library::library_toggle_mark,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
                 platform::start(app.handle(), &window, fullscreen)?;
             }
-            library::scan(app.handle().clone());
+            library::start(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

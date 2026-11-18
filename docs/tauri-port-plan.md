@@ -124,10 +124,11 @@ and removed once already).
    ported.
 2. **Library**: grid with virtualization, chips, search, sort, views, marks and
    bulk edits, the cursor (keyboard and pad), cover downloads, the file watch,
-   collections. Built 2026-11-18 as **2a**: the grid, the chips, the search,
-   the sort, the views, the cards with covers (the asset protocol) and the
-   cursor. **2b** carries the marks and bulk chips, the Collections sheet,
-   cover downloads and the file watch.
+   collections. Built 2026-11-18 as **2a** (the grid, the chips, the search,
+   the sort, the views, the cards with covers over the asset protocol and the
+   cursor) and **2b** (the marks and bulk edits, the file watch, the cover
+   downloads and the FPS harness). The Collections chip waits for its sheet,
+   which is slice 4's.
 3. **Game page**: header, actions (Play, Stop, Favorite, Hide, Manage), status,
    tiles, sessions, details, local games, Steam facts and requirements, DLC,
    ProtonDB, achievements, Wine prefix, GOG changelog, cloud saves, the Mods
@@ -224,26 +225,29 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    Tailwind, shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
 2. Port the shell: words, colours, tray, controller, keyboard, full screen and
    the command line. Slice 1, built 2026-11-18.
-3. Port the Library: the grid, the chips, the search, the sort and the cursor,
-   with `library_list` and the covers over the asset protocol. Slice 2a, built
-   2026-11-18. Then 2b: marks and bulk edits, collections, cover downloads and
-   the file watch.
-4. Add the FPS harness and the parity checklist, then proceed slice by slice.
+3. Port the Library: the grid, chips, search, sort, cursor, marks, bulk
+   edits, cover downloads and the file watch. Slice 2, built 2026-11-18 (2a
+   and 2b); the Collections sheet is slice 4's.
+4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
+   slice by slice.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
 
-- Branch `f/ui-revamp`. Slices 0 and 1 are in place: the crate, the SvelteKit
-  app, the dev loop, the shell's words and colours, the tray, the controller,
-  full screen and the command line. Its commands and checks are in
-  `crates/zendo-tauri/README.md`.
+- Branch `f/ui-revamp`. Slices 0, 1 and 2 are in place: the crate, the
+  SvelteKit app, the dev loop, the shell, and the Library with its grid, chips,
+  search, sort, cursor, marks, bulk edits, cover downloads and file watch. Its
+  commands and checks are in `crates/zendo-tauri/README.md`.
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next is slice 2b: marks and the bulk chips, the Collections sheet, cover
-  downloads and the file watch, with the FPS harness on a large library. Then
-  slice 3 (the game page).
-- The last run could not check clicks or keys: this session's `ydotool` and
-  `wtype` delivered nothing. The grid's keys and the pad were code-read only;
-  the user tested the shell's input and tray in their own session.
+- Next is slice 3: the game page. The Library's Collections chip waits for
+  slice 4's sheet.
+- The FPS harness is `ZENDO_FPS=1`, with the seeder at
+  `crates/zendo-tauri/scripts/seed-library.py` for a large throwaway library;
+  it measured 62 fps on 2,700 games in a debug build. `history.md` has the
+  runs.
+- The last runs could not check clicks or keys: this session's `ydotool` and
+  `wtype` delivered nothing. The user tested the shell's input and tray in
+  their own session.
 - The decisions above are firm; do not reopen them without the user.

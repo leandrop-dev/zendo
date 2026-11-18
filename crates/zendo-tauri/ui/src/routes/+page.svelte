@@ -49,6 +49,13 @@
 		</div>
 	{/if}
 
+	{#if library.chips.marked}
+		<div class="flex flex-wrap items-center gap-2 px-6 pb-1">
+			<span class="text-xs text-dim uppercase">{library.chips.marked}</span>
+			<Chips chips={library.chips.bulk} />
+		</div>
+	{/if}
+
 	<div class="min-h-0 flex-1">
 		<Grid />
 	</div>

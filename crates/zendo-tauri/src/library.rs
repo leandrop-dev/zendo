@@ -10,17 +10,27 @@
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use zendo_core::browse::Move;
-use zendo_core::{Library, Source, State as CoreState, Status, View};
-use zendo_shell::library::{Browser, CardData, Chip, Empty, Pick, Save};
+use zendo_core::config::Config;
+use zendo_core::covers::{Fetcher, Kind};
+use zendo_core::{Game, Library, Source, State as CoreState, Status, View};
+use zendo_shell::library::{Browser, CardData, Chip, Chips, Empty, Pick, Save};
+
+/// How often the launchers' files are looked at, as the Slint window does.
+const WATCH: Duration = Duration::from_secs(10);
 
 /// The Library's state, and whether the first scan has finished.
 pub struct LibraryState {
     browser: Mutex<Browser>,
     ready: AtomicBool,
+    /// A scan is running.
+    scanning: AtomicBool,
+    /// The covers are being fetched.
+    downloading: AtomicBool,
 }
 
 impl LibraryState {
@@ -28,6 +38,8 @@ impl LibraryState {
         Self {
             browser: Mutex::new(Browser::new()),
             ready: AtomicBool::new(false),
+            scanning: AtomicBool::new(false),
+            downloading: AtomicBool::new(false),
         }
     }
 }
@@ -38,25 +50,144 @@ impl Default for LibraryState {
     }
 }
 
-/// Scans every source on a thread of its own, as the Slint window does, then
-/// says `library_loaded` so the page asks for the list.
-pub fn scan(app: AppHandle) {
+/// Scans every source and then watches the launchers' files, as the Slint
+/// window does.
+pub fn start(app: AppHandle) {
+    rescan(app.clone());
+    watch(app);
+}
+
+/// Reads every source on a thread of its own, then says `library_loaded` so
+/// the page asks for the list, and fetches the covers that are missing.
+fn rescan(app: AppHandle) {
+    if app
+        .state::<LibraryState>()
+        .scanning
+        .swap(true, Ordering::Relaxed)
+    {
+        return;
+    }
     std::thread::spawn(move || {
         let state = CoreState::load().unwrap_or_default();
         let library = Library::scan();
         let shell = app.state::<LibraryState>();
-        let Ok(mut browser) = shell.browser.lock() else {
+        if let Ok(mut browser) = shell.browser.lock() {
+            browser.loaded(
+                library,
+                Some(state.sort),
+                state.categories(),
+                state.filters(),
+            );
+        }
+        shell.ready.store(true, Ordering::Relaxed);
+        shell.scanning.store(false, Ordering::Relaxed);
+        let _ = app.emit("library_loaded", ());
+        download_covers(app);
+    });
+}
+
+/// Looks at the launchers' files every so often, and reads the games again
+/// when one changed. The first look only notes them.
+fn watch(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut previous = zendo_core::watch::signature();
+        loop {
+            std::thread::sleep(WATCH);
+            let signature = zendo_core::watch::signature();
+            if signature == previous {
+                continue;
+            }
+            previous = signature;
+            rescan(app.clone());
+        }
+    });
+}
+
+/// What a new cover tells the page.
+#[derive(Debug, Clone, Serialize)]
+struct CoverChanged {
+    id: String,
+    path: String,
+}
+
+/// Fetches the covers and wide images the library is missing, one at a time,
+/// on a thread of its own; covers first, since the grid shows them. The
+/// keyring is read only when the settings ask for downloads.
+fn download_covers(app: AppHandle) {
+    if app
+        .state::<LibraryState>()
+        .downloading
+        .swap(true, Ordering::Relaxed)
+    {
+        return;
+    }
+    std::thread::spawn(move || {
+        let finish = |app: &AppHandle| {
+            app.state::<LibraryState>()
+                .downloading
+                .store(false, Ordering::Relaxed);
+        };
+        let file = Config::load_file().unwrap_or_default();
+        if !file.download_covers {
+            finish(&app);
+            return;
+        }
+        let Ok(config) = Config::load() else {
+            finish(&app);
             return;
         };
-        browser.loaded(
-            library,
-            Some(state.sort),
-            state.categories(),
-            state.filters(),
-        );
-        shell.ready.store(true, Ordering::Relaxed);
-        drop(browser);
-        let _ = app.emit("library_loaded", ());
+        let Some(mut fetcher) = Fetcher::new(&config) else {
+            finish(&app);
+            return;
+        };
+        let wanted: Vec<(Game, Kind)> = {
+            let shell = app.state::<LibraryState>();
+            let Ok(browser) = shell.browser.lock() else {
+                finish(&app);
+                return;
+            };
+            let mut wanted = Vec::new();
+            for kind in [Kind::Cover, Kind::Hero] {
+                wanted.extend(
+                    browser
+                        .games()
+                        .iter()
+                        .filter(|game| fetcher.wants(*game, kind))
+                        .map(|game| (game.clone(), kind)),
+                );
+            }
+            wanted
+        };
+        let mut failed = 0_u64;
+        for (game, kind) in wanted {
+            let id = game.id.clone();
+            match fetcher.fetch(&game, kind) {
+                Ok(Some(path)) => {
+                    if let Ok(mut browser) = app.state::<LibraryState>().browser.lock() {
+                        browser.set_image(&id, kind, path.clone());
+                    }
+                    if matches!(kind, Kind::Cover) {
+                        let _ = app.emit(
+                            "cover_changed",
+                            CoverChanged {
+                                id,
+                                path: path.display().to_string(),
+                            },
+                        );
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => failed = failed.saturating_add(1),
+            }
+        }
+        if failed > 0 {
+            let note = zendo_shell::t!("images-failed", count = failed);
+            if let Ok(mut browser) = app.state::<LibraryState>().browser.lock() {
+                browser.say(Some(note.clone()));
+            }
+            let _ = app.emit("library_status", note);
+        }
+        finish(&app);
     });
 }
 
@@ -113,6 +244,10 @@ pub struct ChipsDto {
     sources: Vec<ChipDto>,
     sorts: Vec<ChipDto>,
     organize: Vec<ChipDto>,
+    /// The bulk chips, while games are marked.
+    bulk: Vec<ChipDto>,
+    /// "3 marked", while any are.
+    marked: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -247,6 +382,18 @@ pub fn library_fit(columns: usize, height: f32, state: State<'_, LibraryState>) 
 }
 
 /// Escape: the marks go first, then the search.
+/// Marks a game, or leaves it; `None` is the card under the cursor.
+#[tauri::command]
+pub fn library_toggle_mark(id: Option<String>, state: State<'_, LibraryState>) -> FilteredDto {
+    let mut browser = state
+        .browser
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let outcome = browser.toggle_mark(id.as_deref());
+    save(outcome.save);
+    filtered(&browser, state.ready.load(Ordering::Relaxed))
+}
+
 #[tauri::command]
 pub fn library_back(state: State<'_, LibraryState>) -> FilteredDto {
     let mut browser = state
@@ -281,12 +428,20 @@ fn filtered(browser: &Browser, ready: bool) -> FilteredDto {
     }
 }
 
-fn chips(chips: zendo_shell::library::Chips) -> ChipsDto {
+fn chips(chips: Chips) -> ChipsDto {
     ChipsDto {
         views: chips.views.into_iter().map(chip).collect(),
         sources: chips.sources.into_iter().map(chip).collect(),
         sorts: chips.sorts.into_iter().map(chip).collect(),
-        organize: chips.organize.into_iter().map(chip).collect(),
+        // The Collections sheet is slice 4's; the chip waits for it.
+        organize: chips
+            .organize
+            .into_iter()
+            .filter(|chip| !matches!(chip.pick, Pick::Collections { .. }))
+            .map(chip)
+            .collect(),
+        bulk: chips.bulk.into_iter().map(chip).collect(),
+        marked: chips.marked,
     }
 }
 
@@ -308,9 +463,23 @@ fn empty(empty: Empty) -> EmptyDto {
 
 /// Writes what the page asked to remember: the sort, for now.
 fn save(save: Option<Save>) {
-    if let Some(Save::Sort(sort)) = save {
-        let _ = CoreState::update(|state| state.sort = sort);
-    }
+    let Some(save) = save else {
+        return;
+    };
+    let _ = CoreState::update(|state| match save {
+        Save::Sort(sort) => state.sort = sort,
+        Save::Pinned(ids, pinned) => {
+            for id in ids {
+                state.set_pinned(&id, pinned);
+            }
+        }
+        Save::Hidden(ids, hidden) => {
+            for id in ids {
+                state.set_hidden(&id, hidden);
+            }
+        }
+        Save::Status(id, status) => state.set_status(&id, status),
+    });
 }
 
 fn move_of(step: &str) -> Option<Move> {

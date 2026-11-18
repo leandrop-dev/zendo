@@ -26,6 +26,8 @@ pub struct Bootstrap {
     fullscreen: bool,
     /// Whether closing the window hides it to the tray.
     tray: bool,
+    /// The FPS harness is on (`ZENDO_FPS` in the environment).
+    fps: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +79,7 @@ pub fn bootstrap(shell: State<'_, Shell>, window: WebviewWindow) -> Result<Boots
         palette: palette(&themes.palette()),
         fullscreen: window.is_fullscreen().map_err(|err| err.to_string())?,
         tray: shell.tray.load(std::sync::atomic::Ordering::Relaxed),
+        fps: std::env::var_os("ZENDO_FPS").is_some(),
     })
 }
 
