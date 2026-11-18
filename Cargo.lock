@@ -7964,7 +7964,7 @@ dependencies = [
 
 [[package]]
 name = "zendo"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "i-slint-backend-testing",
@@ -7977,7 +7977,7 @@ dependencies = [
 
 [[package]]
 name = "zendo-core"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -7996,7 +7996,7 @@ dependencies = [
 
 [[package]]
 name = "zendo-shell"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "discord-rich-presence",

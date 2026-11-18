@@ -1,6 +1,6 @@
 [package]
 name = "zendo"
-version = "1.0.0"
+version.workspace = true
 description = "A game launcher for Linux: every game in one library"
 edition.workspace = true
 rust-version.workspace = true

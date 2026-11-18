@@ -6139,3 +6139,97 @@ and the COPR repodata both 200. Not done: a signed Arch repository (the README
 says `SigLevel = Optional TrustAll`), an AUR package (registration closed),
 a Pages cleanup policy, and a real install from the repository on a second
 machine.
+
+## Whole-workspace review, Rust and Slint (2026-11-18)
+
+Seven read-only passes over the workspace (about 57k lines of Rust and the
+22 `.slint` files): the security surface, launch and process code, state and
+data, `zendo-shell`, the two halves of the Slint glue, and the UI. Every
+finding was checked against the source before it was acted on; `cargo fmt
+--check` was clean and `cargo clippy --workspace --all-targets` had no
+warning before and after. The test suite ran green throughout.
+
+Fixed, in the order the review ranked them:
+
+- **Launch log permissions**: `open_log` wrote the heading, which prints the
+  launch's environment, into a 0644 file (`launch.rs`). It is now 0600,
+  reset on an older log too, as the launch options file already was.
+- **HTTPS only**: ureq's `https_only` is now set, so a store's `3xx` cannot
+  turn a request plaintext. ureq strips only `Authorization` and `Cookie`
+  from a redirect, so Nexus's `apikey` would have followed one.
+- **Deletion guard**: `safe_to_delete` counted `..` as a component, so a
+  record like `/tmp/x/../../../home/me` reached `remove_dir_all`. Such paths
+  are refused now, with a test.
+- **gogdl's token and an error message**: a `gogdl auth` reply that is not
+  the expected JSON no longer quotes stdout (which holds the tokens) into the
+  error.
+- **GOG's playtime queue**: a corrupt queue file is an error, not an empty
+  queue that the next save deletes; the sessions are kept and the footer says
+  why.
+- **Covers and the chips**: a downloaded cover redrew the grid and recounted
+  every game through `Browser::chips()` (about 2,700 full passes on a first
+  scan). The Library's `draw` and the Store's `apply_store` now leave the
+  chips alone for a row mark.
+- **Stop on a thread**: Stop walked `/proc` and spoke to each X display on
+  the event loop. `Running::stop` now decides, `Effect::StopAsking` carries
+  the watch to a thread, and `RunMessage::StopAnswered` brings the answer
+  back. The second press still kills, silently.
+- **Settings writes**: one writer thread takes the changes in press order
+  (a thread per press let the lock decide the file). A failed write now
+  re-reads `config.toml` instead of restoring a snapshot that may predate
+  another change.
+- **Typing in the key field**: no longer rebuilds the Settings page's models
+  per letter; the field, the button and the note change only.
+- **The game page's prefix**: read from the settings already in the window,
+  not `config.toml` from disk on every redraw.
+- **Accounts**: one look at a time (a counter of stores being asked), so
+  switching pages quickly no longer stacks engine processes.
+- **A folder-watched game**: `Watch::Folder` now carries the launch time, so
+  a program already open on a file in the folder is not taken for the game
+  by Stop, Force kill or the running check.
+- **Mod archive**: removed only after the add worked.
+- **Game Pass marker and Nexus Launcher state**: written atomically through
+  `paths::write_atomic`; the state's fixed temp name is gone.
+- **`.desktop` scan**: does not walk through a symlinked folder, and is
+  bounded in depth.
+- **File dialog**: passes the chosen path as bytes; a non-UTF-8 name is no
+  longer corrupted by `display()`/`from_utf8_lossy`.
+- **Steam installs**: a look whose thread died is taken over after 30 s
+  instead of latching for the session.
+- **The queue**: a report nobody takes now stops the job, so a closed window
+  no longer leaves an engine downloading.
+- **A bad `config.toml`**: said in the footer at startup, not silently
+  replaced by defaults.
+- **Slint**: the grid reports its column count after layout (an `init` read
+  one column before the first layout and reset the grid twice); the Stats
+  cards subtract the scroll bar; Accounts draws its engine cards from the
+  model instead of three hard-coded ones; the scrim and the scroll bar's
+  width live in `style.slint` and `Grid`; hand-rolled links, Refresh
+  buttons, Game Mode tiles and the installer's rows carry `accessible-*`.
+- **Smaller ones**: `Queue`'s link socket takes only a newline-terminated
+  link; the tray's events block on each channel instead of polling every
+  100 ms; each controller has its own stick; an installer picture superseded
+  before its decode started is not decoded; plugin names with control
+  characters are left out of `Plugins.txt`; `saturating_*` where a cast or a
+  sum could overflow; `Session::offset`'s comment now says it is taken at the
+  start.
+- **Versions**: the three crates now inherit one `version` from
+  `[workspace.package]` (`1.0.1` in this release). Before, `zendo --version`,
+  the HTTP `User-Agent` and Nexus's `Application-Version` said `0.1.0`, read
+  from `zendo-shell` and `zendo-core`, while About said `1.0.0`. A release
+  bump is now one line.
+
+Left for a decision, not changed: the default translucency's contrast
+(`main.slint`, a look decision), animations and `rem` type (a design pass),
+the no-match card's heading (needs a new Fluent id in every language), the
+unused `Tr.count`, pruning `covers::Queue.wide` (bounded by the library, and
+pruning races a pending decode), a size cap on checksum-less downloads
+(game and mod sizes are unbounded), `Sort::compare`'s per-comparison
+lowercasing and `owned::cached`'s per-scan work (both perf, not faults), and
+whether the installer's accessible role should be radio or checkbox (Slint
+wants a constant and a list mixes both; it reports checkbox).
+
+Checked: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets`
+(0 warnings), `cargo test --workspace` (584 passed, 32 ignored). Not checked:
+the window on a screen (an empty throwaway home would show little), and the
+Settings, Accounts and Stats pages with real data.

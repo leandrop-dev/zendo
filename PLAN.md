@@ -18,7 +18,7 @@ Read this file first. The rest is read on demand, not up front.
 | `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
 
-## Where it stands (2026-11-16)
+## Where it stands (2026-11-18)
 
 Phases 1 to 7 and items 1 to 20 are built and mostly tried by the user; the
 whole-workspace review of 2026-11-10 is closed. On 2026-11-12 the project
@@ -66,7 +66,7 @@ record write is ADR 0002. Updates stay with the launcher (item 60c).
 - Releases are built from a `v*` tag by `.github/workflows/release.yml`: a
   GitHub Release (source tarball, checksums, Arch package, Fedora SRPM), a
   pacman repository on GitHub Pages, and a COPR build (ADR 0003). The first
-  stable tag is `v1.0.0`.
+  stable tag was `v1.0.0`; `v1.0.1` is the current release.
 - The Fedora RPM builds on COPR `leandrop/zendo`; the spec's licence is now
   `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
   (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
@@ -74,12 +74,20 @@ record write is ADR 0002. Updates stay with the launcher (item 60c).
 - The user closed the "not yet tried" checklist on 2026-11-17: the app has
   been used through development and works, so items 28, 29, 33 to 36 and 41
   to 44 are taken as seen rather than retested one by one.
+- On 2026-11-18 a whole-workspace review (Rust and Slint, `docs/history.md`)
+  fixed its must and should items, which `v1.0.1` carries: launch logs are
+  the owner's alone, HTTP is HTTPS only, the deletion guard refuses `..`, the
+  GOG playtime queue is no longer deleted on a parse error, covers no longer
+  recount the chips, Stop leaves the event loop, settings writes are ordered,
+  and the Slint grid, Stats and Accounts fixes. The three crates now share one
+  version from `[workspace.package]`.
 
 ## Next
 
-Installing the 1.0.0 packages from the new repositories on the family's
+Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
-the user chooses from `docs/backlog.md` (what is on hold is there).
+the user chooses from `docs/backlog.md` (what is on hold is there, and the
+review's deferred items are listed after it).
 
 ## Direction [firm]
 

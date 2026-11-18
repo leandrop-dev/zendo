@@ -607,6 +607,43 @@ All decided by the user on 2026-11-13.
   GitHub and GitLab releases with community catalogs; Business Source
   License 1.1 from version 4, so ideas only, no code).
 
+## After the whole-workspace review (2026-11-18)
+
+What the review left for a decision rather than a mechanical fix. The rest
+of it is recorded in `docs/history.md` under the same date.
+
+- **Contrast at the default translucency** (`ui/main.slint`, the background
+  at `Colors.background.with-alpha(translucency)`): over a bright, blurred
+  desktop `Colors.dim` falls near 1.6:1, and the footer and captions use it.
+  Raising the default to about 0.85 keeps the blur without the wash-out, but
+  it changes the look, so it waits for the user.
+- **A motion and type pass**: no `animate` anywhere (150 to 200 ms on the
+  background of chips, tabs and buttons would cover most of the window), and
+  every font size is in `px` with `default-font-size: 14px`; `rem` would let
+  the window follow the user's scale.
+- **The no-match card is headed "About"** (`ui/game.slint`, `game-about`
+  over `steam-app-no-match`). It stands in for the About card, but the
+  heading describes what is missing; a new Fluent id is needed in every
+  language, and the i18n tests enforce the same ids everywhere.
+- **`Tr.count` / `lookup-count` is declared and never used** (`ui/style.slint`,
+  `tr.rs`). Remove it, or use it for the plural messages that are formatted
+  on the Rust side today.
+- **`covers::Queue.wide`** grows for the life of the process (every hero,
+  backdrop and screenshot ever asked for). It is bounded by the library size;
+  pruning it on eviction races a worker that reads the set while decoding.
+- **No size cap on a checksum-less download** (`http::download` uses
+  `u64::MAX`; the Lutris-provided runtimes carry no digest). A cap is easy,
+  but game and mod downloads share the same function and have no natural
+  ceiling.
+- **Two perf items, not faults**: `Sort::compare` lowercases both titles per
+  comparison (`zendo list` over the whole library), and `owned::cached`
+  derives images, sizes and totals for a whole store list on every library
+  scan to look up a few installed ids.
+- **The installer's accessible role is `checkbox` for every row**
+  (`ui/installer.slint`): Slint wants a constant role and the list mixes
+  radio rows and boxes. A per-row role would need the rows split into two
+  components.
+
 ## Built since the reformulation of 2026-11-12
 
 Numbers 27 onwards, so they never collide with items 1 to 20 cited in
@@ -637,5 +674,6 @@ history.md and the commits.
 | 62 | Game Pass installs, registration with Nexus Launcher and uninstall | 2026-11-17 |
 | 63 | CI (fmt, clippy, tests) and the tag release: GitHub Release, Arch pacman repository on Pages, COPR | 2026-11-17 |
 | 64 | First stable release `v1.0.0` | 2026-11-17 |
+| 65 | Whole-workspace review: security, data-safety and UI fixes; `v1.0.1` | 2026-11-18 |
 
 Item 37 (emulation) is on hold above.
