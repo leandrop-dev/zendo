@@ -23,6 +23,7 @@ mod mods;
 mod platform;
 mod prefix;
 mod presence;
+mod protons;
 mod settings;
 
 fn main() -> ExitCode {
@@ -74,6 +75,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(engines::EnginesState::default())
         .manage(engines::RuntimesState::default())
         .manage(engines::OverlayState::default())
+        .manage(protons::ProtonsState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -132,6 +134,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_set_auto_update,
             settings::settings_set_workers,
             settings::settings_set_path_first,
+            settings::settings_default_chosen,
             settings::settings_download_covers,
             settings::settings_copy_report,
             settings::settings_open,
@@ -156,6 +159,12 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             engines::settings_runtime_remove,
             engines::settings_overlay_do_install,
             engines::settings_overlay_do_remove,
+            protons::settings_proton_remove,
+            protons::settings_build_chosen,
+            protons::settings_proton_refresh,
+            protons::settings_proton_show_older,
+            protons::settings_release_download,
+            protons::settings_proton_stop,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

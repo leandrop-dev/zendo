@@ -555,6 +555,21 @@ export type SettingsOverlay = {
 	note: SettingsRow | null;
 };
 
+// The Proton group: the default, the ones found, and the releases on offer.
+export type SettingsProtons = {
+	defaults: { name: string | null; label: string; chosen: boolean }[];
+	installed: SettingsSetRow[];
+	installed_none: string;
+	builds: { label: string; chosen: boolean }[];
+	releases_title: string;
+	releases: SettingsSetRow[];
+	refresh_on: boolean;
+	line: SettingsRow | null;
+	older: boolean;
+	bar: SettingsBar;
+	note: SettingsRow | null;
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -581,6 +596,7 @@ export type SettingsPage = {
 	runtimes: SettingsSetRow[];
 	runtimes_note: SettingsRow | null;
 	overlay: SettingsOverlay;
+	proton: SettingsProtons;
 	files: { label: string; value: string; open: string | null }[];
 	report_busy: boolean;
 	report_note: SettingsRow | null;
@@ -726,4 +742,33 @@ export async function settingsOverlayDoInstall(): Promise<SettingsPage> {
 
 export async function settingsOverlayDoRemove(): Promise<SettingsPage> {
 	return invoke<SettingsPage>('settings_overlay_do_remove');
+}
+
+// The Proton group.
+export async function settingsDefaultChosen(name: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_default_chosen', { name });
+}
+
+export async function settingsProtonRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_remove', { index });
+}
+
+export async function settingsBuildChosen(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_build_chosen', { index });
+}
+
+export async function settingsProtonRefresh(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_refresh');
+}
+
+export async function settingsProtonShowOlder(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_show_older');
+}
+
+export async function settingsReleaseDownload(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_release_download', { index });
+}
+
+export async function settingsProtonStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_stop');
 }

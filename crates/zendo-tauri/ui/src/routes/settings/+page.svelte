@@ -3,7 +3,9 @@
 	import { onMount } from 'svelte';
 	import {
 		inTauri,
+		settingsBuildChosen,
 		settingsCopyReport,
+		settingsDefaultChosen,
 		settingsDownloadCovers,
 		settingsEngineAct,
 		settingsEngineRemove,
@@ -26,6 +28,11 @@
 		settingsOpen,
 		settingsOverlayDoInstall,
 		settingsOverlayDoRemove,
+		settingsProtonRefresh,
+		settingsProtonRemove,
+		settingsProtonShowOlder,
+		settingsProtonStop,
+		settingsReleaseDownload,
 		settingsRuntimeAct,
 		settingsRuntimeRemove,
 		settingsSetAutoUpdate,
@@ -50,6 +57,7 @@
 		{ key: 'keys', label: 'settings-group-keys' },
 		{ key: 'launchers', label: 'settings-group-launchers' },
 		{ key: 'engines', label: 'settings-group-engines' },
+		{ key: 'proton', label: 'settings-group-proton' },
 		{ key: 'library', label: 'settings-group-library' },
 		{ key: 'diagnostics', label: 'settings-group-diagnostics' }
 	] as const;
@@ -423,6 +431,92 @@
 					{#if settings.overlay.note}
 						<p class="mt-3 text-[13px] {rowTone(settings.overlay.note.tone)}">
 							{settings.overlay.note.value}
+						</p>
+					{/if}
+				</section>
+			{:else if group === 'proton'}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">Proton</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('protons-about')}</p>
+					<p class="text-[13px] font-bold">{app.t('protons-default')}</p>
+					<p class="mt-1 mb-2 text-[13px] text-dim">{app.t('protons-default-about')}</p>
+					<div class="flex flex-wrap gap-2">
+						{#each settings.proton.defaults as chip (chip.name ?? 'auto')}
+							<button
+								type="button"
+								aria-pressed={chip.chosen}
+								onclick={() => void act(() => settingsDefaultChosen(chip.name))}
+								class="border px-2 py-1 text-[13px] uppercase {chip.chosen
+									? 'border-accent-mark text-accent-mark'
+									: 'border-line text-foreground hover:bg-raised'}"
+							>
+								{chip.label}
+							</button>
+						{/each}
+					</div>
+
+					<p class="mt-4 text-[13px] font-bold">{app.t('protons-here')}</p>
+					{#if settings.proton.installed_none}
+						<p class="mt-1 text-[13px] text-dim">{settings.proton.installed_none}</p>
+					{/if}
+					<div class="mt-2">
+						<SetList
+							rows={settings.proton.installed}
+							onremove={(index) => void act(() => settingsProtonRemove(index))}
+						/>
+					</div>
+
+					<p class="mt-4 text-[13px] font-bold">{settings.proton.releases_title}</p>
+					<div class="mt-2 flex flex-wrap gap-2">
+						{#each settings.proton.builds as chip, index (chip.label)}
+							<button
+								type="button"
+								aria-pressed={chip.chosen}
+								onclick={() => void act(() => settingsBuildChosen(index))}
+								class="border px-2 py-1 text-[13px] uppercase {chip.chosen
+									? 'border-accent-mark text-accent-mark'
+									: 'border-line text-foreground hover:bg-raised'}"
+							>
+								{chip.label}
+							</button>
+						{/each}
+					</div>
+					<div class="mt-2">
+						<button
+							type="button"
+							disabled={!settings.proton.refresh_on}
+							onclick={() => void act(settingsProtonRefresh)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{app.t('protons-check-again')}
+						</button>
+					</div>
+					<div class="mt-2">
+						<SetList
+							rows={settings.proton.releases}
+							onact={(index) => void act(() => settingsReleaseDownload(index))}
+						/>
+					</div>
+					{#if settings.proton.line}
+						<p class="mt-3 text-[13px] {rowTone(settings.proton.line.tone)}">
+							{settings.proton.line.value}
+						</p>
+					{/if}
+					{#if settings.proton.older}
+						<div class="mt-2">
+							<button
+								type="button"
+								onclick={() => void act(settingsProtonShowOlder)}
+								class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised"
+							>
+								{app.t('protons-show-older')}
+							</button>
+						</div>
+					{/if}
+					<DownloadBar bar={settings.proton.bar} onstop={() => void act(settingsProtonStop)} />
+					{#if settings.proton.note}
+						<p class="mt-3 text-[13px] {rowTone(settings.proton.note.tone)}">
+							{settings.proton.note.value}
 						</p>
 					{/if}
 				</section>

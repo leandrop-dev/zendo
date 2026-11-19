@@ -35,6 +35,7 @@ use crate::launchers;
 use crate::library::LibraryState;
 use crate::platform::{self, Shell};
 use crate::presence::PresenceState;
+use crate::protons;
 
 /// The page a key is fetched from, as the "Get a key" line opens.
 const STEAMGRIDDB_KEY_PAGE: &str = "https://www.steamgriddb.com/profile/preferences/api";
@@ -56,6 +57,7 @@ pub enum Setting {
     SteamGridDbKey { key: Option<String>, then: KeyThen },
     NexusKey { key: Option<String>, then: Then },
     EnginesPathFirst(bool),
+    DefaultProton(Option<String>),
 }
 
 impl Setting {
@@ -71,6 +73,7 @@ impl Setting {
             Self::SteamGridDbKey { key, .. } => config.steamgriddb_key.clone_from(key),
             Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
             Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
+            Self::DefaultProton(name) => config.default_proton.clone_from(name),
         }
     }
 
@@ -103,6 +106,7 @@ impl Setting {
             }
             Self::DownloadCovers(true) => crate::library::download_covers_now(app),
             Self::EnginesPathFirst(_) => crate::engines::refresh_engines(app),
+            Self::DefaultProton(_) => crate::protons::default_proton_set(app),
             Self::DownloadCovers(false) | Self::Workers(_) | Self::AutoUpdate(_) => {}
         }
     }
@@ -159,7 +163,7 @@ impl SettingsState {
         }
     }
 
-    fn config(&self) -> MutexGuard<'_, Config> {
+    pub(crate) fn config(&self) -> MutexGuard<'_, Config> {
         self.config.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -241,7 +245,7 @@ pub struct FileDto {
 
 /// A thing Settings lists with buttons: an engine, a runtime, a Proton, a
 /// release or a launcher. An empty text is not drawn.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct SetRowDto {
     pub(crate) title: String,
     pub(crate) sub: String,
@@ -354,6 +358,7 @@ pub struct SettingsDto {
     runtimes: Vec<SetRowDto>,
     runtimes_note: Option<RowDto>,
     overlay: engines::OverlayDto,
+    proton: protons::ProtonsDto,
     files: Vec<FileDto>,
     report_busy: bool,
     report_note: Option<RowDto>,
@@ -366,6 +371,7 @@ pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> Setting
     nexus_ready(&app);
     launchers::ready(&app);
     engines::ready(&app);
+    protons::ready(&app);
     let settings = app.state::<SettingsState>();
     let config = settings.config();
     let shell = app.state::<Shell>();
@@ -402,6 +408,7 @@ pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> Setting
         runtimes: engines::runtimes_rows(&app),
         runtimes_note: engines::runtimes_note(&app),
         overlay: engines::overlay_dto(&app),
+        proton: protons::protons_dto(&app, &config),
         files: files(&config),
         report_busy: settings.gathering.load(Ordering::Relaxed),
         report_note: settings.note().map(|(note, tone)| RowDto {
@@ -643,6 +650,17 @@ pub fn settings_set_path_first(
     settings_get(app, library)
 }
 
+/// The default Proton: `None` is Automatic.
+#[tauri::command]
+pub fn settings_default_chosen(
+    name: Option<String>,
+    app: AppHandle,
+    library: State<'_, LibraryState>,
+) -> SettingsDto {
+    save(&app, Setting::DefaultProton(name));
+    settings_get(app, library)
+}
+
 /// Fetches the covers the library is missing, as Download now asks.
 #[tauri::command]
 pub fn settings_download_covers(app: AppHandle, library: State<'_, LibraryState>) -> SettingsDto {
@@ -689,7 +707,7 @@ pub fn settings_open(path: String) -> Result<(), String> {
 }
 
 /// Shows a change at once, then writes it on the one writer's thread.
-fn save(app: &AppHandle, setting: Setting) {
+pub(crate) fn save(app: &AppHandle, setting: Setting) {
     let settings = app.state::<SettingsState>();
     setting.apply(&mut settings.config());
     let sender = settings
