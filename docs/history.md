@@ -6906,3 +6906,33 @@ default chips ("Automatic: proton-cachyos-slr…" and the found Proton), the
 Protons on this computer, and the five latest GE-Proton releases with Download
 and "Show older versions". Diagnostics rendered as in 4a. The presses that
 start real work (a download, an install, a key save) were not run.
+
+## The Tauri port, slice 4c: About, Accounts and the Collections sheet (2026-11-19)
+
+- **About** (`src/commands.rs`, `src/routes/about/+page.svelte`): the name and
+  version, the intro, Source code and Report a problem (the repository URL now
+  comes with `bootstrap`), the licence and the "Built on" list. The licence
+  line still names Slint, since the repo is GPLv3 until cut-over; slice 8
+  changes it.
+- **Accounts** (`src/accounts.rs`, `src/routes/accounts/+page.svelte`): the
+  three stores (Epic, GOG, Amazon) with each engine's copy and who is signed
+  in, the sign-in in a window of Zendo's own (the shared `zendo_shell::
+  sign_in_window` subprocess, which the shared CLI already handles), the
+  browser-and-paste flow, and sign-out. Steam's card (its own sign-in window,
+  the token kept in the keyring, the kept line) and Nexus Launcher's card
+  (open it), plus GOG's playtime and Galaxy switches. What a sign-in means for
+  the Store's lists is slice 5's.
+- **The Collections sheet** (`src/collections.rs`,
+  `src/lib/components/collections-sheet.svelte`): the hand-picked collections
+  and saved views in one list, Create, Save view, Rename, Delete (twice), a
+  tick per hand-picked collection for the games the sheet was opened for, and
+  Open on a saved view. The Library's COLLECTIONS chip now opens it; the
+  marked games are its targets.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (606 passed, 32 ignored).
+
+Not yet seen on screen: the Accounts page and the Collections sheet. The
+virtual pointer still does not move (the earlier session's failure), so the
+on-screen check stays with the `ZENDO_CHECK` hook and is next.

@@ -49,6 +49,17 @@ follow.
   theme follow a successful write. Discord's presence, the Launchers, Engines
   and Proton groups live in `src/presence.rs`, `src/launchers.rs`,
   `src/engines.rs` and `src/protons.rs`.
+- `src/accounts.rs`: the Accounts page: the three stores' cards (Epic, GOG,
+  Amazon) and their sign-in in the shared `zendo_shell::sign_in_window`
+  subprocess or the browser, Steam's card (its token in the keyring) and
+  Nexus Launcher's card, plus GOG's two switches. What a sign-in means for the
+  Store's lists is slice 5's.
+- `src/collections.rs`: the Collections sheet over `zendo_shell::collections`
+  and `zendo_core::State` (hand-picked collections and saved views made,
+  renamed and deleted; the marked games ticked), opened by the Library's
+  COLLECTIONS chip. The sheet is `ui/src/lib/components/collections-sheet.svelte`. About is
+  `ui/src/routes/about/+page.svelte`, fed by `bootstrap`'s `version_line` and
+  `repository`.
 - `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
   `mods_get` and `mods_begin` read it, and each press is a command
   (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,
@@ -86,6 +97,10 @@ follow.
   the page asks for its cards again.
 - `settings_changed`: a setting was written (or failed), the covers' fetch
   ended, or the report was copied; the Settings page asks again.
+- `accounts_changed`: a store's account was checked, a sign-in or sign-out
+  ended, or Steam's sign-in did; the Accounts page asks again.
+- `collections_changed`: the Collections sheet opened or closed; the Library
+  page asks for it again.
 - `language_changed`: the window's language and its messages.
 - `game_changed`: something about a game's data changed (a prefix tool ended,
   the known fixes were read again, a mark, the saves' state); the payload is
