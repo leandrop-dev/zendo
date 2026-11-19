@@ -995,9 +995,18 @@ export type OwnedPage = {
 	cover: string | null;
 	installed: boolean;
 	details: [string, string][];
-	install: string;
-	install_on: boolean;
-	note: [string, number] | null;
+	// 0 installed (Open in library), 1 Install and Import, 2 queued,
+	// 3 running, 4 paused.
+	job: number;
+	// What the running button says, such as "Installing…".
+	job_label: string;
+	// How far the install is, 0 to 100; -1 for no bar.
+	progress: number;
+	// "Also install its DLC (n)", empty when there is none to give.
+	dlc: string;
+	dlc_on: boolean;
+	// What installing it would do, or why it cannot be.
+	note: string;
 };
 
 export async function storeGet(): Promise<StorePage> {
@@ -1038,4 +1047,105 @@ export async function storeRefresh(): Promise<StorePage> {
 
 export async function ownedGet(id: string): Promise<OwnedPage> {
 	return invoke<OwnedPage>('owned_get', { id });
+}
+
+// Install: queues the game where Settings says, with the DLC unless the box
+// was unticked.
+export async function ownedInstall(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_install', { id });
+}
+
+// Import: the folder dialog, then the game is taken from the folder chosen.
+export async function ownedImport(id: string): Promise<void> {
+	return invoke<void>('owned_import', { id });
+}
+
+export async function ownedResume(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_resume', { id });
+}
+
+export async function ownedToggleDlc(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_toggle_dlc', { id });
+}
+
+// A job in the Downloads page's lists. Every text is Rust's; an empty one
+// is not drawn.
+export type JobRow = {
+	id: string;
+	title: string;
+	// "Install · Epic".
+	line: string;
+	// A dim line: "Waits until the game is closed".
+	note: string;
+	// Why it failed, in red.
+	error: string;
+	// How a finished job ended.
+	verdict: string;
+	verdict_bad: boolean;
+	// The first button (Pause, Resume, Try again), Cancel and Open; an empty
+	// label is no button.
+	first: string;
+	first_primary: boolean;
+	cancel: string;
+	open: string;
+};
+
+// The Downloads page: what the queue is doing, waiting and has finished.
+export type DownloadsPage = {
+	// Nothing queued and nothing finished: no tiles.
+	empty: boolean;
+	// Nothing at all going on: the page invites to the Store.
+	invite: boolean;
+	// How many jobs wait, the running one included.
+	count: number;
+	counts: { up_next: string; paused: string; finished: string };
+	// Closing was asked for while a job runs.
+	asking: boolean;
+	running: {
+		id: string;
+		title: string;
+		line: string;
+		// How far, 0 to 100, or -1 when the engine did not say.
+		percent: number;
+		progress_line: string;
+		pause_label: string;
+		cancel_label: string;
+		pause_on: boolean;
+		cancel_on: boolean;
+	} | null;
+	up_next: JobRow[];
+	paused: JobRow[];
+	finished: JobRow[];
+	// What the queue last said.
+	message: string | null;
+	// The running job's line, or how many jobs wait paused.
+	summary: string | null;
+};
+
+export async function downloadsGet(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_get');
+}
+
+export async function downloadsPause(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_pause', { id });
+}
+
+export async function downloadsResume(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_resume', { id });
+}
+
+export async function downloadsCancel(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_cancel', { id });
+}
+
+export async function downloadsClear(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_clear');
+}
+
+// Where a finished job's game is to open: its page in the library, or in the
+// Store when the scan has it not.
+export type OpenAt = { kind: 'game' | 'store'; id: string };
+
+export async function downloadsOpen(id: string): Promise<OpenAt | null> {
+	return invoke<OpenAt | null>('downloads_open', { id });
 }

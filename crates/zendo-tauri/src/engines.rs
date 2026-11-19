@@ -205,9 +205,9 @@ pub(crate) fn refresh_engines(app: &AppHandle) {
 }
 
 /// Whether replacing or deleting an engine could pull the program out from
-/// under a game.
+/// under a game, or a store's job.
 fn engines_busy(app: &AppHandle) -> bool {
-    app.state::<LibraryState>().running().busy()
+    app.state::<LibraryState>().running().busy() || crate::downloads::is_running(app)
 }
 
 /// Asks GitHub for the latest releases, once a session or on asking.

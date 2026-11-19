@@ -4,6 +4,7 @@
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import Settings from '@lucide/svelte/icons/settings';
 	import Chips from '#lib/components/library/chips.svelte';
+	import { downloads } from '#lib/downloads.svelte.js';
 	import { library } from '#lib/library.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -71,11 +72,18 @@
 			href={resolve('/downloads')}
 			aria-label={app.t('page-downloads')}
 			aria-current={route === '/downloads' ? 'page' : undefined}
-			class="grid size-[34px] place-items-center border {route === '/downloads'
+			class="relative grid size-[34px] place-items-center border {route === '/downloads'
 				? 'border-accent-mark text-accent-mark'
 				: 'border-transparent text-foreground hover:bg-raised'}"
 		>
 			<ArrowDownToLine class="size-[18px]" />
+			{#if downloads.count > 0}
+				<span
+					class="absolute top-0 right-0 grid size-[14px] place-items-center bg-accent-mark text-[10px] font-bold text-primary-foreground"
+				>
+					{downloads.count}
+				</span>
+			{/if}
 		</a>
 		<a
 			href={resolve('/settings')}

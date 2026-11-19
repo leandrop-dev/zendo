@@ -6962,6 +6962,52 @@ Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
 --workspace` (606 passed, 32 ignored). Not yet seen on screen.
 
+## The Tauri port, slice 5b-1: the queue and the Downloads page (2026-11-19)
+
+- **The queue** (`crates/zendo-tauri/src/downloads.rs`): the state is
+  `zendo_shell::queue::Queue`'s, shared with the Slint window; this module
+  carries its effects out. The queue left in `downloads.json` is read at start
+  and what is due begins at once, a cancelled install's files are cleared on a
+  thread, a finished job reads the library again, and the exit effect is the
+  window's. `downloads_changed` is the one event; a running job's progress is
+  fetched by the page every 500 ms rather than pushed, since the engine writes
+  its log many times a second.
+- **The Downloads page** (`ui/src/routes/downloads/+page.svelte`,
+  `ui/src/lib/downloads.svelte.ts`): the three count tiles, the running job
+  with its bar, progress line, Pause and Cancel, the waiting jobs (with
+  "Waits until the game is closed"), the paused ones (Resume or Try again, and
+  why they failed), the finished ones with Open and Clear, and the invitation
+  to the Store. The top bar's downloads button carries the queue's count, and
+  the window's foot carries the summary ("Installing Beta Racer, 18%") on
+  every page but Downloads.
+- **A store game's Install, Import and Resume** (`owned_install`,
+  `owned_import`, `owned_resume`, `owned_toggle_dlc`): the page's buttons
+  follow the queue (install, queued, installing, paused), its note says where
+  the game goes or why it cannot be installed, and its "Also install its DLC"
+  box ticks what the store says is installable. `Job::install` refuses a
+  Steam game and a Game Pass game whose launcher is not ready; those notes are
+  `zendo_shell::store::xbox_install_note` (moved there from the Slint window,
+  which now calls it too).
+- **What the stores say of a game** (`want_info`): the size, latest version
+  and DLC are asked of the game's engine once a session when its page opens
+  (Steam's store for a Steam game, the launcher's `resolve-package` for Game
+  Pass), and the details card takes `zendo_shell::store_facts::facts` as the
+  Slint page does. A failure is kept and shown as "The store could not say".
+- The library's rescan now tells the Store which games it has
+  (`store::library_changed`), and a store job keeps Settings' engines from
+  being replaced (`engines_busy`).
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (606 passed, 32 ignored). Seen on screen in a throwaway home with
+a seeded queue, a fake `legendary` and a cached Epic list: the Downloads page
+with a paused job and, while the fake printed progress, the running card at 33%
+and 42% with its bar and "Installing Beta Racer, 18%" at the foot; the store
+game's page with its note, Install, Import, See downloads; Install queues the
+game and the page follows (INSTALLING), Pause says PAUSING… and ends paused
+with "Paused: Installing Beta Racer". Not seen: a real engine, the DLC box
+(with a store that reports some), the Import dialog, a light scheme and pt-PT.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

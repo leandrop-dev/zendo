@@ -154,7 +154,14 @@ and removed once already).
    Proton and Discord's presence are **4b**; Accounts, About and the
    Collections sheet **4c**.
 5. **Store and Downloads**: the Store page, a store game's page, Steam's card,
-   installs, the queue, updates, the close-while-running question.
+   installs, the queue, updates, the close-while-running question. Built
+   2026-11-19 as **5a** (the Store page over `zendo_shell::store`, the chips,
+   the search, the sorts, Refresh and the store game's read-only page) and
+   **5b-1** (the queue over `zendo_shell::queue`, the Downloads page, the top
+   bar's count and the window's foot, and a store game's Install, Import,
+   Resume and "Also install its DLC", with the sizes, versions and DLC asked of
+   its engine). **5b-2** is Steam's installs, the updates after a scan and the
+   close-while-running question.
 6. **Stats and Game Mode**: the Stats tab and Game Mode (F11 and Select, hero,
    carousel, shelves, the Start menu, `--game-mode`).
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
@@ -247,9 +254,11 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    and 2b); the Collections sheet is slice 4's.
 4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
    slice by slice. Slice 3 is built whole: 3a, 3b, 3c, 3d and 3e (3e-1 to
-   3e-4). Slice 4 is in parts: 4a (Settings' General, Library and
-   Diagnostics) built; 4b (Keys, Launchers, Engines, Proton and Discord's
-   presence) next, then 4c (Accounts, About, the Collections sheet).
+   3e-4). Slice 4 is whole: 4a (Settings' General, Library and Diagnostics),
+   4b (Keys, Launchers, Engines, Proton and Discord's presence) and 4c
+   (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page)
+   and 5b-1 (the queue, the Downloads page, Install and Import); 5b-2 is
+   next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
@@ -258,13 +267,16 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
   SvelteKit app, the dev loop, the shell, the Library, and the whole game page
   (its header and actions, sessions, details, local games, the store cards,
   the Wine prefix card with its tools, GOG's changelog, the cloud saves row
-  and the Mods card). Its commands and checks are in
+  and the Mods card). Slice 4 is whole, and slice 5 is 5a (the Store page) and
+  5b-1 (the queue and the Downloads page). Its commands and checks are in
   `crates/zendo-tauri/README.md`.
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 4b, then 4c. The prefix's tools, the Mods card's presses and
-  Settings' presses are built but unrun: they start umu, a real window, an
+- Next: slice 5b-2 (Steam's installs, the updates after a scan, the
+  close-while-running question), then the accounts→Store refresh 4c left, then
+  slices 6 to 8. The prefix's tools, the Mods card's presses and Settings'
+  presses are built and some are unrun: they start umu, a real window, an
   installer, a change to a game's files or a write to `config.toml`.
 - This session's `ydotool` and `wtype` reached nothing at all (the pointer
   would not move; `hyprctl cursorpos` stayed put), so the on-screen checks

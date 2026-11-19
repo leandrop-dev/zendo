@@ -16,6 +16,7 @@ mod cards;
 mod cloud;
 mod collections;
 mod commands;
+mod downloads;
 mod engines;
 mod game;
 mod launchers;
@@ -82,6 +83,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(accounts::AccountsState::default())
         .manage(collections::CollectionsState::default())
         .manage(store::StoreState::default())
+        .manage(downloads::DownloadsState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -207,6 +209,16 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             store::store_back,
             store::store_refresh,
             store::owned_get,
+            downloads::downloads_get,
+            downloads::downloads_pause,
+            downloads::downloads_resume,
+            downloads::downloads_cancel,
+            downloads::downloads_clear,
+            downloads::downloads_open,
+            downloads::owned_install,
+            downloads::owned_import,
+            downloads::owned_resume,
+            downloads::owned_toggle_dlc,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
@@ -218,6 +230,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
                 platform::start(app.handle(), &window, fullscreen)?;
             }
             library::start(app.handle().clone());
+            downloads::start(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

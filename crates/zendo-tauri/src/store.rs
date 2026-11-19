@@ -14,14 +14,18 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+use zendo_core::downloads;
+use zendo_core::info::{self, GameInfo};
 use zendo_core::owned::{self, Owned, Shop};
 use zendo_core::xodus;
 use zendo_shell::format;
 use zendo_shell::steam_list;
 use zendo_shell::store::{StoreBrowser, StoreChip, StoreChips, StorePick};
+use zendo_shell::store_facts::{self, InfoState};
 use zendo_shell::t;
 
 use crate::accounts;
+use crate::downloads as queue;
 use crate::library::{CardDto, LibraryState};
 
 /// The Store page's state.
@@ -295,8 +299,7 @@ pub fn store_refresh(app: AppHandle) -> StoreDto {
     dto(&app)
 }
 
-/// A store game's page: its facts and whether the store's engine can install
-/// it. Installing is the queue (the next part of the slice).
+/// A store game's page: its facts, and what the queue would do with it.
 #[derive(Debug, Serialize)]
 pub struct OwnedDto {
     id: String,
@@ -305,38 +308,78 @@ pub struct OwnedDto {
     cover: Option<String>,
     installed: bool,
     details: Vec<(String, String)>,
-    install: String,
-    install_on: bool,
-    note: Option<(String, i32)>,
+    /// 0 installed, 1 Install and Import, 2 queued, 3 running, 4 paused.
+    job: i32,
+    /// What the running button says, such as "Installing…".
+    job_label: String,
+    /// How far, 0 to 100; -1 for no bar.
+    progress: f32,
+    /// "Also install its DLC (n)", empty when there is none to give.
+    dlc: String,
+    dlc_on: bool,
+    /// What installing it would do, or why it cannot be.
+    note: String,
 }
 
 #[tauri::command]
 pub fn owned_get(id: String, app: AppHandle) -> Result<OwnedDto, String> {
-    let state = app.state::<StoreState>();
-    let browser = browser(&state);
-    let owned = browser
-        .owned(&id)
-        .cloned()
-        .ok_or_else(|| format!("no store game with the id {id:?}"))?;
-    let installed = browser.is_installed(&id);
-    Ok(OwnedDto {
+    let (owned, installed, info) = {
+        let state = app.state::<StoreState>();
+        let browser = browser(&state);
+        let owned = browser
+            .owned(&id)
+            .cloned()
+            .ok_or_else(|| format!("no store game with the id {id:?}"))?;
+        let installed = browser.is_installed(&id);
+        let info = browser.info.get(&id).cloned();
+        (owned, installed, info)
+    };
+    // Sizes, versions and the DLC are asked once a session, on a thread.
+    want_info(&app, &owned);
+    Ok(page(&app, &owned, installed, info.as_ref()))
+}
+
+/// A store game's page as it is now.
+pub(crate) fn page(
+    app: &AppHandle,
+    owned: &Owned,
+    installed: bool,
+    info: Option<&InfoState>,
+) -> OwnedDto {
+    let install = queue::install_state(app, owned, installed);
+    OwnedDto {
         id: owned.id.clone(),
         title: owned.title.clone(),
         source_line: format!("{} · {}", owned.shop.label(), owned.id),
         cover: owned.cover.as_ref().map(|path| path.display().to_string()),
         installed,
-        details: fact_rows(&owned, installed),
-        install: if installed {
-            t!("action-label", action = "uninstall")
-        } else {
-            t!("install")
-        },
-        install_on: true,
-        note: None,
-    })
+        details: fact_rows(owned, installed, info),
+        job: install.job,
+        job_label: install.label,
+        progress: install.progress,
+        dlc: install.dlc,
+        dlc_on: install.dlc_on,
+        note: install.note,
+    }
 }
 
-fn fact_rows(owned: &Owned, installed: bool) -> Vec<(String, String)> {
+/// A store game's page, asked again by the frontend after a press.
+pub(crate) fn page_of(app: &AppHandle, id: &str) -> Result<OwnedDto, String> {
+    let (owned, installed, info) = {
+        let state = app.state::<StoreState>();
+        let browser = browser(&state);
+        let owned = browser
+            .owned(id)
+            .cloned()
+            .ok_or_else(|| format!("no store game with the id {id:?}"))?;
+        let installed = browser.is_installed(id);
+        let info = browser.info.get(id).cloned();
+        (owned, installed, info)
+    };
+    Ok(page(app, &owned, installed, info.as_ref()))
+}
+
+fn fact_rows(owned: &Owned, installed: bool, info: Option<&InfoState>) -> Vec<(String, String)> {
     let mut rows = vec![(t!("fact-store"), owned.shop.label().to_owned())];
     if owned.shared {
         rows.push((t!("fact-owner"), t!("store-shared")));
@@ -355,6 +398,7 @@ fn fact_rows(owned: &Owned, installed: bool) -> Vec<(String, String)> {
     if let Some(developer) = &owned.developer {
         rows.push((t!("fact-developer"), developer.clone()));
     }
+    rows.extend(store_facts::facts(Some(owned), info, installed));
     if let Some(minutes) = owned.minutes {
         rows.push((
             t!("fact-play-time"),
@@ -366,6 +410,159 @@ fn fact_rows(owned: &Owned, installed: bool) -> Vec<(String, String)> {
         ));
     }
     rows
+}
+
+// What the stores say of a game.
+
+/// Asks the game's store, on a thread, how big it is and its latest version,
+/// unless that was asked already or Zendo is not signed in to the store; for
+/// a Steam game, asks Steam's store for its page; for a Game Pass game, asks
+/// the launcher's backend what it would install.
+fn want_info(app: &AppHandle, owned: &Owned) {
+    {
+        let state = app.state::<StoreState>();
+        if browser(&state).info.contains_key(&owned.id) {
+            return;
+        }
+    }
+    if let Some(app_id) = owned.id.strip_prefix("steam:") {
+        want_steam_details(app, &owned.id, app_id);
+        return;
+    }
+    if let Some(product) = owned.id.strip_prefix("xbox:") {
+        want_xbox_package(app, &owned.id, product);
+        return;
+    }
+    let Some((store, app_id)) = owned::store_of(&owned.id) else {
+        return;
+    };
+    if !accounts::signed_in(app, store) {
+        return;
+    }
+    let platform = downloads::install_platform(owned);
+    asking(app, &owned.id);
+    let handle = app.clone();
+    let id = owned.id.clone();
+    let app_id = app_id.to_owned();
+    let platform = platform.to_owned();
+    std::thread::spawn(move || {
+        let result = info::fetch(store, &app_id, &platform).map_err(|err| format!("{err:#}"));
+        arrived(&handle, &id, result.map(InfoState::Got));
+    });
+}
+
+fn want_xbox_package(app: &AppHandle, id: &str, product: &str) {
+    asking(app, id);
+    let handle = app.clone();
+    let id = id.to_owned();
+    let product = product.to_owned();
+    std::thread::spawn(move || {
+        let result = xodus::package(&product).map_err(|err| format!("{err:#}"));
+        match result {
+            Ok(package) => {
+                let size = package.download_bytes;
+                {
+                    let state = handle.state::<StoreState>();
+                    let mut browser = browser(&state);
+                    let _ = browser.set_package(&id, package);
+                }
+                arrived(
+                    &handle,
+                    &id,
+                    Ok(InfoState::Got(GameInfo {
+                        download_size: size,
+                        ..GameInfo::default()
+                    })),
+                );
+            }
+            Err(err) => arrived(&handle, &id, Err(err)),
+        }
+    });
+}
+
+/// Asks Steam's store about a Steam game the list knows only by name; once a
+/// session.
+fn want_steam_details(app: &AppHandle, id: &str, app_id: &str) {
+    let known = {
+        let state = app.state::<StoreState>();
+        let browser = browser(&state);
+        browser.owned(id).is_none_or(|game| {
+            (game.summary.is_some() || game.developer.is_some()) && game.space.is_some()
+        })
+    };
+    if known {
+        return;
+    }
+    asking(app, id);
+    let handle = app.clone();
+    let id = id.to_owned();
+    let app_id = app_id.to_owned();
+    std::thread::spawn(move || {
+        // Through the shared cache, so the game page's facts and this are
+        // asked once between them.
+        let result = match app_id.parse::<u32>() {
+            Ok(number) => zendo_core::steam_facts::details(number),
+            Err(_) => owned::steam_details(&app_id),
+        }
+        .map_err(|err| format!("{err:#}"));
+        match result {
+            Ok(details) => {
+                if let Some(details) = details {
+                    let changed = {
+                        let state = handle.state::<StoreState>();
+                        let mut browser = browser(&state);
+                        browser.fill_steam(&id, &details)
+                    };
+                    if changed
+                        && let Some(games) = {
+                            let state = handle.state::<StoreState>();
+                            let browser = browser(&state);
+                            browser.list(Shop::Steam).map(<[Owned]>::to_vec)
+                        }
+                    {
+                        let _ = owned::save(Shop::Steam, &games);
+                    }
+                }
+                arrived(&handle, &id, Ok(InfoState::Got(info::GameInfo::default())));
+            }
+            Err(err) => arrived(&handle, &id, Err(err)),
+        }
+    });
+}
+
+/// The game is being asked about: the page says so.
+fn asking(app: &AppHandle, id: &str) {
+    let state = app.state::<StoreState>();
+    let mut browser = browser(&state);
+    browser.info.insert(id.to_owned(), InfoState::Asking);
+}
+
+/// The store's answer is in: kept, and the page asks again.
+fn arrived(app: &AppHandle, id: &str, result: Result<InfoState, String>) {
+    let state = app.state::<StoreState>();
+    let mut browser = browser(&state);
+    browser
+        .info
+        .insert(id.to_owned(), result.unwrap_or_else(InfoState::Failed));
+    drop(browser);
+    let _ = app.emit("store_changed", ());
+}
+
+/// The library changed (an install ended, a game was added): the Store's
+/// cards say which games are installed.
+pub(crate) fn library_changed(app: &AppHandle) {
+    let ids: HashSet<String> = app
+        .state::<LibraryState>()
+        .games()
+        .iter()
+        .map(|game| game.id.clone())
+        .collect();
+    {
+        let state = app.state::<StoreState>();
+        let mut browser = browser(&state);
+        let _ = browser.set_installed(ids);
+    }
+    let _ = app.emit("store_changed", ());
 }
 
 // The DTO.

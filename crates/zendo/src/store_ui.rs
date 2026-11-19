@@ -189,33 +189,7 @@ fn synthesized(owned: &Owned) -> Game {
 /// What a Game Pass game's page says about installing it: Zendo's own
 /// install when its backend and runtime are there, the launcher's otherwise.
 fn xbox_install_note(package: Option<&xodus::Package>, ready: bool, running: bool) -> String {
-    let Some(package) = package else {
-        return if ready && !running {
-            t!("xbox-install-here")
-        } else if running {
-            t!("xbox-close-launcher")
-        } else {
-            t!("xbox-install-in-launcher")
-        };
-    };
-    if !package.supported {
-        return t!("xbox-not-available");
-    }
-    if running {
-        return t!("xbox-close-launcher");
-    }
-    match (ready, package.download_bytes) {
-        (true, Some(bytes)) => t!(
-            "xbox-install-here-needs",
-            size = Size::Bytes(bytes).to_string()
-        ),
-        (true, None) => t!("xbox-install-here"),
-        (false, Some(bytes)) => t!(
-            "xbox-install-in-launcher-needs",
-            size = Size::Bytes(bytes).to_string()
-        ),
-        (false, None) => t!("xbox-install-in-launcher"),
-    }
+    zendo_shell::store::xbox_install_note(package, ready, running)
 }
 
 impl Glue {

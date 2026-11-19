@@ -1,8 +1,13 @@
 <script lang="ts">
 	import './layout.css';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { listen } from '@tauri-apps/api/event';
 	import { onMount } from 'svelte';
 	import type { LayoutProps } from './$types';
 	import TopBar from '#lib/components/top-bar.svelte';
+	import { downloads } from '#lib/downloads.svelte.js';
 	import { library } from '#lib/library.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -25,11 +30,20 @@
 		}
 	}
 
+	// The queue's line stays at the foot of the window on every page but
+	// Downloads, which shows the running job itself.
+	let elsewhere = $derived(page.route.id !== '/downloads');
+
 	onMount(() => {
 		void app.start();
 		void library.start();
+		void downloads.start();
 		window.addEventListener('keydown', key);
-		return () => window.removeEventListener('keydown', key);
+		const asked = listen('downloads_asked', () => void goto(resolve('/downloads')));
+		return () => {
+			window.removeEventListener('keydown', key);
+			void asked.then((stop) => stop());
+		};
 	});
 </script>
 
@@ -42,6 +56,9 @@
 	<main class="min-h-0 flex-1">
 		{@render children()}
 	</main>
+	{#if elsewhere && downloads.summary}
+		<p class="border-t border-line px-6 py-2 text-sm text-dim">{downloads.summary}</p>
+	{/if}
 	{#if app.error}
 		<p class="border-t border-line px-6 py-2 text-sm text-bad">{app.error}</p>
 	{/if}

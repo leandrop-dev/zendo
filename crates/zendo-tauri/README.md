@@ -62,8 +62,19 @@ follow.
   `repository`.
 - `src/store.rs`: the Store page over `zendo_shell::store::StoreBrowser`
   (moved there for both windows): the lists from the cache and each signed-in
-  store, the chips, search, sorts, Refresh, the cards, and a store game's
-  read-only page. Install and the queue are the Downloads part (5b).
+  store, the chips, search, sorts, Refresh, the cards, and a store game's page
+  with its facts and the size, version and DLC its engine says.
+- `src/downloads.rs`: the queue over `zendo_shell::queue`: the queue left from
+  last time read at start and begun, the job's thread, a cancelled install's
+  files cleared, the library read again after a job, and `downloads_get` /
+  `downloads_pause` / `downloads_resume` / `downloads_cancel` /
+  `downloads_clear` / `downloads_open`. A store game's Install, Import, Resume
+  and "Also install its DLC" are here too (`owned_install`, `owned_import`,
+  `owned_resume`, `owned_toggle_dlc`), and the page asks for it again by
+  `store_changed` and `downloads_changed`. The page follows a running job's
+  progress by asking every 500 ms while it runs
+  (`ui/src/lib/downloads.svelte.ts`); the top bar counts the queue and the
+  window's foot says what it is doing.
 - `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
   `mods_get` and `mods_begin` read it, and each press is a command
   (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,
@@ -95,6 +106,11 @@ follow.
   could not be downloaded.
 - `library_changed`: a mark or a count changed on a game's page; the Library
   asks for its list again.
+- `store_changed`: a Store list arrived, a game's size or version was asked,
+  or the library changed what is installed; the Store page and a store game's
+  page ask again.
+- `downloads_changed`: the queue changed (a job queued, started, paused,
+  cancelled or ended); the Downloads page and a store game's page ask again.
 - `game_run` and `game_line`: the running game's state (idle, starting,
   running, stopping) and the line under its actions.
 - `game_cards`: a store card's answer is in; the payload is the game's id, and

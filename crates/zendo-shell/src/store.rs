@@ -15,6 +15,7 @@ use zendo_core::Sort;
 use zendo_core::browse::{self, Move};
 use zendo_core::covers::Kind;
 use zendo_core::owned::{self, Owned, Shop, StoreDetails};
+use zendo_core::xodus::Package;
 
 use crate::library::{CardData, GEOMETRY, Outcome, Rows, Scroll};
 
@@ -651,6 +652,40 @@ impl StoreBrowser {
             GEOMETRY,
         )
         .map_or(Scroll::Keep, Scroll::To)
+    }
+}
+
+/// What a Game Pass game's page says about installing it: Zendo's own
+/// install when the launcher's backend and runtime are there, the launcher's
+/// otherwise. Both windows say it the same.
+#[must_use]
+pub fn xbox_install_note(package: Option<&Package>, ready: bool, running: bool) -> String {
+    let Some(package) = package else {
+        return if ready && !running {
+            t!("xbox-install-here")
+        } else if running {
+            t!("xbox-close-launcher")
+        } else {
+            t!("xbox-install-in-launcher")
+        };
+    };
+    if !package.supported {
+        return t!("xbox-not-available");
+    }
+    if running {
+        return t!("xbox-close-launcher");
+    }
+    match (ready, package.download_bytes) {
+        (true, Some(bytes)) => t!(
+            "xbox-install-here-needs",
+            size = zendo_core::Size::Bytes(bytes).to_string()
+        ),
+        (true, None) => t!("xbox-install-here"),
+        (false, Some(bytes)) => t!(
+            "xbox-install-in-launcher-needs",
+            size = zendo_core::Size::Bytes(bytes).to_string()
+        ),
+        (false, None) => t!("xbox-install-in-launcher"),
     }
 }
 

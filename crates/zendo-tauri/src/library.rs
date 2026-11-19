@@ -86,6 +86,7 @@ pub(crate) fn rescan(app: AppHandle) {
         shell.ready.store(true, Ordering::Relaxed);
         shell.scanning.store(false, Ordering::Relaxed);
         let _ = app.emit("library_loaded", ());
+        crate::store::library_changed(&app);
         download_covers(app);
     });
 }
