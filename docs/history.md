@@ -6607,3 +6607,84 @@ Added, Zendo (umu-launcher), Windows.
 
 Not checked: Open folder (no input), the tools (not ported), and the fixes'
 lines (a store game with a list).
+
+## The Tauri port, slice 3d: the store cards (2026-11-18)
+
+Built with the user's first Steam and Epic installs in the library (Bastion,
+`steam:107100`; Absolute Drift, Epic): these cards needed a real Steam game
+and a store account to ask, which the earlier sessions did not have.
+
+- **The words are one** in `zendo_shell::cards` (new): `rating_pill` (Native,
+  a tier, or no reports, with the tier's own colour), `features_line`,
+  `steam_rows` (developer, publisher, released, genres, features and
+  Metacritic, skipping what the game's own store already said),
+  `requirements_view`, `achievements_summary`, `achievement_rows`,
+  `more_label` and `rarity_text`. The Slint window's `cards_ui.rs` now maps
+  these instead of keeping its own copies; its three formatting tests moved
+  to the shared module, and its own test is the tier colour reaching a Slint
+  `Color`.
+- **The Tauri side** is `crates/zendo-tauri/src/cards.rs`: a `CardsState` of
+  answers by game for the session (`rating`, `facts`, `requirements`,
+  `achievements`, and how many achievements are shown), the commands
+  `cards_get`, `cards_retry`, `cards_more_achievements` and `steam_app_set`,
+  and the event `game_cards` (the game's id) that makes the page ask again.
+  Every question runs on its own thread; a panic becomes the failure the
+  card shows. A rating that names a Steam app id the game did not know asks
+  Steam's store on the way. Achievements' progress is recorded as the Slint
+  window records it (`Browser::set_achievements` and `state.json`), so the
+  tiles and the Library's cards follow.
+- **`steam_app_set`** parses the typed id in Rust (`steam-app-invalid` when
+  it is not one), writes `state.json` through `LibraryState::set_steam_app`,
+  forgets the rating, Steam's facts and the requirements, and says the line
+  the page shows (`steam-app-saved` / `steam-app-cleared`).
+- **The page** draws the ProtonDB pill beside the source line (its tier
+  colour inline, its URL through the new `open_link`, which refuses anything
+  but http and https), the About card (or the "give it a Steam app id" line
+  when no Steam game was found), the screenshots strip, the achievements
+  (share bar, rows, Show more), the requirements, the failures with Try
+  again, the installed DLC, and a Technical card with the Steam app id row
+  (its line, the field, Save and Clear). Steam's rows are appended to the
+  details card, and the Metacritic row opens its page.
+- **The asset protocol's scope** widened from `$CACHE/zendo/covers/**` to
+  `$CACHE/zendo/**`: the screenshots are in `zendo/screenshots` and the
+  achievement icons in `zendo/achievements`.
+- **DLC is the installed list only**, read from the game's own record. The
+  store's list of the DLC the player owns, the count and Install, Install all
+  and Uninstall need the Store's answers and the queue, which are slice 5's.
+- **The screenshot lightbox stays slice 7's**, as the plan has it: the strip
+  shows the small pictures and a click opens nothing yet.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (594 passed, 32 ignored).
+
+A throwaway home (`/tmp/zendo-cards`) with a seeded Steam library (Bastion,
+app 107100) and a `.desktop` game (Hollow Knight), run as `tauri build
+--debug` then the binary with no session bus. Seen on screen:
+
+- **Bastion**: `Steam` with a green `PROTONDB NATIVE` pill, Steam's About
+  (with its "Key Features" lines), five screenshots over the asset protocol,
+  Achievements saying "24 achievements · your Steam profile's game details are
+  private, so which you have unlocked cannot be seen" with icons, rarity per
+  row and Show more (14 left), the requirements from Steam's page, and the
+  details card with Developer, Publisher, Released, Genres, Features ("+4
+  more") and Metacritic 86 / 100 as a link. No Technical card, a Steam game
+  having its own app id.
+- **Hollow Knight** (a `.desktop` game): ProtonDB found app 367520, so the
+  About and screenshots came from Steam's store; the Technical card read
+  `367520 (found by Zendo)`. Typing `620` and Enter (and Save) changed it to
+  `620 (set by you)`, drew Portal 2's About, requirements and details, and
+  said "Hollow Knight now uses Steam app 620"; Clear put back
+  `367520 (found by Zendo)`, Hollow Knight's own cards and said "Hollow Knight
+  no longer has a Steam app id of its own", with `state.json`'s `steam_apps`
+  empty again. The input's Enter key, the pointer and the wheel all reached
+  the window (a `ydotoold` on a short socket path).
+- One rough edge: saving or clearing the app id redraws the page from the
+  top, the about card's height having changed. The Slint window keeps the
+  scroll. Escape with the local game's sheet open now closes the sheet only,
+  where both listeners used to run.
+
+Not checked: an account with public game details (the unlocks, the tiles'
+count and the share bar), an Epic or GOG game's achievements and requirements
+(they need the store signed in), the failure cards with the network down, the
+DLC card (no DLC installed), and a light KDE scheme.

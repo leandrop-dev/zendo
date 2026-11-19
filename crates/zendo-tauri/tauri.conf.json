@@ -13,7 +13,7 @@
 		"security": {
 			"assetProtocol": {
 				"enable": true,
-				"scope": ["$CACHE/zendo/covers/**"]
+				"scope": ["$CACHE/zendo/**"]
 			}
 		},
 		"windows": [

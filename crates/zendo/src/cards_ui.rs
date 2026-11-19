@@ -12,25 +12,20 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use slint::{Color, ComponentHandle, Model, ModelRc, VecModel};
-use zendo_core::achievements::{self, Achievement, Achievements};
-use zendo_core::owned::{Owned, StoreDetails};
+use zendo_core::achievements::{self, Achievements};
+use zendo_core::owned::Owned;
 use zendo_core::protondb::{self, Rating};
-use zendo_core::requirements::{self, From, Requirements, System};
+use zendo_core::requirements::{self, Requirements, System};
 use zendo_core::steam_facts::{self, Facts};
 use zendo_core::{Game, Source, State, steam};
+use zendo_shell::cards::{self, SHOWN};
 use zendo_shell::running::now;
-use zendo_shell::{format, t};
+use zendo_shell::t;
 
 use super::store::DlcView;
 use super::{Glue, with_glue};
 use crate::covers::Cover;
 use crate::{Ach, DlcRow, Fact, GameData, MainWindow, Pill, Req, Shot};
-
-/// How many achievements show at first, and how many more Show more adds.
-const SHOWN: usize = 10;
-
-/// How many of Steam's features the details card names before "+N more".
-const FEATURES_SHOWN: usize = 6;
 
 /// A question put to the network and what is known of the answer.
 #[derive(Debug)]
@@ -79,96 +74,18 @@ impl CardsState {
     }
 }
 
-/// The colour of a `ProtonDB` tier, or `None` for the theme's own.
-fn tier_color(tier: &str) -> Option<Color> {
-    match tier {
-        "platinum" => Some(Color::from_rgb_u8(0xb4, 0xc7, 0xdc)),
-        "gold" => Some(Color::from_rgb_u8(0xcf, 0xb5, 0x3b)),
-        "silver" => Some(Color::from_rgb_u8(0xa6, 0xa6, 0xa6)),
-        "bronze" => Some(Color::from_rgb_u8(0xcd, 0x7f, 0x32)),
-        _ => None,
-    }
-}
-
-fn title_case(word: &str) -> String {
-    let mut chars = word.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
-}
-
-/// What the reports say, for the pill's words.
-fn reports(rating: &Rating) -> String {
-    match (&rating.tier, rating.reports) {
-        (None, _) => t!("protondb-no-reports-yet"),
-        (Some(tier), count) => t!("protondb-reports", tier = title_case(tier), count = count),
-    }
-}
-
-/// The pill for the game's page: Native for a game with a Linux build, else
-/// the reports' tier. The tone says which of the theme's colours it takes
-/// (1 good, 2 bad, 3 dim), or 0 for the tier's own.
-fn pill_of(rating: &Rating) -> Pill {
-    let (label, tone, tint, about) = match &rating.tier {
-        _ if rating.native => (
-            t!("protondb-native"),
-            1,
-            None,
-            t!("protondb-native-about", reports = reports(rating)),
-        ),
-        Some(tier) => {
-            let own = tier_color(tier);
-            let tone = if tier == "borked" { 2 } else { 3 };
-            (
-                format!("PROTONDB {}", tier.to_uppercase()),
-                if own.is_some() { 0 } else { tone },
-                own,
-                t!("protondb-tier-about", reports = reports(rating)),
-            )
-        }
-        None => (t!("protondb-none"), 3, None, t!("protondb-none-about")),
-    };
+/// A pill as Slint draws it.
+fn pill_of(shared: cards::Pill) -> Pill {
     Pill {
-        label: label.into(),
-        tint: tint.unwrap_or_default(),
-        tone,
-        tip: about.into(),
-        url: rating.url().into(),
-    }
-}
-
-/// Steam's features of the game, with its controller support when the
-/// features do not already say it.
-fn features_line(details: &StoreDetails) -> String {
-    let mut features = details.features.clone();
-    let controller = match details.controller.as_deref() {
-        Some("full") => Some(t!("fact-controller-full")),
-        Some("partial") => Some(t!("fact-controller-partial")),
-        _ => None,
-    };
-    if let Some(controller) = controller
-        && !features
-            .iter()
-            .any(|feature| feature.eq_ignore_ascii_case(&controller))
-    {
-        features.push(controller);
-    }
-    // Steam lists up to thirty; the first few say what the game is.
-    let more = features.len().saturating_sub(FEATURES_SHOWN);
-    features.truncate(FEATURES_SHOWN);
-    let mut line = features.join(", ");
-    if more > 0 {
-        line.push_str(&t!("fact-features-more", count = more.to_string()));
-    }
-    line
-}
-
-/// A share of players: one decimal under 10 %, whole numbers above.
-fn rarity_text(percent: f32) -> String {
-    if percent < 10.0 {
-        format!("{percent:.1}")
-    } else {
-        format!("{percent:.0}")
+        label: shared.label.into(),
+        tint: shared
+            .tint
+            .map_or_else(Color::default, |(red, green, blue)| {
+                Color::from_rgb_u8(red, green, blue)
+            }),
+        tone: shared.tone,
+        tip: shared.tip.into(),
+        url: shared.url.into(),
     }
 }
 
@@ -638,14 +555,8 @@ impl Glue {
         // The pills.
         let mut pills = Vec::new();
         match self.cards.ratings.borrow().get(id) {
-            Some(Ask::Asking) => pills.push(Pill {
-                label: "PROTONDB …".into(),
-                tint: Color::default(),
-                tone: 3,
-                tip: "".into(),
-                url: "".into(),
-            }),
-            Some(Ask::Got(Some(rating))) => pills.push(pill_of(rating)),
+            Some(Ask::Asking) => pills.push(pill_of(cards::asking_pill())),
+            Some(Ask::Got(Some(rating))) => pills.push(pill_of(cards::rating_pill(rating))),
             _ => {}
         }
         pills.extend(self.deck_pills(id));
@@ -732,41 +643,30 @@ impl Glue {
         data.set_ach_more("".into());
         data.set_ach_summary("".into());
         if let Some(Ask::Got(Some(found))) = self.cards.achievements.borrow().get(id) {
-            let total = found.list.len();
-            if found.unlocks_known {
-                let unlocked = found.unlocked();
-                #[expect(
-                    clippy::cast_precision_loss,
-                    reason = "counts of achievements, far below f32's exact range"
-                )]
-                let share = unlocked as f32 / total.max(1) as f32;
-                data.set_ach_share(share);
-                data.set_ach_summary(
-                    t!("achievements-unlocked", unlocked = unlocked, total = total).into(),
-                );
-            } else {
-                let why = if id.starts_with("steam:") {
-                    t!("achievements-unknown-steam", total = total)
-                } else {
-                    t!("achievements-unknown", total = total)
-                };
-                data.set_ach_summary(why.into());
-            }
-            let shown = (SHOWN + self.cards.achievements_more.get()).min(total);
+            let (summary, share) = cards::achievements_summary(found, id);
+            data.set_ach_share(share.unwrap_or(-1.0));
+            data.set_ach_summary(summary.into());
+            let shown = (SHOWN + self.cards.achievements_more.get()).min(found.list.len());
             let at = now();
-            for achievement in &found.list[..shown] {
-                let icon = achievement.icon.as_ref().and_then(|path| {
+            for row in cards::achievement_rows(found, shown, at) {
+                let icon = row.icon.as_ref().and_then(|path| {
                     images.push(path.clone());
                     match self.covers.borrow_mut().get(path) {
                         Cover::Ready(image) => Some(image),
                         _ => None,
                     }
                 });
-                rows.push(achievement_row(achievement, icon, at));
+                rows.push(Ach {
+                    has_icon: icon.is_some(),
+                    icon: icon.unwrap_or_default(),
+                    name: row.name.into(),
+                    description: row.description.into(),
+                    side: row.side.into(),
+                    unlocked: row.unlocked,
+                });
             }
-            let left = total - shown;
-            if left > 0 {
-                data.set_ach_more(t!("achievements-more", count = left).into());
+            if let Some(more) = cards::more_label(found, shown) {
+                data.set_ach_more(more.into());
             }
         }
         self.cards.achievements_model.set_vec(rows);
@@ -778,23 +678,14 @@ impl Glue {
         data.set_req_both(false);
         data.set_req_source("".into());
         if let Some(Ask::Got(Some(found))) = self.cards.requirements.borrow().get(id) {
-            let system = match found.system {
-                System::Windows => "Windows",
-                System::Linux => "Linux",
-            };
-            let source = match found.from {
-                From::Gog => t!("requirements-from-gog", system = system),
-                From::Epic => t!("requirements-from-epic", system = system),
-                From::Steam => t!("requirements-from-steam", system = system),
-            };
-            let both = found.has_recommended();
-            data.set_req_both(both);
-            data.set_req_source(source.into());
-            for row in &found.rows {
+            let view = cards::requirements_view(found);
+            data.set_req_both(view.both);
+            data.set_req_source(view.source.into());
+            for row in view.rows {
                 rows.push(Req {
-                    label: row.label.clone().into(),
-                    minimum: row.minimum.clone().unwrap_or_default().into(),
-                    recommended: row.recommended.clone().unwrap_or_default().into(),
+                    label: row.label.into(),
+                    minimum: row.minimum.into(),
+                    recommended: row.recommended.into(),
                 });
             }
         }
@@ -852,134 +743,38 @@ impl Glue {
         let Some(facts) = self.facts_of(&game.id) else {
             return Vec::new();
         };
-        let details = &facts.details;
-        // What the game's own store already said is not said twice.
-        let said = |own: Option<&Option<String>>| own.is_some_and(Option::is_some);
-        let mut rows = Vec::new();
-        if let Some(developer) = &details.developer
-            && game.details.developer.is_none()
-            && !said(owned.map(|owned| &owned.developer))
-        {
-            rows.push(fact(t!("fact-developer"), developer.clone()));
-        }
-        if let Some(publisher) = &details.publisher
-            && !said(owned.map(|owned| &owned.publisher))
-        {
-            rows.push(fact(t!("fact-publisher"), publisher.clone()));
-        }
-        if let Some(day) = &details.released
-            && !said(owned.map(|owned| &owned.released))
-        {
-            rows.push(fact(t!("fact-released"), day.clone()));
-        }
-        if !details.genres.is_empty() && owned.is_none_or(|owned| owned.genres.is_empty()) {
-            rows.push(fact(t!("fact-genres"), details.genres.join(", ")));
-        }
-        let features = features_line(details);
-        if !features.is_empty() {
-            rows.push(fact(t!("fact-features"), features));
-        }
-        if let Some(found) = &details.metacritic {
-            rows.push(Fact {
-                url: found.url.clone().into(),
-                ..fact(t!("fact-metacritic"), format!("{} / 100", found.score))
-            });
-        }
-        rows
-    }
-}
-
-/// One achievement: its icon, its name and description, and when it was
-/// unlocked or how rare it is.
-fn achievement_row(achievement: &Achievement, icon: Option<slint::Image>, at: u64) -> Ach {
-    let kept_back = achievement.hidden && achievement.unlocked.is_none();
-    let (name, description) = if kept_back {
-        (t!("achievements-hidden"), t!("achievements-hidden-about"))
-    } else {
-        (achievement.name.clone(), achievement.description.clone())
-    };
-    let side = match (achievement.unlocked, achievement.rarity) {
-        (Some(when), _) if when > 0 => {
-            t!("achievements-unlocked-when", when = format::ago(when, at))
-        }
-        (Some(_), _) => t!("achievements-unlocked-plain"),
-        (None, Some(rarity)) => t!("achievements-rarity", percent = rarity_text(rarity)),
-        (None, None) => String::new(),
-    };
-    Ach {
-        has_icon: icon.is_some(),
-        icon: icon.unwrap_or_default(),
-        name: name.into(),
-        description: description.into(),
-        side: side.into(),
-        unlocked: achievement.unlocked.is_some(),
+        cards::steam_rows(&facts, game, owned)
+            .into_iter()
+            .map(|row| Fact {
+                url: row.url.unwrap_or_default().into(),
+                ..fact(row.label, row.value)
+            })
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use zendo_core::owned::Metacritic;
-
     use super::*;
 
-    fn details() -> StoreDetails {
-        StoreDetails {
-            features: vec!["Single-player".into(), "Co-op".into()],
-            controller: Some("full".into()),
-            metacritic: Some(Metacritic {
-                score: 95,
-                url: "https://www.metacritic.com/game/pc/portal-2".into(),
-            }),
-            ..StoreDetails::default()
+    fn rating(tier: Option<&str>) -> Rating {
+        Rating {
+            app: 435_790,
+            tier: tier.map(str::to_owned),
+            reports: 37,
+            native: false,
         }
     }
 
+    // The words and the tiers are `zendo_shell::cards`'; this checks the
+    // colour Slint gets for each, which is the window's own part.
     #[test]
-    fn names_the_controller_once_and_counts_the_rest() {
-        let mut details = details();
-        assert_eq!(
-            features_line(&details),
-            format!("Single-player, Co-op, {}", t!("fact-controller-full"))
-        );
-        details.features.push(t!("fact-controller-full"));
-        assert_eq!(features_line(&details).matches("ontroller").count(), 1);
-        details.controller = None;
-        details.features = (1..=9).map(|n| format!("F{n}")).collect();
-        let line = features_line(&details);
-        assert!(line.starts_with("F1, F2, F3, F4, F5, F6"));
-        assert!(!line.contains("F7"));
-        assert!(line.ends_with(&t!("fact-features-more", count = "3".to_owned())));
-    }
-
-    #[test]
-    fn a_pill_says_native_or_the_tier() {
-        let rating = Rating {
-            app: 435_790,
-            tier: Some("gold".into()),
-            reports: 37,
-            native: false,
-        };
-        let pill = pill_of(&rating);
-        assert_eq!(pill.label, "PROTONDB GOLD");
-        assert_eq!(pill.tone, 0);
-        assert_eq!(reports(&rating), "Proton: Gold from 37 reports");
-        let native = Rating {
-            native: true,
-            ..rating
-        };
-        assert_eq!(pill_of(&native).tone, 1);
-        let borked = Rating {
-            app: 1,
-            tier: Some("borked".into()),
-            reports: 2,
-            native: false,
-        };
-        assert_eq!(pill_of(&borked).tone, 2);
-    }
-
-    #[test]
-    fn rarity_has_a_decimal_under_ten_percent() {
-        assert_eq!(rarity_text(3.24), "3.2");
-        assert_eq!(rarity_text(42.4), "42");
+    fn a_tier_colour_reaches_the_pill() {
+        let gold = pill_of(cards::rating_pill(&rating(Some("gold"))));
+        assert_eq!(gold.tint, Color::from_rgb_u8(0xcf, 0xb5, 0x3b));
+        assert_eq!(gold.tone, 0);
+        let borked = pill_of(cards::rating_pill(&rating(Some("borked"))));
+        assert_eq!(borked.tint, Color::default());
+        assert_eq!(borked.tone, 2);
     }
 }

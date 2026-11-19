@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use tauri::Manager;
 
+mod cards;
 mod commands;
 mod game;
 mod library;
@@ -53,10 +54,12 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     tauri::Builder::default()
         .manage(platform::Shell::new(themes, config.minimize_to_tray))
         .manage(library::LibraryState::new())
+        .manage(cards::CardsState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
             commands::window_fullscreen_toggle,
+            commands::open_link,
             library::library_list,
             library::library_pick,
             library::library_search,
@@ -79,6 +82,10 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             local::local_save,
             local::local_remove,
             prefix::prefix_open,
+            cards::cards_get,
+            cards::cards_retry,
+            cards::cards_more_achievements,
+            cards::steam_app_set,
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

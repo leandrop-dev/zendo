@@ -3,10 +3,11 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1, 2 and 3a are in place: the scaffold, the shell, the Library
-(grid, chips, search, sort, cursor, marks, bulk edits, cover downloads and the
-file watch), and the game page's header and actions. The rest of that page and
-the other pages follow.
+Slices 0, 1, 2, 3a, 3b, 3c, 3d and 3e-1 are in place: the scaffold, the shell,
+the Library (grid, chips, search, sort, cursor, marks, bulk edits, cover
+downloads and the file watch), the game page's header and actions, its
+sessions and details, local games, its store cards and the Wine prefix card.
+The rest of that page and the other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -24,12 +25,19 @@ the other pages follow.
 - `src/game.rs`: the game page's commands: `game_get`, `game_launch`,
   `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
   over `zendo_shell::running` for the launch.
+- `src/cards.rs`: the page's store cards, asked once a session:
+  `cards_get`, `cards_retry` (for a card that failed), `cards_more_achievements`
+  and `steam_app_set`. ProtonDB's rating, Steam's store, the requirements and
+  the achievements are asked on threads of their own; a failure is kept and
+  shown with Try again. The words are `zendo_shell::cards`, shared with the
+  Slint window.
 - `src/library.rs`: the Library's commands over `zendo_shell::library`: the
   list (every card once), the chips, the search, the sort, the cursor, the
   marks, and the bulk edits. It scans on a thread, watches the launchers'
   files every 10 seconds, and fetches the covers that are missing. Covers are
   files in `$CACHE/zendo/covers`, read through the asset protocol (enabled in
-  `tauri.conf.json` with that scope).
+  `tauri.conf.json` with `$CACHE/zendo/**`: the store cards' screenshots and
+  achievement icons are in that folder's neighbours).
 - `tauri.conf.json`: the window (title `Zendo`, 1360x860, minimum 1100x560),
   the dev loop and the build. The product name is `zendo`, which is the window
   class the compositors' rules key on; `main` sets GTK's program name to it,
@@ -50,6 +58,8 @@ the other pages follow.
   asks for its list again.
 - `game_run` and `game_line`: the running game's state (idle, starting,
   running, stopping) and the line under its actions.
+- `game_cards`: a store card's answer is in; the payload is the game's id, and
+  the page asks for its cards again.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the
@@ -76,6 +86,10 @@ pipeline):
 ```sh
 ui/node_modules/.bin/tauri build [--debug]
 ```
+
+The check needs this one, or `tauri dev`: a plain `cargo build` opens the
+window on `devUrl` and shows "Could not connect to localhost" with no dev
+server behind it.
 
 ## Checks
 

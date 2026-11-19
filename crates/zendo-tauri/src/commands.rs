@@ -113,6 +113,19 @@ pub fn window_fullscreen_toggle(window: WebviewWindow) -> Result<bool, String> {
     Ok(!fullscreen)
 }
 
+/// Opens a link with the desktop's browser, for the store rows that carry one.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri hands a command its argument by value"
+)]
+pub fn open_link(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(format!("{url:?} is not a web address"));
+    }
+    zendo_shell::open::target(&url)
+}
+
 /// A value the frontend sends, as Fluent takes it.
 fn fluent_value(value: &serde_json::Value) -> FluentValue<'static> {
     match value {

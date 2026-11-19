@@ -6,6 +6,9 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { onMount } from 'svelte';
 	import {
+		cardsGet,
+		cardsMoreAchievements,
+		cardsRetry,
 		gameGet,
 		gameLaunch,
 		gameSetHidden,
@@ -14,20 +17,30 @@
 		gameStop,
 		inTauri,
 		localRemove,
+		openLink,
 		prefixOpen,
-		type GamePage
+		steamAppSet,
+		type GameCards,
+		type GamePage,
+		type Pill
 	} from '#lib/api.js';
 	import LocalForm from '#lib/components/local-form.svelte';
 	import { app } from '#lib/state.svelte.js';
 
 	// A game's page: the wide art faint behind the header, the cover, the
-	// title, the actions, the status chips and the four tiles. The cards
-	// under them are the next parts of this slice.
+	// title, the actions, the status chips and the four tiles, then the cards
+	// the stores and the sites fill: Steam's about, screenshots and facts,
+	// the achievements, the requirements, the Wine prefix, the DLC and the
+	// game's details.
 	let game = $state<GamePage | null>(null);
+	let cards = $state<GameCards | null>(null);
 	let error = $state<string | null>(null);
 	// A game added by hand: the sheet to edit it, and Remove pressed once.
 	let editing = $state(false);
 	let removing = $state(false);
+	// The Steam app id's field and what saving it said.
+	let appInput = $state('');
+	let appNote = $state<string | null>(null);
 	let id = $derived(page.params.id ?? '');
 
 	let cover = $derived(
@@ -36,6 +49,15 @@
 	let hero = $derived(
 		game?.hero !== null && game?.hero && inTauri() ? convertFileSrc(game.hero) : null
 	);
+	// The details card: what the game is, then what only Steam says.
+	let detailRows = $derived([
+		...(game?.details ?? []).map((row) => ({ ...row, url: null as string | null })),
+		...(cards?.steam ?? [])
+	]);
+	// Every file of the cards is in Zendo's cache; the asset protocol serves it.
+	function asset(path: string | null): string {
+		return path !== null && inTauri() ? convertFileSrc(path) : '';
+	}
 
 	async function load(): Promise<void> {
 		if (!inTauri() || !id) {
@@ -43,6 +65,22 @@
 		}
 		try {
 			game = await gameGet(id);
+		} catch (err) {
+			error = String(err);
+		}
+	}
+
+	async function loadCards(): Promise<void> {
+		if (!inTauri() || !id) {
+			return;
+		}
+		try {
+			const first = cards === null;
+			cards = await cardsGet(id);
+			// An answer from another card must not clear what is being typed.
+			if (first) {
+				appInput = cards.steam_app.input;
+			}
 		} catch (err) {
 			error = String(err);
 		}
@@ -72,17 +110,62 @@
 		void goto(resolve('/'));
 	}
 
+	async function moreAchievements(): Promise<void> {
+		try {
+			cards = await cardsMoreAchievements(id);
+		} catch (err) {
+			error = String(err);
+		}
+	}
+
+	async function retry(): Promise<void> {
+		try {
+			cards = await cardsRetry(id);
+		} catch (err) {
+			error = String(err);
+		}
+	}
+
+	async function saveApp(appId: string | null): Promise<void> {
+		try {
+			appNote = await steamAppSet(id, appId);
+			cards = await cardsGet(id);
+			appInput = cards.steam_app.input;
+		} catch (err) {
+			appNote = String(err);
+		}
+	}
+
 	function key(event: KeyboardEvent): void {
-		if (event.key === 'Escape') {
+		if (event.key === 'Escape' && !editing) {
 			event.preventDefault();
 			back();
 		}
 	}
 
+	// The pill's colour: its own tier colour, else the theme's for its tone.
+	function pillStyle(pill: Pill): string {
+		return pill.tone === 0 && pill.tint ? `border-color: ${pill.tint}; color: ${pill.tint}` : '';
+	}
+
+	function pillClass(pill: Pill): string {
+		switch (pill.tone) {
+			case 0:
+				return 'border';
+			case 1:
+				return 'border border-good text-good';
+			case 2:
+				return 'border border-bad text-bad';
+			default:
+				return 'border border-line text-dim';
+		}
+	}
+
 	onMount(() => {
 		void load();
+		void loadCards();
 		window.addEventListener('keydown', key);
-		const unlisten = listen<{ id: string; state: number }>('game_run', (event) => {
+		const runs = listen<{ id: string; state: number }>('game_run', (event) => {
 			if (game && event.payload.id === game.id) {
 				game.run_state = event.payload.state;
 				// The end of a game writes a session and its minutes: ask again.
@@ -96,10 +179,17 @@
 				game.line = event.payload.line;
 			}
 		});
+		// An answer to a card came in: ask for them all again.
+		const arrived = listen<string>('game_cards', (event) => {
+			if (event.payload === id) {
+				void loadCards();
+			}
+		});
 		return () => {
 			window.removeEventListener('keydown', key);
-			void unlisten.then((stop) => stop());
+			void runs.then((stop) => stop());
 			void lines.then((stop) => stop());
+			void arrived.then((stop) => stop());
 		};
 	});
 </script>
@@ -158,7 +248,30 @@
 							</span>
 						{/if}
 					</div>
-					<p class="text-sm text-dim">{game.source_line}</p>
+					<div class="flex flex-wrap items-center gap-2">
+						<p class="text-sm text-dim">{game.source_line}</p>
+						{#if cards?.pill}
+							{#if cards.pill.url}
+								<button
+									type="button"
+									title={cards.pill.tip}
+									style={pillStyle(cards.pill)}
+									onclick={() => void openLink(cards!.pill!.url)}
+									class="px-1.5 py-0.5 text-[11px] font-bold {pillClass(cards.pill)}"
+								>
+									{cards.pill.label}
+								</button>
+							{:else}
+								<span
+									title={cards.pill.tip}
+									style={pillStyle(cards.pill)}
+									class="px-1.5 py-0.5 text-[11px] font-bold {pillClass(cards.pill)}"
+								>
+									{cards.pill.label}
+								</span>
+							{/if}
+						{/if}
+					</div>
 
 					<div class="mt-2 flex flex-wrap gap-2">
 						<button
@@ -255,6 +368,129 @@
 				{/each}
 			</div>
 
+			{#if cards?.about}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('game-about')}</h2>
+					<p class="text-sm whitespace-pre-line">{cards.about}</p>
+				</section>
+			{:else if cards?.no_match}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('game-about')}</h2>
+					<p class="text-sm text-dim">{cards.no_match}</p>
+				</section>
+			{/if}
+
+			{#if cards && cards.shots.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('screenshots-title')}</h2>
+					<div class="flex gap-3 overflow-x-auto">
+						{#each cards.shots as shot (shot.thumb)}
+							<img
+								src={asset(shot.thumb)}
+								alt=""
+								loading="lazy"
+								class="h-[150px] shrink-0 rounded-[2px] object-cover"
+							/>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			{#if cards && cards.achievements.rows.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('achievements-title')}</h2>
+					<div class="flex items-center gap-3">
+						<p class="text-sm {cards.achievements.share === null ? 'text-dim' : ''}">
+							{cards.achievements.summary}
+						</p>
+						{#if cards.achievements.share !== null}
+							<div class="h-1.5 flex-1 bg-raised">
+								<div
+									class="h-full bg-accent-mark"
+									style="width: {Math.round(
+										Math.min(1, Math.max(0, cards.achievements.share)) * 100
+									)}%"
+								></div>
+							</div>
+						{/if}
+					</div>
+					<ul class="mt-4 flex flex-col gap-3">
+						{#each cards.achievements.rows as row (row.name + row.side)}
+							<li class="flex items-center gap-3">
+								<div class="flex h-11 w-11 shrink-0 items-center justify-center bg-raised">
+									{#if row.icon}
+										<img src={asset(row.icon)} alt="" class="h-full w-full object-cover" />
+									{:else}
+										<span class="text-dim">?</span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<p class="text-sm font-bold">{row.name}</p>
+									{#if row.description}
+										<p class="text-[13px] text-dim">{row.description}</p>
+									{/if}
+								</div>
+								<span class="shrink-0 text-[13px] {row.unlocked ? 'text-good' : 'text-dim'}">
+									{row.side}
+								</span>
+							</li>
+						{/each}
+					</ul>
+					{#if cards.achievements.more}
+						<button
+							type="button"
+							onclick={() => void moreAchievements()}
+							class="mt-4 border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{cards.achievements.more}
+						</button>
+					{/if}
+				</section>
+			{/if}
+
+			{#if cards && cards.requirements.rows.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('requirements-title')}</h2>
+					<p class="mb-3 text-[13px] text-dim">{cards.requirements.source}</p>
+					<div class="flex flex-col gap-2">
+						{#if cards.requirements.both}
+							<div class="flex gap-3">
+								<span class="w-[130px] shrink-0"></span>
+								<span class="flex-1 text-sm font-bold text-dim">
+									{app.t('requirements-minimum')}
+								</span>
+								<span class="flex-1 text-sm font-bold text-dim">
+									{app.t('requirements-recommended')}
+								</span>
+							</div>
+						{/if}
+						{#each cards.requirements.rows as row (row.label + row.minimum)}
+							<div class="flex gap-3">
+								<span class="w-[130px] shrink-0 text-sm text-dim">{row.label}</span>
+								<span class="flex-1 text-sm">{row.minimum}</span>
+								{#if cards.requirements.both}
+									<span class="flex-1 text-sm">{row.recommended}</span>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			{#each cards?.failures ?? [] as failure (failure.label)}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{failure.label}</h2>
+					<p class="mb-3 text-[13px] text-dim">{failure.value}</p>
+					<button
+						type="button"
+						onclick={() => void retry()}
+						class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+					>
+						{app.t('try-again')}
+					</button>
+				</section>
+			{/each}
+
 			{#if game.sessions.length > 0}
 				<section class="border border-line bg-surface p-4">
 					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('stats-game-title')}</h2>
@@ -308,17 +544,83 @@
 				</section>
 			{/if}
 
+			{#if game.dlc.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('dlc-title')}</h2>
+					<ul class="flex flex-col gap-1">
+						{#each game.dlc as dlc (dlc.title)}
+							<li class="text-[13px]">{dlc.title}</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+
 			<section class="border border-line bg-surface p-4">
 				<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('game-details')}</h2>
 				<dl class="flex flex-col gap-1">
-					{#each game.details as row (row.label)}
+					{#each detailRows as row (row.label)}
 						<div class="flex gap-4 text-[13px]">
 							<dt class="w-[160px] shrink-0 text-dim">{row.label}</dt>
-							<dd class="break-all">{row.value}</dd>
+							{#if row.url}
+								<dd class="break-all">
+									<button
+										type="button"
+										onclick={() => void openLink(row.url!)}
+										class="text-accent-mark hover:underline"
+									>
+										{row.value}
+									</button>
+								</dd>
+							{:else}
+								<dd class="break-all">{row.value}</dd>
+							{/if}
 						</div>
 					{/each}
 				</dl>
 			</section>
+
+			{#if cards && cards.steam_app.line}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('game-technical')}</h2>
+					<div class="flex flex-col gap-2">
+						<span class="text-[11px] text-dim uppercase">{app.t('steam-app-label')}</span>
+						<p class="text-[13px] font-bold">{cards.steam_app.line}</p>
+						<div class="flex flex-wrap items-center gap-2">
+							<input
+								type="text"
+								bind:value={appInput}
+								placeholder={app.t('steam-app-placeholder')}
+								class="h-8 w-[160px] border border-line bg-background px-2 text-[13px]"
+								onkeydown={(event) => {
+									if (event.key === 'Enter') {
+										event.preventDefault();
+										void saveApp(appInput);
+									}
+								}}
+							/>
+							<button
+								type="button"
+								onclick={() => void saveApp(appInput)}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+							>
+								{app.t('steam-app-save')}
+							</button>
+							{#if cards.steam_app.clearable}
+								<button
+									type="button"
+									onclick={() => void saveApp(null)}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+								>
+									{app.t('steam-app-clear')}
+								</button>
+							{/if}
+						</div>
+						{#if appNote}
+							<p class="text-[13px] text-dim">{appNote}</p>
+						{/if}
+					</div>
+				</section>
+			{/if}
 		</div>
 	</div>
 

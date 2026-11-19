@@ -41,8 +41,17 @@ pub struct GameDto {
     sessions: Vec<FactDto>,
     /// The latest sessions, by date.
     recent: Vec<FactDto>,
+    /// The DLC installed with the game, when its engine records any.
+    dlc: Vec<DlcDto>,
     /// The Wine prefix card's data, for a Windows game Zendo starts.
     prefix: Option<PrefixDto>,
+}
+
+/// A DLC installed with a game. The store's list of the DLC the player owns,
+/// and Install and Uninstall, come with the Store and the queue (slice 5).
+#[derive(Debug, Serialize)]
+struct DlcDto {
+    title: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -228,6 +237,14 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
         details: facts(details(game)),
         sessions: facts(session_summary),
         recent: facts(session_recent),
+        dlc: game
+            .details
+            .dlc
+            .iter()
+            .map(|dlc| DlcDto {
+                title: dlc.title.clone().unwrap_or_else(|| dlc.id.clone()),
+            })
+            .collect(),
         prefix: prefix_of(game),
     }
 }

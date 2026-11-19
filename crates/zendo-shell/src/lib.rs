@@ -9,6 +9,7 @@
 //! that into its own kind of stream or event.
 
 pub mod artwork;
+pub mod cards;
 pub mod cli;
 pub mod collections;
 pub mod file_dialog;

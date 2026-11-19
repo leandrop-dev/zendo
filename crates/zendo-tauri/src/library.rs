@@ -157,6 +157,19 @@ impl LibraryState {
         self.ready.store(true, Ordering::Relaxed);
     }
 
+    /// Gives a game a Steam app id, or takes it back with `None`, and writes
+    /// it: the game's title when it is there.
+    pub(crate) fn set_steam_app(&self, id: &str, app: Option<u32>) -> Option<String> {
+        let title = {
+            let mut browser = self.browser.lock().ok()?;
+            browser.set_steam_app(id, app)?
+        };
+        let _ = CoreState::update(|state| {
+            state.set_steam_app(id, app);
+        });
+        Some(title)
+    }
+
     /// The running games.
     pub(crate) fn running(&self) -> std::sync::MutexGuard<'_, Running> {
         self.running

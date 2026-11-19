@@ -180,9 +180,82 @@ export type GamePage = {
 	sessions: { label: string; value: string; path: boolean }[];
 	// The latest sessions, by date.
 	recent: { label: string; value: string; path: boolean }[];
+	// The DLC installed with the game, when its engine records any.
+	dlc: { title: string }[];
 	// The Wine prefix card, for a Windows game Zendo starts.
 	prefix: { folder: string | null; fixes: string[]; gog: boolean } | null;
 };
+
+// A badge on the header: ProtonDB's rating.
+export type Pill = {
+	label: string;
+	// 0 takes `tint`; 1, 2 and 3 take the theme's good, bad and dim.
+	tone: number;
+	tint: string | null;
+	tip: string;
+	url: string;
+};
+
+// A line of a card, and the link its value opens.
+export type Row = { label: string; value: string; url: string | null };
+
+// What the stores and the sites say about a game, as its page's cards.
+export type GameCards = {
+	// While ProtonDB is asked, and once its rating is known.
+	pill: Pill | null;
+	// Steam's about line, empty when its store has no page.
+	about: string;
+	// No Steam game was found for this one.
+	no_match: string | null;
+	shots: { thumb: string; full: string }[];
+	// What only Steam says, for the details card.
+	steam: Row[];
+	requirements: {
+		source: string;
+		both: boolean;
+		rows: { label: string; minimum: string; recommended: string }[];
+	};
+	achievements: {
+		summary: string;
+		// The share of them unlocked, 0 to 1; null when it cannot be said.
+		share: number | null;
+		rows: {
+			icon: string | null;
+			name: string;
+			description: string;
+			side: string;
+			unlocked: boolean;
+		}[];
+		more: string | null;
+	};
+	// The cards that could not be asked, with why.
+	failures: Row[];
+	// The Technical card's Steam app id row.
+	steam_app: { line: string; input: string; clearable: boolean };
+};
+
+export async function cardsGet(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_get', { id });
+}
+
+export async function cardsRetry(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_retry', { id });
+}
+
+export async function cardsMoreAchievements(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_more_achievements', { id });
+}
+
+// Gives the game a Steam app id, or takes it back with null and answers the
+// line the page shows.
+export async function steamAppSet(id: string, app: string | null): Promise<string> {
+	return invoke<string>('steam_app_set', { id, app });
+}
+
+// Opens a link with the desktop's browser.
+export async function openLink(url: string): Promise<void> {
+	return invoke<void>('open_link', { url });
+}
 
 export async function gameGet(id: string): Promise<GamePage> {
 	return invoke<GamePage>('game_get', { id });
