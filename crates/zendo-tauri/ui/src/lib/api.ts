@@ -26,6 +26,10 @@ export type Palette = {
 // What the shell starts with.
 export type Bootstrap = {
 	version: string;
+	// "Version 1.0.1", in the window's words.
+	version_line: string;
+	// Where the source is, for About's buttons.
+	repository: string;
 	language: string;
 	languages: Language[];
 	/// The current language's messages that take no values, by id.

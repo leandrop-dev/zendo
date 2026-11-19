@@ -12,11 +12,18 @@ use zendo_shell::theme::Palette;
 
 use crate::platform::Shell;
 
+/// Where Zendo's source is, for About's buttons.
+const REPOSITORY: &str = "https://github.com/leandrop-dev/zendo";
+
 /// Everything the shell needs when it starts: its words, its colours, and
 /// how many languages and which one.
 #[derive(Debug, Serialize)]
 pub struct Bootstrap {
     version: String,
+    /// "Version 1.0.1", in the window's words.
+    version_line: String,
+    /// Where the source is, for About's buttons.
+    repository: String,
     language: String,
     languages: Vec<LanguageJson>,
     /// The current language's messages that take no values, by id. Messages
@@ -67,6 +74,8 @@ pub fn bootstrap(shell: State<'_, Shell>, window: WebviewWindow) -> Result<Boots
         .map_err(|_| "the theme could not be read".to_owned())?;
     Ok(Bootstrap {
         version: env!("CARGO_PKG_VERSION").to_owned(),
+        version_line: zendo_shell::t!("about-version", version = env!("CARGO_PKG_VERSION")),
+        repository: REPOSITORY.to_owned(),
         language: i18n::current().tag().to_owned(),
         languages: Language::ALL
             .iter()
