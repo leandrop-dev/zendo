@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { listen } from '@tauri-apps/api/event';
 	import { onMount } from 'svelte';
 	import Chips from '#lib/components/library/chips.svelte';
+	import CollectionsSheet from '#lib/components/collections-sheet.svelte';
 	import LocalForm from '#lib/components/local-form.svelte';
 	import Grid from '#lib/components/library/grid.svelte';
+	import { collectionsApply, collectionsGet, inTauri, type CollectionsPage } from '#lib/api.js';
 	import { library } from '#lib/library.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -44,9 +47,34 @@
 	// The Add game sheet, the Library's own; the game page opens it to edit.
 	let adding = $state(false);
 
+	// The Collections sheet.
+	let collections = $state<CollectionsPage | null>(null);
+
+	async function loadCollections(): Promise<void> {
+		if (!inTauri()) {
+			return;
+		}
+		collections = await collectionsGet();
+	}
+
+	function collectionAct(action: () => Promise<CollectionsPage>): void {
+		void action().then((page) => {
+			collections = page;
+		});
+	}
+
+	async function applyView(name: string): Promise<void> {
+		collections = await collectionsApply(name);
+		await library.pick(`saved:${name}`);
+	}
+
 	onMount(() => {
 		window.addEventListener('keydown', key);
-		return () => window.removeEventListener('keydown', key);
+		const changed = listen('collections_changed', () => void loadCollections());
+		return () => {
+			window.removeEventListener('keydown', key);
+			void changed.then((stop) => stop());
+		};
 	});
 </script>
 
@@ -92,5 +120,9 @@
 				void goto(resolve('/game/[id]', { id }));
 			}}
 		/>
+	{/if}
+
+	{#if collections?.open}
+		<CollectionsSheet {collections} act={collectionAct} onapply={(name) => void applyView(name)} />
 	{/if}
 </div>

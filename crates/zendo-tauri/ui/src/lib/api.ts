@@ -639,6 +639,30 @@ export type AccountsPage = {
 	code: string;
 };
 
+// One collection in the sheet: hand-picked or a saved view.
+export type CollRow = {
+	name: string;
+	sub: string;
+	count: string;
+	view: boolean;
+	checked: boolean;
+	checkable: boolean;
+	renaming: boolean;
+	confirm: boolean;
+};
+
+// The Collections sheet.
+export type CollectionsPage = {
+	open: boolean;
+	count: string;
+	empty: string;
+	now: string;
+	draft: string;
+	rename_draft: string;
+	note: SettingsRow | null;
+	rows: CollRow[];
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -897,4 +921,56 @@ export async function accountsSetGogPlaytime(on: boolean): Promise<AccountsPage>
 
 export async function accountsSetGogGalaxy(on: boolean): Promise<AccountsPage> {
 	return invoke<AccountsPage>('accounts_set_gog_galaxy', { on });
+}
+
+// The Collections sheet.
+export async function collectionsOpen(marked: boolean): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_open', { marked });
+}
+
+export async function collectionsClose(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_close');
+}
+
+export async function collectionsGet(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_get');
+}
+
+export async function collectionsDraft(text: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_draft', { text });
+}
+
+export async function collectionsRenameDraft(text: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename_draft', { text });
+}
+
+export async function collectionsCreate(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_create');
+}
+
+export async function collectionsSaveView(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_save_view');
+}
+
+export async function collectionsRename(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename', { name });
+}
+
+export async function collectionsRenameDone(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename_done');
+}
+
+export async function collectionsSetMember(
+	name: string,
+	member: boolean
+): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_set_member', { name, member });
+}
+
+export async function collectionsDelete(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_delete', { name });
+}
+
+export async function collectionsApply(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_apply', { name });
 }

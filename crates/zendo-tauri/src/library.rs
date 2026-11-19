@@ -208,6 +208,46 @@ impl LibraryState {
         browser.games().to_vec()
     }
 
+    /// The hand-picked collections and the saved views, for the sheet.
+    pub(crate) fn collections(&self) -> (Vec<zendo_core::Category>, Vec<zendo_core::SavedFilter>) {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (browser.categories().to_vec(), browser.saved().to_vec())
+    }
+
+    /// The games marked on the grid.
+    pub(crate) fn marked(&self) -> std::collections::BTreeSet<String> {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        browser.marked().clone()
+    }
+
+    /// The filter the grid shows now, for a saved view.
+    pub(crate) fn current_filter(&self) -> zendo_core::Filter {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        browser.current().clone()
+    }
+
+    /// Puts a state's collections on the grid, and shows them again.
+    pub(crate) fn set_collections(
+        &self,
+        categories: Vec<zendo_core::Category>,
+        filters: Vec<zendo_core::SavedFilter>,
+    ) {
+        let mut browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ = browser.set_collections(categories, filters);
+    }
+
     /// A scan is running now.
     pub(crate) fn scanning(&self) -> bool {
         self.scanning.load(Ordering::Relaxed)
@@ -438,14 +478,27 @@ pub fn library_list(state: State<'_, LibraryState>) -> ListDto {
 }
 
 #[tauri::command]
-pub fn library_pick(key: String, state: State<'_, LibraryState>) -> FilteredDto {
+pub fn library_pick(key: String, app: AppHandle, state: State<'_, LibraryState>) -> FilteredDto {
+    let Some(pick) = pick_of(&key) else {
+        let browser = state
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        return filtered(&browser, state.ready.load(Ordering::Relaxed));
+    };
+    // The Collections chip opens the sheet, not a filter.
+    if let Pick::Collections { marked } = pick {
+        crate::collections::open(&app, marked);
+        let browser = state
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        return filtered(&browser, state.ready.load(Ordering::Relaxed));
+    }
     let mut browser = state
         .browser
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(pick) = pick_of(&key) else {
-        return filtered(&browser, state.ready.load(Ordering::Relaxed));
-    };
     let outcome = browser.pick(&pick);
     save(outcome.save);
     filtered(&browser, state.ready.load(Ordering::Relaxed))
@@ -563,13 +616,7 @@ fn chips(chips: Chips) -> ChipsDto {
         views: chips.views.into_iter().map(chip).collect(),
         sources: chips.sources.into_iter().map(chip).collect(),
         sorts: chips.sorts.into_iter().map(chip).collect(),
-        // The Collections sheet is slice 4's; the chip waits for it.
-        organize: chips
-            .organize
-            .into_iter()
-            .filter(|chip| !matches!(chip.pick, Pick::Collections { .. }))
-            .map(chip)
-            .collect(),
+        organize: chips.organize.into_iter().map(chip).collect(),
         bulk: chips.bulk.into_iter().map(chip).collect(),
         marked: chips.marked,
     }

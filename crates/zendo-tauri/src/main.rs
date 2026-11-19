@@ -14,6 +14,7 @@ use tauri::Manager;
 mod accounts;
 mod cards;
 mod cloud;
+mod collections;
 mod commands;
 mod engines;
 mod game;
@@ -78,6 +79,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(engines::OverlayState::default())
         .manage(protons::ProtonsState::default())
         .manage(accounts::AccountsState::default())
+        .manage(collections::CollectionsState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -181,6 +183,18 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             accounts::accounts_xbox_open,
             accounts::accounts_set_gog_playtime,
             accounts::accounts_set_gog_galaxy,
+            collections::collections_open,
+            collections::collections_close,
+            collections::collections_get,
+            collections::collections_draft,
+            collections::collections_rename_draft,
+            collections::collections_create,
+            collections::collections_save_view,
+            collections::collections_rename,
+            collections::collections_rename_done,
+            collections::collections_set_member,
+            collections::collections_delete,
+            collections::collections_apply,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
