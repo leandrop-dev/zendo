@@ -105,7 +105,7 @@ pub(crate) fn apply(app: &AppHandle, effects: Vec<Effect>) {
     let _ = app.emit("downloads_changed", ());
 }
 
-fn say(app: &AppHandle, line: String) {
+pub(crate) fn say(app: &AppHandle, line: String) {
     let state = app.state::<DownloadsState>();
     *state.message.lock().unwrap_or_else(PoisonError::into_inner) = Some(line);
 }
@@ -229,6 +229,10 @@ pub struct RunningDto {
 }
 
 /// The Downloads page as it stands.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is one fact the page draws by"
+)]
 #[derive(Debug, Serialize)]
 pub struct DownloadsDto {
     /// Nothing queued and nothing finished: no tiles.
@@ -249,6 +253,9 @@ pub struct DownloadsDto {
     /// The running job's line, or how many jobs wait paused, for the foot
     /// of any page.
     summary: Option<String>,
+    /// Steam has something going: its card, with Open Steam's downloads.
+    steam_show: bool,
+    steam_rows: Vec<crate::steam::SteamRowDto>,
 }
 
 fn row(job: &Job) -> JobRowDto {
@@ -331,24 +338,34 @@ pub(crate) fn dto(app: &AppHandle) -> DownloadsDto {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
+    let queue_len = queue.len();
+    let queue_empty = queue.queue.is_empty();
+    let finished_empty = queue.finished.is_empty();
+    let asking = queue.confirm_close;
+    let summary = queue.summary();
+    let running = running_of(&queue);
+    drop(queue);
     let counts = CountsDto {
         // As in Iced, the running job counts as waiting its turn's end.
-        up_next: queue.len().saturating_sub(paused.len()).to_string(),
+        up_next: queue_len.saturating_sub(paused.len()).to_string(),
         paused: paused.len().to_string(),
         finished: finished.len().to_string(),
     };
+    let (steam_show, steam_rows) = crate::steam::card(app);
     DownloadsDto {
-        empty: queue.queue.is_empty() && queue.finished.is_empty(),
-        invite: queue.queue.is_empty() && queue.finished.is_empty(),
-        count: queue.len(),
+        empty: queue_empty && finished_empty,
+        invite: queue_empty && finished_empty && !steam_show,
+        count: queue_len + crate::steam::count(app),
         counts,
-        asking: queue.confirm_close,
-        running: running_of(&queue),
+        asking,
+        running,
         up_next,
         paused,
         finished,
         message,
-        summary: queue.summary(),
+        summary,
+        steam_show,
+        steam_rows,
     }
 }
 
@@ -480,6 +497,15 @@ pub(crate) fn install_state(app: &AppHandle, owned: &Owned, installed: bool) -> 
     let mut state = InstallState::plain();
     state.dlc_on = !skip_dlc(app).contains(&owned.id);
     if installed {
+        return state;
+    }
+    // Steam installs through its own dialog, which Zendo follows.
+    if let Some((job, label, progress)) = crate::steam::install_state(app, &owned.id) {
+        state.job = job;
+        state.label = label;
+        state.progress = progress;
+        state.note = crate::steam::install_note(app, &owned.id)
+            .unwrap_or_else(|| install_note(app, owned, installed));
         return state;
     }
     let held = {
@@ -635,15 +661,28 @@ fn install_job(app: &AppHandle, id: &str) -> Option<Job> {
 }
 
 /// Install: queues the game where Settings says, with the DLC unless the box
-/// was unticked. The page asks for the game again by itself.
+/// was unticked; a Steam game is asked of Steam's own dialog instead.
 #[tauri::command]
 pub fn owned_install(id: String, app: AppHandle) -> Result<crate::store::OwnedDto, String> {
+    if id.starts_with("steam:") {
+        crate::steam::install(&app, &id);
+        return crate::store::page_of(&app, &id);
+    }
     if let Some(job) = install_job(&app, &id) {
         let effects = {
             let state = app.state::<DownloadsState>();
             lock(&state).enqueue(job)
         };
         apply(&app, effects);
+    }
+    crate::store::page_of(&app, &id)
+}
+
+/// Stop waiting for Steam to start a Steam game's install.
+#[tauri::command]
+pub fn owned_forget(id: String, app: AppHandle) -> Result<crate::store::OwnedDto, String> {
+    if let Some(app_id) = id.strip_prefix("steam:") {
+        crate::steam::forget(&app, app_id);
     }
     crate::store::page_of(&app, &id)
 }

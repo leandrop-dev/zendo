@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import {
 		inTauri,
+		ownedForget,
 		ownedGet,
 		ownedImport,
 		ownedInstall,
@@ -46,9 +47,11 @@
 		void load();
 		const changed = listen('store_changed', () => void load());
 		const queued = listen('downloads_changed', () => void load());
+		const steam = listen('steam_changed', () => void load());
 		return () => {
 			void changed.then((stop) => stop());
 			void queued.then((stop) => stop());
+			void steam.then((stop) => stop());
 		};
 	});
 </script>
@@ -142,7 +145,26 @@
 						{app.t('resume')}
 					</button>
 				{/if}
-				{#if owned.job >= 2}
+				{#if owned.job >= 5}
+					<button
+						type="button"
+						disabled={owned.job === 7}
+						onclick={() => void act(() => ownedInstall(game.id))}
+						class="border border-accent-mark px-3 py-1 text-[13px] text-accent-mark uppercase hover:bg-raised disabled:opacity-50"
+					>
+						{owned.job_label}
+					</button>
+				{/if}
+				{#if owned.job === 6}
+					<button
+						type="button"
+						onclick={() => void act(() => ownedForget(game.id))}
+						class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+					>
+						{app.t('steam-stop-waiting')}
+					</button>
+				{/if}
+				{#if owned.job >= 2 && owned.job !== 5}
 					<button
 						type="button"
 						onclick={() => void goto(resolve('/downloads'))}

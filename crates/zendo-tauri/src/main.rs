@@ -28,6 +28,7 @@ mod prefix;
 mod presence;
 mod protons;
 mod settings;
+mod steam;
 mod store;
 
 fn main() -> ExitCode {
@@ -84,6 +85,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(collections::CollectionsState::default())
         .manage(store::StoreState::default())
         .manage(downloads::DownloadsState::default())
+        .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -219,6 +221,9 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             downloads::owned_import,
             downloads::owned_resume,
             downloads::owned_toggle_dlc,
+            downloads::owned_forget,
+            steam::steam_stop_waiting,
+            steam::steam_open_downloads,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
@@ -231,6 +236,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             }
             library::start(app.handle().clone());
             downloads::start(app.handle().clone());
+            steam::start(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

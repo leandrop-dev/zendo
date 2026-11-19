@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { downloadsOpen, inTauri, type JobRow } from '#lib/api.js';
+	import { downloadsOpen, inTauri, steamOpenDownloads, type JobRow } from '#lib/api.js';
 	import { downloads } from '#lib/downloads.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -103,6 +103,47 @@
 						<p class="text-[11px] text-dim uppercase">{app.t('downloads-finished')}</p>
 						<p class="text-[22px] font-bold">{page.counts.finished}</p>
 					</div>
+				</div>
+			{/if}
+
+			{#if page.steam_show}
+				<div class="flex flex-col gap-3 border border-line bg-surface p-4">
+					<div class="flex items-center gap-3">
+						<h2 class="flex-1 text-[14px] font-bold uppercase">{app.t('steam-downloads-title')}</h2>
+						<button
+							type="button"
+							onclick={() => void steamOpenDownloads()}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{app.t('steam-open-downloads')}
+						</button>
+					</div>
+					<p class="text-[13px] text-dim">{app.t('steam-downloads-about')}</p>
+					{#each page.steam_rows as row (row.app)}
+						<div class="flex flex-col gap-1">
+							<div class="flex items-center gap-3">
+								<p class="flex-1 truncate text-[15px]">{row.title}</p>
+								<p class="text-[13px] text-dim">{row.line}</p>
+								{#if row.forget}
+									<button
+										type="button"
+										onclick={() => downloads.stopSteamWaiting(row.app)}
+										class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+									>
+										{row.forget}
+									</button>
+								{/if}
+							</div>
+							{#if row.percent >= 0}
+								<div class="h-2 bg-raised">
+									<div
+										class="h-full bg-accent-mark"
+										style="width: {Math.min(row.percent, 100)}%"
+									></div>
+								</div>
+							{/if}
+						</div>
+					{/each}
 				</div>
 			{/if}
 

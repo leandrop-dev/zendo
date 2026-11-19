@@ -11,6 +11,7 @@ import {
 	downloadsPause,
 	downloadsResume,
 	inTauri,
+	steamStopWaiting,
 	type DownloadsPage
 } from './api.js';
 
@@ -78,6 +79,11 @@ class Downloads {
 
 	cancel(id: string): void {
 		this.#use(() => downloadsCancel(id));
+	}
+
+	/// Stop waiting for Steam to start an install it was asked for.
+	stopSteamWaiting(app: string): void {
+		this.#use(() => steamStopWaiting(app));
 	}
 
 	clear(): void {

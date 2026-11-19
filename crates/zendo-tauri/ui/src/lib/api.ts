@@ -1068,6 +1068,11 @@ export async function ownedToggleDlc(id: string): Promise<OwnedPage> {
 	return invoke<OwnedPage>('owned_toggle_dlc', { id });
 }
 
+// Stop waiting for Steam to start a Steam game's install.
+export async function ownedForget(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_forget', { id });
+}
+
 // A job in the Downloads page's lists. Every text is Rust's; an empty one
 // is not drawn.
 export type JobRow = {
@@ -1120,6 +1125,21 @@ export type DownloadsPage = {
 	message: string | null;
 	// The running job's line, or how many jobs wait paused.
 	summary: string | null;
+	// Steam has something going: its card, with Open Steam's downloads.
+	steam_show: boolean;
+	steam_rows: SteamRow[];
+};
+
+// A line of the Steam card: an install, an uninstall or a verify asked of
+// Steam, or what Steam is downloading.
+export type SteamRow = {
+	app: string;
+	title: string;
+	line: string;
+	// How far, 0 to 100, or -1 for no bar.
+	percent: number;
+	// Stop waiting, for an install Steam has not started; empty is no button.
+	forget: string;
 };
 
 export async function downloadsGet(): Promise<DownloadsPage> {
@@ -1148,4 +1168,14 @@ export type OpenAt = { kind: 'game' | 'store'; id: string };
 
 export async function downloadsOpen(id: string): Promise<OpenAt | null> {
 	return invoke<OpenAt | null>('downloads_open', { id });
+}
+
+// Stop waiting for Steam to start an install it was asked for.
+export async function steamStopWaiting(app: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('steam_stop_waiting', { app });
+}
+
+// Opens Steam's own downloads page.
+export async function steamOpenDownloads(): Promise<void> {
+	return invoke<void>('steam_open_downloads');
 }
