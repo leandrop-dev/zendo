@@ -6858,3 +6858,40 @@ input tools reach nothing, and synthetic clicks from the temporary hook did
 not reach the page's handlers after the route change (the same hook's click
 on a Library card did, in 3e-3), so the rest is checked by types and the
 module's tests only.
+
+## The Tauri port, slice 4b: Keys, Launchers, Engines, Proton and Discord (2026-11-19)
+
+- **Discord's presence** (`src/presence.rs`): the Settings' Discord switch
+  starts or drops the `zendo_shell::presence` thread, and the launch's
+  `Effect::Presence` tells it who is playing, wired in `src/game.rs`.
+- **The Keys group** (`src/settings.rs`): the SteamGridDB key's field (Show,
+  Check, Save, Get a key) over `covers::check_key`, saved only once SteamGridDB
+  accepts it, and the Nexus key's field over `zendo_shell::nexus::NexusState`,
+  whose key is asked about first and written once accepted, with the `nxm://`
+  handler's line and "Open them with Zendo". Both show where the key is kept
+  (the keyring, `config.toml`, or an unread keyring) through `config.kept`.
+- **The Launchers group** (`src/launchers.rs`): Nexus Launcher and Greenlight,
+  each brought as its `AppImage` (`xodus` and `greenlight`), opened in a window
+  of their own, with a download bar and Stop; closing Nexus Launcher rescans
+  the library.
+- **The Engines group** (`src/engines.rs`): the path-first switch, the five
+  engines (whose copy, latest release, Download/Update/Remove, one download at
+  a time), the anti-cheat runtimes from Lutris, and Epic's overlay (Install,
+  Update, Remove). GitHub and Lutris are asked once a session, again on
+  asking.
+- **The Proton group** (`src/protons.rs`): the default Proton (Automatic and
+  each found), the Protons found with Remove, and GE-Proton / Proton-CachyOS
+  releases to download (the latest five, older ones on asking), one at a time.
+  Removing a Proton puts the games that chose it back to Automatic, and the
+  default too.
+- **Shared** `SetRowDto` and `BarDto` carry a row and a download bar; the
+  frontend's `set-list.svelte` and `download-bar.svelte` draw them. Every group
+  reads the disk once as the page first opens, and again after a change.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (606 passed, 32 ignored).
+
+Not yet seen in the window: the build and a throwaway-home check of the five
+groups and their presses; the input was re-tested after the reboot (the pointer
+moves again), so the on-screen check is next.

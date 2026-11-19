@@ -39,13 +39,16 @@ follow.
   for the first start, in sync when, none kept, or failed), from
   `zendo_core::cloud_saves` and the launch options, and whether a sync is
   running now, which the launch's effects set.
-- `src/settings.rs`: Settings' General, Library and Diagnostics groups
+- `src/settings.rs`: Settings' General, Library, Keys and Diagnostics groups
   (`settings_get`, `settings_set_language`, `settings_set_theme`,
-  `settings_set_tray`, `settings_set_covers`, `settings_set_auto_update`,
-  `settings_set_workers`, `settings_download_covers`, `settings_copy_report`,
-  `settings_open`). A change shows at once and is written behind one writer;
-  the language and the theme follow a successful write. Keys, Launchers,
-  Engines, Proton and Discord's presence are the next part.
+  `settings_set_tray`, `settings_set_discord`, `settings_set_covers`,
+  `settings_set_auto_update`, `settings_set_workers`, `settings_set_path_first`,
+  `settings_default_chosen`, the SteamGridDB and Nexus key fields,
+  `settings_download_covers`, `settings_copy_report`, `settings_open`). A
+  change shows at once and is written behind one writer; the language and the
+  theme follow a successful write. Discord's presence, the Launchers, Engines
+  and Proton groups live in `src/presence.rs`, `src/launchers.rs`,
+  `src/engines.rs` and `src/protons.rs`.
 - `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
   `mods_get` and `mods_begin` read it, and each press is a command
   (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,
