@@ -79,3 +79,8 @@ coordinates and refuses anything else: a malformed call (zsh does not split
 
 After a layout change, click every new control once in the app. A control
 can be drawn outside the area that receives clicks.
+
+The Tauri window is checked its own way: `ui/node_modules/.bin/tauri build
+--debug` and then the binary (a plain `cargo build` opens it on the dev URL and
+shows "Could not connect to localhost"), in a throwaway home as above. Its
+commands, events and dev loop are in `crates/zendo-tauri/README.md`.
