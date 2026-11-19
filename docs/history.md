@@ -6892,6 +6892,17 @@ Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
 --workspace` (606 passed, 32 ignored).
 
-Not yet seen in the window: the build and a throwaway-home check of the five
-groups and their presses; the input was re-tested after the reboot (the pointer
-moves again), so the on-screen check is next.
+Checked in a throwaway home (`tauri build --debug`, no session bus), the groups
+switched by a temporary `ZENDO_CHECK` hook in `platform.rs` (removed before the
+commit) because the virtual pointer was stuck at (0,0) again, though `wtype`
+reached the compositor. Seen: General with the new Discord switch; Keys with
+both fields, Show/Check/Save, "No key set", the kept line and the handler line
+("Nothing opens Mod manager download links yet") and "Open them with Zendo";
+Launchers with Nexus Launcher and the Xbox Series S, each "Not installed" with
+Download; Engines with legendary, gogdl, nile, comet and umu-launcher (Heroic's
+copies with the latest tags from GitHub), the anti-cheat runtimes ("Not on this
+computer") and Epic's overlay ("Not installed", Install); Proton with the
+default chips ("Automatic: proton-cachyos-slr…" and the found Proton), the
+Protons on this computer, and the five latest GE-Proton releases with Download
+and "Show older versions". Diagnostics rendered as in 4a. The presses that
+start real work (a download, an install, a key save) were not run.
