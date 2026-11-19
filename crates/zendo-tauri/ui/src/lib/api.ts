@@ -520,6 +520,31 @@ export type SettingsNexusKey = SettingsKey & {
 	handler_can: boolean;
 };
 
+// A thing Settings lists with buttons: a launcher, an engine, a Proton.
+export type SettingsSetRow = {
+	title: string;
+	sub: string;
+	path: string;
+	note: string;
+	note_tone: number;
+	action: string;
+	action_on: boolean;
+	remove: string;
+	remove_on: boolean;
+	remove_danger: boolean;
+	status: string;
+	status_tone: number;
+};
+
+// A download in progress: its name, the bytes so far and how far it is.
+export type SettingsBar = {
+	active: boolean;
+	name: string;
+	size: string;
+	percent: number;
+	stopping: boolean;
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -537,6 +562,8 @@ export type SettingsPage = {
 	auto_update: boolean;
 	workers: { count: number | null; label: string; chosen: boolean }[];
 	sources: SettingsRow[];
+	launchers: SettingsSetRow[];
+	launchers_bar: SettingsBar;
 	files: { label: string; value: string; open: string | null }[];
 	report_busy: boolean;
 	report_note: SettingsRow | null;
@@ -636,4 +663,13 @@ export async function settingsNexusKeyGet(): Promise<void> {
 
 export async function settingsNexusBecomeHandler(): Promise<SettingsPage> {
 	return invoke<SettingsPage>('settings_nexus_become_handler');
+}
+
+// The Launchers group: a launcher's one button, and Stop on the download.
+export async function settingsLauncherAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_launcher_act', { index });
+}
+
+export async function settingsLaunchersStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_launchers_stop');
 }

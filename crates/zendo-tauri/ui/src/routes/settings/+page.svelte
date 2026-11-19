@@ -11,6 +11,8 @@
 		settingsKeyGet,
 		settingsKeySave,
 		settingsKeyToggleShown,
+		settingsLauncherAct,
+		settingsLaunchersStop,
 		settingsNexusBecomeHandler,
 		settingsNexusKeyCheck,
 		settingsNexusKeyEdited,
@@ -27,6 +29,8 @@
 		settingsSetWorkers,
 		type SettingsPage
 	} from '#lib/api.js';
+	import DownloadBar from '#lib/components/settings/download-bar.svelte';
+	import SetList from '#lib/components/settings/set-list.svelte';
 	import { app } from '#lib/state.svelte.js';
 
 	// The Settings page's General, Library and Diagnostics groups: one at a
@@ -35,6 +39,7 @@
 	const GROUPS = [
 		{ key: 'general', label: 'settings-group-general' },
 		{ key: 'keys', label: 'settings-group-keys' },
+		{ key: 'launchers', label: 'settings-group-launchers' },
 		{ key: 'library', label: 'settings-group-library' },
 		{ key: 'diagnostics', label: 'settings-group-diagnostics' }
 	] as const;
@@ -317,6 +322,19 @@
 							</button>
 						</div>
 					{/if}
+				</section>
+			{:else if group === 'launchers'}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('launchers-title')}</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('launchers-about')}</p>
+					<SetList
+						rows={settings.launchers}
+						onact={(index) => void act(() => settingsLauncherAct(index))}
+					/>
+					<DownloadBar
+						bar={settings.launchers_bar}
+						onstop={() => void act(settingsLaunchersStop)}
+					/>
 				</section>
 			{:else if group === 'library'}
 				<section class="border border-line bg-surface p-4">

@@ -30,6 +30,7 @@ use zendo_shell::nexus::{self as nexus, NexusState, Then};
 use zendo_shell::theme::Themes;
 use zendo_shell::{clipboard, open, t};
 
+use crate::launchers;
 use crate::library::LibraryState;
 use crate::platform::{self, Shell};
 use crate::presence::PresenceState;
@@ -240,6 +241,54 @@ pub struct FileDto {
     open: Option<String>,
 }
 
+/// A thing Settings lists with buttons: an engine, a runtime, a Proton, a
+/// release or a launcher. An empty text is not drawn.
+#[derive(Debug, Serialize)]
+pub struct SetRowDto {
+    pub(crate) title: String,
+    pub(crate) sub: String,
+    pub(crate) path: String,
+    pub(crate) note: String,
+    pub(crate) note_tone: i32,
+    pub(crate) action: String,
+    pub(crate) action_on: bool,
+    pub(crate) remove: String,
+    pub(crate) remove_on: bool,
+    pub(crate) remove_danger: bool,
+    pub(crate) status: String,
+    pub(crate) status_tone: i32,
+}
+
+/// A download in progress: its name, the bytes so far and how far it is.
+#[derive(Debug, Default, Serialize)]
+pub struct BarDto {
+    active: bool,
+    name: String,
+    size: String,
+    percent: f32,
+    stopping: bool,
+}
+
+/// A download's bar, from the bytes so far.
+pub(crate) fn bar_of(name: &str, done: u64, total: u64, stopping: bool) -> BarDto {
+    BarDto {
+        active: true,
+        name: t!("protons-downloading", name = name),
+        size: t!(
+            "size-of",
+            done = zendo_core::Size::Bytes(done).to_string(),
+            total = zendo_core::Size::Bytes(total).to_string()
+        ),
+        #[expect(clippy::cast_precision_loss, reason = "a bar's width")]
+        percent: if total == 0 {
+            0.0
+        } else {
+            done as f32 * 100.0 / total as f32
+        },
+        stopping,
+    }
+}
+
 /// The `SteamGridDB` key's field, with where the key is kept.
 #[derive(Debug, Serialize)]
 #[expect(
@@ -298,6 +347,8 @@ pub struct SettingsDto {
     auto_update: bool,
     workers: Vec<WorkerChip>,
     sources: Vec<RowDto>,
+    launchers: Vec<SetRowDto>,
+    launchers_bar: BarDto,
     files: Vec<FileDto>,
     report_busy: bool,
     report_note: Option<RowDto>,
@@ -308,6 +359,7 @@ pub struct SettingsDto {
 #[tauri::command]
 pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> SettingsDto {
     nexus_ready(&app);
+    launchers::ready(&app);
     let settings = app.state::<SettingsState>();
     let config = settings.config();
     let shell = app.state::<Shell>();
@@ -335,6 +387,8 @@ pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> Setting
         auto_update: config.auto_update,
         workers: workers(&config),
         sources: sources(&library),
+        launchers: launchers::rows(&app),
+        launchers_bar: launchers::bar(&app),
         files: files(&config),
         report_busy: settings.gathering.load(Ordering::Relaxed),
         report_note: settings.note().map(|(note, tone)| RowDto {

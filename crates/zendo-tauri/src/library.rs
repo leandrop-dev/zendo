@@ -63,7 +63,7 @@ pub fn start(app: AppHandle) {
 
 /// Reads every source on a thread of its own, then says `library_loaded` so
 /// the page asks for the list, and fetches the covers that are missing.
-fn rescan(app: AppHandle) {
+pub(crate) fn rescan(app: AppHandle) {
     if app
         .state::<LibraryState>()
         .scanning

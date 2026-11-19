@@ -15,6 +15,7 @@ mod cards;
 mod cloud;
 mod commands;
 mod game;
+mod launchers;
 mod library;
 mod local;
 mod mods;
@@ -68,6 +69,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(mods::ModsHandle::default())
         .manage(settings::SettingsState::new())
         .manage(presence::PresenceState::new(config.discord_presence))
+        .manage(launchers::LaunchersState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -139,6 +141,8 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_nexus_key_save,
             settings::settings_nexus_key_get,
             settings::settings_nexus_become_handler,
+            launchers::settings_launcher_act,
+            launchers::settings_launchers_stop,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
