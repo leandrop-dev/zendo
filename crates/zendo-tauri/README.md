@@ -3,12 +3,12 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1, 2, 3a, 3b, 3c, 3d, 3e-1, 3e-2 and 3e-3 are in place: the
-scaffold, the shell, the Library (grid, chips, search, sort, cursor, marks,
-bulk edits, cover downloads and the file watch), the game page's header and
-actions, its sessions and details, local games, its store cards, the Wine
-prefix card with its tools, GOG's changelog and the cloud saves row. The Mods
-card and the rest of the other pages follow.
+Slices 0, 1, 2 and 3 are in place: the scaffold, the shell, the Library
+(grid, chips, search, sort, cursor, marks, bulk edits, cover downloads and
+the file watch), and the whole game page (its header and actions, sessions,
+details, local games, its store cards, the Wine prefix card with its tools,
+GOG's changelog, the cloud saves row and the Mods card). The other pages
+follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -39,6 +39,12 @@ card and the rest of the other pages follow.
   for the first start, in sync when, none kept, or failed), from
   `zendo_core::cloud_saves` and the launch options, and whether a sync is
   running now, which the launch's effects set.
+- `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
+  `mods_get` and `mods_begin` read it, and each press is a command
+  (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,
+  the profiles, `mods_apply`, `mods_add`, `mods_find_nexus`). A change runs
+  on a thread and says `game_changed`. Update from Nexus, Search Nexus and
+  the FOMOD installer are slice 7's.
 - `src/library.rs`: the Library's commands over `zendo_shell::library`: the
   list (every card once), the chips, the search, the sort, the cursor, the
   marks, and the bulk edits. It scans on a thread, watches the launchers'

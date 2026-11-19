@@ -17,6 +17,7 @@ mod commands;
 mod game;
 mod library;
 mod local;
+mod mods;
 mod platform;
 mod prefix;
 
@@ -58,6 +59,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(cards::CardsState::default())
         .manage(prefix::PrefixState::default())
         .manage(cloud::CloudState::default())
+        .manage(mods::ModsHandle::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -89,6 +91,24 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             prefix::prefix_install,
             prefix::prefix_pick_program,
             prefix::prefix_want,
+            mods::mods_get,
+            mods::mods_begin,
+            mods::mods_toggle_mod,
+            mods::mods_move_mod,
+            mods::mods_toggle_plugin,
+            mods::mods_move_plugin,
+            mods::mods_remove,
+            mods::mods_clear_overwrite,
+            mods::mods_folder_save,
+            mods::mods_folder_known,
+            mods::mods_profile_switch,
+            mods::mods_profile_naming,
+            mods::mods_profile_save,
+            mods::mods_profile_cancel,
+            mods::mods_profile_delete,
+            mods::mods_apply,
+            mods::mods_add,
+            mods::mods_find_nexus,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

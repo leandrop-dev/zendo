@@ -449,6 +449,7 @@ mods-loses = { $count ->
    *[other] { $count } substituídos por { $other }
 }
 mods-options = Opções…
+mods-installer-later = Este arquivo tem o seu próprio instalador com opções, e essa janela ainda não está aqui. Nada foi adicionado.
 mods-update-to = Atualizar para { $version }
 mods-update = Atualizar
 mods-profile = Perfil

@@ -6771,3 +6771,48 @@ Not checked: Show earlier updates (input), a row for a sync that is running,
 off, none kept or failed, and GOG's total time played, which the Slint window
 reads and this page does not yet (it is not in 3e's list; it raises the total
 the page shows).
+
+## The Tauri port, slice 3e-4: the Mods card (2026-11-19)
+
+- **The card** (`crates/zendo-tauri/src/mods.rs`): a `ModsHandle` over
+  `zendo_shell::mods::ModsState` (the state and words the Slint window uses)
+  and a `ModsDto` with everything the page draws: the profile chips and the
+  name field, the mods in order with their boxes, moves and Delete (asked
+  twice), a Bethesda game's plugins with their notes and problems, the
+  overwrite count, the mod folder, and Apply and Back to vanilla with what
+  the game's state says. `mods_get` reads it; `mods_begin` also reads the
+  game's mods again when the page opens; the other commands are one press
+  each (`mods_toggle_mod`, `mods_move_mod`, `mods_toggle_plugin`,
+  `mods_move_plugin`, `mods_remove`, `mods_clear_overwrite`,
+  `mods_folder_save`, `mods_folder_known`, `mods_profile_switch`,
+  `mods_profile_naming`, `mods_profile_save`, `mods_profile_cancel`,
+  `mods_profile_delete`, `mods_apply`, `mods_add`, `mods_find_nexus`).
+- **One change at a time**: each press moves `ModsState` and runs the `Job`
+  it makes on a thread through `zendo_shell::mods::run`, then its end says
+  `game_changed`; a failure or a finished change leaves the line the card
+  shows, and a game that runs refuses Apply with the shared words.
+- **Left for slice 7, with the sheets**: Update from Nexus and the downloads'
+  lines on the card, Search Nexus, the updates' check, and the FOMOD
+  installer. An archive that carries one is not added; the card says so
+  (`mods-installer-later`, new in both `.ftl` files). Options… is not drawn
+  for an installer-built mod, for the same reason.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (603 passed, 32 ignored).
+
+A throwaway home whose GOG game (Cyberpunk 2077) has two seeded mods
+(`mods.toml` with the "Light" profile in use and a "Default" one, one mod on,
+one off, a file each), `tauri build --debug`, no session bus, the page opened
+by the same temporary `ZENDO_PAGE` hook as 3e-3 (this session's `ydotool` and
+`wtype` reach nothing), removed before the commit. Seen: the Mods card with
+its heading and Add mod…, the profile chips `DEFAULT` and `LIGHT` (Light
+chosen) with New…, Rename… and Delete, the place line, the game's folder, the
+two mods with their boxes, `1 file` each, ↑ ↓ and Delete, the Mod folder
+field showing the placeholder, and `Not applied: the game is as it was` with
+Back to vanilla disabled and Apply enabled.
+
+Not checked: every press (Apply, Back to vanilla, the boxes, the moves, a
+profile switch, Delete twice, Add mod… and the file dialog), the plugins'
+section (a Bethesda game's page was not at hand), the failure the card shows
+when the mods cannot be read on screen, and pt-PT.

@@ -359,3 +359,141 @@ export async function prefixPickProgram(id: string): Promise<void> {
 export async function prefixWant(id: string): Promise<void> {
 	return invoke<void>('prefix_want', { id });
 }
+
+// The Mods card: the mods Zendo keeps for a game, the profile in use, a
+// Bethesda game's plugins, the folder they go in, and Apply.
+export type ModsCard = {
+	// The card is drawn: the mods are here, or the read failed with why.
+	show: boolean;
+	// 1 the read failed, 2 the mods are here.
+	body_kind: number;
+	message: string;
+	// What is happening to the game's mods now; empty when nothing is.
+	busy: string;
+	// No change is in flight, so the controls take presses.
+	free: boolean;
+	// The game is on Nexus Mods.
+	nexus: boolean;
+	// The line the last change left.
+	note: string | null;
+	profiles: { label: string; chosen: boolean }[];
+	delete_profile_label: string;
+	delete_profile_asking: boolean;
+	delete_profile_on: boolean;
+	naming: { placeholder: string; name: string; ok: boolean } | null;
+	place: string;
+	target: string;
+	mods: {
+		id: string;
+		name: string;
+		facts: string;
+		enabled: boolean;
+		up: boolean;
+		down: boolean;
+		delete_label: string;
+		asking: boolean;
+	}[];
+	plugins: {
+		note: string;
+		note_bad: boolean;
+		file: string | null;
+		rows: {
+			name: string;
+			facts: string;
+			problems: string;
+			enabled: boolean;
+			locked: boolean;
+			up: boolean;
+			down: boolean;
+		}[];
+	} | null;
+	overwrite: string | null;
+	overwrite_label: string;
+	overwrite_asking: boolean;
+	folder: string;
+	folder_editable: boolean;
+	folder_save: boolean;
+	folder_known: boolean;
+	state: string;
+	state_tone: number;
+	can_apply: boolean;
+	can_restore: boolean;
+};
+
+export async function modsGet(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_get', { id });
+}
+
+// The page opened: reads the game's mods again.
+export async function modsBegin(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_begin', { id });
+}
+
+export async function modsToggleMod(id: string, modId: string, on: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_toggle_mod', { id, modId, on });
+}
+
+export async function modsMoveMod(id: string, modId: string, up: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_move_mod', { id, modId, up });
+}
+
+export async function modsTogglePlugin(id: string, name: string, on: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_toggle_plugin', { id, name, on });
+}
+
+export async function modsMovePlugin(id: string, name: string, up: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_move_plugin', { id, name, up });
+}
+
+export async function modsRemove(id: string, modId: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_remove', { id, modId });
+}
+
+export async function modsClearOverwrite(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_clear_overwrite', { id });
+}
+
+export async function modsFolderSave(id: string, text: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_folder_save', { id, text });
+}
+
+// Back to where the game is known to take its mods.
+export async function modsFolderKnown(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_folder_known', { id });
+}
+
+export async function modsProfileSwitch(id: string, name: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_switch', { id, name });
+}
+
+// New… (renaming false) or Rename… (true): the name field opens.
+export async function modsProfileNaming(id: string, renaming: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_naming', { id, renaming });
+}
+
+export async function modsProfileSave(id: string, name: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_save', { id, name });
+}
+
+export async function modsProfileCancel(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_cancel', { id });
+}
+
+export async function modsProfileDelete(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_delete', { id });
+}
+
+// Apply, or back to vanilla with false; never while the game runs.
+export async function modsApply(id: string, apply: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_apply', { id, apply });
+}
+
+// Add mod…: the file dialog, then the archive's unpacking on a thread.
+export async function modsAdd(id: string): Promise<void> {
+	return invoke<void>('mods_add', { id });
+}
+
+// Opens the game's page on Nexus Mods in the browser.
+export async function modsFindNexus(id: string): Promise<void> {
+	return invoke<void>('mods_find_nexus', { id });
+}

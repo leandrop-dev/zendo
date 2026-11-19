@@ -18,6 +18,24 @@
 		gameStop,
 		inTauri,
 		localRemove,
+		modsAdd,
+		modsApply,
+		modsBegin,
+		modsClearOverwrite,
+		modsFindNexus,
+		modsFolderKnown,
+		modsFolderSave,
+		modsGet,
+		modsMoveMod,
+		modsMovePlugin,
+		modsProfileCancel,
+		modsProfileDelete,
+		modsProfileNaming,
+		modsProfileSave,
+		modsProfileSwitch,
+		modsRemove,
+		modsToggleMod,
+		modsTogglePlugin,
 		openLink,
 		prefixInstall,
 		prefixOpen,
@@ -27,6 +45,7 @@
 		steamAppSet,
 		type GameCards,
 		type GamePage,
+		type ModsCard,
 		type Pill
 	} from '#lib/api.js';
 	import LocalForm from '#lib/components/local-form.svelte';
@@ -49,6 +68,12 @@
 	// The winetricks components typed, and a tool that could not start.
 	let prefixInput = $state('');
 	let prefixNote = $state<string | null>(null);
+	// The Mods card, the folder and profile name being typed, and a change
+	// that could not start.
+	let mods = $state<ModsCard | null>(null);
+	let modsNote = $state<string | null>(null);
+	let folderInput = $state('');
+	let profileName = $state('');
 	let id = $derived(page.params.id ?? '');
 
 	let cover = $derived(
@@ -187,6 +212,55 @@
 		}
 	}
 
+	async function loadMods(open: boolean): Promise<void> {
+		if (!inTauri() || !id) {
+			return;
+		}
+		try {
+			mods = open ? await modsBegin(id) : await modsGet(id);
+			if (mods.folder) {
+				folderInput = mods.folder;
+			}
+			if (mods.naming) {
+				profileName = mods.naming.name;
+			}
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
+	async function modsAct(action: () => Promise<ModsCard>): Promise<void> {
+		modsNote = null;
+		try {
+			mods = await action();
+			if (mods.folder) {
+				folderInput = mods.folder;
+			}
+			if (mods.naming) {
+				profileName = mods.naming.name;
+			}
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
+	async function addMod(): Promise<void> {
+		modsNote = null;
+		try {
+			await modsAdd(id);
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
+	async function findOnNexus(): Promise<void> {
+		try {
+			await modsFindNexus(id);
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
 	function key(event: KeyboardEvent): void {
 		if (event.key === 'Escape' && !editing) {
 			event.preventDefault();
@@ -215,6 +289,7 @@
 	onMount(() => {
 		void load();
 		void loadCards();
+		void loadMods(true);
 		void prefixWant(id);
 		window.addEventListener('keydown', key);
 		const runs = listen<{ id: string; state: number }>('game_run', (event) => {
@@ -242,6 +317,7 @@
 		const changed = listen<string>('game_changed', (event) => {
 			if (event.payload === id) {
 				void load();
+				void loadMods(false);
 			}
 		});
 		return () => {
@@ -683,6 +759,313 @@
 						>
 							{prefixNote ?? game.prefix.status?.text}
 						</p>
+					{/if}
+				</section>
+			{/if}
+
+			{#if mods?.show}
+				<section class="border border-line bg-surface p-4">
+					<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+						<h2 class="text-[11px] text-dim uppercase">{app.t('mods-title')}</h2>
+						<div class="flex flex-wrap items-center gap-2">
+							{#if mods.nexus}
+								<button
+									type="button"
+									onclick={() => void findOnNexus()}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+								>
+									{app.t('mods-find-on-nexus')}
+								</button>
+							{/if}
+							<button
+								type="button"
+								disabled={!mods.free}
+								onclick={() => void addMod()}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+							>
+								{app.t('mods-add')}
+							</button>
+						</div>
+					</div>
+
+					{#if mods.body_kind !== 2}
+						<p class="text-[13px] {mods.body_kind === 1 ? 'text-bad' : 'text-dim'}">
+							{mods.message}
+						</p>
+					{:else}
+						<div class="flex flex-col gap-3">
+							{#if mods.naming}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="w-[90px] shrink-0 text-[13px] text-dim">
+										{app.t('mods-profile')}
+									</span>
+									<input
+										type="text"
+										bind:value={profileName}
+										placeholder={mods.naming.placeholder}
+										class="h-8 min-w-[200px] flex-1 border border-line bg-background px-2 text-[13px]"
+										onkeydown={(event) => {
+											if (event.key === 'Enter' && mods!.naming!.ok) {
+												event.preventDefault();
+												void modsAct(() => modsProfileSave(id, profileName));
+											}
+										}}
+									/>
+									<button
+										type="button"
+										disabled={!mods.naming.ok}
+										onclick={() => void modsAct(() => modsProfileSave(id, profileName))}
+										class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+									>
+										{app.t('key-save')}
+									</button>
+									<button
+										type="button"
+										onclick={() => void modsAct(() => modsProfileCancel(id))}
+										class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+									>
+										{app.t('cancel')}
+									</button>
+								</div>
+							{:else}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="w-[90px] shrink-0 text-[13px] text-dim">
+										{app.t('mods-profile')}
+									</span>
+									{#each mods.profiles as profile (profile.label)}
+										<button
+											type="button"
+											disabled={!mods.free}
+											aria-pressed={profile.chosen}
+											onclick={() => void modsAct(() => modsProfileSwitch(id, profile.label))}
+											class="border px-2 py-0.5 text-[13px] uppercase disabled:opacity-60 {profile.chosen
+												? 'border-accent-mark text-accent-mark'
+												: 'border-line text-foreground hover:bg-raised'}"
+										>
+											{profile.label}
+										</button>
+									{/each}
+									<button
+										type="button"
+										disabled={!mods.free}
+										onclick={() => void modsAct(() => modsProfileNaming(id, false))}
+										class="border border-line px-2 py-0.5 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+									>
+										{app.t('mods-profile-new')}
+									</button>
+									<button
+										type="button"
+										disabled={!mods.free}
+										onclick={() => void modsAct(() => modsProfileNaming(id, true))}
+										class="border border-line px-2 py-0.5 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+									>
+										{app.t('mods-profile-rename-button')}
+									</button>
+									<button
+										type="button"
+										disabled={!mods.delete_profile_on}
+										onclick={() => void modsAct(() => modsProfileDelete(id))}
+										class="border px-2 py-0.5 text-[13px] uppercase disabled:opacity-60 {mods.delete_profile_asking
+											? 'border-bad text-bad'
+											: 'border-line text-foreground hover:bg-raised'}"
+									>
+										{mods.delete_profile_label}
+									</button>
+								</div>
+							{/if}
+
+							<p class="text-[13px] text-dim">{mods.place}</p>
+							<p class="font-mono text-[13px] break-all">{mods.target}</p>
+
+							{#if mods.mods.length === 0}
+								<p class="text-[14px] text-dim">{app.t('mods-none')}</p>
+							{:else}
+								<ul class="flex flex-col gap-2">
+									{#each mods.mods as mod (mod.id)}
+										<li class="flex flex-col gap-0.5">
+											<div class="flex flex-wrap items-center gap-2">
+												<input
+													type="checkbox"
+													checked={mod.enabled}
+													disabled={!mods.free}
+													onchange={(event) =>
+														void modsAct(() =>
+															modsToggleMod(id, mod.id, event.currentTarget.checked)
+														)}
+												/>
+												<span class="min-w-0 flex-1 truncate text-[14px]">{mod.name}</span>
+												<button
+													type="button"
+													disabled={!mods.free || !mod.up}
+													onclick={() => void modsAct(() => modsMoveMod(id, mod.id, true))}
+													class="border border-line px-2 text-[13px] hover:bg-raised disabled:opacity-40"
+												>
+													↑
+												</button>
+												<button
+													type="button"
+													disabled={!mods.free || !mod.down}
+													onclick={() => void modsAct(() => modsMoveMod(id, mod.id, false))}
+													class="border border-line px-2 text-[13px] hover:bg-raised disabled:opacity-40"
+												>
+													↓
+												</button>
+												<button
+													type="button"
+													disabled={!mods.free}
+													onclick={() => void modsAct(() => modsRemove(id, mod.id))}
+													class="border px-2 text-[13px] uppercase disabled:opacity-60 {mod.asking
+														? 'border-bad text-bad'
+														: 'border-line text-foreground hover:bg-raised'}"
+												>
+													{mod.delete_label}
+												</button>
+											</div>
+											<p class="pl-7 text-[12px] text-dim">{mod.facts}</p>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+
+							{#if mods.plugins}
+								<div class="flex flex-col gap-1">
+									<p class="text-[13px] font-bold uppercase">{app.t('plugins-title')}</p>
+									<p class="text-[13px] {mods.plugins.note_bad ? 'text-bad' : 'text-dim'}">
+										{mods.plugins.note}
+									</p>
+									{#if mods.plugins.file}
+										<p class="font-mono text-[12px] break-all text-dim">{mods.plugins.file}</p>
+									{/if}
+									{#if mods.plugins.rows.length === 0}
+										<p class="text-[13px] text-dim">{app.t('plugins-none')}</p>
+									{/if}
+									{#each mods.plugins.rows as plugin (plugin.name)}
+										<div class="flex flex-col gap-0.5">
+											<div class="flex flex-wrap items-center gap-2">
+												<input
+													type="checkbox"
+													checked={plugin.enabled}
+													disabled={!mods.free || plugin.locked}
+													onchange={(event) =>
+														void modsAct(() =>
+															modsTogglePlugin(id, plugin.name, event.currentTarget.checked)
+														)}
+												/>
+												<span class="min-w-0 flex-1 truncate text-[14px]">{plugin.name}</span>
+												<button
+													type="button"
+													disabled={!mods.free || !plugin.up}
+													onclick={() => void modsAct(() => modsMovePlugin(id, plugin.name, true))}
+													class="border border-line px-2 text-[13px] hover:bg-raised disabled:opacity-40"
+												>
+													↑
+												</button>
+												<button
+													type="button"
+													disabled={!mods.free || !plugin.down}
+													onclick={() => void modsAct(() => modsMovePlugin(id, plugin.name, false))}
+													class="border border-line px-2 text-[13px] hover:bg-raised disabled:opacity-40"
+												>
+													↓
+												</button>
+											</div>
+											<p class="pl-7 text-[12px] text-dim">{plugin.facts}</p>
+											{#if plugin.problems}
+												<p class="pl-7 text-[12px] text-bad">{plugin.problems}</p>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
+
+							{#if mods.overwrite}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="min-w-0 flex-1 text-[13px] text-dim">{mods.overwrite}</span>
+									<button
+										type="button"
+										disabled={!mods.free}
+										onclick={() => void modsAct(() => modsClearOverwrite(id))}
+										class="border px-2 py-0.5 text-[13px] uppercase disabled:opacity-60 {mods.overwrite_asking
+											? 'border-bad text-bad'
+											: 'border-line text-foreground hover:bg-raised'}"
+									>
+										{mods.overwrite_label}
+									</button>
+								</div>
+							{/if}
+
+							<div class="flex flex-wrap items-center gap-2">
+								<span class="w-[90px] shrink-0 text-[13px] text-dim">{app.t('mods-folder')}</span>
+								<input
+									type="text"
+									bind:value={folderInput}
+									readonly={!mods.folder_editable}
+									placeholder={app.t('mods-folder-placeholder')}
+									class="h-8 min-w-[240px] flex-1 border border-line bg-background px-2 text-[13px]"
+									onkeydown={(event) => {
+										if (event.key === 'Enter') {
+											event.preventDefault();
+											void modsAct(() => modsFolderSave(id, folderInput));
+										}
+									}}
+								/>
+								{#if mods.folder_save}
+									<button
+										type="button"
+										disabled={!mods.free}
+										onclick={() => void modsAct(() => modsFolderSave(id, folderInput))}
+										class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+									>
+										{app.t('key-save')}
+									</button>
+								{/if}
+								{#if mods.folder_known}
+									<button
+										type="button"
+										disabled={!mods.free}
+										onclick={() => void modsAct(() => modsFolderKnown(id))}
+										class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+									>
+										{app.t('mods-folder-known')}
+									</button>
+								{/if}
+							</div>
+
+							<div class="flex flex-wrap items-center gap-2">
+								<span
+									class="min-w-0 flex-1 text-[13px] {mods.state_tone === 1
+										? 'text-good'
+										: mods.state_tone === 2
+											? 'text-bad'
+											: 'text-dim'}"
+								>
+									{mods.state}
+								</span>
+								<button
+									type="button"
+									disabled={!mods.can_restore}
+									onclick={() => void modsAct(() => modsApply(id, false))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+								>
+									{app.t('mods-back-to-vanilla')}
+								</button>
+								<button
+									type="button"
+									disabled={!mods.can_apply}
+									onclick={() => void modsAct(() => modsApply(id, true))}
+									class="border border-accent-mark bg-accent-mark px-3 py-1 text-[13px] font-bold text-background uppercase disabled:opacity-60"
+								>
+									{app.t('mods-apply')}
+								</button>
+							</div>
+						</div>
+					{/if}
+
+					{#if mods.busy}
+						<p class="mt-3 text-[13px] text-dim">{mods.busy}</p>
+					{/if}
+					{#if modsNote ?? mods.note}
+						<p class="mt-1 text-[13px] text-dim">{modsNote ?? mods.note}</p>
 					{/if}
 				</section>
 			{/if}

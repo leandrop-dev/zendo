@@ -143,8 +143,9 @@ and removed once already).
    and the screenshot lightbox is slice 7's. **3e** the Wine prefix card (built 2026-11-18 as its read-only first part: the folder, Open folder and
    the known fixes' lines) with its tools (built 2026-11-19 as **3e-2**: Wine
    settings, winetricks, Run a program…, GOG's setup, the components box and
-   Apply known fixes) and GOG's changelog and the cloud saves row (**3e-3**,
-   the same day), with the Mods card still to come (**3e-4**).
+   Apply known fixes), GOG's changelog and the cloud saves row (**3e-3**) and
+   the Mods card (**3e-4**), all built 2026-11-19. Update from Nexus, the
+   downloads' lines, Search Nexus and the FOMOD installer are slice 7's.
 4. **Settings, Accounts, About**: General, Keys, Library, Engines, Proton,
    Theme, Diagnostics; Epic, GOG and Amazon and the Xbox card; About; the
    Collections sheet.
@@ -241,24 +242,25 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    edits, cover downloads and the file watch. Slice 2, built 2026-11-18 (2a
    and 2b); the Collections sheet is slice 4's.
 4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
-   slice by slice. Slice 3 is in parts: 3a, 3b, 3c, 3d, 3e-1, 3e-2 and 3e-3
-   built; the Mods card next (3e-4).
+   slice by slice. Slice 3 is built whole: 3a, 3b, 3c, 3d and 3e (3e-1 to
+   3e-4); slice 4, Settings, Accounts, About and the Collections sheet, is
+   next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
 
-- Branch `f/ui-revamp`. Slices 0, 1, 2, 3a, 3b, 3c, 3d, 3e-1, 3e-2 and 3e-3
-  are in place: the crate, the SvelteKit app, the dev loop, the shell, the
-  Library, the game page's header, actions, sessions, details, local games,
-  the store cards (ProtonDB, Steam, the requirements, the achievements and the
-  Steam app id), the Wine prefix card with its tools, GOG's changelog and the
-  cloud saves row. Its commands and checks are in
+- Branch `f/ui-revamp`. Slices 0, 1, 2 and 3 are in place: the crate, the
+  SvelteKit app, the dev loop, the shell, the Library, and the whole game page
+  (its header and actions, sessions, details, local games, the store cards,
+  the Wine prefix card with its tools, GOG's changelog, the cloud saves row
+  and the Mods card). Its commands and checks are in
   `crates/zendo-tauri/README.md`.
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next (3e-4): the Mods card. The prefix's tools are built but unrun: each
-  starts umu and a real window or installer.
+- Next: slice 4 (Settings, Accounts, About and the Collections sheet). The
+  prefix's tools and the Mods card's presses are built but unrun: they start
+  umu, a real window, an installer or a change to a game's files.
   The account-dependent cards are checkable now that the user has a
   Steam game and an Epic game installed: an Epic game's achievements and
   requirements, and a Steam profile whose game details are public (the

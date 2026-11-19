@@ -441,6 +441,7 @@ mods-from-nexus = from Nexus
 mods-wins = replaces { $count } of { $other }
 mods-loses = { $count } replaced by { $other }
 mods-options = Options…
+mods-installer-later = This archive has its own installer with options, and that sheet is not here yet. Nothing was added.
 mods-update-to = Update to { $version }
 mods-update = Update
 mods-profile = Profile
