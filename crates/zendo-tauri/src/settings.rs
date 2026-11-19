@@ -30,6 +30,7 @@ use zendo_shell::nexus::{self as nexus, NexusState, Then};
 use zendo_shell::theme::Themes;
 use zendo_shell::{clipboard, open, t};
 
+use crate::engines;
 use crate::launchers;
 use crate::library::LibraryState;
 use crate::platform::{self, Shell};
@@ -52,14 +53,9 @@ pub enum Setting {
     Theme(Option<String>),
     MinimizeToTray(bool),
     DiscordPresence(bool),
-    SteamGridDbKey {
-        key: Option<String>,
-        then: KeyThen,
-    },
-    NexusKey {
-        key: Option<String>,
-        then: Then,
-    },
+    SteamGridDbKey { key: Option<String>, then: KeyThen },
+    NexusKey { key: Option<String>, then: Then },
+    EnginesPathFirst(bool),
 }
 
 impl Setting {
@@ -74,6 +70,7 @@ impl Setting {
             Self::DiscordPresence(on) => config.discord_presence = *on,
             Self::SteamGridDbKey { key, .. } => config.steamgriddb_key.clone_from(key),
             Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
+            Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
         }
     }
 
@@ -105,6 +102,7 @@ impl Setting {
                 settings.nexus_key_stored(then);
             }
             Self::DownloadCovers(true) => crate::library::download_covers_now(app),
+            Self::EnginesPathFirst(_) => crate::engines::refresh_engines(app),
             Self::DownloadCovers(false) | Self::Workers(_) | Self::AutoUpdate(_) => {}
         }
     }
@@ -227,10 +225,10 @@ pub struct WorkerChip {
 /// A line of a list: a source and its count, or a file and where it is.
 #[derive(Debug, Serialize)]
 pub struct RowDto {
-    label: String,
-    value: String,
-    /// 0 plain, 2 bad, 3 dim.
-    tone: i32,
+    pub(crate) label: String,
+    pub(crate) value: String,
+    /// 0 plain, 1 good, 2 bad, 3 dim.
+    pub(crate) tone: i32,
 }
 
 /// One of Zendo's own files, and the folder to open.
@@ -349,6 +347,13 @@ pub struct SettingsDto {
     sources: Vec<RowDto>,
     launchers: Vec<SetRowDto>,
     launchers_bar: BarDto,
+    path_first: bool,
+    engines: Vec<SetRowDto>,
+    engines_bar: BarDto,
+    engines_note: Option<RowDto>,
+    runtimes: Vec<SetRowDto>,
+    runtimes_note: Option<RowDto>,
+    overlay: engines::OverlayDto,
     files: Vec<FileDto>,
     report_busy: bool,
     report_note: Option<RowDto>,
@@ -360,6 +365,7 @@ pub struct SettingsDto {
 pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> SettingsDto {
     nexus_ready(&app);
     launchers::ready(&app);
+    engines::ready(&app);
     let settings = app.state::<SettingsState>();
     let config = settings.config();
     let shell = app.state::<Shell>();
@@ -389,6 +395,13 @@ pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> Setting
         sources: sources(&library),
         launchers: launchers::rows(&app),
         launchers_bar: launchers::bar(&app),
+        path_first: config.engines_on_path_first,
+        engines: engines::engines_rows(&app),
+        engines_bar: engines::engines_bar(&app),
+        engines_note: engines::engines_note(&app),
+        runtimes: engines::runtimes_rows(&app),
+        runtimes_note: engines::runtimes_note(&app),
+        overlay: engines::overlay_dto(&app),
         files: files(&config),
         report_busy: settings.gathering.load(Ordering::Relaxed),
         report_note: settings.note().map(|(note, tone)| RowDto {
@@ -510,10 +523,13 @@ pub fn settings_key_save(app: AppHandle, library: State<'_, LibraryState>) -> Se
         key
     };
     if key.is_empty() {
-        save(&app, Setting::SteamGridDbKey {
-            key: None,
-            then: KeyThen::Removed,
-        });
+        save(
+            &app,
+            Setting::SteamGridDbKey {
+                key: None,
+                then: KeyThen::Removed,
+            },
+        );
     } else {
         check_steamgriddb_key(app.clone(), key);
     }
@@ -548,10 +564,7 @@ pub fn settings_nexus_key_toggle_shown(
 
 /// Checks the Nexus key in the field, without writing it.
 #[tauri::command]
-pub fn settings_nexus_key_check(
-    app: AppHandle,
-    library: State<'_, LibraryState>,
-) -> SettingsDto {
+pub fn settings_nexus_key_check(app: AppHandle, library: State<'_, LibraryState>) -> SettingsDto {
     let step = app.state::<SettingsState>().nexus().check_key(true);
     nexus_key_step(&app, step);
     settings_get(app, library)
@@ -616,6 +629,17 @@ pub fn settings_set_workers(
     library: State<'_, LibraryState>,
 ) -> SettingsDto {
     save(&app, Setting::Workers(workers));
+    settings_get(app, library)
+}
+
+/// Whether a program on `PATH` wins over Zendo's own copy of an engine.
+#[tauri::command]
+pub fn settings_set_path_first(
+    on: bool,
+    app: AppHandle,
+    library: State<'_, LibraryState>,
+) -> SettingsDto {
+    save(&app, Setting::EnginesPathFirst(on));
     settings_get(app, library)
 }
 
@@ -1018,7 +1042,10 @@ fn nexus_ready(app: &AppHandle) {
     let handle = app.clone();
     std::thread::spawn(move || {
         let handler = core_nexus::handler();
-        handle.state::<SettingsState>().nexus().handler_known(handler);
+        handle
+            .state::<SettingsState>()
+            .nexus()
+            .handler_known(handler);
         let _ = handle.emit("settings_changed", ());
     });
     if let Some(key) = stored {
@@ -1059,9 +1086,7 @@ fn check_nexus_key(app: AppHandle, key: String) {
 fn nexus_key_checked(app: &AppHandle, key: &str, result: Result<NexusKeyCheck, String>) {
     let settings = app.state::<SettingsState>();
     let stored = settings.config().nexus_key.clone();
-    let checked = settings
-        .nexus()
-        .key_checked(key, result, stored.as_deref());
+    let checked = settings.nexus().key_checked(key, result, stored.as_deref());
     match checked {
         nexus::Checked::Save(key, then) => save(
             app,

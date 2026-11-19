@@ -545,6 +545,16 @@ export type SettingsBar = {
 	stopping: boolean;
 };
 
+// The EOS overlay's card: its state and its Install/Remove buttons.
+export type SettingsOverlay = {
+	status: string;
+	install: string;
+	install_on: boolean;
+	remove: string;
+	remove_on: boolean;
+	note: SettingsRow | null;
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -564,6 +574,13 @@ export type SettingsPage = {
 	sources: SettingsRow[];
 	launchers: SettingsSetRow[];
 	launchers_bar: SettingsBar;
+	path_first: boolean;
+	engines: SettingsSetRow[];
+	engines_bar: SettingsBar;
+	engines_note: SettingsRow | null;
+	runtimes: SettingsSetRow[];
+	runtimes_note: SettingsRow | null;
+	overlay: SettingsOverlay;
 	files: { label: string; value: string; open: string | null }[];
 	report_busy: boolean;
 	report_note: SettingsRow | null;
@@ -672,4 +689,41 @@ export async function settingsLauncherAct(index: number): Promise<SettingsPage> 
 
 export async function settingsLaunchersStop(): Promise<SettingsPage> {
 	return invoke<SettingsPage>('settings_launchers_stop');
+}
+
+// The Engines group: the engines, the runtimes and the EOS overlay.
+export async function settingsSetPathFirst(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_path_first', { on });
+}
+
+export async function settingsEnginesCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engines_check');
+}
+
+export async function settingsEngineAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engine_act', { index });
+}
+
+export async function settingsEngineRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engine_remove', { index });
+}
+
+export async function settingsEnginesStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engines_stop');
+}
+
+export async function settingsRuntimeAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_runtime_act', { index });
+}
+
+export async function settingsRuntimeRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_runtime_remove', { index });
+}
+
+export async function settingsOverlayDoInstall(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_overlay_do_install');
+}
+
+export async function settingsOverlayDoRemove(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_overlay_do_remove');
 }

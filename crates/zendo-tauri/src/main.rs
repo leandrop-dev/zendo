@@ -14,6 +14,7 @@ use tauri::Manager;
 mod cards;
 mod cloud;
 mod commands;
+mod engines;
 mod game;
 mod launchers;
 mod library;
@@ -70,6 +71,9 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(settings::SettingsState::new())
         .manage(presence::PresenceState::new(config.discord_presence))
         .manage(launchers::LaunchersState::default())
+        .manage(engines::EnginesState::default())
+        .manage(engines::RuntimesState::default())
+        .manage(engines::OverlayState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -127,6 +131,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_set_covers,
             settings::settings_set_auto_update,
             settings::settings_set_workers,
+            settings::settings_set_path_first,
             settings::settings_download_covers,
             settings::settings_copy_report,
             settings::settings_open,
@@ -143,6 +148,14 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_nexus_become_handler,
             launchers::settings_launcher_act,
             launchers::settings_launchers_stop,
+            engines::settings_engines_check,
+            engines::settings_engine_act,
+            engines::settings_engine_remove,
+            engines::settings_engines_stop,
+            engines::settings_runtime_act,
+            engines::settings_runtime_remove,
+            engines::settings_overlay_do_install,
+            engines::settings_overlay_do_remove,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

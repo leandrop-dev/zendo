@@ -5,6 +5,10 @@
 		inTauri,
 		settingsCopyReport,
 		settingsDownloadCovers,
+		settingsEngineAct,
+		settingsEngineRemove,
+		settingsEnginesCheck,
+		settingsEnginesStop,
 		settingsGet,
 		settingsKeyCheck,
 		settingsKeyEdited,
@@ -20,10 +24,15 @@
 		settingsNexusKeySave,
 		settingsNexusKeyToggleShown,
 		settingsOpen,
+		settingsOverlayDoInstall,
+		settingsOverlayDoRemove,
+		settingsRuntimeAct,
+		settingsRuntimeRemove,
 		settingsSetAutoUpdate,
 		settingsSetCovers,
 		settingsSetDiscord,
 		settingsSetLanguage,
+		settingsSetPathFirst,
 		settingsSetTheme,
 		settingsSetTray,
 		settingsSetWorkers,
@@ -40,6 +49,7 @@
 		{ key: 'general', label: 'settings-group-general' },
 		{ key: 'keys', label: 'settings-group-keys' },
 		{ key: 'launchers', label: 'settings-group-launchers' },
+		{ key: 'engines', label: 'settings-group-engines' },
 		{ key: 'library', label: 'settings-group-library' },
 		{ key: 'diagnostics', label: 'settings-group-diagnostics' }
 	] as const;
@@ -335,6 +345,86 @@
 						bar={settings.launchers_bar}
 						onstop={() => void act(settingsLaunchersStop)}
 					/>
+				</section>
+			{:else if group === 'engines'}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('engines-title')}</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('engines-about')}</p>
+					<label class="mb-3 flex items-center gap-2 text-[13px]">
+						<input
+							type="checkbox"
+							checked={settings.path_first}
+							onchange={(event) =>
+								void act(() => settingsSetPathFirst(event.currentTarget.checked))}
+						/>
+						{app.t('engines-path-first')}
+					</label>
+					<div class="mb-3">
+						<button
+							type="button"
+							onclick={() => void act(settingsEnginesCheck)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{app.t('protons-check-again')}
+						</button>
+					</div>
+					<SetList
+						rows={settings.engines}
+						onact={(index) => void act(() => settingsEngineAct(index))}
+						onremove={(index) => void act(() => settingsEngineRemove(index))}
+					/>
+					<DownloadBar bar={settings.engines_bar} onstop={() => void act(settingsEnginesStop)} />
+					{#if settings.engines_note}
+						<p class="mt-3 text-[13px] {rowTone(settings.engines_note.tone)}">
+							{settings.engines_note.value}
+						</p>
+					{/if}
+				</section>
+
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('runtimes-title')}</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('runtimes-about')}</p>
+					<SetList
+						rows={settings.runtimes}
+						onact={(index) => void act(() => settingsRuntimeAct(index))}
+						onremove={(index) => void act(() => settingsRuntimeRemove(index))}
+					/>
+					{#if settings.runtimes_note}
+						<p class="mt-3 text-[13px] {rowTone(settings.runtimes_note.tone)}">
+							{settings.runtimes_note.value}
+						</p>
+					{/if}
+				</section>
+
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('overlay-title')}</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('overlay-about')}</p>
+					<p class="text-[13px] text-dim">{settings.overlay.status}</p>
+					<div class="mt-2 flex gap-2">
+						<button
+							type="button"
+							disabled={!settings.overlay.install_on}
+							onclick={() => void act(settingsOverlayDoInstall)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{settings.overlay.install}
+						</button>
+						{#if settings.overlay.remove}
+							<button
+								type="button"
+								disabled={!settings.overlay.remove_on}
+								onclick={() => void act(settingsOverlayDoRemove)}
+								class="border border-bad px-2 py-1 text-[13px] text-bad uppercase disabled:opacity-60"
+							>
+								{settings.overlay.remove}
+							</button>
+						{/if}
+					</div>
+					{#if settings.overlay.note}
+						<p class="mt-3 text-[13px] {rowTone(settings.overlay.note.tone)}">
+							{settings.overlay.note.value}
+						</p>
+					{/if}
 				</section>
 			{:else if group === 'library'}
 				<section class="border border-line bg-surface p-4">

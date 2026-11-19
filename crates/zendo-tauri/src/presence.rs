@@ -37,10 +37,7 @@ impl PresenceState {
     /// Tells Discord who is playing, when the setting is on.
     pub fn show(app: &AppHandle) {
         let state = app.state::<PresenceState>();
-        let handle = state
-            .handle
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let handle = state.handle.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(handle) = handle.as_ref() else {
             return;
         };

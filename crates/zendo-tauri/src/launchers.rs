@@ -112,12 +112,13 @@ pub fn settings_launcher_act(
 
 /// Stops the download in progress, if there is one.
 #[tauri::command]
-pub fn settings_launchers_stop(
-    app: AppHandle,
-    library: State<'_, LibraryState>,
-) -> SettingsDto {
+pub fn settings_launchers_stop(app: AppHandle, library: State<'_, LibraryState>) -> SettingsDto {
     let state = app.state::<LaunchersState>();
-    if let Some(download) = state.download.lock().unwrap_or_else(PoisonError::into_inner).as_ref()
+    if let Some(download) = state
+        .download
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
     {
         download.stop.store(true, Ordering::Relaxed);
     }
@@ -188,7 +189,10 @@ fn open_nexus(app: &AppHandle) {
 fn download(app: &AppHandle, which: Launcher) {
     let state = app.state::<LaunchersState>();
     {
-        let mut download = state.download.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut download = state
+            .download
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if download.is_some() {
             return;
         }
@@ -204,7 +208,10 @@ fn download(app: &AppHandle, which: Launcher) {
     std::thread::spawn(move || {
         let state = handle.state::<LaunchersState>();
         let stop = {
-            let download = state.download.lock().unwrap_or_else(PoisonError::into_inner);
+            let download = state
+                .download
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             let Some(download) = download.as_ref() else {
                 return;
             };
@@ -239,7 +246,10 @@ fn download(app: &AppHandle, which: Launcher) {
         }
         .map_err(|err| format!("{err:#}"));
         {
-            let mut download = state.download.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut download = state
+                .download
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             *download = None;
         }
         let note = match result {
@@ -291,9 +301,10 @@ fn nexus_row(app: &AppHandle, downloading: bool) -> SetRowDto {
     row(
         t!("xbox-title"),
         t!("xbox-about"),
-        state.appimage.as_ref().map_or_else(String::new, |path| {
-            path.display().to_string()
-        }),
+        state
+            .appimage
+            .as_ref()
+            .map_or_else(String::new, |path| path.display().to_string()),
         state.note.as_ref(),
         action,
         action_on,
@@ -330,7 +341,10 @@ fn series_row(app: &AppHandle, downloading: bool) -> SetRowDto {
 }
 
 /// One row of the group, with all its texts.
-#[expect(clippy::too_many_arguments, reason = "one argument per field of the row")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one argument per field of the row"
+)]
 fn row(
     title: String,
     sub: String,
@@ -364,7 +378,10 @@ fn row(
 /// The download's bar, when one runs.
 pub(crate) fn bar(app: &AppHandle) -> BarDto {
     let state = app.state::<LaunchersState>();
-    let download = state.download.lock().unwrap_or_else(PoisonError::into_inner);
+    let download = state
+        .download
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let Some(download) = download.as_ref() else {
         return BarDto::default();
     };
