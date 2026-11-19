@@ -501,6 +501,25 @@ export async function modsFindNexus(id: string): Promise<void> {
 // A line of a Settings list: a source, or the report's answer.
 export type SettingsRow = { label: string; value: string; tone: number };
 
+// An API key's field: the value, the buttons and what it last said.
+export type SettingsKey = {
+	value: string;
+	shown: boolean;
+	checking: boolean;
+	// The field holds another key than the one saved.
+	changed: boolean;
+	note: SettingsRow | null;
+	kept: string;
+	kept_bad: boolean;
+};
+
+// The Nexus key's field, with whose key it is and what opens links.
+export type SettingsNexusKey = SettingsKey & {
+	handler_line: string;
+	handler_good: boolean;
+	handler_can: boolean;
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -510,6 +529,8 @@ export type SettingsPage = {
 	theme_problems: string[];
 	tray: boolean;
 	discord: boolean;
+	steamgriddb: SettingsKey;
+	nexus: SettingsNexusKey;
 	covers: boolean;
 	// Downloads can start now: the setting is on and nothing runs.
 	covers_now: boolean;
@@ -569,4 +590,50 @@ export async function settingsCopyReport(): Promise<SettingsPage> {
 
 export async function settingsOpen(path: string): Promise<void> {
 	return invoke<void>('settings_open', { path });
+}
+
+// The SteamGridDB key's field.
+export async function settingsKeyEdited(text: string): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_edited', { text });
+}
+
+export async function settingsKeyToggleShown(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_toggle_shown');
+}
+
+export async function settingsKeyCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_check');
+}
+
+export async function settingsKeySave(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_save');
+}
+
+export async function settingsKeyGet(): Promise<void> {
+	return invoke<void>('settings_key_get');
+}
+
+// The Nexus key's field, and the handler that opens its links.
+export async function settingsNexusKeyEdited(text: string): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_edited', { text });
+}
+
+export async function settingsNexusKeyToggleShown(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_toggle_shown');
+}
+
+export async function settingsNexusKeyCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_check');
+}
+
+export async function settingsNexusKeySave(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_save');
+}
+
+export async function settingsNexusKeyGet(): Promise<void> {
+	return invoke<void>('settings_nexus_key_get');
+}
+
+export async function settingsNexusBecomeHandler(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_become_handler');
 }

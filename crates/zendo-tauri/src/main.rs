@@ -39,6 +39,10 @@ fn main() -> ExitCode {
     clippy::needless_pass_by_value,
     reason = "zendo_shell::cli::RunWindow fixes the signature"
 )]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the command list is the one place every command is registered"
+)]
 fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
     // Nexus links arrive with the Nexus pages.
     let _ = link;
@@ -124,6 +128,17 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_download_covers,
             settings::settings_copy_report,
             settings::settings_open,
+            settings::settings_key_edited,
+            settings::settings_key_toggle_shown,
+            settings::settings_key_check,
+            settings::settings_key_save,
+            settings::settings_key_get,
+            settings::settings_nexus_key_edited,
+            settings::settings_nexus_key_toggle_shown,
+            settings::settings_nexus_key_check,
+            settings::settings_nexus_key_save,
+            settings::settings_nexus_key_get,
+            settings::settings_nexus_become_handler,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

@@ -6,6 +6,17 @@
 		settingsCopyReport,
 		settingsDownloadCovers,
 		settingsGet,
+		settingsKeyCheck,
+		settingsKeyEdited,
+		settingsKeyGet,
+		settingsKeySave,
+		settingsKeyToggleShown,
+		settingsNexusBecomeHandler,
+		settingsNexusKeyCheck,
+		settingsNexusKeyEdited,
+		settingsNexusKeyGet,
+		settingsNexusKeySave,
+		settingsNexusKeyToggleShown,
 		settingsOpen,
 		settingsSetAutoUpdate,
 		settingsSetCovers,
@@ -23,6 +34,7 @@
 	// Discord's presence are the next part of this slice.
 	const GROUPS = [
 		{ key: 'general', label: 'settings-group-general' },
+		{ key: 'keys', label: 'settings-group-keys' },
 		{ key: 'library', label: 'settings-group-library' },
 		{ key: 'diagnostics', label: 'settings-group-diagnostics' }
 	] as const;
@@ -30,13 +42,22 @@
 	let group = $state<(typeof GROUPS)[number]['key']>('general');
 	let settings = $state<SettingsPage | null>(null);
 	let error = $state<string | null>(null);
+	// The key fields show what is typed; an answer from a check or a save
+	// must not clear them, so they are set only on the first load.
+	let steamgriddbValue = $state('');
+	let nexusValue = $state('');
 
 	async function load(): Promise<void> {
 		if (!inTauri()) {
 			return;
 		}
 		try {
-			settings = await settingsGet();
+			const page = await settingsGet();
+			if (!settings) {
+				steamgriddbValue = page.steamgriddb.value;
+				nexusValue = page.nexus.value;
+			}
+			settings = page;
 		} catch (err) {
 			error = String(err);
 		}
@@ -52,6 +73,16 @@
 
 	function rowTone(tone: number): string {
 		return tone === 2 ? 'text-bad' : tone === 1 ? 'text-good' : tone === 3 ? 'text-dim' : '';
+	}
+
+	function onSteamgriddbInput(event: Event): void {
+		steamgriddbValue = (event.currentTarget as HTMLInputElement).value;
+		void act(() => settingsKeyEdited(steamgriddbValue));
+	}
+
+	function onNexusInput(event: Event): void {
+		nexusValue = (event.currentTarget as HTMLInputElement).value;
+		void act(() => settingsNexusKeyEdited(nexusValue));
 	}
 
 	onMount(() => {
@@ -158,11 +189,134 @@
 						<input
 							type="checkbox"
 							checked={settings.discord}
-							onchange={(event) =>
-								void act(() => settingsSetDiscord(event.currentTarget.checked))}
+							onchange={(event) => void act(() => settingsSetDiscord(event.currentTarget.checked))}
 						/>
 						{app.t('discord-presence')}
 					</label>
+				</section>
+			{:else if group === 'keys'}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">SteamGridDB</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('steamgriddb-about')}</p>
+					<div class="flex flex-wrap gap-2">
+						<input
+							type={settings.steamgriddb.shown ? 'text' : 'password'}
+							value={steamgriddbValue}
+							oninput={onSteamgriddbInput}
+							placeholder={app.t('steamgriddb-paste')}
+							class="min-w-0 flex-1 border border-line bg-background px-2 py-1 text-[13px]"
+						/>
+						<button
+							type="button"
+							onclick={() => void act(settingsKeyToggleShown)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{settings.steamgriddb.shown ? app.t('key-hide') : app.t('key-show')}
+						</button>
+						<button
+							type="button"
+							disabled={settings.steamgriddb.checking || steamgriddbValue === ''}
+							onclick={() => void act(settingsKeyCheck)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{settings.steamgriddb.checking ? app.t('key-checking') : app.t('key-check')}
+						</button>
+						<button
+							type="button"
+							disabled={!settings.steamgriddb.changed}
+							onclick={() => void act(settingsKeySave)}
+							class="border border-accent-mark bg-accent-mark px-3 py-1 text-[13px] font-bold text-background uppercase disabled:opacity-60"
+						>
+							{app.t('key-save')}
+						</button>
+					</div>
+					{#if settings.steamgriddb.note}
+						<p class="mt-3 text-[13px] {rowTone(settings.steamgriddb.note.tone)}">
+							{settings.steamgriddb.note.value}
+						</p>
+					{/if}
+					{#if settings.steamgriddb.kept}
+						<p class="mt-1 text-[13px] {settings.steamgriddb.kept_bad ? 'text-bad' : 'text-dim'}">
+							{settings.steamgriddb.kept}
+						</p>
+					{/if}
+					<button
+						type="button"
+						onclick={() => void settingsKeyGet()}
+						class="mt-3 text-[13px] underline hover:text-accent-mark"
+					>
+						{app.t('steamgriddb-get-key')}
+					</button>
+				</section>
+
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">Nexus Mods</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('nexus-about')}</p>
+					<div class="flex flex-wrap gap-2">
+						<input
+							type={settings.nexus.shown ? 'text' : 'password'}
+							value={nexusValue}
+							oninput={onNexusInput}
+							placeholder={app.t('nexus-paste')}
+							class="min-w-0 flex-1 border border-line bg-background px-2 py-1 text-[13px]"
+						/>
+						<button
+							type="button"
+							onclick={() => void act(settingsNexusKeyToggleShown)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{settings.nexus.shown ? app.t('key-hide') : app.t('key-show')}
+						</button>
+						<button
+							type="button"
+							disabled={settings.nexus.checking || nexusValue === ''}
+							onclick={() => void act(settingsNexusKeyCheck)}
+							class="border border-line px-2 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{settings.nexus.checking ? app.t('key-checking') : app.t('key-check')}
+						</button>
+						<button
+							type="button"
+							disabled={!settings.nexus.changed}
+							onclick={() => void act(settingsNexusKeySave)}
+							class="border border-accent-mark bg-accent-mark px-3 py-1 text-[13px] font-bold text-background uppercase disabled:opacity-60"
+						>
+							{app.t('key-save')}
+						</button>
+					</div>
+					{#if settings.nexus.note}
+						<p class="mt-3 text-[13px] {rowTone(settings.nexus.note.tone)}">
+							{settings.nexus.note.value}
+						</p>
+					{/if}
+					{#if settings.nexus.kept}
+						<p class="mt-1 text-[13px] {settings.nexus.kept_bad ? 'text-bad' : 'text-dim'}">
+							{settings.nexus.kept}
+						</p>
+					{/if}
+					<button
+						type="button"
+						onclick={() => void settingsNexusKeyGet()}
+						class="mt-3 text-[13px] underline hover:text-accent-mark"
+					>
+						{app.t('nexus-get-key')}
+					</button>
+					{#if settings.nexus.handler_line}
+						<p class="mt-3 text-[13px] {settings.nexus.handler_good ? 'text-good' : 'text-dim'}">
+							{settings.nexus.handler_line}
+						</p>
+					{/if}
+					{#if settings.nexus.handler_can}
+						<div class="mt-2 flex justify-end">
+							<button
+								type="button"
+								onclick={() => void act(settingsNexusBecomeHandler)}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+							>
+								{app.t('nexus-become-handler')}
+							</button>
+						</div>
+					{/if}
 				</section>
 			{:else if group === 'library'}
 				<section class="border border-line bg-surface p-4">
