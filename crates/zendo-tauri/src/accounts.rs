@@ -183,12 +183,45 @@ pub fn accounts_get(app: AppHandle) -> AccountsDto {
 }
 
 /// Asks each store who is signed in, once as the page first opens.
-fn ready(app: &AppHandle) {
+pub(crate) fn ready(app: &AppHandle) {
     let state = app.state::<AccountsState>();
     if state.ready.swap(true, Ordering::Relaxed) {
         return;
     }
     check_accounts(app);
+}
+
+/// Whether the store is known to be signed in (the Store lists its games).
+pub(crate) fn signed_in(app: &AppHandle, store: Store) -> bool {
+    let state = app.state::<AccountsState>();
+    matches!(
+        state
+            .accounts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)[index(store)],
+        Account::SignedIn(_)
+    )
+}
+
+/// Whether the store is known to be signed out (its list waits for a sign-in).
+pub(crate) fn signed_out(app: &AppHandle, store: Store) -> bool {
+    let state = app.state::<AccountsState>();
+    matches!(
+        state
+            .accounts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)[index(store)],
+        Account::SignedOut
+    )
+}
+
+/// Zendo's Steam sign-in, from the settings.
+pub(crate) fn steam_session(app: &AppHandle) -> Option<Session> {
+    app.state::<SettingsState>()
+        .config()
+        .steam_session
+        .as_deref()
+        .and_then(Session::parse)
 }
 
 fn dto(app: &AppHandle) -> AccountsDto {

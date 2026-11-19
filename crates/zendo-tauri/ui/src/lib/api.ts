@@ -974,3 +974,68 @@ export async function collectionsDelete(name: string): Promise<CollectionsPage> 
 export async function collectionsApply(name: string): Promise<CollectionsPage> {
 	return invoke<CollectionsPage>('collections_apply', { name });
 }
+
+// The Store page: the games the signed-in stores say the user owns.
+export type StoreChip = { key: string; label: string; count: number | null; chosen: boolean };
+export type StorePage = {
+	ready: boolean;
+	cards: Card[];
+	chips: { sources: StoreChip[]; sorts: StoreChip[] };
+	cursor: number;
+	empty: { title: string; accounts: boolean } | null;
+	search: string;
+	status: string | null;
+};
+
+// A store game's page.
+export type OwnedPage = {
+	id: string;
+	title: string;
+	source_line: string;
+	cover: string | null;
+	installed: boolean;
+	details: [string, string][];
+	install: string;
+	install_on: boolean;
+	note: [string, number] | null;
+};
+
+export async function storeGet(): Promise<StorePage> {
+	return invoke<StorePage>('store_get');
+}
+
+export async function storePick(key: string): Promise<StorePage> {
+	return invoke<StorePage>('store_pick', { key });
+}
+
+export async function storeSearch(text: string): Promise<StorePage> {
+	return invoke<StorePage>('store_search', { text });
+}
+
+export async function storeCycleSort(): Promise<StorePage> {
+	return invoke<StorePage>('store_cycle_sort');
+}
+
+export async function storeClick(id: string): Promise<StorePage> {
+	return invoke<StorePage>('store_click', { id });
+}
+
+export async function storeStep(step: string): Promise<StorePage> {
+	return invoke<StorePage>('store_step', { step });
+}
+
+export async function storeFit(columns: number, height: number): Promise<StorePage> {
+	return invoke<StorePage>('store_fit', { columns, height });
+}
+
+export async function storeBack(): Promise<StorePage> {
+	return invoke<StorePage>('store_back');
+}
+
+export async function storeRefresh(): Promise<StorePage> {
+	return invoke<StorePage>('store_refresh');
+}
+
+export async function ownedGet(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_get', { id });
+}

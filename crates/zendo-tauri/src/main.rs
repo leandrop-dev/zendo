@@ -27,6 +27,7 @@ mod prefix;
 mod presence;
 mod protons;
 mod settings;
+mod store;
 
 fn main() -> ExitCode {
     // The window's class on X11 (its WM_CLASS) and its app id on Wayland come
@@ -80,6 +81,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(protons::ProtonsState::default())
         .manage(accounts::AccountsState::default())
         .manage(collections::CollectionsState::default())
+        .manage(store::StoreState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -195,6 +197,16 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             collections::collections_set_member,
             collections::collections_delete,
             collections::collections_apply,
+            store::store_get,
+            store::store_pick,
+            store::store_search,
+            store::store_cycle_sort,
+            store::store_click,
+            store::store_step,
+            store::store_fit,
+            store::store_back,
+            store::store_refresh,
+            store::owned_get,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
