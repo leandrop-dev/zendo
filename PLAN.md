@@ -53,8 +53,8 @@ sort, views, cursor, marks, bulk edits, cover downloads and the file watch,
 with 62 fps on 2,700 games), 3a (the game page's header and actions), 3b
 (its sessions and details), 3c (local games), 3d (the store cards: ProtonDB's
 pill, Steam's About, facts and screenshots, the requirements, the
-achievements and the Steam app id) and 3e (the Wine prefix card, read-only
-then with its tools) are built,
+achievements and the Steam app id) and 3e (the Wine prefix card with its
+tools, GOG's changelog and the cloud saves row) are built,
 and the Slint window stays in place and releasable until the port's parity
 checklist passes (`docs/tauri-port-plan.md`).
 

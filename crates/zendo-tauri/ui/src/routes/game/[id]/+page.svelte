@@ -8,6 +8,7 @@
 	import {
 		cardsGet,
 		cardsMoreAchievements,
+		cardsMoreChangelog,
 		cardsRetry,
 		gameGet,
 		gameLaunch,
@@ -59,7 +60,7 @@
 	// The details card: what the game is, then what only Steam says.
 	let detailRows = $derived([
 		...(game?.details ?? []).map((row) => ({ ...row, url: null as string | null })),
-		...(cards?.steam ?? [])
+		...(cards?.steam ?? []).map((row) => ({ ...row, tone: 0 }))
 	]);
 	// Every file of the cards is in Zendo's cache; the asset protocol serves it.
 	function asset(path: string | null): string {
@@ -125,6 +126,14 @@
 	async function moreAchievements(): Promise<void> {
 		try {
 			cards = await cardsMoreAchievements(id);
+		} catch (err) {
+			error = String(err);
+		}
+	}
+
+	async function moreChangelog(): Promise<void> {
+		try {
+			cards = await cardsMoreChangelog(id);
 		} catch (err) {
 			error = String(err);
 		}
@@ -228,8 +237,9 @@
 				void loadCards();
 			}
 		});
-		// A prefix tool ended, or the known fixes' list was read again.
-		const prefixChanged = listen<string>('prefix_changed', (event) => {
+		// A prefix tool ended, the known fixes were read again, or the
+		// game's saves' state changed.
+		const changed = listen<string>('game_changed', (event) => {
 			if (event.payload === id) {
 				void load();
 			}
@@ -239,7 +249,7 @@
 			void runs.then((stop) => stop());
 			void lines.then((stop) => stop());
 			void arrived.then((stop) => stop());
-			void prefixChanged.then((stop) => stop());
+			void changed.then((stop) => stop());
 		};
 	});
 </script>
@@ -677,6 +687,38 @@
 				</section>
 			{/if}
 
+			{#if cards && cards.changelog.lines.length > 0}
+				<section class="border border-line bg-surface p-4">
+					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('changelog-title')}</h2>
+					<div class="flex flex-col gap-1">
+						{#each cards.changelog.lines as line, index (index)}
+							{#if line.kind === 4}
+								<span class="h-2"></span>
+							{:else}
+								<p
+									class="text-[14px] whitespace-pre-line {line.kind === 0
+										? 'text-[15px] font-bold'
+										: line.kind === 1
+											? 'font-bold text-dim'
+											: ''}"
+								>
+									{line.kind === 3 ? `•  ${line.text}` : line.text}
+								</p>
+							{/if}
+						{/each}
+					</div>
+					{#if cards.changelog.more}
+						<button
+							type="button"
+							onclick={() => void moreChangelog()}
+							class="mt-3 border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{cards.changelog.more}
+						</button>
+					{/if}
+				</section>
+			{/if}
+
 			{#if game.dlc.length > 0}
 				<section class="border border-line bg-surface p-4">
 					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('dlc-title')}</h2>
@@ -705,7 +747,17 @@
 									</button>
 								</dd>
 							{:else}
-								<dd class="break-all">{row.value}</dd>
+								<dd
+									class="break-all {row.tone === 1
+										? 'text-good'
+										: row.tone === 2
+											? 'text-bad'
+											: row.tone === 3
+												? 'text-dim'
+												: ''}"
+								>
+									{row.value}
+								</dd>
 							{/if}
 						</div>
 					{/each}

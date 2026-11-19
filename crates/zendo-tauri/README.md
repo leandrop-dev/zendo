@@ -3,12 +3,12 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1, 2, 3a, 3b, 3c, 3d, 3e-1 and 3e-2 are in place: the scaffold,
-the shell, the Library (grid, chips, search, sort, cursor, marks, bulk edits,
-cover downloads and the file watch), the game page's header and actions, its
-sessions and details, local games, its store cards, and the Wine prefix card
-with its tools. GOG's changelog, cloud saves, the Mods card and the rest of
-the other pages follow.
+Slices 0, 1, 2, 3a, 3b, 3c, 3d, 3e-1, 3e-2 and 3e-3 are in place: the
+scaffold, the shell, the Library (grid, chips, search, sort, cursor, marks,
+bulk edits, cover downloads and the file watch), the game page's header and
+actions, its sessions and details, local games, its store cards, the Wine
+prefix card with its tools, GOG's changelog and the cloud saves row. The Mods
+card and the rest of the other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -29,11 +29,16 @@ the other pages follow.
   `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
   over `zendo_shell::running` for the launch.
 - `src/cards.rs`: the page's store cards, asked once a session:
-  `cards_get`, `cards_retry` (for a card that failed), `cards_more_achievements`
-  and `steam_app_set`. ProtonDB's rating, Steam's store, the requirements and
-  the achievements are asked on threads of their own; a failure is kept and
-  shown with Try again. The words are `zendo_shell::cards`, shared with the
-  Slint window.
+  `cards_get`, `cards_retry` (for a card that failed), `cards_more_achievements`,
+  `cards_more_changelog` and `steam_app_set`. ProtonDB's rating, Steam's
+  store, the requirements, the achievements and GOG's changelog are asked on
+  threads of their own; a failure is kept and shown with Try again. The words
+  are `zendo_shell::cards` and `zendo_shell::gog`, shared with the Slint
+  window.
+- `src/cloud.rs`: the Details card's cloud saves row (off, syncing, waiting
+  for the first start, in sync when, none kept, or failed), from
+  `zendo_core::cloud_saves` and the launch options, and whether a sync is
+  running now, which the launch's effects set.
 - `src/library.rs`: the Library's commands over `zendo_shell::library`: the
   list (every card once), the chips, the search, the sort, the cursor, the
   marks, and the bulk edits. It scans on a thread, watches the launchers'
@@ -63,8 +68,9 @@ the other pages follow.
   running, stopping) and the line under its actions.
 - `game_cards`: a store card's answer is in; the payload is the game's id, and
   the page asks for its cards again.
-- `prefix_changed`: a prefix tool ended, or the known fixes' list was read
-  again; the payload is the game's id, and the page asks for its game again.
+- `game_changed`: something about a game's data changed (a prefix tool ended,
+  the known fixes were read again, a mark, the saves' state); the payload is
+  the game's id, and the page asks for its game again.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

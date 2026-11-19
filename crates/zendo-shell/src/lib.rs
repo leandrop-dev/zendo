@@ -17,6 +17,7 @@ pub mod format;
 pub mod game;
 pub mod game_mode;
 pub mod gamepad;
+pub mod gog;
 pub mod i18n;
 pub mod installer;
 pub mod launch_options;

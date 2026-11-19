@@ -6728,3 +6728,46 @@ installer: Wine settings, winetricks, Run a program…, GOG's setup, Apply known
 fixes), a components install and what it says, the tools disabled while one
 runs or the game does, and the known fixes' lines and button (a local game has
 no list; the Slint window's lines were seen in 3e-1).
+
+## The Tauri port, slice 3e-3: GOG's changelog and the cloud saves (2026-11-19)
+
+- **The words are one** in `zendo_shell::gog` (new): `lines` turns GOG's
+  entries into the card's lines (0 an update's title, 1 a heading, 2 a
+  paragraph, 3 a list item, 4 a gap), and `more_label` is what Show earlier
+  updates says, `MORE` being how many it adds. The Slint window's `gog_ui.rs`
+  maps these now; its test moved to the shared module.
+- **The Tauri side**: the changelog is one of `cards.rs`'s answers (`Ask` on
+  a thread, once a session, for a `gog:` id), with `cards_more_changelog` and
+  its line in the page's cards; a failure is kept and asked again by Try again.
+  GOG's notes need no token, so an account is not needed to see them.
+- **The cloud saves row** (`crates/zendo-tauri/src/cloud.rs`, new): the
+  Details card's last row, from `cloud_saves::applies` and `statuses` and the
+  game's launch options (off, syncing, waiting for the first start, in sync
+  when, none kept, or failed and why), with the row's tone. `CloudState`
+  keeps the games syncing now, which the launch's `Effect::CloudSyncing` sets
+  and `Effect::CloudReload` refreshes; `FactDto` gained the tone the window
+  colours the value with.
+- **One event**: `game_changed` (the game's id) replaced `prefix_changed`.
+  Everything that changes a game's data but not its run state (a prefix tool
+  ending, the fixes' list, a mark, the saves' state) says it, and the page
+  asks for its game again; `Effect::Changed` says it too.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (600 passed, 32 ignored).
+
+A throwaway home with a GOG game Zendo installed (Cyberpunk 2077, product
+1423049311, a Windows install with its prefix and a seeded "in sync" status),
+`tauri build --debug`, no session bus. This session's `ydotool` and `wtype`
+reached nothing (the pointer would not move at all, `hyprctl cursorpos` staying
+put), so the page was opened by a temporary hook reading `ZENDO_PAGE` in
+`platform.rs`, which was removed before the commit. Seen: the page's About and
+screenshots from Steam's store (ProtonDB found app 1091500, `PROTONDB GOLD`),
+the requirements card's Minimum/Recommended columns, GOG's changelog with its
+headings, paragraphs and bullets and `Show earlier updates (27 more)`, and the
+details card closing with `Cloud saves · In sync, 1 h ago` in green.
+
+Not checked: Show earlier updates (input), a row for a sync that is running,
+off, none kept or failed, and GOG's total time played, which the Slint window
+reads and this page does not yet (it is not in 3e's list; it raises the total
+the page shows).

@@ -12,6 +12,7 @@ use anyhow::Context;
 use tauri::Manager;
 
 mod cards;
+mod cloud;
 mod commands;
 mod game;
 mod library;
@@ -56,6 +57,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(library::LibraryState::new())
         .manage(cards::CardsState::default())
         .manage(prefix::PrefixState::default())
+        .manage(cloud::CloudState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -90,6 +92,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
+            cards::cards_more_changelog,
             cards::steam_app_set,
         ])
         .setup(move |app| {

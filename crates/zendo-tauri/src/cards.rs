@@ -17,11 +17,13 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use zendo_core::achievements::{self, Achievements};
 use zendo_core::config::Config;
+use zendo_core::gog_changelog::{self, Entry};
 use zendo_core::protondb::{self, Rating};
 use zendo_core::requirements::{self, Requirements, System};
 use zendo_core::steam_facts::{self, Facts};
 use zendo_core::{Game, State as CoreState, steam, steam_web};
 use zendo_shell::cards::{self, Pill, RequirementsView, SHOWN};
+use zendo_shell::gog;
 use zendo_shell::running::now;
 use zendo_shell::t;
 
@@ -47,8 +49,12 @@ struct Answers {
     requirements: Option<Ask<Option<Requirements>>>,
     /// `None`: the store gives none.
     achievements: Option<Ask<Option<Achievements>>>,
+    /// `None`: GOG has no changelog for it.
+    changelog: Option<Ask<Vec<Entry>>>,
     /// How many achievements are shown beyond the first ones.
     more: usize,
+    /// How many of GOG's updates are shown beyond the newest.
+    changelog_more: usize,
 }
 
 /// The cards' answers, by game, for this session.
@@ -138,6 +144,21 @@ pub struct AchievementDto {
     unlocked: bool,
 }
 
+/// A line of GOG's changelog: 0 an update's title, 1 a heading, 2 a
+/// paragraph, 3 a list item, 4 a gap between updates.
+#[derive(Debug, Serialize)]
+pub struct LineDto {
+    kind: i32,
+    text: String,
+}
+
+#[derive(Debug, Serialize, Default)]
+pub struct ChangelogDto {
+    lines: Vec<LineDto>,
+    /// What Show earlier updates says, when there are older updates.
+    more: Option<String>,
+}
+
 #[derive(Debug, Serialize, Default)]
 pub struct AchievementsDto {
     /// "3 of 10 unlocked", or why that cannot be said.
@@ -175,6 +196,8 @@ pub struct CardsDto {
     steam: Vec<RowDto>,
     requirements: RequirementsDto,
     achievements: AchievementsDto,
+    /// GOG's notes for each update, newest first.
+    changelog: ChangelogDto,
     /// The cards that could not be asked, with why.
     failures: Vec<RowDto>,
     steam_app: SteamAppDto,
@@ -212,6 +235,9 @@ pub fn cards_retry(
         if matches!(answers.achievements, Some(Ask::Failed(_))) {
             answers.achievements = None;
         }
+        if matches!(answers.changelog, Some(Ask::Failed(_))) {
+            answers.changelog = None;
+        }
     });
     cards_for(&app, &state, &id)
 }
@@ -226,6 +252,23 @@ pub fn cards_more_achievements(
     app.state::<CardsState>().keep(&id, |answers| {
         if let Some(Ask::Got(Some(found))) = &answers.achievements {
             answers.more = (answers.more + SHOWN).min(found.list.len());
+        }
+    });
+    cards_for(&app, &state, &id)
+}
+
+/// Shows more of GOG's updates, the next `MORE` of them.
+#[tauri::command]
+pub fn cards_more_changelog(
+    id: String,
+    app: AppHandle,
+    state: State<'_, LibraryState>,
+) -> Result<CardsDto, String> {
+    app.state::<CardsState>().keep(&id, |answers| {
+        if let Some(Ask::Got(entries)) = &answers.changelog
+            && !entries.is_empty()
+        {
+            answers.changelog_more = (answers.changelog_more + gog::MORE).min(entries.len() - 1);
         }
     });
     cards_for(&app, &state, &id)
@@ -302,6 +345,29 @@ fn start_asks(app: &AppHandle, game: &Game, answers: &mut Answers) {
     if answers.achievements.is_none() {
         want_achievements(app, game, answers);
     }
+    if answers.changelog.is_none()
+        && let Some(product) = game.id.strip_prefix("gog:")
+    {
+        answers.changelog = Some(Ask::Asking);
+        ask_changelog(app, &game.id, product.to_owned());
+    }
+}
+
+/// Asks GOG for its notes on each update, which need no token.
+fn ask_changelog(app: &AppHandle, id: &str, product: String) {
+    let handle = app.clone();
+    let kept = id.to_owned();
+    std::thread::spawn(move || {
+        let result =
+            guarded(move || gog_changelog::fetch(&product).map_err(|err| format!("{err:#}")));
+        handle.state::<CardsState>().keep(&kept, |answers| {
+            answers.changelog = Some(match result {
+                Ok(entries) => Ask::Got(entries),
+                Err(err) => Ask::Failed(err),
+            });
+        });
+        finish(&handle, &kept);
+    });
 }
 
 /// The achievements: a store's own, or for a Game Pass game the launcher's
@@ -537,6 +603,7 @@ fn dto(game: &Game, answers: &Answers, at: u64) -> CardsDto {
         steam: steam_rows(game, answers),
         requirements: requirements_of(answers),
         achievements: achievements_of(game, answers, at),
+        changelog: changelog_of(answers),
         failures: failures_of(answers),
         steam_app: SteamAppDto {
             line: steam_app_line(game, answers),
@@ -605,6 +672,25 @@ fn achievements_of(game: &Game, answers: &Answers, at: u64) -> AchievementsDto {
             })
             .collect(),
         more: cards::more_label(found, shown),
+    }
+}
+
+/// GOG's changelog as the card draws it: the newest update, and `MORE` more
+/// each time Show earlier updates is pressed.
+fn changelog_of(answers: &Answers) -> ChangelogDto {
+    let Some(Ask::Got(entries)) = &answers.changelog else {
+        return ChangelogDto::default();
+    };
+    let shown = (1 + answers.changelog_more).min(entries.len());
+    ChangelogDto {
+        lines: gog::lines(entries, shown)
+            .into_iter()
+            .map(|line| LineDto {
+                kind: line.kind,
+                text: line.text,
+            })
+            .collect(),
+        more: gog::more_label(entries, shown),
     }
 }
 

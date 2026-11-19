@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use zendo_core::config::Config;
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::prefix_tools::{self, Ran, Tool};
@@ -233,12 +233,12 @@ pub async fn prefix_want(id: String, app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let _ = tauri::async_runtime::spawn_blocking(known_fixes::refresh).await;
-    let _ = app.emit("prefix_changed", id);
+    crate::game::emit_game_changed(&app, &id);
     Ok(())
 }
 
 /// Starts a tool on a thread of its own, when none runs there and the game
-/// does not; its end says `prefix_changed`.
+/// does not; its end says `game_changed`.
 fn start(app: &AppHandle, state: &LibraryState, id: String, tool: Tool) -> Result<(), String> {
     let Some(game) = state.game(&id) else {
         return Err(format!("no game with the id {id:?}"));
@@ -285,7 +285,7 @@ fn finished(app: &AppHandle, id: &str, tool: &Tool, result: Result<Ran, String>)
         prefix.clear_components(id);
     }
     prefix.put_note(id.to_owned(), words::done(tool, result));
-    let _ = app.emit("prefix_changed", id.to_owned());
+    crate::game::emit_game_changed(app, id);
 }
 
 /// Keeps the components typed in the game's launch options, as the Slint

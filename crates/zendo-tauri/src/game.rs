@@ -14,6 +14,7 @@ use zendo_core::{Game, Source, State as CoreState, Status};
 use zendo_shell::game::{details, sessions_of, tiles_of};
 use zendo_shell::running::{self, Effect, Names, RunMessage};
 
+use crate::cloud::{self, CloudState};
 use crate::library::LibraryState;
 use crate::platform;
 use crate::prefix::{PrefixDto, PrefixState, prefix_of};
@@ -59,6 +60,8 @@ struct FactDto {
     label: String,
     value: String,
     path: bool,
+    /// The value's colour: 0 plain, 1 good, 2 bad, 3 dim.
+    tone: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,7 +100,12 @@ pub fn game_get(
     let game = state
         .game(&id)
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
-    Ok(dto(&state, &game, &app.state::<PrefixState>()))
+    Ok(dto(
+        &state,
+        &game,
+        &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
+    ))
 }
 
 /// Starts the game on a thread of its own, then follows it: the page hears
@@ -114,7 +122,12 @@ pub fn game_launch(
     {
         let mut running = state.running();
         if running.is_open(&id) {
-            return Ok(dto(&state, &game, &app.state::<PrefixState>()));
+            return Ok(dto(
+                &state,
+                &game,
+                &app.state::<PrefixState>(),
+                &app.state::<CloudState>(),
+            ));
         }
         running.begin(&id);
     }
@@ -124,7 +137,12 @@ pub fn game_launch(
         true
     });
     emit_run(&app, &id);
-    Ok(dto(&state, &game, &app.state::<PrefixState>()))
+    Ok(dto(
+        &state,
+        &game,
+        &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
+    ))
 }
 
 /// Asks the game to close; a second press kills it, as the Slint window does.
@@ -138,7 +156,12 @@ pub fn game_stop(
         .game(&id)
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
     handle_run(&app, RunMessage::Stop(id.clone()));
-    Ok(dto(&state, &game, &app.state::<PrefixState>()))
+    Ok(dto(
+        &state,
+        &game,
+        &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
+    ))
 }
 
 #[tauri::command]
@@ -158,6 +181,7 @@ pub fn game_set_pinned(
         &state,
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
     ))
 }
 
@@ -178,6 +202,7 @@ pub fn game_set_hidden(
         &state,
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
     ))
 }
 
@@ -203,6 +228,7 @@ pub fn game_set_status(
         &state,
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
     ))
 }
 
@@ -215,7 +241,7 @@ fn fresh(state: &LibraryState, id: &str) -> Result<Game, String> {
 }
 
 /// What the page shows of a game now.
-fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState) -> GameDto {
+fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState, cloud: &CloudState) -> GameDto {
     let (run_state, running) = {
         let running = state.running();
         let state_number = match running.games.get(&game.id) {
@@ -254,7 +280,19 @@ fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState) -> GameDto {
             })
             .collect(),
         local: game.source == Source::Local,
-        details: facts(details(game)),
+        details: {
+            let mut rows = facts(details(game));
+            // The cloud saves' row closes the details, as in the Slint page.
+            if let Some((value, tone)) = cloud::row(game, cloud) {
+                rows.push(FactDto {
+                    label: zendo_shell::t!("fact-cloud-saves"),
+                    value,
+                    path: false,
+                    tone,
+                });
+            }
+            rows
+        },
         sessions: facts(session_summary),
         recent: facts(session_recent),
         dlc: game
@@ -276,6 +314,7 @@ fn facts(rows: Vec<zendo_shell::game::Fact>) -> Vec<FactDto> {
             label: row.label,
             value: row.value,
             path: row.path,
+            tone: 0,
         })
         .collect()
 }
@@ -332,6 +371,12 @@ fn handle_run(app: &AppHandle, message: RunMessage) {
                 };
                 let _ = zendo_core::sessions::record(&session);
             }
+            Effect::CloudReload => emit_game_changed(app, &id),
+            Effect::CloudSyncing(changed, syncing) => {
+                app.state::<CloudState>().set_syncing(&changed, syncing);
+                emit_game_changed(app, &changed);
+            }
+            Effect::Changed(changed) => emit_game_changed(app, &changed),
             Effect::HideOnLaunch => platform::hide_for_launch(app),
             Effect::ShowOnClose => platform::show_after_game(app),
             Effect::StopAsking { watch, kill, .. } => {
@@ -368,6 +413,12 @@ fn message_id(message: &RunMessage) -> &str {
         | RunMessage::Stop(id)
         | RunMessage::StopAnswered(id, _) => id,
     }
+}
+
+/// Something about a game's data changed (its saves' state, a mark, a prefix
+/// tool): the page asks for its game again.
+pub(crate) fn emit_game_changed(app: &AppHandle, id: &str) {
+    let _ = app.emit("game_changed", id.to_owned());
 }
 
 fn emit_run(app: &AppHandle, id: &str) {

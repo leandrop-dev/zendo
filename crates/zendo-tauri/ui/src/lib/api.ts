@@ -175,11 +175,11 @@ export type GamePage = {
 	statuses: { key: string; label: string; chosen: boolean }[];
 	// A game added by hand: its page edits and removes it.
 	local: boolean;
-	details: { label: string; value: string; path: boolean }[];
+	details: (Fact & { tone: number })[];
 	// The session counts and lengths, empty until the game has one.
-	sessions: { label: string; value: string; path: boolean }[];
+	sessions: (Fact & { tone: number })[];
 	// The latest sessions, by date.
-	recent: { label: string; value: string; path: boolean }[];
+	recent: (Fact & { tone: number })[];
 	// The DLC installed with the game, when its engine records any.
 	dlc: { title: string }[];
 	// The Wine prefix card, for a Windows game Zendo starts.
@@ -195,6 +195,9 @@ export type GamePage = {
 		status: { text: string; tone: number } | null;
 	} | null;
 };
+
+// A line of a card: a label and its value.
+export type Fact = { label: string; value: string; path: boolean };
 
 // A badge on the header: ProtonDB's rating.
 export type Pill = {
@@ -238,6 +241,9 @@ export type GameCards = {
 		}[];
 		more: string | null;
 	};
+	// GOG's notes for each update: 0 a title, 1 a heading, 2 a paragraph,
+	// 3 a list item, 4 a gap.
+	changelog: { lines: { kind: number; text: string }[]; more: string | null };
 	// The cards that could not be asked, with why.
 	failures: Row[];
 	// The Technical card's Steam app id row.
@@ -254,6 +260,10 @@ export async function cardsRetry(id: string): Promise<GameCards> {
 
 export async function cardsMoreAchievements(id: string): Promise<GameCards> {
 	return invoke<GameCards>('cards_more_achievements', { id });
+}
+
+export async function cardsMoreChangelog(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_more_changelog', { id });
 }
 
 // Gives the game a Steam app id, or takes it back with null and answers the
