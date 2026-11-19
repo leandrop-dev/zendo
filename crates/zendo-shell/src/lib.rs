@@ -11,6 +11,7 @@
 pub mod artwork;
 pub mod cards;
 pub mod cli;
+pub mod clipboard;
 pub mod collections;
 pub mod file_dialog;
 pub mod format;

@@ -6816,3 +6816,45 @@ Not checked: every press (Apply, Back to vanilla, the boxes, the moves, a
 profile switch, Delete twice, Add mod… and the file dialog), the plugins'
 section (a Bethesda game's page was not at hand), the failure the card shows
 when the mods cannot be read on screen, and pt-PT.
+
+## The Tauri port, slice 4a: Settings' General, Library and Diagnostics (2026-11-19)
+
+- **The page's first three groups** (`crates/zendo-tauri/src/settings.rs`):
+  Language (System and each Zendo speaks), Theme (each file and the KDE
+  scheme where there is one, with the note and the files that are not
+  themes), the tray switch, the covers switch and Download now, the
+  auto-update switch, the download workers (the engine's own choice and 2, 4,
+  8, 16), the sources' counts and what a scan could not read, Zendo's own
+  files with a folder to open each, the report (gathered and copied on a
+  thread) and the logs' folder.
+- **A change shows at once and is written behind one writer**: the page's
+  `Config` is held in the page's state, a press applies to it and queues the
+  write, and the one thread keeps the order the presses were made in, as the
+  Slint window does. A failure puts the file's settings back and says why.
+  The language's words and the theme's colours follow a successful write
+  (`language_changed` carries the new messages, `theme_changed` the palette),
+  and the tray is made or taken out as the switch says (`platform::set_tray`).
+- **The clipboard moved to `zendo_shell::clipboard`**, so both windows copy
+  the report through the same `wl-copy`/`xclip` fallback.
+- **Not in this part**: the Keys group (SteamGridDB and Nexus), the Launchers,
+  Engines and Proton groups, and Discord's presence, which waits for the
+  launch's presence effect (4b); then Accounts, About and the Collections
+  sheet (4c). The Opaque switch is not drawn, the port's window having no
+  translucency.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (606 passed, 32 ignored).
+
+A throwaway home, `tauri build --debug`, no session bus, the page opened by a
+temporary `ZENDO_PAGE` hook in `platform.rs` (removed before the commit), as
+in 3e-3. Seen: the Settings tab, the three group chips (GENERAL chosen), the
+Language card with `SYSTEM (ENGLISH)`, `ENGLISH` and `PORTUGUÊS (PORTUGAL)`,
+the Theme card with the folder line and the `ZENDO` chip, and the Window card
+with the tray switch off.
+
+Not seen: the Library and Diagnostics groups, and any press. This session's
+input tools reach nothing, and synthetic clicks from the temporary hook did
+not reach the page's handlers after the route change (the same hook's click
+on a Library card did, in 3e-3), so the rest is checked by types and the
+module's tests only.

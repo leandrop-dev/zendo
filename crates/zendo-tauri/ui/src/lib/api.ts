@@ -497,3 +497,71 @@ export async function modsAdd(id: string): Promise<void> {
 export async function modsFindNexus(id: string): Promise<void> {
 	return invoke<void>('mods_find_nexus', { id });
 }
+
+// A line of a Settings list: a source, or the report's answer.
+export type SettingsRow = { label: string; value: string; tone: number };
+
+// The Settings page: General, Library and Diagnostics.
+export type SettingsPage = {
+	languages: { tag: string | null; label: string; chosen: boolean }[];
+	themes: { tag: string; label: string; chosen: boolean }[];
+	theme_about: string;
+	theme_note: SettingsRow | null;
+	theme_problems: string[];
+	tray: boolean;
+	covers: boolean;
+	// Downloads can start now: the setting is on and nothing runs.
+	covers_now: boolean;
+	auto_update: boolean;
+	workers: { count: number | null; label: string; chosen: boolean }[];
+	sources: SettingsRow[];
+	files: { label: string; value: string; open: string | null }[];
+	report_busy: boolean;
+	report_note: SettingsRow | null;
+	logs: string | null;
+};
+
+export async function settingsGet(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_get');
+}
+
+// null follows the desktop's language.
+export async function settingsSetLanguage(tag: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_language', { language: tag });
+}
+
+// A theme file's id, or "system" for the KDE scheme.
+export async function settingsSetTheme(tag: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_theme', { theme: tag });
+}
+
+export async function settingsSetTray(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_tray', { on });
+}
+
+export async function settingsSetCovers(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_covers', { on });
+}
+
+export async function settingsSetAutoUpdate(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_auto_update', { on });
+}
+
+// null is the engine's own choice.
+export async function settingsSetWorkers(count: number | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_workers', { workers: count });
+}
+
+// Gathers the report and copies it, on a thread.
+// Fetches the covers the library is missing.
+export async function settingsDownloadCovers(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_download_covers');
+}
+
+export async function settingsCopyReport(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_copy_report');
+}
+
+export async function settingsOpen(path: string): Promise<void> {
+	return invoke<void>('settings_open', { path });
+}

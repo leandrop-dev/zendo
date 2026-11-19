@@ -32,6 +32,15 @@ class App {
 			this.error = `The shell could not start: ${String(error)}`;
 			return;
 		}
+		await listen<{ language: string; messages: Record<string, string> }>(
+			'language_changed',
+			(event) => {
+				if (this.data) {
+					this.data.language = event.payload.language;
+					this.data.messages = event.payload.messages;
+				}
+			}
+		);
 		await listen<Palette>('theme_changed', (event) => {
 			if (this.data) {
 				this.data.palette = event.payload;

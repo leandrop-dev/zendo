@@ -39,6 +39,13 @@ follow.
   for the first start, in sync when, none kept, or failed), from
   `zendo_core::cloud_saves` and the launch options, and whether a sync is
   running now, which the launch's effects set.
+- `src/settings.rs`: Settings' General, Library and Diagnostics groups
+  (`settings_get`, `settings_set_language`, `settings_set_theme`,
+  `settings_set_tray`, `settings_set_covers`, `settings_set_auto_update`,
+  `settings_set_workers`, `settings_download_covers`, `settings_copy_report`,
+  `settings_open`). A change shows at once and is written behind one writer;
+  the language and the theme follow a successful write. Keys, Launchers,
+  Engines, Proton and Discord's presence are the next part.
 - `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
   `mods_get` and `mods_begin` read it, and each press is a command
   (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,
@@ -74,6 +81,9 @@ follow.
   running, stopping) and the line under its actions.
 - `game_cards`: a store card's answer is in; the payload is the game's id, and
   the page asks for its cards again.
+- `settings_changed`: a setting was written (or failed), the covers' fetch
+  ended, or the report was copied; the Settings page asks again.
+- `language_changed`: the window's language and its messages.
 - `game_changed`: something about a game's data changed (a prefix tool ended,
   the known fixes were read again, a mark, the saves' state); the payload is
   the game's id, and the page asks for its game again.

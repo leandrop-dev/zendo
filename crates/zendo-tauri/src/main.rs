@@ -20,6 +20,7 @@ mod local;
 mod mods;
 mod platform;
 mod prefix;
+mod settings;
 
 fn main() -> ExitCode {
     // The window's class on X11 (its WM_CLASS) and its app id on Wayland come
@@ -60,6 +61,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(prefix::PrefixState::default())
         .manage(cloud::CloudState::default())
         .manage(mods::ModsHandle::default())
+        .manage(settings::SettingsState::new())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -109,6 +111,16 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             mods::mods_apply,
             mods::mods_add,
             mods::mods_find_nexus,
+            settings::settings_get,
+            settings::settings_set_language,
+            settings::settings_set_theme,
+            settings::settings_set_tray,
+            settings::settings_set_covers,
+            settings::settings_set_auto_update,
+            settings::settings_set_workers,
+            settings::settings_download_covers,
+            settings::settings_copy_report,
+            settings::settings_open,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

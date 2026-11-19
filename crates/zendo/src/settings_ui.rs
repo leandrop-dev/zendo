@@ -7,9 +7,7 @@
 //! covers.
 
 use std::cell::{Cell, RefCell};
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -237,30 +235,6 @@ fn folder(path: Option<PathBuf>) -> Option<PathBuf> {
 }
 
 /// Puts `text` on the clipboard through the tool the session has.
-fn copy_text(text: &str) -> Result<(), String> {
-    for (program, args) in [
-        ("wl-copy", &[][..]),
-        ("xclip", &["-selection", "clipboard"][..]),
-    ] {
-        let Ok(mut child) = Command::new(program)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-        else {
-            continue;
-        };
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(text.as_bytes());
-        }
-        if child.wait().is_ok_and(|status| status.success()) {
-            return Ok(());
-        }
-    }
-    Err(t!("report-no-clipboard"))
-}
-
 impl Glue {
     /// Hooks the page's callbacks up and gives it its models.
     pub(super) fn connect_settings(self: &Rc<Self>, window: &MainWindow) {
@@ -676,7 +650,7 @@ impl Glue {
 
     pub(super) fn report_ready(&self, result: Result<String, String>) {
         let note = match result {
-            Ok(text) => match copy_text(&text) {
+            Ok(text) => match zendo_shell::clipboard::copy(&text) {
                 Ok(()) => (t!("report-gathered", count = text.lines().count()), true),
                 Err(err) => (err, false),
             },

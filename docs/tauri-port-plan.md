@@ -148,7 +148,11 @@ and removed once already).
    downloads' lines, Search Nexus and the FOMOD installer are slice 7's.
 4. **Settings, Accounts, About**: General, Keys, Library, Engines, Proton,
    Theme, Diagnostics; Epic, GOG and Amazon and the Xbox card; About; the
-   Collections sheet.
+   Collections sheet. Built 2026-11-19 as **4a**: General (language, theme,
+   the tray), Library (covers, auto-update, workers, the sources) and
+   Diagnostics (Zendo's files and the report). Keys, Launchers, Engines,
+   Proton and Discord's presence are **4b**; Accounts, About and the
+   Collections sheet **4c**.
 5. **Store and Downloads**: the Store page, a store game's page, Steam's card,
    installs, the queue, updates, the close-while-running question.
 6. **Stats and Game Mode**: the Stats tab and Game Mode (F11 and Select, hero,
@@ -243,8 +247,9 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    and 2b); the Collections sheet is slice 4's.
 4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
    slice by slice. Slice 3 is built whole: 3a, 3b, 3c, 3d and 3e (3e-1 to
-   3e-4); slice 4, Settings, Accounts, About and the Collections sheet, is
-   next.
+   3e-4). Slice 4 is in parts: 4a (Settings' General, Library and
+   Diagnostics) built; 4b (Keys, Launchers, Engines, Proton and Discord's
+   presence) next, then 4c (Accounts, About, the Collections sheet).
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
@@ -258,9 +263,14 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 4 (Settings, Accounts, About and the Collections sheet). The
-  prefix's tools and the Mods card's presses are built but unrun: they start
-  umu, a real window, an installer or a change to a game's files.
+- Next: slice 4b, then 4c. The prefix's tools, the Mods card's presses and
+  Settings' presses are built but unrun: they start umu, a real window, an
+  installer, a change to a game's files or a write to `config.toml`.
+- This session's `ydotool` and `wtype` reached nothing at all (the pointer
+  would not move; `hyprctl cursorpos` stayed put), so the on-screen checks
+  used a temporary `ZENDO_PAGE` hook in `platform.rs`. It opened a Library
+  card and the Settings route; a synthetic click on Settings' own buttons did
+  not reach their handlers, so only the first group was seen.
   The account-dependent cards are checkable now that the user has a
   Steam game and an Epic game installed: an Epic game's achievements and
   requirements, and a Steam profile whose game details are public (the

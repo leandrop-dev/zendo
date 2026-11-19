@@ -9,7 +9,8 @@ scaffold; slice 1, the shell; slice 2, the Library; slices 3a, 3b, 3c and 3d,
 the game page's header, sessions, details, local games and store cards, all
 built 2026-11-18; slice 3e, the game page's last cards, built 2026-11-18 and
 2026-11-19: the Wine prefix card with its tools, GOG's changelog, the cloud
-saves row and the Mods card).
+saves row and the Mods card); slice 4a, Settings' General, Library and
+Diagnostics, built 2026-11-19.
 The items below stay as the reference for what the port has to reach.
 
 ## The port from Iced to Slint (built 2026-11-14 to 2026-11-15)

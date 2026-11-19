@@ -170,6 +170,54 @@ impl LibraryState {
         Some(title)
     }
 
+    /// How many games each source gave.
+    pub(crate) fn sources(&self) -> Vec<(Source, usize)> {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let counts: Vec<(Source, usize)> = Source::ALL
+            .iter()
+            .map(|source| {
+                let count = browser
+                    .games()
+                    .iter()
+                    .filter(|game| game.source == *source)
+                    .count();
+                (*source, count)
+            })
+            .collect();
+        counts
+    }
+
+    /// What the last scan could not read, by source.
+    pub(crate) fn problems(&self) -> Vec<String> {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        browser.problems().to_vec()
+    }
+
+    /// Every game as the last scan read them.
+    pub(crate) fn games(&self) -> Vec<Game> {
+        let browser = self
+            .browser
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        browser.games().to_vec()
+    }
+
+    /// A scan is running now.
+    pub(crate) fn scanning(&self) -> bool {
+        self.scanning.load(Ordering::Relaxed)
+    }
+
+    /// The covers are being fetched.
+    pub(crate) fn downloading(&self) -> bool {
+        self.downloading.load(Ordering::Relaxed)
+    }
+
     /// The running games.
     pub(crate) fn running(&self) -> std::sync::MutexGuard<'_, Running> {
         self.running
@@ -183,6 +231,11 @@ impl LibraryState {
 struct CoverChanged {
     id: String,
     path: String,
+}
+
+/// Fetches the covers on demand, as Settings' Download now asks.
+pub(crate) fn download_covers_now(app: &AppHandle) {
+    download_covers(app.clone());
 }
 
 /// Fetches the covers and wide images the library is missing, one at a time,
@@ -201,6 +254,8 @@ fn download_covers(app: AppHandle) {
             app.state::<LibraryState>()
                 .downloading
                 .store(false, Ordering::Relaxed);
+            // Settings' Download now goes quiet with it.
+            let _ = app.emit("settings_changed", ());
         };
         let file = Config::load_file().unwrap_or_default();
         if !file.download_covers {

@@ -24,7 +24,7 @@ pub struct Shell {
     /// The colours in use, and the choice they come from.
     pub themes: Arc<Mutex<Themes>>,
     /// The setting asks for the tray when the window closes.
-    pub wants_tray: bool,
+    pub wants_tray: AtomicBool,
     /// The tray is there (it was asked for and could be made).
     pub tray: AtomicBool,
 }
@@ -33,7 +33,7 @@ impl Shell {
     pub fn new(themes: Themes, wants_tray: bool) -> Self {
         Self {
             themes: Arc::new(Mutex::new(themes)),
-            wants_tray,
+            wants_tray: AtomicBool::new(wants_tray),
             tray: AtomicBool::new(false),
         }
     }
@@ -76,6 +76,24 @@ pub fn start(app: &AppHandle, window: &WebviewWindow, fullscreen: bool) -> tauri
     Ok(())
 }
 
+/// The tray follows the setting: made now when it is turned on, and taken
+/// out when it is turned off. Closing quits when there is none.
+pub fn set_tray(app: &AppHandle, on: bool) {
+    let shell = app.state::<Shell>();
+    shell.wants_tray.store(on, Ordering::Relaxed);
+    let there = if on {
+        if shell.tray.load(Ordering::Relaxed) {
+            true
+        } else {
+            start_tray(app)
+        }
+    } else {
+        TRAY.with(|slot| *slot.borrow_mut() = None);
+        false
+    };
+    shell.tray.store(there, Ordering::Relaxed);
+}
+
 /// A game is up: hides the window to the tray, when the setting asks for it
 /// and the tray is there.
 pub(crate) fn hide_for_launch(app: &AppHandle) {
@@ -105,7 +123,7 @@ pub(crate) fn show_after_game(app: &AppHandle) {
 /// Puts the icon in the tray when the Window setting asks for it; `true` when
 /// it is there.
 fn start_tray(app: &AppHandle) -> bool {
-    if !app.state::<Shell>().wants_tray {
+    if !app.state::<Shell>().wants_tray.load(Ordering::Relaxed) {
         return false;
     }
     let Some(tray) = Tray::spawn() else {
