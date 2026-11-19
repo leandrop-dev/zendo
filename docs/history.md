@@ -6961,3 +6961,22 @@ on-screen check stays with the `ZENDO_CHECK` hook and is next.
 Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
 --workspace` (606 passed, 32 ignored). Not yet seen on screen.
+
+## The Tauri port: checks left for when it is whole (2026-11-19)
+
+The user asked to finish the port first and run the on-screen checks at the
+end. The virtual pointer stopped moving in two sessions (stuck at (0,0); see the
+continuation note), so nothing below is a build or type failure: every
+automated check above passes.
+
+- **Not seen on screen**: 4c's Accounts page (the three stores' cards, Steam's
+  card, Nexus Launcher's) and the Collections sheet; 5a's Store page and a
+  store game's page. Every page before them was seen when it landed (the
+  Library and game page in 3x, Settings in 4b).
+- **Presses that start real work, not run**: the prefix's tools (3e-2), the
+  Mods card's presses (3e-4), Settings' downloads/installs/key saves/the
+  overlay/Discord (4b), the store sign-ins and the Collections sheet's changes
+  (4c), and — when 5b lands — Install/Uninstall and the queue.
+- The keyring is only touched by a key save or read; a check can keep keys in
+  `config.toml` (`kept-file`) or run on the real session bus with the user's
+  agreement.
