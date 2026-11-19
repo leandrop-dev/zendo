@@ -34,6 +34,7 @@ pub mod presence;
 pub mod queue;
 pub mod running;
 pub mod sign_in_window;
+pub mod stats;
 pub mod steam_installs;
 pub mod steam_list;
 pub mod store;

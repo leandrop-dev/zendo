@@ -1063,6 +1063,130 @@ export async function collectionsApply(name: string): Promise<CollectionsPage> {
 	return invoke<CollectionsPage>('collections_apply', { name });
 }
 
+// Game Mode: one game large over a row of covers, and its Start menu.
+export type GmChip = { label: string; count: string; chosen: boolean };
+export type GmTile = { title: string; cover: string | null; current: boolean };
+export type GameModePage = {
+	on: boolean;
+	// The Library's own grid is showing, not the screen.
+	browsing: boolean;
+	// The shelf shown has no game.
+	empty: boolean;
+	width: number;
+	shelves: GmChip[];
+	tiles: GmTile[];
+	hero: {
+		id: string;
+		title: string;
+		meta: string;
+		description: string;
+		cover: string | null;
+	} | null;
+	menu_open: boolean;
+	menu: GmChip[];
+};
+
+export async function gameModeGet(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_get');
+}
+
+// The window's width, so the carousel knows how many tiles fit.
+export async function gameModeSized(width: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_sized', { width });
+}
+
+// F11 and Select: Game Mode on or off.
+export async function gameModeToggle(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_toggle');
+}
+
+// Zendo started with --game-mode.
+export async function gameModeStart(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_start');
+}
+
+export async function gameModeShelf(at: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_shelf', { at });
+}
+
+export async function gameModePick(at: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_pick', { at });
+}
+
+// One tile along the carousel; negative is back.
+export async function gameModeStep(by: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_step', { by });
+}
+
+// The next shelf with games.
+export async function gameModeCycleShelf(by: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_cycle_shelf', { by });
+}
+
+export async function gameModeOpenMenu(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_open_menu');
+}
+
+export async function gameModeCloseMenu(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_close_menu');
+}
+
+// Escape on the screen: the Start menu opens, or closes.
+export async function gameModeBack(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_back');
+}
+
+// left, right, up, down, page-up, page-down, first or last.
+export async function gameModeMenuStep(step: string): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_menu_step', { step });
+}
+
+export async function gameModeChoose(at: number): Promise<{ page: GameModePage; leave: boolean }> {
+	return invoke<{ page: GameModePage; leave: boolean }>('game_mode_choose', { at });
+}
+
+export async function gameModePlay(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_play');
+}
+
+// The game in the hero, for its own page.
+export async function gameModeDetails(): Promise<string | null> {
+	return invoke<string | null>('game_mode_details');
+}
+
+// The Library's own grid again, and the screen after it.
+export async function gameModeBrowse(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_browse');
+}
+
+export async function gameModeShow(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_show');
+}
+
+// The Stats page: what the play sessions add up to, for a year or all of them.
+export type StatBar = { label: string; value: string; share: number };
+export type StatsPage = {
+	empty: boolean;
+	none_period: boolean;
+	periods: { label: string; chosen: boolean }[];
+	chosen: number;
+	tiles: { label: string; value: string }[];
+	top: StatBar[];
+	months: StatBar[];
+	weekdays: StatBar[];
+	facts: { label: string; value: string }[];
+	statuses: { label: string; value: string }[];
+};
+
+export async function statsGet(): Promise<StatsPage> {
+	return invoke<StatsPage>('stats_get');
+}
+
+// A period chip, by its place among them.
+export async function statsPeriod(at: number): Promise<StatsPage> {
+	return invoke<StatsPage>('stats_period', { at });
+}
+
 // The Store page: the games the signed-in stores say the user owns.
 export type StoreChip = { key: string; label: string; count: number | null; chosen: boolean };
 export type StorePage = {

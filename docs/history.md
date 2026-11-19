@@ -7090,6 +7090,40 @@ greyed, the footer at 20% and 50%. Not run: Uninstall pressed twice, Move…
 (the real folder dialog), Install all and a DLC's two presses, and Steam's
 Verify and Uninstall (they need an installed Steam game the scan lists).
 
+## The Tauri port, slice 6: the Stats page and Game Mode (2026-11-19)
+
+- **`zendo_shell::stats`** (new, shared): the periods, the column values, the
+  tiles, the most played and the highlights, moved out of the Slint
+  `stats_ui.rs` with tests of its own; the Slint window maps `StatsView` and
+  its tests still pass.
+- **The Stats page** (`crates/zendo-tauri/src/stats.rs`,
+  `ui/src/routes/stats/+page.svelte`): the period chips (this year, the years
+  with sessions, all time), the four tiles, the most played with bars, the
+  months and weekdays charts, the highlights and the library by status. The
+  arrows and Home/End move along the periods, as in the Slint window.
+- **Game Mode** (`crates/zendo-tauri/src/game_mode.rs`,
+  `ui/src/lib/game_mode.svelte.ts`, `ui/src/lib/components/game-mode.svelte`):
+  `zendo_shell::game_mode`'s rules over the screen of the hero (cover, meta,
+  title, description, Play, Details, Menu), the shelf chips ("Continue
+  playing", "All games", with counts), the carousel of as many tiles as fit
+  and the Start menu (Back to Game Mode, Library, Leave Game Mode). F11 and
+  Select toggle it with the window full screen, Escape opens and closes the
+  menu, the arrows and Tab move, A/Enter plays or chooses, B closes, the pad's
+  shoulders change the shelf, and `--game-mode` starts in it. The screen takes
+  the pad while it shows; Details opens the game's page and the screen comes
+  back from it. The hero's summary is the Store's when its list has it.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored: three Stats tests are new). Seen on
+screen in the throwaway home with four seeded sessions and one Epic game: the
+Stats page on 2025 (tiles 7 h 15 min, 3 sessions, 3 days, 2 games; Portal 2's
+bar; months and weekdays; highlights) and on all time after End; Game Mode
+from F11 with the hero, the shelves and the carousel, the Start menu on
+Escape, Leave Game Mode back to the windowed Library, and `--game-mode`
+starting in it. Not seen: the pad on the screen (no controller here), a hero
+with a cover or a Steam summary, and a game played from it.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

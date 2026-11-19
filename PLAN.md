@@ -61,10 +61,10 @@ Theme and Discord's presence; Accounts, About and the Collections sheet) and
 slice 5 (the Store page, the queue and the Downloads page, Install and
 Import, Steam's installs, the updates, the close question, the Store's lists
 following the accounts, and the installed game page's Update, job line, More
-row and DLC card) are built, and
+row and DLC card) and slice 6 (the Stats page and Game Mode) are built, and
 the Slint window stays in place and releasable until the port's parity
-checklist passes (`docs/tauri-port-plan.md`). Left there: Stats and Game Mode
-(slice 6), the sheets (slice 7), and the cut-over (slice 8).
+checklist passes (`docs/tauri-port-plan.md`). Left there: the sheets
+(slice 7) and the cut-over (slice 8).
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
@@ -109,7 +109,7 @@ Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
 the user chooses from `docs/backlog.md` (what is on hold is there, and the
 review's deferred items are listed after it). On `f/ui-revamp`, the port
-continues with slice 6 (Stats and Game Mode), then slices 7 and 8.
+continues with slice 7 (the sheets), then slice 8 (the cut-over).
 
 ## Direction [firm]
 

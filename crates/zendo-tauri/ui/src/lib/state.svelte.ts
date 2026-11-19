@@ -4,6 +4,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { bootstrap, inTauri, toggleFullscreen, type Bootstrap, type Palette } from './api.js';
 import { applyPalette, DEFAULT_PALETTE } from './theme.js';
+import { gameMode } from './game_mode.svelte.js';
 import { library } from './library.svelte.js';
 
 class App {
@@ -64,9 +65,16 @@ class App {
 	}
 
 	/// What a controller asks for, as the same moves the keyboard makes. The
-	/// grid's moves arrive with the Library (slice 2); Game Mode's with
-	/// slice 6.
+	/// Game Mode screen takes them all while it shows.
 	async pad(move: string): Promise<void> {
+		if (move === 'toggle-game-mode') {
+			gameMode.toggle();
+			return;
+		}
+		if (gameMode.screen) {
+			gameMode.pad(move);
+			return;
+		}
 		switch (move) {
 			case 'left':
 			case 'right':
@@ -82,9 +90,6 @@ class App {
 				break;
 			case 'back':
 				await library.back();
-				break;
-			case 'toggle-game-mode':
-				await this.toggleFullscreen();
 				break;
 			default:
 				break;

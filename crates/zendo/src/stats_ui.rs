@@ -8,10 +8,8 @@ use std::rc::Rc;
 
 use slint::platform::Key;
 use slint::{ComponentHandle, ModelRc, VecModel};
-use zendo_core::Status;
 use zendo_core::browse::Move;
-use zendo_core::sessions::{self, Period, Summary};
-use zendo_shell::{format, t};
+use zendo_core::sessions::{self, Period};
 
 use super::Glue;
 use crate::{ChipData, MainWindow, Page, StatBar, StatCol, StatLine, StatsData, Tile};
@@ -43,114 +41,9 @@ impl StatsState {
     }
 }
 
-/// The periods the chips offer: the years with sessions, latest first, then
-/// all of them.
+/// The periods the chips offer, from `zendo_shell::stats`.
 fn periods_of(sessions: &[sessions::Session]) -> Vec<Period> {
-    sessions::years(sessions, sessions::year_now())
-        .into_iter()
-        .map(Period::Year)
-        .chain([Period::All])
-        .collect()
-}
-
-fn period_label(period: Period) -> String {
-    match period {
-        Period::Year(year) => year.to_string(),
-        Period::All => t!("stats-all-time"),
-    }
-}
-
-/// A column's value: "45m" under an hour, then whole hours, nothing for none.
-fn column_value(minutes: u64) -> String {
-    match minutes {
-        0 => String::new(),
-        1..60 => format!("{minutes}m"),
-        _ => format!("{}h", (minutes + 30) / 60),
-    }
-}
-
-/// `value` as a share of `most`, 0 to 1.
-#[expect(clippy::cast_precision_loss, reason = "minutes are far below 2^24")]
-fn share(value: u64, most: u64) -> f32 {
-    value as f32 / most.max(1) as f32
-}
-
-fn columns(values: &[u64], labels: Vec<String>) -> Vec<StatCol> {
-    let most = values.iter().copied().max().unwrap_or(0);
-    values
-        .iter()
-        .zip(labels)
-        .map(|(&minutes, label)| StatCol {
-            label: label.into(),
-            value: column_value(minutes).into(),
-            share: share(minutes, most),
-        })
-        .collect()
-}
-
-fn tile(label: String, value: String) -> Tile {
-    Tile {
-        label: label.into(),
-        value: value.into(),
-    }
-}
-
-fn line(label: String, value: String) -> StatLine {
-    StatLine {
-        label: label.into(),
-        value: value.into(),
-    }
-}
-
-/// The tiles, the most played, the charts and the highlights of a summary.
-fn tiles_of(summary: &Summary) -> Vec<Tile> {
-    vec![
-        tile(t!("fact-play-time"), format::play_time(summary.minutes)),
-        tile(t!("stats-sessions"), summary.sessions.to_string()),
-        tile(t!("stats-days"), summary.active_days.to_string()),
-        tile(t!("stats-games"), summary.games.to_string()),
-    ]
-}
-
-fn top_of(summary: &Summary) -> Vec<StatBar> {
-    let most = summary.top.first().map_or(1, |game| game.minutes);
-    summary
-        .top
-        .iter()
-        .map(|game| StatBar {
-            title: game.title.clone().into(),
-            value: format::play_time(game.minutes).into(),
-            share: share(game.minutes, most),
-        })
-        .collect()
-}
-
-fn facts_of(summary: &Summary, period: Period) -> Vec<StatLine> {
-    let mut facts = vec![
-        line(
-            match period {
-                Period::Year(_) => t!("stats-new-games"),
-                Period::All => t!("stats-games"),
-            },
-            summary.new_games.to_string(),
-        ),
-        line(
-            t!("stats-streak"),
-            t!("stats-days-count", count = summary.streak),
-        ),
-    ];
-    if let Some(longest) = &summary.longest {
-        facts.push(line(
-            t!("stats-longest"),
-            format!(
-                "{} · {} · {}",
-                format::play_time(longest.minutes),
-                longest.title,
-                longest.date
-            ),
-        ));
-    }
-    facts
+    zendo_shell::stats::periods_of(sessions)
 }
 
 impl Glue {
@@ -177,54 +70,84 @@ impl Glue {
         self.show_stats();
     }
 
-    /// Writes the page from the sessions kept and the library's statuses.
+    /// Writes the page from the sessions kept and the library's statuses. The
+    /// words and sums are `zendo_shell::stats`'s, shared with Tauri.
     pub(super) fn show_stats(&self) {
         let Some(window) = self.window.upgrade() else {
             return;
         };
         let all = self.game.sessions.borrow();
-        let periods = periods_of(&all);
+        let browser = self.browser.borrow();
+        let view = zendo_shell::stats::view(&all, self.stats.period.get(), browser.games());
+        drop(browser);
+        drop(all);
         // A period that has no chip any more (a year with no session left)
         // falls back to the first.
-        if !periods.contains(&self.stats.period.get()) {
-            self.stats.period.set(periods[0]);
-        }
-        let period = self.stats.period.get();
-        let summary = Summary::of(&all, period);
+        self.stats.period.set(view.period);
         let data = window.global::<StatsData>();
-        data.set_empty(all.is_empty());
-        data.set_none_period(summary.sessions == 0);
-        let chips = periods.iter().enumerate().map(|(at, &chip)| ChipData {
-            id: i32::try_from(at).unwrap_or(0),
-            label: period_label(chip).into(),
-            count: "".into(),
-            chosen: chip == period,
-        });
-        self.stats.periods.set_vec(chips.collect::<Vec<_>>());
-        self.stats.tiles.set_vec(tiles_of(&summary));
-        self.stats.top.set_vec(top_of(&summary));
-        self.stats.months.set_vec(columns(
-            &summary.by_month,
-            (1..=12).map(format::month_short).collect(),
-        ));
-        self.stats.weekdays.set_vec(columns(
-            &summary.by_weekday,
-            (0..7).map(format::weekday_short).collect(),
-        ));
-        self.stats.facts.set_vec(facts_of(&summary, period));
-        let browser = self.browser.borrow();
-        let count = |status: Status| {
-            browser
-                .games()
+        data.set_empty(view.empty);
+        data.set_none_period(view.none_period);
+        self.stats.periods.set_vec(
+            view.periods
                 .iter()
-                .filter(|game| game.status == Some(status))
-                .count()
-        };
-        self.stats.statuses.set_vec(
-            Status::ALL
-                .map(|status| tile(format::play_status(status), count(status).to_string()))
-                .to_vec(),
+                .enumerate()
+                .map(|(at, chip)| ChipData {
+                    id: i32::try_from(at).unwrap_or(0),
+                    label: chip.label.clone().into(),
+                    count: "".into(),
+                    chosen: chip.chosen,
+                })
+                .collect::<Vec<_>>(),
         );
+        self.stats.tiles.set_vec(
+            view.tiles
+                .iter()
+                .map(|tile| Tile {
+                    label: tile.label.clone().into(),
+                    value: tile.value.clone().into(),
+                })
+                .collect::<Vec<_>>(),
+        );
+        self.stats.top.set_vec(
+            view.top
+                .iter()
+                .map(|bar| StatBar {
+                    title: bar.label.clone().into(),
+                    value: bar.value.clone().into(),
+                    share: bar.share,
+                })
+                .collect::<Vec<_>>(),
+        );
+        let cols = |cols: &[zendo_shell::stats::Column]| -> Vec<StatCol> {
+            cols.iter()
+                .map(|col| StatCol {
+                    label: col.label.clone().into(),
+                    value: col.value.clone().into(),
+                    share: col.share,
+                })
+                .collect()
+        };
+        self.stats.months.set_vec(cols(&view.months));
+        self.stats.weekdays.set_vec(cols(&view.weekdays));
+        let lines = |lines: &[zendo_shell::stats::Stat]| -> Vec<StatLine> {
+            lines
+                .iter()
+                .map(|line| StatLine {
+                    label: line.label.clone().into(),
+                    value: line.value.clone().into(),
+                })
+                .collect()
+        };
+        self.stats.facts.set_vec(lines(&view.facts));
+        let statuses: Vec<Tile> = view
+            .statuses
+            .iter()
+            .map(|status| Tile {
+                label: status.label.clone().into(),
+                value: status.value.clone().into(),
+            })
+            .collect();
+        self.stats.statuses.set_vec(statuses);
     }
 
     /// Whether the Stats page is the one on screen.
@@ -284,14 +207,6 @@ mod tests {
             minutes,
             offset: 0,
         }
-    }
-
-    #[test]
-    fn column_values_read_as_minutes_then_hours() {
-        assert_eq!(column_value(0), "");
-        assert_eq!(column_value(55), "55m");
-        assert_eq!(column_value(60), "1h");
-        assert_eq!(column_value(185), "3h");
     }
 
     #[test]

@@ -28,6 +28,14 @@ follow.
 - `src/game.rs`: the game page's commands: `game_get`, `game_launch`,
   `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
   over `zendo_shell::running` for the launch.
+- `src/stats.rs`: the Stats page over `zendo_shell::stats`: the period chips,
+  the tiles, the most played, the months and weekdays charts, the highlights
+  and the library by status (`stats_get`, `stats_period`).
+- `src/game_mode.rs`: Game Mode over `zendo_shell::game_mode`: the shelves, the
+  hero, the carousel for the window's width and the Start menu
+  (`game_mode_*`: get, sized, toggle, start, shelf, pick, step,
+  cycle_shelf, open/close menu, back, menu_step, choose, play, details,
+  browse, show). F11, Select and `--game-mode` enter it full screen.
 - `src/jobs.rs`: the installed game page's jobs over `zendo_shell::queue` and
   `zendo_shell::dlc`: `game_open` (the page opened: More folded, questions
   forgotten), `game_update`, `game_repair`, `game_check_updates`,
@@ -148,6 +156,8 @@ follow.
 - `game_changed`: something about a game's data changed (a prefix tool ended,
   the known fixes were read again, a mark, the saves' state); the payload is
   the game's id, and the page asks for its game again.
+- `game_mode_changed`: Game Mode was entered, left or changed its shelf; the
+  frontend asks for the screen again.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

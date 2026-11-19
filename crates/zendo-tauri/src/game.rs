@@ -113,40 +113,30 @@ pub fn game_get(
 /// Starts the game on a thread of its own, then follows it: the page hears
 /// each change of state and line.
 #[tauri::command]
-pub fn game_launch(
-    id: String,
-    app: AppHandle,
-    state: State<'_, LibraryState>,
-) -> Result<GameDto, String> {
+pub fn game_launch(id: String, app: AppHandle) -> Result<GameDto, String> {
+    start(&app, &id)
+}
+
+/// Starts a game, from its page or from Game Mode.
+pub(crate) fn start(app: &AppHandle, id: &str) -> Result<GameDto, String> {
+    let state = app.state::<LibraryState>();
     let game = state
-        .game(&id)
+        .game(id)
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
     {
         let mut running = state.running();
-        if running.is_open(&id) {
-            return Ok(dto(
-                &state,
-                &game,
-                &app.state::<PrefixState>(),
-                &app.state::<CloudState>(),
-                &app,
-            ));
+        if running.is_open(id) {
+            return page(app, id);
         }
-        running.begin(&id);
+        running.begin(id);
     }
     let handle = app.clone();
     running::follow(game.clone(), move |message| {
         handle_run(&handle, message);
         true
     });
-    emit_run(&app, &id);
-    Ok(dto(
-        &state,
-        &game,
-        &app.state::<PrefixState>(),
-        &app.state::<CloudState>(),
-        &app,
-    ))
+    emit_run(app, id);
+    page(app, id)
 }
 
 /// Asks the game to close; a second press kills it, as the Slint window does.

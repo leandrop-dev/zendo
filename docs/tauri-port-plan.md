@@ -169,7 +169,10 @@ and removed once already).
    twice, Steam's Verify and Uninstall, and the DLC card's buttons, over
    `zendo_shell::dlc`, now shared).
 6. **Stats and Game Mode**: the Stats tab and Game Mode (F11 and Select, hero,
-   carousel, shelves, the Start menu, `--game-mode`).
+   carousel, shelves, the Start menu, `--game-mode`). Built 2026-11-19: the
+   Stats page over the new shared `zendo_shell::stats`, and Game Mode over
+   `zendo_shell::game_mode`, full screen with F11 and Select, the screen taking
+   the pad while it shows.
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
    Nexus search, the screenshot lightbox.
 8. **Parity and cut-over**: the parity checklist signed off, the Slint crate
@@ -264,8 +267,9 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    4b (Keys, Launchers, Engines, Proton and Discord's presence) and 4c
    (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page),
    5b-1 (the queue, the Downloads page, Install and Import), 5b-2 (Steam's
-   installs), 5b-3 (updates, the close question, the Store's accounts) and 5c
-   (the game page's jobs). Slice 6 (Stats and Game Mode) is next.
+   installs), 5b-3 (updates, the close question, the Store's accounts), 5c
+   (the game page's jobs) and 6 (Stats and Game Mode). Slice 7 (the sheets) is
+   next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
@@ -280,7 +284,8 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 6 (Stats and Game Mode), then slice 7 (the sheets) and 8 (the
+- Next: slice 7 (the sheets: launch options, the artwork chooser, the FOMOD
+  installer, Nexus and its search, the screenshot lightbox), then slice 8 (the
   cut-over). The prefix's tools, the Mods card's presses and Settings'
   presses are built and some are unrun: they start umu, a real window, an
   installer, a change to a game's files or a write to `config.toml`.

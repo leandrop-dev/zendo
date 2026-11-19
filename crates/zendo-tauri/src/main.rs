@@ -19,6 +19,7 @@ mod commands;
 mod downloads;
 mod engines;
 mod game;
+mod game_mode;
 mod jobs;
 mod launchers;
 mod library;
@@ -29,6 +30,7 @@ mod prefix;
 mod presence;
 mod protons;
 mod settings;
+mod stats;
 mod steam;
 mod store;
 
@@ -87,6 +89,8 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(store::StoreState::default())
         .manage(downloads::DownloadsState::default())
         .manage(jobs::JobsState::default())
+        .manage(stats::StatsState::default())
+        .manage(game_mode::GameModeState::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -240,6 +244,25 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             downloads::owned_forget,
             steam::steam_stop_waiting,
             steam::steam_open_downloads,
+            stats::stats_get,
+            stats::stats_period,
+            game_mode::game_mode_get,
+            game_mode::game_mode_sized,
+            game_mode::game_mode_toggle,
+            game_mode::game_mode_start,
+            game_mode::game_mode_shelf,
+            game_mode::game_mode_pick,
+            game_mode::game_mode_step,
+            game_mode::game_mode_cycle_shelf,
+            game_mode::game_mode_open_menu,
+            game_mode::game_mode_close_menu,
+            game_mode::game_mode_back,
+            game_mode::game_mode_menu_step,
+            game_mode::game_mode_choose,
+            game_mode::game_mode_play,
+            game_mode::game_mode_details,
+            game_mode::game_mode_browse,
+            game_mode::game_mode_show,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
