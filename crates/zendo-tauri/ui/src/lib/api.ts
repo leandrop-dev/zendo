@@ -509,6 +509,7 @@ export type SettingsPage = {
 	theme_note: SettingsRow | null;
 	theme_problems: string[];
 	tray: boolean;
+	discord: boolean;
 	covers: boolean;
 	// Downloads can start now: the setting is on and nothing runs.
 	covers_now: boolean;
@@ -537,6 +538,10 @@ export async function settingsSetTheme(tag: string | null): Promise<SettingsPage
 
 export async function settingsSetTray(on: boolean): Promise<SettingsPage> {
 	return invoke<SettingsPage>('settings_set_tray', { on });
+}
+
+export async function settingsSetDiscord(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_discord', { on });
 }
 
 export async function settingsSetCovers(on: boolean): Promise<SettingsPage> {

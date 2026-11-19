@@ -20,6 +20,7 @@ mod local;
 mod mods;
 mod platform;
 mod prefix;
+mod presence;
 mod settings;
 
 fn main() -> ExitCode {
@@ -62,6 +63,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(cloud::CloudState::default())
         .manage(mods::ModsHandle::default())
         .manage(settings::SettingsState::new())
+        .manage(presence::PresenceState::new(config.discord_presence))
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -115,6 +117,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             settings::settings_set_language,
             settings::settings_set_theme,
             settings::settings_set_tray,
+            settings::settings_set_discord,
             settings::settings_set_covers,
             settings::settings_set_auto_update,
             settings::settings_set_workers,

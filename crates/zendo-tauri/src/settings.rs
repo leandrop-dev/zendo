@@ -29,6 +29,7 @@ use zendo_shell::{clipboard, open, t};
 
 use crate::library::LibraryState;
 use crate::platform::{self, Shell};
+use crate::presence::PresenceState;
 
 /// The download workers Settings offers besides the engine's own choice,
 /// which is the computer's processors (legendary at most 16).
@@ -43,6 +44,7 @@ pub enum Setting {
     AutoUpdate(bool),
     Theme(Option<String>),
     MinimizeToTray(bool),
+    DiscordPresence(bool),
 }
 
 impl Setting {
@@ -54,6 +56,7 @@ impl Setting {
             Self::AutoUpdate(on) => config.auto_update = *on,
             Self::Theme(theme) => config.theme.clone_from(theme),
             Self::MinimizeToTray(on) => config.minimize_to_tray = *on,
+            Self::DiscordPresence(on) => config.discord_presence = *on,
         }
     }
 
@@ -63,6 +66,7 @@ impl Setting {
             Self::Language(_) => language_changed(app),
             Self::Theme(_) => theme_changed(app),
             Self::MinimizeToTray(on) => platform::set_tray(app, *on),
+            Self::DiscordPresence(on) => PresenceState::set(app, *on),
             Self::DownloadCovers(true) => crate::library::download_covers_now(app),
             Self::DownloadCovers(false) | Self::Workers(_) | Self::AutoUpdate(_) => {}
         }
@@ -165,6 +169,7 @@ pub struct SettingsDto {
     theme_note: Option<RowDto>,
     theme_problems: Vec<String>,
     tray: bool,
+    discord: bool,
     covers: bool,
     /// This computer can download now: the setting is on and nothing runs.
     covers_now: bool,
@@ -199,6 +204,7 @@ pub fn settings_get(app: AppHandle, library: State<'_, LibraryState>) -> Setting
             .map(|problem| t!("theme-not-read", problem = problem.as_str()))
             .collect(),
         tray: config.minimize_to_tray,
+        discord: config.discord_presence,
         covers: config.download_covers,
         covers_now: config.download_covers && !library.downloading(),
         auto_update: config.auto_update,
@@ -246,6 +252,16 @@ pub fn settings_set_tray(
     library: State<'_, LibraryState>,
 ) -> SettingsDto {
     save(&app, Setting::MinimizeToTray(on));
+    settings_get(app, library)
+}
+
+#[tauri::command]
+pub fn settings_set_discord(
+    on: bool,
+    app: AppHandle,
+    library: State<'_, LibraryState>,
+) -> SettingsDto {
+    save(&app, Setting::DiscordPresence(on));
     settings_get(app, library)
 }
 

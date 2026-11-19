@@ -379,6 +379,7 @@ fn handle_run(app: &AppHandle, message: RunMessage) {
             Effect::Changed(changed) => emit_game_changed(app, &changed),
             Effect::HideOnLaunch => platform::hide_for_launch(app),
             Effect::ShowOnClose => platform::show_after_game(app),
+            Effect::Presence => crate::presence::PresenceState::show(app),
             Effect::StopAsking { watch, kill, .. } => {
                 std::thread::spawn(move || {
                     if kill {

@@ -9,6 +9,7 @@
 		settingsOpen,
 		settingsSetAutoUpdate,
 		settingsSetCovers,
+		settingsSetDiscord,
 		settingsSetLanguage,
 		settingsSetTheme,
 		settingsSetTray,
@@ -147,6 +148,20 @@
 							onchange={(event) => void act(() => settingsSetTray(event.currentTarget.checked))}
 						/>
 						{app.t('minimize-to-tray')}
+					</label>
+				</section>
+
+				<section class="border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('discord-title')}</h2>
+					<p class="mt-1 mb-3 text-[13px] text-dim">{app.t('discord-about')}</p>
+					<label class="flex items-center gap-2 text-[13px]">
+						<input
+							type="checkbox"
+							checked={settings.discord}
+							onchange={(event) =>
+								void act(() => settingsSetDiscord(event.currentTarget.checked))}
+						/>
+						{app.t('discord-presence')}
 					</label>
 				</section>
 			{:else if group === 'library'}
