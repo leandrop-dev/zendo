@@ -35,6 +35,7 @@ pub mod running;
 pub mod sign_in_window;
 pub mod steam_installs;
 pub mod steam_list;
+pub mod store;
 pub mod store_facts;
 pub mod theme;
 pub mod tray;
