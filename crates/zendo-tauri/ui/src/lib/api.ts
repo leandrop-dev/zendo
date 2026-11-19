@@ -183,7 +183,17 @@ export type GamePage = {
 	// The DLC installed with the game, when its engine records any.
 	dlc: { title: string }[];
 	// The Wine prefix card, for a Windows game Zendo starts.
-	prefix: { folder: string | null; fixes: string[]; gog: boolean } | null;
+	prefix: {
+		folder: string | null;
+		fixes: string[];
+		gog: boolean;
+		// No tool runs in the prefix and the game does not.
+		free: boolean;
+		// The components typed last.
+		components: string;
+		// What runs, or how the last tool went.
+		status: { text: string; tone: number } | null;
+	} | null;
 };
 
 // A badge on the header: ProtonDB's rating.
@@ -316,4 +326,26 @@ export async function localRemove(id: string): Promise<void> {
 // Opens the Wine prefix's folder with the desktop's file manager.
 export async function prefixOpen(path: string): Promise<void> {
 	return invoke<void>('prefix_open', { path });
+}
+
+// Runs a tool in the game's prefix: wine-settings, winetricks, gog-setup or
+// known-fixes.
+export async function prefixRun(id: string, tool: string): Promise<void> {
+	return invoke<void>('prefix_run', { id, tool });
+}
+
+// Installs the winetricks components typed.
+export async function prefixInstall(id: string, typed: string): Promise<void> {
+	return invoke<void>('prefix_install', { id, typed });
+}
+
+// Run a program…: the file dialog, then the program in the prefix.
+export async function prefixPickProgram(id: string): Promise<void> {
+	return invoke<void>('prefix_pick_program', { id });
+}
+
+// Asks for the known fixes' list when it is a day old, then says the card
+// may be read again.
+export async function prefixWant(id: string): Promise<void> {
+	return invoke<void>('prefix_want', { id });
 }

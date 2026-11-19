@@ -5,9 +5,10 @@ The work left. Items 1 to 20, 27 to 38, 41 to 54 are built; the detail of each i
 
 The work next is the port from Slint to Tauri 2 and SvelteKit, on branch
 `f/ui-revamp` and in slices, in `docs/tauri-port-plan.md` (slice 0, the
-scaffold; slice 1, the shell; slice 2, the Library; slices 3a, 3b, 3c, 3d and
-3e-1, the game page's header, sessions, details, local games, store cards and
-Wine prefix card, all built 2026-11-18).
+scaffold; slice 1, the shell; slice 2, the Library; slices 3a, 3b, 3c and 3d,
+the game page's header, sessions, details, local games and store cards, all
+built 2026-11-18; slice 3e, the Wine prefix card, built 2026-11-18 and
+2026-11-19 with its tools).
 The items below stay as the reference for what the port has to reach.
 
 ## The port from Iced to Slint (built 2026-11-14 to 2026-11-15)

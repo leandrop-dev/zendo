@@ -26,6 +26,7 @@ pub mod mods;
 pub mod nexus;
 pub mod nexus_search;
 pub mod open;
+pub mod prefix;
 pub mod presence;
 pub mod queue;
 pub mod running;

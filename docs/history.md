@@ -6688,3 +6688,43 @@ Not checked: an account with public game details (the unlocks, the tiles'
 count and the share bar), an Epic or GOG game's achievements and requirements
 (they need the store signed in), the failure cards with the network down, the
 DLC card (no DLC installed), and a light KDE scheme.
+
+## The Tauri port, slice 3e-2: the prefix's tools (2026-11-19)
+
+- **The words are one** in `zendo_shell::prefix` (new): `label` (what a tool
+  is called while it runs), `installed` (what a components run installed, and
+  what was there) and `done` (the line a finished tool leaves, and whether it
+  went well). The Slint window's `prefix_ui.rs` maps these now instead of
+  keeping its own copies; its test moved to the shared module.
+- **The Tauri side** (`crates/zendo-tauri/src/prefix.rs`): a `PrefixState` of
+  what runs in each game's prefix, the components typed, and how the last tool
+  went; the commands `prefix_run` (`wine-settings`, `winetricks`, `gog-setup`,
+  `known-fixes`), `prefix_install` (the verbs checked by
+  `prefix_tools::components`, then kept in the game's launch options as the
+  Slint window keeps them), `prefix_pick_program` (Zendo's file dialog,
+  `Kind::Installer`, on a blocker thread, then the program in the prefix) and
+  `prefix_want` (Heroic's fixes list, refreshed once a day, then
+  `prefix_changed`). One tool per game at a time and none while the game runs;
+  each runs on a thread and says `prefix_changed` (the game's id) when it ends,
+  so the page reads its game again.
+- **The card** gained the tools' row, the components box and Install, the
+  fixes' Apply known fixes and the status line (what runs, the game holding the
+  tools, or how the last one went), the tools disabled while one runs or the
+  game does.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `npm run build`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test --workspace` (598 passed, 32 ignored).
+
+A throwaway home with a local Windows game (`local:prefix-test`, a fake
+`.exe`) and its prefix folder, `tauri build --debug`, no session bus. Seen:
+the card with Wine settings, winetricks, Run a program… and Open folder (GOG's
+setup absent, the game not being GOG's), the prefix's folder, the components
+box with its placeholder, and typing `-q` then Enter leaving
+" -q is not a winetricks component" in red with nothing run.
+
+Not checked: the tools themselves (each starts umu and a real window or
+installer: Wine settings, winetricks, Run a program…, GOG's setup, Apply known
+fixes), a components install and what it says, the tools disabled while one
+runs or the game does, and the known fixes' lines and button (a local game has
+no list; the Slint window's lines were seen in 3e-1).

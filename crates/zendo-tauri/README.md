@@ -3,11 +3,12 @@
 Zendo's window in Tauri 2, beside the Slint window in `crates/zendo` until the
 port's parity checklist passes (`docs/tauri-port-plan.md`).
 
-Slices 0, 1, 2, 3a, 3b, 3c, 3d and 3e-1 are in place: the scaffold, the shell,
-the Library (grid, chips, search, sort, cursor, marks, bulk edits, cover
-downloads and the file watch), the game page's header and actions, its
-sessions and details, local games, its store cards and the Wine prefix card.
-The rest of that page and the other pages follow.
+Slices 0, 1, 2, 3a, 3b, 3c, 3d, 3e-1 and 3e-2 are in place: the scaffold,
+the shell, the Library (grid, chips, search, sort, cursor, marks, bulk edits,
+cover downloads and the file watch), the game page's header and actions, its
+sessions and details, local games, its store cards, and the Wine prefix card
+with its tools. GOG's changelog, cloud saves, the Mods card and the rest of
+the other pages follow.
 
 - `src/main.rs`: the command line, `zendo_shell::cli`'s, and the Tauri app.
   `--game-mode`/`--fullscreen` opens full screen.
@@ -17,8 +18,10 @@ The rest of that page and the other pages follow.
   tray could be made; otherwise it quits.
 - `src/commands.rs`: `bootstrap` (words, languages, palette, full screen and
   tray state), `tr` (a message with values) and `window_fullscreen_toggle`.
-- `src/prefix.rs`: the Wine prefix card's data (the folder, Open folder, the
-  known fixes) for a Windows game Zendo starts.
+- `src/prefix.rs`: the Wine prefix card for a Windows game Zendo starts: the
+  folder, Open folder, the known fixes, and the tools (`prefix_run`,
+  `prefix_install`, `prefix_pick_program`, `prefix_want`) with their state.
+  One tool runs per game at a time and none while the game does.
 - `src/local.rs`: games added by hand: the form's get, its about line, the
   file dialog, and save and remove, each reading the library again after it
   writes.
@@ -60,6 +63,8 @@ The rest of that page and the other pages follow.
   running, stopping) and the line under its actions.
 - `game_cards`: a store card's answer is in; the payload is the game's id, and
   the page asks for its cards again.
+- `prefix_changed`: a prefix tool ended, or the known fixes' list was read
+  again; the payload is the game's id, and the page asks for its game again.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

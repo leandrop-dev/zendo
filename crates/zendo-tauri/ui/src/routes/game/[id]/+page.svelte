@@ -18,7 +18,11 @@
 		inTauri,
 		localRemove,
 		openLink,
+		prefixInstall,
 		prefixOpen,
+		prefixPickProgram,
+		prefixRun,
+		prefixWant,
 		steamAppSet,
 		type GameCards,
 		type GamePage,
@@ -41,6 +45,9 @@
 	// The Steam app id's field and what saving it said.
 	let appInput = $state('');
 	let appNote = $state<string | null>(null);
+	// The winetricks components typed, and a tool that could not start.
+	let prefixInput = $state('');
+	let prefixNote = $state<string | null>(null);
 	let id = $derived(page.params.id ?? '');
 
 	let cover = $derived(
@@ -65,6 +72,11 @@
 		}
 		try {
 			game = await gameGet(id);
+			// The components in the box are read once; what is typed after
+			// that is the page's own.
+			if (prefixInput === '' && game.prefix?.components) {
+				prefixInput = game.prefix.components;
+			}
 		} catch (err) {
 			error = String(err);
 		}
@@ -136,6 +148,36 @@
 		}
 	}
 
+	// A prefix tool: it holds the card while it runs, and says why it could
+	// not start.
+	async function runTool(tool: string): Promise<void> {
+		prefixNote = null;
+		try {
+			await prefixRun(id, tool);
+		} catch (err) {
+			prefixNote = String(err);
+		}
+	}
+
+	async function installComponents(): Promise<void> {
+		prefixNote = null;
+		try {
+			await prefixInstall(id, prefixInput);
+			prefixInput = '';
+		} catch (err) {
+			prefixNote = String(err);
+		}
+	}
+
+	async function pickProgram(): Promise<void> {
+		prefixNote = null;
+		try {
+			await prefixPickProgram(id);
+		} catch (err) {
+			prefixNote = String(err);
+		}
+	}
+
 	function key(event: KeyboardEvent): void {
 		if (event.key === 'Escape' && !editing) {
 			event.preventDefault();
@@ -164,6 +206,7 @@
 	onMount(() => {
 		void load();
 		void loadCards();
+		void prefixWant(id);
 		window.addEventListener('keydown', key);
 		const runs = listen<{ id: string; state: number }>('game_run', (event) => {
 			if (game && event.payload.id === game.id) {
@@ -185,11 +228,18 @@
 				void loadCards();
 			}
 		});
+		// A prefix tool ended, or the known fixes' list was read again.
+		const prefixChanged = listen<string>('prefix_changed', (event) => {
+			if (event.payload === id) {
+				void load();
+			}
+		});
 		return () => {
 			window.removeEventListener('keydown', key);
 			void runs.then((stop) => stop());
 			void lines.then((stop) => stop());
 			void arrived.then((stop) => stop());
+			void prefixChanged.then((stop) => stop());
 		};
 	});
 </script>
@@ -519,9 +569,42 @@
 				<section class="border border-line bg-surface p-4">
 					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('prefix-title')}</h2>
 					<p class="mb-3 text-[13px] text-dim">{app.t('prefix-about')}</p>
-					{#if game.prefix.folder}
-						<div class="flex flex-wrap items-center gap-3">
-							<span class="font-mono text-[13px] break-all">{game.prefix.folder}</span>
+					<div class="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							disabled={!game.prefix.free}
+							onclick={() => void runTool('wine-settings')}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{app.t('prefix-wine-settings')}
+						</button>
+						<button
+							type="button"
+							disabled={!game.prefix.free}
+							onclick={() => void runTool('winetricks')}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							winetricks
+						</button>
+						<button
+							type="button"
+							disabled={!game.prefix.free}
+							onclick={() => void pickProgram()}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{app.t('prefix-run-program')}
+						</button>
+						{#if game.prefix.gog}
+							<button
+								type="button"
+								disabled={!game.prefix.free}
+								onclick={() => void runTool('gog-setup')}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+							>
+								{app.t('prefix-gog-setup')}
+							</button>
+						{/if}
+						{#if game.prefix.folder}
 							<button
 								type="button"
 								onclick={() => void prefixOpen(game!.prefix!.folder!)}
@@ -529,17 +612,67 @@
 							>
 								{app.t('files-open-folder')}
 							</button>
+						{/if}
+					</div>
+
+					{#if game.prefix.folder}
+						<p class="mt-3 font-mono text-[13px] break-all">{game.prefix.folder}</p>
+					{/if}
+
+					<div class="mt-4 flex flex-wrap items-center gap-2">
+						<input
+							type="text"
+							bind:value={prefixInput}
+							placeholder={app.t('prefix-components-placeholder')}
+							class="h-8 min-w-[240px] flex-1 border border-line bg-background px-2 text-[13px]"
+							onkeydown={(event) => {
+								if (event.key === 'Enter' && game!.prefix!.free) {
+									event.preventDefault();
+									void installComponents();
+								}
+							}}
+						/>
+						<button
+							type="button"
+							disabled={!game.prefix.free}
+							onclick={() => void installComponents()}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+						>
+							{app.t('prefix-install')}
+						</button>
+					</div>
+
+					{#if game.prefix.fixes.length > 0}
+						<div class="mt-4 flex items-end justify-between gap-3">
+							<div>
+								<p class="text-[13px]">{app.t('prefix-known-fixes-title')}</p>
+								<ul class="mt-1 flex flex-col gap-1">
+									{#each game.prefix.fixes as fix (fix)}
+										<li class="text-[13px] text-dim">{fix}</li>
+									{/each}
+								</ul>
+							</div>
+							<button
+								type="button"
+								disabled={!game.prefix.free}
+								onclick={() => void runTool('known-fixes')}
+								class="shrink-0 border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-60"
+							>
+								{app.t('prefix-known-fixes')}
+							</button>
 						</div>
 					{/if}
-					{#if game.prefix.fixes.length > 0}
-						<h3 class="mt-4 mb-2 text-[11px] text-dim uppercase">
-							{app.t('prefix-known-fixes-title')}
-						</h3>
-						<ul class="flex flex-col gap-1">
-							{#each game.prefix.fixes as fix (fix)}
-								<li class="text-[13px]">{fix}</li>
-							{/each}
-						</ul>
+
+					{#if game.prefix.status || prefixNote}
+						<p
+							class="mt-3 text-[13px] {prefixNote || game.prefix.status?.tone === 2
+								? 'text-bad'
+								: game.prefix.status?.tone === 1
+									? 'text-good'
+									: 'text-dim'}"
+						>
+							{prefixNote ?? game.prefix.status?.text}
+						</p>
 					{/if}
 				</section>
 			{/if}

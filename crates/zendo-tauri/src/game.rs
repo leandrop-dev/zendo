@@ -16,7 +16,7 @@ use zendo_shell::running::{self, Effect, Names, RunMessage};
 
 use crate::library::LibraryState;
 use crate::platform;
-use crate::prefix::{PrefixDto, prefix_of};
+use crate::prefix::{PrefixDto, PrefixState, prefix_of};
 
 /// A game's page: the header, the tiles, the statuses and how it is running.
 #[derive(Debug, Serialize)]
@@ -89,11 +89,15 @@ pub struct GameLine {
 }
 
 #[tauri::command]
-pub fn game_get(id: String, state: State<'_, LibraryState>) -> Result<GameDto, String> {
+pub fn game_get(
+    id: String,
+    app: AppHandle,
+    state: State<'_, LibraryState>,
+) -> Result<GameDto, String> {
     let game = state
         .game(&id)
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
-    Ok(dto(&state, &game))
+    Ok(dto(&state, &game, &app.state::<PrefixState>()))
 }
 
 /// Starts the game on a thread of its own, then follows it: the page hears
@@ -110,7 +114,7 @@ pub fn game_launch(
     {
         let mut running = state.running();
         if running.is_open(&id) {
-            return Ok(dto(&state, &game));
+            return Ok(dto(&state, &game, &app.state::<PrefixState>()));
         }
         running.begin(&id);
     }
@@ -120,7 +124,7 @@ pub fn game_launch(
         true
     });
     emit_run(&app, &id);
-    Ok(dto(&state, &game))
+    Ok(dto(&state, &game, &app.state::<PrefixState>()))
 }
 
 /// Asks the game to close; a second press kills it, as the Slint window does.
@@ -134,13 +138,14 @@ pub fn game_stop(
         .game(&id)
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
     handle_run(&app, RunMessage::Stop(id.clone()));
-    Ok(dto(&state, &game))
+    Ok(dto(&state, &game, &app.state::<PrefixState>()))
 }
 
 #[tauri::command]
 pub fn game_set_pinned(
     id: String,
     pinned: bool,
+    app: AppHandle,
     state: State<'_, LibraryState>,
 ) -> Result<GameDto, String> {
     let game = state
@@ -149,13 +154,18 @@ pub fn game_set_pinned(
     if game.pinned != pinned {
         state.change(|browser| browser.toggle_pinned_of(&id));
     }
-    Ok(dto(&state, &fresh(&state, &id)?))
+    Ok(dto(
+        &state,
+        &fresh(&state, &id)?,
+        &app.state::<PrefixState>(),
+    ))
 }
 
 #[tauri::command]
 pub fn game_set_hidden(
     id: String,
     hidden: bool,
+    app: AppHandle,
     state: State<'_, LibraryState>,
 ) -> Result<GameDto, String> {
     let game = state
@@ -164,7 +174,11 @@ pub fn game_set_hidden(
     if game.hidden != hidden {
         state.change(|browser| browser.toggle_hidden_of(&id));
     }
-    Ok(dto(&state, &fresh(&state, &id)?))
+    Ok(dto(
+        &state,
+        &fresh(&state, &id)?,
+        &app.state::<PrefixState>(),
+    ))
 }
 
 /// Sets the play status; `none` clears it.
@@ -172,6 +186,7 @@ pub fn game_set_hidden(
 pub fn game_set_status(
     id: String,
     status: Option<String>,
+    app: AppHandle,
     state: State<'_, LibraryState>,
 ) -> Result<GameDto, String> {
     let game = state
@@ -184,7 +199,11 @@ pub fn game_set_status(
     if game.status != wanted {
         state.change(|browser| browser.set_status_of(&id, wanted));
     }
-    Ok(dto(&state, &fresh(&state, &id)?))
+    Ok(dto(
+        &state,
+        &fresh(&state, &id)?,
+        &app.state::<PrefixState>(),
+    ))
 }
 
 /// A game as it is now: the page asks again after a change, so its chips and
@@ -196,15 +215,16 @@ fn fresh(state: &LibraryState, id: &str) -> Result<Game, String> {
 }
 
 /// What the page shows of a game now.
-fn dto(state: &LibraryState, game: &Game) -> GameDto {
-    let run_state = {
+fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState) -> GameDto {
+    let (run_state, running) = {
         let running = state.running();
-        match running.games.get(&game.id) {
+        let state_number = match running.games.get(&game.id) {
             None => 0,
             Some(session) if !session.seen => 1,
             Some(session) if session.stopping => 3,
             Some(_) => 2,
-        }
+        };
+        (state_number, running.is_running(&game.id))
     };
     let (session_summary, session_recent) = sessions_of(&all_sessions(), &game.id);
     GameDto {
@@ -245,7 +265,7 @@ fn dto(state: &LibraryState, game: &Game) -> GameDto {
                 title: dlc.title.clone().unwrap_or_else(|| dlc.id.clone()),
             })
             .collect(),
-        prefix: prefix_of(game),
+        prefix: prefix_of(game, running, prefix),
     }
 }
 

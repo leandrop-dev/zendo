@@ -55,6 +55,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(platform::Shell::new(themes, config.minimize_to_tray))
         .manage(library::LibraryState::new())
         .manage(cards::CardsState::default())
+        .manage(prefix::PrefixState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -82,6 +83,10 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             local::local_save,
             local::local_remove,
             prefix::prefix_open,
+            prefix::prefix_run,
+            prefix::prefix_install,
+            prefix::prefix_pick_program,
+            prefix::prefix_want,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

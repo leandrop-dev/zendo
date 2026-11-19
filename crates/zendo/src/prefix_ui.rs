@@ -19,6 +19,7 @@ use zendo_core::launch;
 use zendo_core::launch_options::LaunchOptions;
 use zendo_core::prefix_tools::{self, Ran, Tool};
 use zendo_shell::file_dialog::{self, Kind};
+use zendo_shell::prefix as words;
 use zendo_shell::t;
 
 use super::{Glue, with_glue};
@@ -47,33 +48,6 @@ impl PrefixState {
             fixes: RefCell::default(),
             fix_lines: Rc::new(VecModel::default()),
         }
-    }
-}
-
-/// What the card says runs.
-fn label(tool: &Tool) -> String {
-    match tool {
-        Tool::WineSettings => t!("prefix-wine-settings"),
-        Tool::Winetricks => "winetricks".to_owned(),
-        Tool::Components(verbs) => verbs.join(" "),
-        Tool::GogSetup => t!("prefix-gog-setup"),
-        Tool::KnownFixes => t!("prefix-known-fixes"),
-        Tool::Program(program) => program
-            .file_name()
-            .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
-    }
-}
-
-/// What a components run did: what it installed, and what was there.
-fn installed(ran: &Ran) -> String {
-    match (ran.installed.is_empty(), ran.already.is_empty()) {
-        (_, true) => t!("prefix-installed", components = ran.installed.join(" ")),
-        (true, false) => t!("prefix-all-there", components = ran.already.join(" ")),
-        (false, false) => t!(
-            "prefix-installed-some",
-            components = ran.installed.join(" "),
-            already = ran.already.join(" ")
-        ),
     }
 }
 
@@ -256,16 +230,13 @@ impl Glue {
         let Some(tool) = self.prefix.busy.borrow_mut().remove(&id) else {
             return;
         };
-        let note = match (&tool, result) {
-            (Tool::Components(_), Ok(ran)) => {
-                if let Some(text) = self.prefix.components.borrow_mut().get_mut(&id) {
-                    text.clear();
-                }
-                (installed(&ran), true)
-            }
-            (tool, Ok(_)) => (t!("prefix-done", what = label(tool)), true),
-            (_, Err(err)) => (err, false),
-        };
+        if matches!(tool, Tool::Components(_))
+            && result.is_ok()
+            && let Some(text) = self.prefix.components.borrow_mut().get_mut(&id)
+        {
+            text.clear();
+        }
+        let note = words::done(&tool, result);
         self.prefix.notes.borrow_mut().insert(id, note);
         self.show_game();
     }
@@ -328,7 +299,7 @@ impl Glue {
         self.prefix.fix_lines.set_vec(lines);
 
         let (status, tone) = if let Some(tool) = self.prefix.busy.borrow().get(id) {
-            (t!("prefix-running", what = label(tool)), 3)
+            (t!("prefix-running", what = words::label(tool)), 3)
         } else if running {
             (t!("prefix-game-running"), 3)
         } else if let Some((note, good)) = self.prefix.notes.borrow().get(id) {
@@ -346,19 +317,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn says_what_a_components_run_did() {
-        let ran = Ran {
-            installed: vec!["vcrun2022".into()],
-            already: vec!["d3dx9".into()],
-        };
-        assert_eq!(
-            installed(&ran),
-            "Installed vcrun2022; d3dx9 was there already"
-        );
-        assert_eq!(
-            label(&Tool::Components(vec!["a".into(), "b".into()])),
-            "a b"
-        );
-        assert_eq!(label(&Tool::WineSettings), "Wine settings");
+    fn the_words_of_a_tool_are_the_shells() {
+        // Shared with the Tauri window: this only checks the card reaches
+        // them, with a tool that names itself.
+        assert_eq!(words::label(&Tool::Winetricks), "winetricks");
+        let failed: Result<Ran, String> = Err("no Proton".into());
+        assert!(!words::done(&Tool::GogSetup, failed).1);
     }
 }
