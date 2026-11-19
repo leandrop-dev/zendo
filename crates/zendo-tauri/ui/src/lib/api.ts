@@ -184,8 +184,46 @@ export type GamePage = {
 	sessions: (Fact & { tone: number })[];
 	// The latest sessions, by date.
 	recent: (Fact & { tone: number })[];
-	// The DLC installed with the game, when its engine records any.
-	dlc: { title: string }[];
+	// The DLC card: the store's list of what the player owns, and its buttons.
+	dlc: {
+		count: string;
+		rows: {
+			id: string;
+			title: string;
+			about: string;
+			// The button's words; empty where there is no button.
+			label: string;
+			danger: boolean;
+			enabled: boolean;
+			// "Installed" or "Not installed", where there is no button.
+			status: string;
+			status_tone: number;
+		}[];
+		all: string;
+		all_on: boolean;
+		note: string;
+	};
+	// Update in the action bar; the label is empty when none was found.
+	update: { label: string; badge: string; on: boolean };
+	// The More row and a Steam game's Verify and Uninstall.
+	manage: {
+		has_more: boolean;
+		more_open: boolean;
+		managed: boolean;
+		store_managed: boolean;
+		job_free: boolean;
+		check_on: boolean;
+		move_on: boolean;
+		uninstall_again: boolean;
+		// Repair and Uninstall, as the action's own words.
+		repair_label: string;
+		queue_uninstall_label: string;
+		verify_label: string;
+		verify_on: boolean;
+		uninstall_label: string;
+	};
+	// What the queue is doing with the game.
+	job: { shown: boolean; line: string };
 	// The Wine prefix card, for a Windows game Zendo starts.
 	prefix: {
 		folder: string | null;
@@ -283,6 +321,56 @@ export async function openLink(url: string): Promise<void> {
 
 export async function gameGet(id: string): Promise<GamePage> {
 	return invoke<GamePage>('game_get', { id });
+}
+
+// The page opened on a game: the More row and the DLC's questions start over.
+export async function gameOpen(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_open', { id });
+}
+
+// Update, Repair and Check for updates, through the downloads queue.
+export async function gameUpdate(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_update', { id });
+}
+
+export async function gameRepair(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_repair', { id });
+}
+
+export async function gameCheckUpdates(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_check_updates', { id });
+}
+
+// Uninstall: the first press asks, the second queues it.
+export async function gameUninstall(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_uninstall', { id });
+}
+
+// Move…: the folder dialog, then the move is queued.
+export async function gameMove(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_move', { id });
+}
+
+export async function gameToggleMore(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_toggle_more', { id });
+}
+
+// A DLC's button: Install, or Uninstall, which asks once more first.
+export async function gameDlc(id: string, dlc: string): Promise<GamePage> {
+	return invoke<GamePage>('game_dlc', { id, dlc });
+}
+
+export async function gameDlcAll(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_dlc_all', { id });
+}
+
+// Verify and Uninstall with Steam, asked of Steam itself.
+export async function steamVerifyGame(id: string): Promise<GamePage> {
+	return invoke<GamePage>('steam_verify_game', { id });
+}
+
+export async function steamUninstallGame(id: string): Promise<GamePage> {
+	return invoke<GamePage>('steam_uninstall_game', { id });
 }
 
 export async function gameLaunch(id: string): Promise<GamePage> {

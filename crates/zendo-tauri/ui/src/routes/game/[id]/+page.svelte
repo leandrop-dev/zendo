@@ -10,8 +10,17 @@
 		cardsMoreAchievements,
 		cardsMoreChangelog,
 		cardsRetry,
+		gameCheckUpdates,
+		gameDlc,
+		gameDlcAll,
 		gameGet,
 		gameLaunch,
+		gameMove,
+		gameOpen,
+		gameRepair,
+		gameToggleMore,
+		gameUninstall,
+		gameUpdate,
 		gameSetHidden,
 		gameSetPinned,
 		gameSetStatus,
@@ -43,6 +52,8 @@
 		prefixRun,
 		prefixWant,
 		steamAppSet,
+		steamUninstallGame,
+		steamVerifyGame,
 		type GameCards,
 		type GamePage,
 		type ModsCard,
@@ -92,12 +103,12 @@
 		return path !== null && inTauri() ? convertFileSrc(path) : '';
 	}
 
-	async function load(): Promise<void> {
+	async function load(opening = false): Promise<void> {
 		if (!inTauri() || !id) {
 			return;
 		}
 		try {
-			game = await gameGet(id);
+			game = opening ? await gameOpen(id) : await gameGet(id);
 			// The components in the box are read once; what is typed after
 			// that is the page's own.
 			if (prefixInput === '' && game.prefix?.components) {
@@ -287,7 +298,7 @@
 	}
 
 	onMount(() => {
-		void load();
+		void load(true);
 		void loadCards();
 		void loadMods(true);
 		void prefixWant(id);
@@ -320,12 +331,18 @@
 				void loadMods(false);
 			}
 		});
+		// A job queued, paused or done, or Steam's own work: the line and the
+		// buttons follow.
+		const queued = listen('downloads_changed', () => void load());
+		const steamed = listen('steam_changed', () => void load());
 		return () => {
 			window.removeEventListener('keydown', key);
 			void runs.then((stop) => stop());
 			void lines.then((stop) => stop());
 			void arrived.then((stop) => stop());
 			void changed.then((stop) => stop());
+			void queued.then((stop) => stop());
+			void steamed.then((stop) => stop());
 		};
 	});
 </script>
@@ -451,6 +468,16 @@
 						>
 							{game.hidden ? app.t('game-unhide') : app.t('game-hide')}
 						</button>
+						{#if game.update.label}
+							<button
+								type="button"
+								disabled={!game.update.on}
+								onclick={() => void act(() => gameUpdate(id))}
+								class="border border-accent-mark px-4 py-2 text-[13px] text-accent-mark uppercase hover:bg-raised disabled:opacity-50"
+							>
+								{game.update.label}
+							</button>
+						{/if}
 						{#if game.local}
 							<button
 								type="button"
@@ -474,9 +501,95 @@
 								{removing ? app.t('really-remove') : app.t('remove')}
 							</button>
 						{/if}
+						{#if game.manage.has_more}
+							<button
+								type="button"
+								aria-expanded={game.manage.more_open}
+								onclick={() => void act(() => gameToggleMore(id))}
+								class="border border-line px-4 py-2 text-[13px] text-foreground uppercase hover:bg-raised"
+							>
+								{game.manage.more_open ? app.t('game-less') : app.t('game-more')}
+							</button>
+						{/if}
 					</div>
 
-					<p class="text-sm text-dim">{game.line}</p>
+					{#if game.manage.has_more && game.manage.more_open}
+						<div class="flex flex-wrap gap-2 border border-line bg-surface px-3 py-2">
+							{#if game.manage.store_managed}
+								<button
+									type="button"
+									disabled={!game.manage.check_on}
+									onclick={() => void act(() => gameCheckUpdates(id))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-50"
+								>
+									{app.t('downloads-check-updates')}
+								</button>
+								<button
+									type="button"
+									disabled={!game.manage.job_free}
+									onclick={() => void act(() => gameRepair(id))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-50"
+								>
+									{game.manage.repair_label}
+								</button>
+								<button
+									type="button"
+									disabled={!game.manage.move_on}
+									onclick={() => void act(() => gameMove(id))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-50"
+								>
+									{app.t('downloads-move')}
+								</button>
+							{/if}
+							{#if game.manage.managed}
+								<button
+									type="button"
+									disabled={!game.manage.job_free}
+									onclick={() => void act(() => gameUninstall(id))}
+									class="border px-3 py-1 text-[13px] uppercase disabled:opacity-50 {game.manage
+										.uninstall_again
+										? 'border-bad text-bad'
+										: 'border-line text-foreground hover:bg-raised'}"
+								>
+									{game.manage.uninstall_again
+										? app.t('downloads-press-again')
+										: game.manage.queue_uninstall_label}
+								</button>
+							{/if}
+							{#if game.manage.verify_label}
+								<button
+									type="button"
+									disabled={!game.manage.verify_on}
+									onclick={() => void act(() => steamVerifyGame(id))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-50"
+								>
+									{game.manage.verify_label}
+								</button>
+							{/if}
+							{#if game.manage.uninstall_label}
+								<button
+									type="button"
+									onclick={() => void act(() => steamUninstallGame(id))}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+								>
+									{game.manage.uninstall_label}
+								</button>
+							{/if}
+						</div>
+					{/if}
+
+					<div class="flex items-center gap-3">
+						<p class="text-sm text-dim">{game.job.shown ? game.job.line : game.line}</p>
+						{#if game.job.shown}
+							<button
+								type="button"
+								onclick={() => void goto(resolve('/downloads'))}
+								class="border border-line px-2 py-0.5 text-[12px] uppercase hover:bg-raised"
+							>
+								{app.t('see-downloads')}
+							</button>
+						{/if}
+					</div>
 				</div>
 			</div>
 
@@ -1102,14 +1215,54 @@
 				</section>
 			{/if}
 
-			{#if game.dlc.length > 0}
-				<section class="border border-line bg-surface p-4">
-					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('dlc-title')}</h2>
-					<ul class="flex flex-col gap-1">
-						{#each game.dlc as dlc (dlc.title)}
-							<li class="text-[13px]">{dlc.title}</li>
+			{#if game.dlc.rows.length > 0}
+				<section class="flex flex-col gap-3 border border-line bg-surface p-4">
+					<h2 class="text-[11px] text-dim uppercase">{app.t('dlc-title')}</h2>
+					<div class="flex items-center gap-3">
+						<p class="flex-1 text-[13px] text-dim">{game.dlc.count}</p>
+						{#if game.dlc.all}
+							<button
+								type="button"
+								disabled={!game.dlc.all_on}
+								onclick={() => void act(() => gameDlcAll(id))}
+								class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised disabled:opacity-50"
+							>
+								{game.dlc.all}
+							</button>
+						{/if}
+					</div>
+					<ul class="flex flex-col gap-2">
+						{#each game.dlc.rows as row (row.id)}
+							<li class="flex items-center gap-3">
+								<div class="min-w-0 flex-1">
+									<p class="text-sm">{row.title}</p>
+									{#if row.about}
+										<p class="truncate text-xs text-dim">{row.about}</p>
+									{/if}
+								</div>
+								{#if row.status}
+									<p class="text-[13px] {row.status_tone === 1 ? 'text-good' : 'text-dim'}">
+										{row.status}
+									</p>
+								{/if}
+								{#if row.label}
+									<button
+										type="button"
+										disabled={!row.enabled}
+										onclick={() => void act(() => gameDlc(id, row.id))}
+										class="border px-3 py-1 text-[13px] uppercase disabled:opacity-50 {row.danger
+											? 'border-bad text-bad'
+											: 'border-line text-foreground hover:bg-raised'}"
+									>
+										{row.label}
+									</button>
+								{/if}
+							</li>
 						{/each}
 					</ul>
+					{#if game.dlc.note}
+						<p class="text-xs whitespace-pre-line text-dim">{game.dlc.note}</p>
+					{/if}
 				</section>
 			{/if}
 

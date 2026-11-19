@@ -15,6 +15,7 @@ use zendo_shell::game::{details, sessions_of, tiles_of};
 use zendo_shell::running::{self, Effect, Names, RunMessage};
 
 use crate::cloud::{self, CloudState};
+use crate::jobs::{self, DlcCardDto, JobLineDto, ManageDto, UpdateDto};
 use crate::library::LibraryState;
 use crate::platform;
 use crate::prefix::{PrefixDto, PrefixState, prefix_of};
@@ -42,17 +43,17 @@ pub struct GameDto {
     sessions: Vec<FactDto>,
     /// The latest sessions, by date.
     recent: Vec<FactDto>,
-    /// The DLC installed with the game, when its engine records any.
-    dlc: Vec<DlcDto>,
+    /// The DLC card: the store's list of what the player owns, and the
+    /// buttons.
+    dlc: DlcCardDto,
     /// The Wine prefix card's data, for a Windows game Zendo starts.
     prefix: Option<PrefixDto>,
-}
-
-/// A DLC installed with a game. The store's list of the DLC the player owns,
-/// and Install and Uninstall, come with the Store and the queue (slice 5).
-#[derive(Debug, Serialize)]
-struct DlcDto {
-    title: String,
+    /// Update in the action bar.
+    update: UpdateDto,
+    /// The More row and the Steam buttons.
+    manage: ManageDto,
+    /// What the queue is doing with the game.
+    job: JobLineDto,
 }
 
 #[derive(Debug, Serialize)]
@@ -105,6 +106,7 @@ pub fn game_get(
         &game,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -127,6 +129,7 @@ pub fn game_launch(
                 &game,
                 &app.state::<PrefixState>(),
                 &app.state::<CloudState>(),
+                &app,
             ));
         }
         running.begin(&id);
@@ -142,6 +145,7 @@ pub fn game_launch(
         &game,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -161,6 +165,7 @@ pub fn game_stop(
         &game,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -182,6 +187,7 @@ pub fn game_set_pinned(
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -203,6 +209,7 @@ pub fn game_set_hidden(
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -229,6 +236,7 @@ pub fn game_set_status(
         &fresh(&state, &id)?,
         &app.state::<PrefixState>(),
         &app.state::<CloudState>(),
+        &app,
     ))
 }
 
@@ -241,7 +249,13 @@ fn fresh(state: &LibraryState, id: &str) -> Result<Game, String> {
 }
 
 /// What the page shows of a game now.
-fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState, cloud: &CloudState) -> GameDto {
+fn dto(
+    state: &LibraryState,
+    game: &Game,
+    prefix: &PrefixState,
+    cloud: &CloudState,
+    app: &AppHandle,
+) -> GameDto {
     let (run_state, running) = {
         let running = state.running();
         let state_number = match running.games.get(&game.id) {
@@ -282,6 +296,27 @@ fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState, cloud: &CloudSta
         local: game.source == Source::Local,
         details: {
             let mut rows = facts(details(game));
+            // What the last look for an update found.
+            if game.store_managed() {
+                let downloads = app.state::<crate::downloads::DownloadsState>();
+                let (line, tone) = {
+                    let queue = crate::downloads::lock(&downloads);
+                    zendo_shell::queue::update_line(queue.updates.get(&game.id))
+                };
+                if !line.is_empty() {
+                    rows.push(FactDto {
+                        label: zendo_shell::t!("fact-updates"),
+                        value: line,
+                        path: false,
+                        tone: match tone {
+                            zendo_shell::queue::Tone::Good => 1,
+                            zendo_shell::queue::Tone::Bad => 2,
+                            zendo_shell::queue::Tone::Dim => 3,
+                            zendo_shell::queue::Tone::Accent => 4,
+                        },
+                    });
+                }
+            }
             // The cloud saves' row closes the details, as in the Slint page.
             if let Some((value, tone)) = cloud::row(game, cloud) {
                 rows.push(FactDto {
@@ -295,16 +330,27 @@ fn dto(state: &LibraryState, game: &Game, prefix: &PrefixState, cloud: &CloudSta
         },
         sessions: facts(session_summary),
         recent: facts(session_recent),
-        dlc: game
-            .details
-            .dlc
-            .iter()
-            .map(|dlc| DlcDto {
-                title: dlc.title.clone().unwrap_or_else(|| dlc.id.clone()),
-            })
-            .collect(),
+        dlc: jobs::dlc_card(app, game),
         prefix: prefix_of(game, running, prefix),
+        update: jobs::update(app, game),
+        manage: jobs::manage(app, game),
+        job: jobs::job_line(app, game),
     }
+}
+
+/// A game's page as it is now, for a command that changed something.
+pub(crate) fn page(app: &AppHandle, id: &str) -> Result<GameDto, String> {
+    let state = app.state::<LibraryState>();
+    let game = state
+        .game(id)
+        .ok_or_else(|| format!("no game with the id {id:?}"))?;
+    Ok(dto(
+        &state,
+        &game,
+        &app.state::<PrefixState>(),
+        &app.state::<CloudState>(),
+        app,
+    ))
 }
 
 /// The facts as the page takes them.

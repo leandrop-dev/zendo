@@ -59,12 +59,12 @@ tools, GOG's changelog, the cloud saves row and the Mods card), slice 4
 (Settings' General, Library, Diagnostics, Keys, Launchers, Engines, Proton,
 Theme and Discord's presence; Accounts, About and the Collections sheet) and
 slice 5 (the Store page, the queue and the Downloads page, Install and
-Import, Steam's installs, the updates, the close question and the Store's
-lists following the accounts) are built, and
+Import, Steam's installs, the updates, the close question, the Store's lists
+following the accounts, and the installed game page's Update, job line, More
+row and DLC card) are built, and
 the Slint window stays in place and releasable until the port's parity
-checklist passes (`docs/tauri-port-plan.md`). Left there: the installed game
-page's job line and Manage menu (slice 5c), then Stats and Game Mode, the
-sheets, and the cut-over.
+checklist passes (`docs/tauri-port-plan.md`). Left there: Stats and Game Mode
+(slice 6), the sheets (slice 7), and the cut-over (slice 8).
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
@@ -109,7 +109,7 @@ Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
 the user chooses from `docs/backlog.md` (what is on hold is there, and the
 review's deferred items are listed after it). On `f/ui-revamp`, the port
-continues with slice 5c (the game page's jobs) and then slices 6 to 8.
+continues with slice 6 (Stats and Game Mode), then slices 7 and 8.
 
 ## Direction [firm]
 

@@ -19,6 +19,7 @@ mod commands;
 mod downloads;
 mod engines;
 mod game;
+mod jobs;
 mod launchers;
 mod library;
 mod local;
@@ -85,6 +86,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(collections::CollectionsState::default())
         .manage(store::StoreState::default())
         .manage(downloads::DownloadsState::default())
+        .manage(jobs::JobsState::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -107,6 +109,17 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             game::game_set_pinned,
             game::game_set_hidden,
             game::game_set_status,
+            jobs::game_open,
+            jobs::game_update,
+            jobs::game_repair,
+            jobs::game_uninstall,
+            jobs::game_check_updates,
+            jobs::game_move,
+            jobs::game_toggle_more,
+            jobs::game_dlc,
+            jobs::game_dlc_all,
+            jobs::steam_verify_game,
+            jobs::steam_uninstall_game,
             local::local_get,
             local::local_about,
             local::local_pick_program,

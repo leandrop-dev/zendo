@@ -7058,6 +7058,38 @@ Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 Lua, and `window.close()` from the page does nothing), and an update found and
 queued (it needs an engine that reports one).
 
+## The Tauri port, slice 5c: the game page's jobs (2026-11-19)
+
+- **`zendo_shell::dlc`** (new, shared): the DLC card's words and rules, moved
+  out of the Slint `store_ui.rs` (`dlc_button`, `dlc_rows`'s body and
+  `dlc_note`) with tests of its own; the Slint window now maps its rows and its
+  146 tests still pass.
+- **`crates/zendo-tauri/src/jobs.rs`**: Update in the action bar (and its
+  UPDATE AVAILABLE badge), the line saying what the queue is doing with the
+  game ("Updating: now") with See downloads, the More row (Check for updates,
+  Repair, Move… with the real folder dialog, Uninstall pressed twice) and the
+  DLC card's Install, Install all and Uninstall (pressed twice). The page opens
+  with `game_open`, which folds the More row and forgets the questions, so a
+  reload after a job does not.
+- **The page's DTO** (`src/game.rs`) gains `update`, `manage`, `job` and the
+  DLC card (replacing the read-only titles), and the details card takes the
+  queue's Updates row ("Update available: 2", in the accent colour).
+- **Steam's buttons**: Verify with Steam and Uninstall with Steam on an
+  installed Steam game's page, through `crate::steam`'s `verify`/`uninstall`.
+  `zendo_shell::game::steam_app` is the shared way to name a Steam game's app.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (610 passed, 32 ignored: the four DLC tests are new). Seen on
+screen in a throwaway home with a seeded Epic install, a fake `legendary` that
+reports version 2, and `auto_update` off: the page with UPDATE and MORE, the
+More row open (Check for updates, Repair, Move…, Uninstall), the details'
+Updates row, the DLC card's count and its UNINSTALL disabled while a job runs,
+and Update pressed: the line "Updating: now" with See downloads, UPDATE
+greyed, the footer at 20% and 50%. Not run: Uninstall pressed twice, Move…
+(the real folder dialog), Install all and a DLC's two presses, and Steam's
+Verify and Uninstall (they need an installed Steam game the scan lists).
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

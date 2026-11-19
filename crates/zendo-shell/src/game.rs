@@ -23,6 +23,14 @@ pub struct Fact {
     pub path: bool,
 }
 
+/// A game Steam installed, by its app id.
+#[must_use]
+pub fn steam_app(game: &Game) -> Option<&str> {
+    (game.source == zendo_core::Source::Steam)
+        .then(|| game.id.strip_prefix("steam:"))
+        .flatten()
+}
+
 /// The line under the title: the store, the developer and the platform.
 #[must_use]
 pub fn source_line(game: &Game) -> String {

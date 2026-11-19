@@ -28,7 +28,7 @@ pub struct SteamState {
 }
 
 /// The installs followed, poisoned or not: a look never leaves them broken.
-fn lock(state: &SteamState) -> MutexGuard<'_, SteamInstalls> {
+pub(crate) fn lock(state: &SteamState) -> MutexGuard<'_, SteamInstalls> {
     state
         .installs
         .lock()
@@ -151,6 +151,34 @@ pub(crate) fn install(app: &AppHandle, id: &str) {
     if let Some(line) = line {
         downloads::say(app, line);
     }
+    changed(app);
+}
+
+/// Verify with Steam pressed: Steam shows its own progress.
+pub(crate) fn verify(app: &AppHandle, game: &zendo_core::Game) {
+    let Some(app_id) = game.id.strip_prefix("steam:") else {
+        return;
+    };
+    let line = {
+        let state = app.state::<SteamState>();
+        lock(&state).verify(app_id, &game.title, true)
+    };
+    if let Some(line) = line {
+        downloads::say(app, line);
+    }
+    changed(app);
+}
+
+/// Uninstall with Steam pressed: Steam asks its own question.
+pub(crate) fn uninstall(app: &AppHandle, game: &zendo_core::Game) {
+    let Some(app_id) = game.id.strip_prefix("steam:") else {
+        return;
+    };
+    let line = {
+        let state = app.state::<SteamState>();
+        lock(&state).uninstall(app_id, &game.title, true)
+    };
+    downloads::say(app, line);
     changed(app);
 }
 

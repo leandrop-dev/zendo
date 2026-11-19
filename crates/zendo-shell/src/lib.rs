@@ -13,6 +13,7 @@ pub mod cards;
 pub mod cli;
 pub mod clipboard;
 pub mod collections;
+pub mod dlc;
 pub mod file_dialog;
 pub mod format;
 pub mod game;

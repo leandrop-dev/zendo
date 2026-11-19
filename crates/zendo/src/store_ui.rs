@@ -16,7 +16,7 @@ use slint::{ComponentHandle, Model, ModelNotify, ModelRc, ModelTracker, SharedSt
 use zendo_core::browse::Move;
 use zendo_core::config::Config;
 use zendo_core::downloads;
-use zendo_core::info::{self, Dlc};
+use zendo_core::info::{self};
 use zendo_core::owned::{self, Owned, Shop};
 use zendo_core::stores::Store;
 use zendo_core::{Game, Launch, Size, Source, xodus};
@@ -29,42 +29,7 @@ use super::{Glue, to_card, with_glue};
 use crate::covers::Covers;
 use crate::library::{Outcome, Rows, Scroll};
 use crate::store::{StoreBrowser, StoreChip, StorePick};
-use crate::{
-    CardRow, ChipData, DlcRow, Fact, GameData, MainWindow, OwnedBadge, Page, StoreData, Tile,
-};
-
-/// What the DLC card shows: the count, a row each, Install all, and a note.
-#[derive(Default)]
-pub(super) struct DlcView {
-    pub(super) count: String,
-    pub(super) rows: Vec<DlcRow>,
-    pub(super) all: String,
-    pub(super) all_on: bool,
-    pub(super) note: String,
-}
-
-/// What a DLC's row has at its end: the button's words and whether it is
-/// pressed once already (Uninstall asks twice), or, where Zendo cannot manage
-/// the DLC, a status word and its tone (1 good, 3 dim). A DLC that comes with
-/// the game has neither.
-///
-/// `manage` is `None` where Zendo cannot manage the DLC, else whether the
-/// DLC's Uninstall was pressed once.
-fn dlc_button(
-    installable: bool,
-    installed: bool,
-    manage: Option<bool>,
-) -> (String, bool, String, i32) {
-    let none = String::new;
-    match (installable, installed, manage) {
-        (false, ..) => (none(), false, none(), 0),
-        (true, true, Some(true)) => (t!("downloads-press-again"), true, none(), 0),
-        (true, true, Some(false)) => (t!("action-label", action = "uninstall"), false, none(), 0),
-        (true, false, Some(_)) => (t!("install"), false, none(), 0),
-        (true, true, None) => (none(), false, t!("installed"), 1),
-        (true, false, None) => (none(), false, t!("dlc-not-installed"), 3),
-    }
-}
+use crate::{CardRow, ChipData, Fact, GameData, MainWindow, OwnedBadge, Page, StoreData, Tile};
 
 /// The Store's grid as Slint reads it: a model of rows, each made when asked.
 struct StoreGrid {
@@ -704,122 +669,27 @@ impl Glue {
 
     /// The DLC of a game: those the store says the user owns and those
     /// installed, with how many of the installable are, when the game is in
-    /// the library.
-    pub(super) fn dlc_rows(&self, game: &Game) -> DlcView {
-        struct Line {
-            id: String,
-            title: String,
-            installed: bool,
-            installable: bool,
-            size: Option<u64>,
-        }
-        let installed: HashSet<&str> = game.details.dlc.iter().map(|dlc| dlc.id.as_str()).collect();
-        let owned: Vec<Dlc> = match self.store.browser.borrow().info.get(&game.id) {
-            Some(InfoState::Got(info)) => info.dlc.clone(),
-            _ => Vec::new(),
-        };
-        let mut lines: Vec<Line> = owned
-            .iter()
-            .map(|dlc| Line {
-                id: dlc.id.clone(),
-                title: dlc.title.clone(),
-                installed: installed.contains(dlc.id.as_str()),
-                installable: dlc.installable,
-                size: dlc.install_size,
-            })
-            .collect();
-        // Installed, but not in the store's list (or the list is not here).
-        for dlc in &game.details.dlc {
-            if !owned.iter().any(|item| item.id == dlc.id) {
-                lines.push(Line {
-                    id: dlc.id.clone(),
-                    title: dlc.title.clone().unwrap_or_else(|| dlc.id.clone()),
-                    installed: true,
-                    installable: true,
-                    size: None,
-                });
-            }
-        }
-        let count = if self.browser.borrow().game(&game.id).is_some() {
-            let total = lines.iter().filter(|line| line.installable).count();
-            let have = lines
-                .iter()
-                .filter(|line| line.installable && line.installed)
-                .count();
-            t!("dlc-count", installed = have, total = total)
-        } else {
-            String::new()
-        };
-        // Zendo installs and removes the DLC of a game it installed; for
-        // one Heroic installed, Heroic does.
-        // The buttons are for the game's own page; a store game's page lists
-        // the DLC and leaves them to Install and Open in library.
+    /// the library. The words are `zendo_shell::dlc`'s, shared with Tauri.
+    pub(super) fn dlc_rows(&self, game: &Game) -> zendo_shell::dlc::DlcView {
         let on_page = self.open.borrow().as_deref() == Some(game.id.as_str());
         let manage = game.installed_by_zendo() && on_page;
-        let free = manage && self.downloads.queue.borrow().job_for(&game.id).is_none();
-        let confirming = self.jobs.confirm_dlc.borrow().clone();
-        let to_install = lines
-            .iter()
-            .filter(|line| line.installable && !line.installed)
-            .count();
-        let rows = lines
-            .into_iter()
-            .map(|line| {
-                let about = if line.installable {
-                    line.size
-                        .map_or_default(|bytes| Size::Bytes(bytes).to_string())
-                } else {
-                    t!("dlc-comes-with")
-                };
-                let asked = confirming.as_deref() == Some(line.id.as_str());
-                let (label, danger, status, tone) =
-                    dlc_button(line.installable, line.installed, manage.then_some(asked));
-                DlcRow {
-                    id: line.id.into(),
-                    title: line.title.into(),
-                    about: about.into(),
-                    label: label.into(),
-                    danger,
-                    enabled: free,
-                    status: status.into(),
-                    status_tone: tone,
-                }
-            })
-            .collect();
-        DlcView {
-            count,
-            rows,
-            all: if manage && to_install > 1 {
-                t!("dlc-install-all")
-            } else {
-                String::new()
-            },
-            all_on: free,
-            note: self.dlc_note(game, !manage && on_page),
-        }
-    }
-
-    /// Why Zendo cannot manage the DLC (`unmanaged`, on the game's own
-    /// page): sign in to see all of them, or Heroic does; and that the store
-    /// is being asked.
-    fn dlc_note(&self, game: &Game, unmanaged: bool) -> String {
         let store = match game.source {
             Source::Gog => Store::Gog,
             _ => Store::Epic,
         };
         let info = self.store.browser.borrow().info.get(&game.id).cloned();
-        let mut notes = Vec::new();
-        if unmanaged {
-            notes.push(if info.is_none() && !self.store_signed_in(store) {
-                t!("dlc-sign-in", store = store.label())
-            } else {
-                t!("dlc-in-heroic")
-            });
-        }
-        if matches!(info, Some(InfoState::Asking)) {
-            notes.push(t!("dlc-asking"));
-        }
-        notes.join("\n")
+        let listed = self.browser.borrow().game(&game.id).is_some();
+        let confirm = self.jobs.confirm_dlc.borrow().clone();
+        zendo_shell::dlc::view(&zendo_shell::dlc::Ask {
+            game,
+            info: info.as_ref(),
+            signed_in: self.store_signed_in(store),
+            manage,
+            unmanaged: !manage && on_page,
+            confirm: confirm.as_deref(),
+            free: manage && self.downloads.queue.borrow().job_for(&game.id).is_none(),
+            listed,
+        })
     }
 
     // Writing the page.

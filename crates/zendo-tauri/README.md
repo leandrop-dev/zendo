@@ -28,6 +28,13 @@ follow.
 - `src/game.rs`: the game page's commands: `game_get`, `game_launch`,
   `game_stop`, `game_set_pinned`, `game_set_hidden` and `game_set_status`,
   over `zendo_shell::running` for the launch.
+- `src/jobs.rs`: the installed game page's jobs over `zendo_shell::queue` and
+  `zendo_shell::dlc`: `game_open` (the page opened: More folded, questions
+  forgotten), `game_update`, `game_repair`, `game_check_updates`,
+  `game_uninstall` (twice), `game_move` (the folder dialog), `game_toggle_more`,
+  `game_dlc` and `game_dlc_all`, and Steam's `steam_verify_game` and
+  `steam_uninstall_game`. The page's DTO carries `update`, `manage`, `job` and
+  the DLC card.
 - `src/cards.rs`: the page's store cards, asked once a session:
   `cards_get`, `cards_retry` (for a card that failed), `cards_more_achievements`,
   `cards_more_changelog` and `steam_app_set`. ProtonDB's rating, Steam's
@@ -121,6 +128,8 @@ follow.
   cancelled or ended); the Downloads page and a store game's page ask again.
 - `steam_changed`: what Steam is doing changed; the Downloads page, a store
   game's page and an installed game's page ask again.
+- `downloads_changed` is also what an installed game's page follows: the job
+  line and the buttons (Update, More, the DLC card) change with the queue.
 - `downloads_asked`: closing was asked for while a job runs; the frontend
   opens the Downloads page with the question.
 - `store_changed` is also sent when the accounts change whose games are

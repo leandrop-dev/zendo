@@ -81,9 +81,7 @@ impl GameState {
 /// Stores write platforms as `Windows`, `windows`, `linux`; shown alike.
 /// A game Steam installed, by its app id.
 pub(super) fn steam_app(game: &Game) -> Option<&str> {
-    (game.source == Source::Steam)
-        .then(|| game.id.strip_prefix("steam:"))
-        .flatten()
+    zendo_shell::game::steam_app(game)
 }
 
 /// The page of the game on `PCGamingWiki`: the redirect for a Steam app id,

@@ -22,10 +22,10 @@ use zendo_shell::cards::{self, SHOWN};
 use zendo_shell::running::now;
 use zendo_shell::t;
 
-use super::store::DlcView;
 use super::{Glue, with_glue};
 use crate::covers::Cover;
 use crate::{Ach, DlcRow, Fact, GameData, MainWindow, Pill, Req, Shot};
+use zendo_shell::dlc::DlcView as ShellDlc;
 
 /// A question put to the network and what is known of the answer.
 #[derive(Debug)]
@@ -627,13 +627,27 @@ impl Glue {
         let view = if matches!(game.source, Source::Epic | Source::Gog) {
             self.dlc_rows(game)
         } else {
-            DlcView::default()
+            ShellDlc::default()
         };
         data.set_dlc_count(view.count.into());
         data.set_dlc_install_all(view.all.into());
         data.set_dlc_install_all_on(view.all_on);
         data.set_dlc_note(view.note.into());
-        self.cards.dlc.set_vec(view.rows);
+        let rows: Vec<DlcRow> = view
+            .rows
+            .into_iter()
+            .map(|row| DlcRow {
+                id: row.id.into(),
+                title: row.title.into(),
+                about: row.about.into(),
+                label: row.label.into(),
+                danger: row.danger,
+                enabled: row.enabled,
+                status: row.status.into(),
+                status_tone: row.status_tone,
+            })
+            .collect();
+        self.cards.dlc.set_vec(rows);
     }
 
     fn show_achievements(&self, id: &str, data: &GameData<'_>) -> Vec<PathBuf> {

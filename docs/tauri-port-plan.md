@@ -163,9 +163,11 @@ and removed once already).
    its engine), **5b-2** (Steam's installs: the Steam card on Downloads, Install
    with Steam, Stop waiting and Open Steam's downloads) and **5b-3** (the
    updates after a scan, the close-while-running question, and the Store's
-   lists following a sign-in or a sign-out). Left for **5c**: the installed
-   game page's job line and Manage menu (Update, Check, Repair, Move…,
-   Uninstall, Verify and Uninstall with Steam, the DLC card's buttons).
+   lists following a sign-in or a sign-out) and **5c** (the installed game
+   page's Update and UPDATE AVAILABLE badge, the job line with See downloads,
+   the More row with Check for updates, Repair, Move… and Uninstall pressed
+   twice, Steam's Verify and Uninstall, and the DLC card's buttons, over
+   `zendo_shell::dlc`, now shared).
 6. **Stats and Game Mode**: the Stats tab and Game Mode (F11 and Select, hero,
    carousel, shelves, the Start menu, `--game-mode`).
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
@@ -262,8 +264,8 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    4b (Keys, Launchers, Engines, Proton and Discord's presence) and 4c
    (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page),
    5b-1 (the queue, the Downloads page, Install and Import), 5b-2 (Steam's
-   installs) and 5b-3 (updates, the close question, the Store's accounts);
-   5c (the game page's jobs) is next.
+   installs), 5b-3 (updates, the close question, the Store's accounts) and 5c
+   (the game page's jobs). Slice 6 (Stats and Game Mode) is next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
@@ -278,8 +280,8 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 5c (the installed game page's job line and Manage menu), then
-  slices 6 to 8. The prefix's tools, the Mods card's presses and Settings'
+- Next: slice 6 (Stats and Game Mode), then slice 7 (the sheets) and 8 (the
+  cut-over). The prefix's tools, the Mods card's presses and Settings'
   presses are built and some are unrun: they start umu, a real window, an
   installer, a change to a game's files or a write to `config.toml`.
 - This session's `ydotool` and `wtype` reached nothing at all (the pointer

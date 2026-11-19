@@ -196,6 +196,11 @@ pub fn check_new_updates(app: &AppHandle) {
     check_updates(app, &ids);
 }
 
+/// Asks the stores again about these games, from Check for updates.
+pub(crate) fn check_these(app: &AppHandle, ids: &[String]) {
+    check_updates(app, ids);
+}
+
 /// Asks the stores, on a thread, whether these games have updates.
 fn check_updates(app: &AppHandle, ids: &[String]) {
     let library = app.state::<LibraryState>();
