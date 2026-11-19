@@ -182,6 +182,108 @@ fn show_downloads(app: &AppHandle) {
     let _ = app.emit("downloads_asked", ());
 }
 
+// The updates.
+
+/// Asks the stores, on a thread, whether the games Zendo installed have
+/// updates: once after each scan, and only about games not asked yet.
+pub fn check_new_updates(app: &AppHandle) {
+    let games = app.state::<LibraryState>().games();
+    let ids: Vec<String> = {
+        let state = app.state::<DownloadsState>();
+        let queue = lock(&state);
+        queue.unasked(games.iter())
+    };
+    check_updates(app, &ids);
+}
+
+/// Asks the stores, on a thread, whether these games have updates.
+fn check_updates(app: &AppHandle, ids: &[String]) {
+    let library = app.state::<LibraryState>();
+    let games: Vec<zendo_core::Game> = ids.iter().filter_map(|id| library.game(id)).collect();
+    let games = {
+        let state = app.state::<DownloadsState>();
+        let mut queue = lock(&state);
+        queue.to_check(games.iter())
+    };
+    if games.is_empty() {
+        return;
+    }
+    let _ = app.emit("downloads_changed", ());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let results = queue::ask_updates(&games);
+        updates_checked(&handle, results);
+    });
+}
+
+/// The stores answered: kept, and with "Update games by themselves" on, the
+/// updates found are queued.
+fn updates_checked(
+    app: &AppHandle,
+    results: Vec<(String, Result<zendo_core::info::Update, String>)>,
+) {
+    let auto = app.state::<SettingsState>().config().auto_update;
+    let library = app.state::<LibraryState>();
+    let effects = {
+        let state = app.state::<DownloadsState>();
+        lock(&state).checked(results, auto, |id| library.game(id))
+    };
+    apply(app, effects);
+}
+
+/// Settings' switch turned on: the updates already found are queued.
+pub fn update_by_themselves(app: &AppHandle) {
+    let auto = app.state::<SettingsState>().config().auto_update;
+    let library = app.state::<LibraryState>();
+    let effects = {
+        let state = app.state::<DownloadsState>();
+        let mut queue = lock(&state);
+        let found = queue.available();
+        queue.update_by_themselves(&found, auto, |id| library.game(id))
+    };
+    apply(app, effects);
+}
+
+// Closing.
+
+/// The window is to close for good: says whether it may. While a job runs it
+/// may not: the Downloads page asks first.
+#[must_use]
+pub fn close_requested(app: &AppHandle) -> bool {
+    let effects = {
+        let state = app.state::<DownloadsState>();
+        lock(&state).close_requested()
+    };
+    if effects.iter().any(|effect| matches!(effect, Effect::Exit)) {
+        return true;
+    }
+    apply(app, effects);
+    false
+}
+
+/// Close anyway: the engine stops, the queue is held for next time, and the
+/// window goes once it has.
+#[tauri::command]
+pub fn downloads_close_anyway(app: AppHandle) -> DownloadsDto {
+    let effects = {
+        let state = app.state::<DownloadsState>();
+        lock(&state).close_anyway()
+    };
+    apply(&app, effects);
+    dto(&app)
+}
+
+/// Keep downloading: the question is answered with a no.
+#[tauri::command]
+pub fn downloads_stay_open(app: AppHandle) -> DownloadsDto {
+    {
+        let state = app.state::<DownloadsState>();
+        lock(&state).stay_open();
+    }
+    let _ = app.emit("downloads_changed", ());
+    dto(&app)
+}
+
 // The page.
 
 #[derive(Debug, Default, Serialize)]

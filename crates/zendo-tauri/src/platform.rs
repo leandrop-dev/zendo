@@ -62,11 +62,14 @@ pub fn start(app: &AppHandle, window: &WebviewWindow, fullscreen: bool) -> tauri
     let handle = app.clone();
     let target = window.clone();
     window.on_window_event(move |event| {
-        if let WindowEvent::CloseRequested { api, .. } = event
-            && handle.state::<Shell>().tray.load(Ordering::Relaxed)
-        {
-            api.prevent_close();
-            let _ = target.hide();
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            if handle.state::<Shell>().tray.load(Ordering::Relaxed) {
+                api.prevent_close();
+                let _ = target.hide();
+            } else if !crate::downloads::close_requested(&handle) {
+                // A store's job runs: the Downloads page asks first.
+                api.prevent_close();
+            }
         }
     });
 
@@ -145,7 +148,12 @@ fn start_tray(app: &AppHandle) -> bool {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-            TrayMessage::Quit => handle.exit(0),
+            TrayMessage::Quit => {
+                // A store's job runs: the Downloads page asks first.
+                if crate::downloads::close_requested(&handle) {
+                    handle.exit(0);
+                }
+            }
         }
         true
     });

@@ -108,7 +108,7 @@ fn start(app: &AppHandle, library: &LibraryState) {
 }
 
 /// Which stores are signed in, and whose games the page lists.
-fn accounts_changed(app: &AppHandle) {
+pub(crate) fn accounts_changed(app: &AppHandle) {
     let steam = accounts::steam_session(app).is_some();
     let xbox = xodus::installed().is_some();
     let mut listed = HashSet::new();
@@ -287,6 +287,25 @@ pub fn store_back(app: AppHandle) -> StoreDto {
 }
 
 /// Asks every store again (Refresh).
+/// A store was signed in or out: the page lists what the accounts say now,
+/// and a store with no list yet is asked.
+#[tauri::command]
+pub fn store_accounts_changed(app: AppHandle) -> StoreDto {
+    accounts_changed(&app);
+    dto(&app)
+}
+
+/// The store's list is forgotten, as after signing out of it.
+pub(crate) fn forget(app: &AppHandle, shop: Shop) {
+    {
+        let state = app.state::<StoreState>();
+        let mut browser = browser(&state);
+        let _ = browser.forget(shop);
+    }
+    owned::forget(shop);
+    let _ = app.emit("store_changed", ());
+}
+
 #[tauri::command]
 pub fn store_refresh(app: AppHandle) -> StoreDto {
     let connected: Vec<Shop> = {

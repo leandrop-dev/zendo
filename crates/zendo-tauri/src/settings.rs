@@ -120,9 +120,10 @@ impl Setting {
             Self::DownloadCovers(true) => crate::library::download_covers_now(app),
             Self::EnginesPathFirst(_) => crate::engines::refresh_engines(app),
             Self::DefaultProton(_) => crate::protons::default_proton_set(app),
+            Self::AutoUpdate(true) => crate::downloads::update_by_themselves(app),
             Self::DownloadCovers(false)
             | Self::Workers(_)
-            | Self::AutoUpdate(_)
+            | Self::AutoUpdate(false)
             | Self::GogPlaytime(_)
             | Self::GogGalaxy(_)
             | Self::SteamSession(_) => {}

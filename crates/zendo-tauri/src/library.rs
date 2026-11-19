@@ -87,6 +87,8 @@ pub(crate) fn rescan(app: AppHandle) {
         shell.scanning.store(false, Ordering::Relaxed);
         let _ = app.emit("library_loaded", ());
         crate::store::library_changed(&app);
+        // The games Zendo installed are asked about their updates once.
+        crate::downloads::check_new_updates(&app);
         download_covers(app);
     });
 }

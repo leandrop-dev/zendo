@@ -106,6 +106,29 @@
 				</div>
 			{/if}
 
+			{#if page.asking}
+				<div class="flex flex-col gap-2 border border-accent-mark bg-surface p-4">
+					<p class="text-[15px] font-bold">{app.t('downloads-running-title')}</p>
+					<p class="text-[13px] text-dim">{app.t('downloads-running-about')}</p>
+					<div class="flex gap-3">
+						<button
+							type="button"
+							onclick={() => downloads.closeAnyway()}
+							class="border border-accent-mark px-3 py-1 text-[13px] text-accent-mark uppercase hover:bg-raised"
+						>
+							{app.t('downloads-close-anyway')}
+						</button>
+						<button
+							type="button"
+							onclick={() => downloads.stayOpen()}
+							class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+						>
+							{app.t('downloads-keep')}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			{#if page.steam_show}
 				<div class="flex flex-col gap-3 border border-line bg-surface p-4">
 					<div class="flex items-center gap-3">

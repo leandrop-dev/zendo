@@ -1045,6 +1045,11 @@ export async function storeRefresh(): Promise<StorePage> {
 	return invoke<StorePage>('store_refresh');
 }
 
+// A store was signed in or out: the lists are what the accounts say now.
+export async function storeAccountsChanged(): Promise<StorePage> {
+	return invoke<StorePage>('store_accounts_changed');
+}
+
 export async function ownedGet(id: string): Promise<OwnedPage> {
 	return invoke<OwnedPage>('owned_get', { id });
 }
@@ -1168,6 +1173,17 @@ export type OpenAt = { kind: 'game' | 'store'; id: string };
 
 export async function downloadsOpen(id: string): Promise<OpenAt | null> {
 	return invoke<OpenAt | null>('downloads_open', { id });
+}
+
+// Close anyway: the engine stops, the queue is held for next time, and the
+// window goes once it has.
+export async function downloadsCloseAnyway(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_close_anyway');
+}
+
+// Keep downloading, from the question about closing.
+export async function downloadsStayOpen(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_stay_open');
 }
 
 // Stop waiting for Steam to start an install it was asked for.

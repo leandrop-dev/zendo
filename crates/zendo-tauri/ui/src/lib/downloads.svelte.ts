@@ -7,9 +7,11 @@ import { listen } from '@tauri-apps/api/event';
 import {
 	downloadsCancel,
 	downloadsClear,
+	downloadsCloseAnyway,
 	downloadsGet,
 	downloadsPause,
 	downloadsResume,
+	downloadsStayOpen,
 	inTauri,
 	steamStopWaiting,
 	type DownloadsPage
@@ -88,6 +90,16 @@ class Downloads {
 
 	clear(): void {
 		this.#use(downloadsClear);
+	}
+
+	/// Close anyway: the engine stops, the queue is held, and the window goes.
+	closeAnyway(): void {
+		this.#use(downloadsCloseAnyway);
+	}
+
+	/// Keep downloading.
+	stayOpen(): void {
+		this.#use(downloadsStayOpen);
 	}
 }
 

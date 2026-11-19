@@ -7008,6 +7008,56 @@ game and the page follows (INSTALLING), Pause says PAUSING… and ends paused
 with "Paused: Installing Beta Racer". Not seen: a real engine, the DLC box
 (with a store that reports some), the Import dialog, a light scheme and pt-PT.
 
+## The Tauri port, slice 5b-2: Steam's installs (2026-11-19)
+
+- **`crates/zendo-tauri/src/steam.rs`**: `zendo_shell::steam_installs` read on
+  a thread of its own, every 15 s and every 2 s while Steam is busy, as the
+  Slint window does. What it finds is said (installed, updated, uninstalled,
+  verified), the library is read again when something changed, and the pages
+  hear `steam_changed`.
+- **A Steam store game's page**: `install_state`/`install_note` give it Steam's
+  own states (Install with Steam, Ask Steam again with Stop waiting, Installing
+  with Steam's progress bar and "Downloading, … of …"), and the press asks
+  Steam (`steam -silent steam://install/<app>`).
+- **The Downloads page's Steam card**: what Steam is downloading with its bar
+  and words, the installs and uninstalls and verifies asked of it, Stop waiting
+  on an install Steam has not started, and Open Steam's downloads. The top
+  bar's count adds Steam's installs, and the page's invitation to the Store
+  stays away while Steam has something going.
+
+Checked as for 5b-1. Seen on screen in the throwaway home with a fake `steam`
+and a seeded downloading manifest: the Steam page's Install with Steam, then
+Ask Steam again with Stop waiting and "Waiting for Steam's install dialog",
+then Installing… with "Downloading, 286.10 MiB of 953.67 MiB" and its bar once
+the look came in; the Downloads Steam card with the same line and Open Steam's
+downloads. Not seen: a real Steam client, an install finishing, an uninstall or
+a verify (they need the game page's Manage menu, slice 5c).
+
+## The Tauri port, slice 5b-3: the updates, the close question, the Store's accounts (2026-11-19)
+
+- **The updates**: after each library scan the games Zendo installed are asked
+  of their stores once (`downloads::check_new_updates` over
+  `Queue::unasked`/`to_check`/`ask_updates`), and the answers are kept; with
+  "Update games by themselves" on, the updates found are queued through the
+  same queue, and Settings' switch turned on queues the ones already found.
+- **The close question**: closing the window with no tray, or Quit in the
+  tray, while a store's job runs is held back, the window comes up on the
+  Downloads page with the question, and "Close anyway" stops the engine, holds
+  the queue for next time and lets the window go. With a tray the window still
+  hides and the download continues.
+- **The Store and the accounts**: a sign-in now has the Store ask the store
+  that has no list yet, and a sign-out forgets its list and its cache
+  (`store::accounts_changed`, `store::forget`); the Store page follows
+  `accounts_changed` by itself. The store game page also follows
+  `steam_changed`.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (606 passed, 32 ignored). Not seen on screen: the close question
+(the WM close could not be driven this session: `hyprctl dispatch` now speaks
+Lua, and `window.close()` from the page does nothing), and an update found and
+queued (it needs an engine that reports one).
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

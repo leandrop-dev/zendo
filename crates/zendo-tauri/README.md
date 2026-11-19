@@ -64,14 +64,22 @@ follow.
   (moved there for both windows): the lists from the cache and each signed-in
   store, the chips, search, sorts, Refresh, the cards, and a store game's page
   with its facts and the size, version and DLC its engine says.
+- `src/steam.rs`: Steam's installs over `zendo_shell::steam_installs`, read
+  on a thread every 15 s (2 s while Steam is busy): its card on Downloads, the
+  Install with Steam states of a Steam store game's page, Stop waiting, and
+  Open Steam's downloads. Closing the window with a store job or Steam busy
+  asks first (`downloads.rs`).
 - `src/downloads.rs`: the queue over `zendo_shell::queue`: the queue left from
   last time read at start and begun, the job's thread, a cancelled install's
   files cleared, the library read again after a job, and `downloads_get` /
   `downloads_pause` / `downloads_resume` / `downloads_cancel` /
   `downloads_clear` / `downloads_open`. A store game's Install, Import, Resume
   and "Also install its DLC" are here too (`owned_install`, `owned_import`,
-  `owned_resume`, `owned_toggle_dlc`), and the page asks for it again by
-  `store_changed` and `downloads_changed`. The page follows a running job's
+  `owned_resume`, `owned_toggle_dlc`, `owned_forget`), and the page asks for
+  it again by `store_changed`, `downloads_changed` and `steam_changed`. The
+  updates of the games Zendo installed are asked after each scan, and queued
+  by themselves with Settings' switch on; a close while a job runs is held
+  back with a question (`downloads_close_anyway`, `downloads_stay_open`). The page follows a running job's
   progress by asking every 500 ms while it runs
   (`ui/src/lib/downloads.svelte.ts`); the top bar counts the queue and the
   window's foot says what it is doing.
@@ -111,6 +119,12 @@ follow.
   page ask again.
 - `downloads_changed`: the queue changed (a job queued, started, paused,
   cancelled or ended); the Downloads page and a store game's page ask again.
+- `steam_changed`: what Steam is doing changed; the Downloads page, a store
+  game's page and an installed game's page ask again.
+- `downloads_asked`: closing was asked for while a job runs; the frontend
+  opens the Downloads page with the question.
+- `store_changed` is also sent when the accounts change whose games are
+  listed.
 - `game_run` and `game_line`: the running game's state (idle, starting,
   running, stopping) and the line under its actions.
 - `game_cards`: a store card's answer is in; the payload is the game's id, and

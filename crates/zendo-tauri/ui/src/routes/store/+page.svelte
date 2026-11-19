@@ -6,6 +6,7 @@
 	import Card from '#lib/components/library/card.svelte';
 	import {
 		inTauri,
+		storeAccountsChanged,
 		storeClick,
 		storeGet,
 		storePick,
@@ -47,8 +48,11 @@
 	onMount(() => {
 		void load();
 		const changed = listen('store_changed', () => void load());
+		// A sign-in or a sign-out: the lists are what the accounts say now.
+		const accounts = listen('accounts_changed', () => void act(storeAccountsChanged));
 		return () => {
 			void changed.then((stop) => stop());
+			void accounts.then((stop) => stop());
 		};
 	});
 </script>

@@ -900,6 +900,7 @@ fn sign_out(app: &AppHandle, store: Store) {
     let handle = app.clone();
     std::thread::spawn(move || {
         let result = store.sign_out().map_err(|err| format!("{err:#}"));
+        let signed_out = result.is_ok();
         let state = handle.state::<AccountsState>();
         state
             .accounts
@@ -908,6 +909,10 @@ fn sign_out(app: &AppHandle, store: Store) {
             Ok(()) => Account::SignedOut,
             Err(err) => Account::Failed(err),
         };
+        // The games it listed are not shown any more, nor kept.
+        if signed_out {
+            crate::store::forget(&handle, store.into());
+        }
         let _ = handle.emit("accounts_changed", ());
     });
 }

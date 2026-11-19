@@ -160,8 +160,12 @@ and removed once already).
    **5b-1** (the queue over `zendo_shell::queue`, the Downloads page, the top
    bar's count and the window's foot, and a store game's Install, Import,
    Resume and "Also install its DLC", with the sizes, versions and DLC asked of
-   its engine). **5b-2** is Steam's installs, the updates after a scan and the
-   close-while-running question.
+   its engine), **5b-2** (Steam's installs: the Steam card on Downloads, Install
+   with Steam, Stop waiting and Open Steam's downloads) and **5b-3** (the
+   updates after a scan, the close-while-running question, and the Store's
+   lists following a sign-in or a sign-out). Left for **5c**: the installed
+   game page's job line and Manage menu (Update, Check, Repair, Move…,
+   Uninstall, Verify and Uninstall with Steam, the DLC card's buttons).
 6. **Stats and Game Mode**: the Stats tab and Game Mode (F11 and Select, hero,
    carousel, shelves, the Start menu, `--game-mode`).
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
@@ -256,9 +260,10 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
    slice by slice. Slice 3 is built whole: 3a, 3b, 3c, 3d and 3e (3e-1 to
    3e-4). Slice 4 is whole: 4a (Settings' General, Library and Diagnostics),
    4b (Keys, Launchers, Engines, Proton and Discord's presence) and 4c
-   (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page)
-   and 5b-1 (the queue, the Downloads page, Install and Import); 5b-2 is
-   next.
+   (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page),
+   5b-1 (the queue, the Downloads page, Install and Import), 5b-2 (Steam's
+   installs) and 5b-3 (updates, the close question, the Store's accounts);
+   5c (the game page's jobs) is next.
 5. Keep the Slint window until the checklist is signed off.
 
 ## Handoff for the next session
@@ -273,8 +278,7 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 5b-2 (Steam's installs, the updates after a scan, the
-  close-while-running question), then the accounts→Store refresh 4c left, then
+- Next: slice 5c (the installed game page's job line and Manage menu), then
   slices 6 to 8. The prefix's tools, the Mods card's presses and Settings'
   presses are built and some are unrun: they start umu, a real window, an
   installer, a change to a game's files or a write to `config.toml`.
