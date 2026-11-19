@@ -54,10 +54,20 @@ pub enum Setting {
     Theme(Option<String>),
     MinimizeToTray(bool),
     DiscordPresence(bool),
-    SteamGridDbKey { key: Option<String>, then: KeyThen },
-    NexusKey { key: Option<String>, then: Then },
+    SteamGridDbKey {
+        key: Option<String>,
+        then: KeyThen,
+    },
+    NexusKey {
+        key: Option<String>,
+        then: Then,
+    },
     EnginesPathFirst(bool),
     DefaultProton(Option<String>),
+    GogPlaytime(bool),
+    GogGalaxy(bool),
+    /// Zendo's Steam sign-in, as the keyring keeps it (`Session::to_text`).
+    SteamSession(Option<String>),
 }
 
 impl Setting {
@@ -74,6 +84,9 @@ impl Setting {
             Self::NexusKey { key, .. } => config.nexus_key.clone_from(key),
             Self::EnginesPathFirst(on) => config.engines_on_path_first = *on,
             Self::DefaultProton(name) => config.default_proton.clone_from(name),
+            Self::GogPlaytime(on) => config.gog_playtime = *on,
+            Self::GogGalaxy(on) => config.gog_galaxy = *on,
+            Self::SteamSession(session) => config.steam_session.clone_from(session),
         }
     }
 
@@ -107,7 +120,12 @@ impl Setting {
             Self::DownloadCovers(true) => crate::library::download_covers_now(app),
             Self::EnginesPathFirst(_) => crate::engines::refresh_engines(app),
             Self::DefaultProton(_) => crate::protons::default_proton_set(app),
-            Self::DownloadCovers(false) | Self::Workers(_) | Self::AutoUpdate(_) => {}
+            Self::DownloadCovers(false)
+            | Self::Workers(_)
+            | Self::AutoUpdate(_)
+            | Self::GogPlaytime(_)
+            | Self::GogGalaxy(_)
+            | Self::SteamSession(_) => {}
         }
     }
 }
@@ -992,7 +1010,7 @@ fn note_row(value: String, good: bool) -> RowDto {
 }
 
 /// Where a secret is kept, in words, and whether that is a problem.
-fn kept_text(kept: &Kept) -> (String, bool) {
+pub(crate) fn kept_text(kept: &Kept) -> (String, bool) {
     match kept {
         Kept::Nowhere => (String::new(), false),
         Kept::Keyring => (t!("kept-keyring"), false),

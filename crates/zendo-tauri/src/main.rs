@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use tauri::Manager;
 
+mod accounts;
 mod cards;
 mod cloud;
 mod commands;
@@ -76,6 +77,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(engines::RuntimesState::default())
         .manage(engines::OverlayState::default())
         .manage(protons::ProtonsState::default())
+        .manage(accounts::AccountsState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::tr,
@@ -165,6 +167,20 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             protons::settings_proton_show_older,
             protons::settings_release_download,
             protons::settings_proton_stop,
+            accounts::accounts_get,
+            accounts::accounts_check,
+            accounts::accounts_start,
+            accounts::accounts_sign_out,
+            accounts::accounts_cancel,
+            accounts::accounts_use_browser,
+            accounts::accounts_code_edited,
+            accounts::accounts_finish,
+            accounts::accounts_steam_sign_in,
+            accounts::accounts_steam_cancel,
+            accounts::accounts_steam_sign_out,
+            accounts::accounts_xbox_open,
+            accounts::accounts_set_gog_playtime,
+            accounts::accounts_set_gog_galaxy,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

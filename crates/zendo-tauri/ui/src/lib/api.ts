@@ -574,6 +574,71 @@ export type SettingsProtons = {
 	note: SettingsRow | null;
 };
 
+// One store's card on the Accounts page.
+export type AccountCard = {
+	badge: string;
+	title: string;
+	status: string;
+	status_tone: number;
+	engine: string;
+	engine_ok: boolean;
+	action: string;
+	// 0 Sign in, 1 Sign out.
+	action_kind: number;
+	action_on: boolean;
+	gog: boolean;
+	// 0 none, 1 in Zendo's window, 2 in the browser.
+	flow: number;
+	line: string;
+	note: string;
+	retry: boolean;
+	browser_on: boolean;
+	step_one: string;
+	step_two: string;
+	step_three: string;
+	open_label: string;
+	open_on: boolean;
+	finish_label: string;
+	finish_on: boolean;
+};
+
+export type SteamCard = {
+	// 0 signed out, 1 signing in, 2 signed in.
+	state: number;
+	status: string;
+	about: string;
+	family: string;
+	note: string;
+	note_good: boolean;
+	family_note: string;
+	kept: string;
+	kept_bad: boolean;
+};
+
+export type LauncherCard = {
+	badge: string;
+	title: string;
+	about: string;
+	status: string;
+	status_tone: number;
+	path: string;
+	line: string;
+	action: string;
+	action_on: boolean;
+	note: string;
+	note_tone: number;
+};
+
+// The Accounts page: Steam's card, the stores, and Nexus Launcher's.
+export type AccountsPage = {
+	steam: SteamCard;
+	cards: AccountCard[];
+	xbox: LauncherCard;
+	gog_playtime: boolean;
+	gog_galaxy: boolean;
+	code: string;
+};
+
 // The Settings page: General, Library and Diagnostics.
 export type SettingsPage = {
 	languages: { tag: string | null; label: string; chosen: boolean }[];
@@ -775,4 +840,61 @@ export async function settingsReleaseDownload(index: number): Promise<SettingsPa
 
 export async function settingsProtonStop(): Promise<SettingsPage> {
 	return invoke<SettingsPage>('settings_proton_stop');
+}
+
+// The Accounts page.
+export async function accountsGet(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_get');
+}
+
+export async function accountsCheck(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_check');
+}
+
+export async function accountsStart(index: number): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_start', { index });
+}
+
+export async function accountsSignOut(index: number): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_sign_out', { index });
+}
+
+export async function accountsCancel(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_cancel');
+}
+
+export async function accountsUseBrowser(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_use_browser');
+}
+
+export async function accountsCodeEdited(text: string): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_code_edited', { text });
+}
+
+export async function accountsFinish(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_finish');
+}
+
+export async function accountsSteamSignIn(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_sign_in');
+}
+
+export async function accountsSteamCancel(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_cancel');
+}
+
+export async function accountsSteamSignOut(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_sign_out');
+}
+
+export async function accountsXboxOpen(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_xbox_open');
+}
+
+export async function accountsSetGogPlaytime(on: boolean): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_set_gog_playtime', { on });
+}
+
+export async function accountsSetGogGalaxy(on: boolean): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_set_gog_galaxy', { on });
 }
