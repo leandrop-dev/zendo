@@ -60,6 +60,10 @@ follow.
   COLLECTIONS chip. The sheet is `ui/src/lib/components/collections-sheet.svelte`. About is
   `ui/src/routes/about/+page.svelte`, fed by `bootstrap`'s `version_line` and
   `repository`.
+- `src/store.rs`: the Store page over `zendo_shell::store::StoreBrowser`
+  (moved there for both windows): the lists from the cache and each signed-in
+  store, the chips, search, sorts, Refresh, the cards, and a store game's
+  read-only page. Install and the queue are the Downloads part (5b).
 - `src/mods.rs`: the Mods card over `zendo_shell::mods`'s state and words:
   `mods_get` and `mods_begin` read it, and each press is a command
   (`mods_toggle_mod`, `mods_move_mod`, `mods_remove`, the plugins, the folder,

@@ -6936,3 +6936,28 @@ Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 Not yet seen on screen: the Accounts page and the Collections sheet. The
 virtual pointer still does not move (the earlier session's failure), so the
 on-screen check stays with the `ZENDO_CHECK` hook and is next.
+
+## The Tauri port, slice 5a: the Store page (2026-11-19)
+
+- **`StoreBrowser` moved to `zendo-shell`** (`crates/zendo-shell/src/store.rs`,
+  `4695441`): the store list's state was already toolkit-free, so both windows
+  now share it; `crates/zendo/src/store.rs` is a re-export and the Slint window
+  is unchanged. Two clippy nits the move surfaced were fixed there
+  (`is_empty`, `#[must_use]`).
+- **The Store page** (`crates/zendo-tauri/src/store.rs`,
+  `ui/src/routes/store/+page.svelte`, `ui/src/routes/store/[id]/+page.svelte`):
+  the games the signed-in stores say the user owns, with the source chips, the
+  search, the sorts, Refresh, the cards (the shared `Card` component) and the
+  empty state (with the way to Accounts); a card opens the store game's page
+  with its facts (store, status, platforms, developer, play time). The lists
+  are the cache first, then each signed-in store asked on a thread
+  (`owned::fetch` for Epic/GOG/Amazon, `steam_list::fetch_signed_in` for Steam,
+  `xodus::owned` for Game Pass). The accounts state's sign-in is read through
+  `accounts.rs`'s new accessors.
+- **Not in this part**: Install/Uninstall and the queue, the updates, the
+  close-while-running question, and the store game page's Install button
+  (read-only for now); those are the Downloads part (5b).
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (606 passed, 32 ignored). Not yet seen on screen.
