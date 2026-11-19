@@ -53,12 +53,18 @@ sort, views, cursor, marks, bulk edits, cover downloads and the file watch,
 with 62 fps on 2,700 games), 3a (the game page's header and actions), 3b
 (its sessions and details), 3c (local games), 3d (the store cards: ProtonDB's
 pill, Steam's About, facts and screenshots, the requirements, the
-achievements and the Steam app id) and 3e (the Wine prefix card with its
-tools, GOG's changelog, the cloud saves row and the Mods card) are built, so
-the game page is whole, and slice 4a of slice 4 (Settings' General, Library
-and Diagnostics) is in,
-and the Slint window stays in place and releasable until the port's parity
-checklist passes (`docs/tauri-port-plan.md`).
+achievements and the Steam app id) are built, so
+the game page is whole, and slice 3e (the Wine prefix card with its
+tools, GOG's changelog, the cloud saves row and the Mods card), slice 4
+(Settings' General, Library, Diagnostics, Keys, Launchers, Engines, Proton,
+Theme and Discord's presence; Accounts, About and the Collections sheet) and
+slice 5 (the Store page, the queue and the Downloads page, Install and
+Import, Steam's installs, the updates, the close question and the Store's
+lists following the accounts) are built, and
+the Slint window stays in place and releasable until the port's parity
+checklist passes (`docs/tauri-port-plan.md`). Left there: the installed game
+page's job line and Manage menu (slice 5c), then Stats and Game Mode, the
+sheets, and the cut-over.
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
   (item 54)]. It replaced the Iced window after a spike (item 45) that found
@@ -102,7 +108,8 @@ checklist passes (`docs/tauri-port-plan.md`).
 Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
 the user chooses from `docs/backlog.md` (what is on hold is there, and the
-review's deferred items are listed after it).
+review's deferred items are listed after it). On `f/ui-revamp`, the port
+continues with slice 5c (the game page's jobs) and then slices 6 to 8.
 
 ## Direction [firm]
 
