@@ -15,6 +15,7 @@
 	import { library } from '#lib/library.svelte.js';
 	import { nexus } from '#lib/nexus.svelte.js';
 	import { options } from '#lib/options.svelte.js';
+	import { search } from '#lib/search.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
 	let { children }: LayoutProps = $props();
@@ -24,7 +25,7 @@
 	// the Library's search.
 	function key(event: KeyboardEvent) {
 		// The sheets keep their own keys while they are open.
-		if (options.open || artwork.open || nexus.choosing) {
+		if (options.open || artwork.open || search.open || nexus.choosing) {
 			return;
 		}
 		if (gameMode.key(event)) {
@@ -51,6 +52,7 @@
 		void options.start();
 		void artwork.start();
 		void nexus.start();
+		void search.start();
 		void library.start();
 		void downloads.start();
 		window.addEventListener('keydown', key);

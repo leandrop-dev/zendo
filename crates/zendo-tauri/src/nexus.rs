@@ -59,7 +59,7 @@ pub struct NexusFeed {
 }
 
 /// A line for the window's foot.
-fn say(app: &AppHandle, line: String) {
+pub(crate) fn say(app: &AppHandle, line: String) {
     {
         let feed = app.state::<NexusFeed>();
         *feed.line.lock().unwrap_or_else(PoisonError::into_inner) = Some(line.clone());
@@ -259,7 +259,7 @@ pub fn link(app: &AppHandle, text: String) {
 
 /// Downloads the link's file into a game's mods; its thread says how far it
 /// got every so often and the end reloads the card.
-fn download(app: &AppHandle, id: &str, link: Link, remember: bool) {
+pub(crate) fn download(app: &AppHandle, id: &str, link: Link, remember: bool) {
     let Some(game) = (app.state::<LibraryState>()).game(id) else {
         return;
     };
@@ -343,6 +343,11 @@ pub fn want_updates(app: &AppHandle, game: &str) {
         }
         emit_game_changed(&handle, &job.game);
     });
+}
+
+/// Whether the key's account has Premium.
+pub(crate) fn premium(app: &AppHandle) -> Option<bool> {
+    with_nexus(app, |state| state.premium())
 }
 
 /// The card's rows, with Update written on the mods Nexus has a newer file

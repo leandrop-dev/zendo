@@ -1667,3 +1667,89 @@ export async function nexusLink(text: string): Promise<NexusPage> {
 export async function nexusNotice(): Promise<string | null> {
 	return invoke<string | null>('nexus_notice');
 }
+
+// Search Nexus: the sheet over a game's page that searches its mods, lists
+// them a page at a time with their pictures, and takes a file into the mods.
+// The state is `zendo_shell::nexus_search`'s, shared with the Slint window.
+export type SearchChip = { id: number; label: string; chosen: boolean };
+
+export type SearchRow = {
+	// 0 a mod, 1 one of its files, 2 a line about its files.
+	kind: number;
+	name: string;
+	version: string;
+	byline: string;
+	summary: string;
+	numbers: string;
+	have: string;
+	adult: string;
+	thumb: string | null;
+	files_label: string;
+	page_label: string;
+	file_facts: string;
+	file_action: string;
+	file_have: string;
+	bad: boolean;
+	mod_id: number;
+	file_id: number;
+};
+
+export type SearchSheet = {
+	open: boolean;
+	title: string;
+	words: string;
+	adult: boolean;
+	orders: SearchChip[];
+	// Why searching is limited (no key, no Premium); empty when it is not.
+	limit: string;
+	rows: SearchRow[];
+	more: boolean;
+	asking: boolean;
+	footer: string;
+	footer_bad: boolean;
+};
+
+export async function searchGet(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_get');
+}
+
+// Search Nexus, from the Mods card.
+export async function searchOpen(id: string): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_open', { id });
+}
+
+// The field's words, kept for Enter and the Search button.
+export async function searchWords(text: string): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_words', { text });
+}
+
+// From the start, or the next page after the results shown.
+export async function searchRun(more: boolean): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_run', { more });
+}
+
+export async function searchOrder(at: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_order', { at });
+}
+
+export async function searchAdult(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_adult');
+}
+
+// Files on a mod: Nexus is asked, or they are hidden again.
+export async function searchFiles(mod: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_files', { modId: mod });
+}
+
+// Nexus's window on a mod's page, or one file's Mod manager download.
+export async function searchPage(mod: number, file: number | null): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_page', { modId: mod, file });
+}
+
+export async function searchDownload(mod: number, file: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_download', { modId: mod, file });
+}
+
+export async function searchClose(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_close');
+}

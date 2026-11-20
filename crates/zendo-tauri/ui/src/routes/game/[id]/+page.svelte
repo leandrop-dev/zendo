@@ -66,8 +66,10 @@
 	import ArtSheet from '#lib/components/art-sheet.svelte';
 	import LocalForm from '#lib/components/local-form.svelte';
 	import OptionsSheet from '#lib/components/options-sheet.svelte';
+	import SearchSheet from '#lib/components/search-sheet.svelte';
 	import { artwork } from '#lib/artwork.svelte.js';
 	import { options } from '#lib/options.svelte.js';
+	import { search } from '#lib/search.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
 	// A game's page: the wide art faint behind the header, the cover, the
@@ -312,7 +314,7 @@
 
 	function key(event: KeyboardEvent): void {
 		// The sheets keep their own keys while they are open.
-		if (options.open || artwork.open) {
+		if (options.open || artwork.open || search.open) {
 			return;
 		}
 		if (shot !== null) {
@@ -356,6 +358,7 @@
 	onDestroy(() => {
 		options.dismiss();
 		artwork.dismiss();
+		search.dismiss();
 	});
 
 	onMount(() => {
@@ -1026,6 +1029,13 @@
 								>
 									{app.t('mods-find-on-nexus')}
 								</button>
+								<button
+									type="button"
+									onclick={() => void search.openFor(id)}
+									class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+								>
+									{app.t('mods-search-nexus')}
+								</button>
 							{/if}
 							<button
 								type="button"
@@ -1537,5 +1547,9 @@
 
 	{#if artwork.open}
 		<ArtSheet />
+	{/if}
+
+	{#if search.open}
+		<SearchSheet />
 	{/if}
 {/if}

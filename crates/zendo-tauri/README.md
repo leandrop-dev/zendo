@@ -65,6 +65,12 @@ follow.
   a game's downloads (`nexus_stop`) and Update on a mod (`nexus_update`). The
   key is read on the work's thread; the last line said is kept for the page
   (`nexus_notice`). The Mods card shows the downloads and the update labels.
+- `src/search.rs`: Search Nexus over `zendo_shell::nexus_search`: `search_open`
+  (the Mods card's button; the key is read on its thread), `search_get`,
+  `search_words`, `search_run` (from the start or More), `search_order`,
+  `search_adult` (saved in `config.toml`), `search_files`, `search_page` (Nexus's
+  window), `search_download` (Premium) and `search_close`. The pictures are kept
+  in `$CACHE/zendo/nexus-thumbs` for the asset protocol.
 - The page's screenshot lightbox is the page's own (the full-size files come
   with the cards): Previous, Next, the count and Close, with Escape and the
   arrows.
@@ -192,6 +198,10 @@ follow.
 - `nexus_changed`: a link opened the chooser, a download started, moved on or
   ended, or an update was pressed; the chooser and the Mods card ask again.
 - `nexus_said`: a line from Nexus for the window's foot.
+- `search_changed`: a search, a page of results, a mod's files or Nexus's
+  window finished; the search sheet asks again.
+- `search_thumb`: a mod's picture was downloaded and kept, with the mod's id
+  and its file; the sheet fills that row in.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

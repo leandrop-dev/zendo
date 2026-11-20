@@ -7251,6 +7251,41 @@ it ended with Nexus's refusal at the foot. Not seen, as they need a working
 key (and Premium): a file actually downloaded, the card's line and bar for a
 running download, and a mod's Update.
 
+## The Tauri port, slice 7d-2: Search Nexus (2026-11-21)
+
+The Mods card's Search Nexus button opens the search sheet again: a field and
+Search, the three orders (most endorsed, most downloaded, recently updated),
+Adult mods, and the mods found a page at a time with their picture, version,
+author and category, when they were updated, their endorsements, downloads and
+size, whether they are in the mods already, and Files and Page on Nexus. Files
+opens the mod's current files under it (version, kind and size), each with
+Download with Premium or Get on Nexus without it, or the mark that it is in
+the mods already; a second Files hides them. More asks for the next page, and
+the foot counts what is shown of the total and says what is wrong. Without a
+key the sheet says so and the files are not asked; without Premium Get on
+Nexus opens the file's Mod manager download in Zendo's Nexus window, and what
+it gives (a link or a file) goes into the game's mods.
+
+The state is `zendo_shell::nexus_search`'s, shared with the Slint window:
+`crates/zendo-tauri/src/search.rs` runs the searches, the file lists and the
+pictures (kept in `$CACHE/zendo/nexus-thumbs` for the asset protocol), and
+`ui/src/lib/search.svelte.ts` and `ui/src/lib/components/search-sheet.svelte`
+draw it; the rows are flat (a mod, a file, a line) as in the Slint sheet.
+`search_changed` and `search_thumb` carry the answers. The adult setting is
+saved in `config.toml` (`Setting::NexusAdult`). A search's answer that arrives
+after a newer search is dropped, as in the Slint window.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored). Seen on screen in a throwaway home with
+an Epic game on Nexus: the sheet with four real mods and their pictures, the
+orders re-sorting it (Most downloaded), Adult mods chosen and written to
+`config.toml`, the count "20 of 35675 mods", Files open on the first mod with
+Nexus's key refusal under it, and Close. Not seen, as they need a real key or
+Premium: a mod's files listed, a file downloaded with Premium, Get on Nexus
+and the Nexus window taking a link or a file, and More (all would need the
+sheet scrolled past the first page).
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

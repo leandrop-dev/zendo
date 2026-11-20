@@ -68,6 +68,8 @@ pub enum Setting {
     GogGalaxy(bool),
     /// Zendo's Steam sign-in, as the keyring keeps it (`Session::to_text`).
     SteamSession(Option<String>),
+    /// Whether Nexus's search shows adult mods.
+    NexusAdult(bool),
 }
 
 impl Setting {
@@ -87,6 +89,7 @@ impl Setting {
             Self::GogPlaytime(on) => config.gog_playtime = *on,
             Self::GogGalaxy(on) => config.gog_galaxy = *on,
             Self::SteamSession(session) => config.steam_session.clone_from(session),
+            Self::NexusAdult(on) => config.nexus_adult = *on,
         }
     }
 
@@ -126,7 +129,8 @@ impl Setting {
             | Self::AutoUpdate(false)
             | Self::GogPlaytime(_)
             | Self::GogGalaxy(_)
-            | Self::SteamSession(_) => {}
+            | Self::SteamSession(_)
+            | Self::NexusAdult(_) => {}
         }
     }
 }

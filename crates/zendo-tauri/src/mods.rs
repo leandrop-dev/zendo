@@ -464,7 +464,7 @@ fn act(
 }
 
 /// Runs a job on a thread of its own; its end says `game_changed`.
-fn run(app: &AppHandle, library: &LibraryState, job: Option<Job>) {
+pub(crate) fn run(app: &AppHandle, library: &LibraryState, job: Option<Job>) {
     if let Some(job) = job {
         run_job(app, library, job);
     }

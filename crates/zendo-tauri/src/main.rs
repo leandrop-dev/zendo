@@ -32,6 +32,7 @@ mod platform;
 mod prefix;
 mod presence;
 mod protons;
+mod search;
 mod settings;
 mod stats;
 mod steam;
@@ -90,6 +91,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(options::OptionsState::default())
         .manage(artwork::ArtState::default())
         .manage(nexus::NexusFeed::default())
+        .manage(search::SearchState::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -290,6 +292,16 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             nexus::nexus_update,
             nexus::nexus_link,
             nexus::nexus_notice,
+            search::search_get,
+            search::search_open,
+            search::search_words,
+            search::search_run,
+            search::search_order,
+            search::search_adult,
+            search::search_files,
+            search::search_page,
+            search::search_download,
+            search::search_close,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

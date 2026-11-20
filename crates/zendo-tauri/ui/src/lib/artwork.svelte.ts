@@ -64,7 +64,12 @@ class Artwork {
 		if (!inTauri()) {
 			return;
 		}
-		this.show(await artOpen(id, kind));
+		const sheet = await artOpen(id, kind);
+		// The answer can be the closed one the command took before its thread
+		// opened the sheet; a sheet that opened meanwhile stays.
+		if (sheet.open || !this.open) {
+			this.show(sheet);
+		}
 	}
 
 	#use(action: () => Promise<ArtSheet>): void {
