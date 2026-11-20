@@ -1,5 +1,5 @@
 //! The parts of Zendo's window that need no toolkit, kept apart from the
-//! Slint code that draws it: the window's words ([`i18n`]), the tray,
+//! Tauri code that draws it: the window's words ([`i18n`]), the tray,
 //! controllers, `nxm://` links, Discord's presence, and the two helper
 //! windows that run as processes of their own (the sign-in window and the
 //! file dialog, which need GTK's loop apart from the toolkit's).
@@ -13,6 +13,7 @@ pub mod cards;
 pub mod cli;
 pub mod clipboard;
 pub mod collections;
+pub mod compat;
 pub mod dlc;
 pub mod file_dialog;
 pub mod format;

@@ -305,8 +305,8 @@ mod tests {
         // The `src` of every crate in the workspace: the window's code is
         // in more than one.
         let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        // The Slint window's `ui` folder too: its texts ask `Tr.t("id")`. The
-        // Tauri frontend asks `t("id")` from its own `ui`.
+        // Each crate's `ui` folder too, where there is one: the window's
+        // frontend asks `t("id")` and `tr("id", …)` from its own `ui`.
         let mut files: Vec<_> = fs::read_dir(&crates)
             .unwrap()
             .flat_map(|entry| {
@@ -334,55 +334,36 @@ mod tests {
                 continue;
             }
             let text_of = |path: &Path| fs::read_to_string(path).unwrap();
-            if path.extension().is_some_and(|ext| ext == "slint") {
-                // Comments carry examples (`Tr.t("page-library")`).
-                let text: String = text_of(&path)
-                    .lines()
-                    .filter(|line| !line.trim_start().starts_with("//"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                for call in ["Tr.t(\"", "Tr.with(\"", "Tr.count(\""] {
-                    for (at, _) in text.match_indices(call) {
-                        let id = text[at + call.len()..]
-                            .split('"')
-                            .next()
-                            .unwrap_or_default();
-                        let id = id.to_owned();
-                        if !english.contains_key(id.as_str()) {
-                            unknown.push(format!("{}: {id}", path.display()));
-                        }
-                        used.insert(id);
-                    }
-                }
-                continue;
-            }
-            // The Tauri frontend's words: `t("id")` and `t('id')`.
             if path
                 .extension()
                 .is_some_and(|ext| ext == "svelte" || ext == "ts" || ext == "js")
             {
                 let text = text_of(&path);
-                let mut rest = text.as_str();
-                while let Some((before, after)) = rest.split_once("t(") {
-                    rest = after;
-                    let Some(quote @ ('"' | '\'')) = after.chars().next() else {
-                        continue;
-                    };
-                    if before
-                        .chars()
-                        .next_back()
-                        .is_some_and(|c| c.is_alphanumeric() || c == '_')
-                    {
-                        continue;
+                // `t("id")` and `tr("id", values)`: the second takes values.
+                for call in ["t(", "tr("] {
+                    let mut rest = text.as_str();
+                    while let Some((before, after)) = rest.split_once(call) {
+                        rest = after;
+                        // `t(`, not the end of `format(` or `list(`.
+                        if before
+                            .chars()
+                            .next_back()
+                            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                        {
+                            continue;
+                        }
+                        let Some(quote @ ('"' | '\'')) = after.chars().next() else {
+                            continue;
+                        };
+                        let id = after[1..].split(quote).next().unwrap_or_default();
+                        if id.is_empty() {
+                            continue;
+                        }
+                        if !english.contains_key(id) {
+                            unknown.push(format!("{}: {id}", path.display()));
+                        }
+                        used.insert(id.to_owned());
                     }
-                    let id = after[1..].split(quote).next().unwrap_or_default();
-                    if id.is_empty() {
-                        continue;
-                    }
-                    if !english.contains_key(id) {
-                        unknown.push(format!("{}: {id}", path.display()));
-                    }
-                    used.insert(id.to_owned());
                 }
                 continue;
             }
@@ -398,6 +379,24 @@ mod tests {
                 let Some(after) = after.trim_start().strip_prefix('"') else {
                     continue;
                 };
+                if before
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                {
+                    continue;
+                }
+                let id = after.split('"').next().unwrap_or_default();
+                used.insert(id.to_owned());
+                if !english.contains_key(id) {
+                    unknown.push(format!("{}: {id}", path.display()));
+                }
+            }
+            // `i18n::tr("id", values)`: a message with values, from the word's
+            // own function rather than the macro.
+            let mut rest = text.as_str();
+            while let Some((before, after)) = rest.split_once("tr(\"") {
+                rest = after;
                 if before
                     .chars()
                     .next_back()

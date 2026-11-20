@@ -14,8 +14,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      # Slint on winit (EGL, Wayland, X11, xkbcommon, fontconfig), the
-      # sign-in window (WebKitGTK 4.1, libsoup 3) and gilrs (udev).
+      # The window is a WebKitGTK 4.1 web view (with libsoup 3, GTK 3 and
+      # librsvg's icons) and the sign-in window shares it; gilrs needs udev.
       - name: System libraries
         run: |
           sudo apt-get update
@@ -24,7 +24,8 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
             libgl1-mesa-dev libegl1-mesa-dev libudev-dev \
-            libsoup-3.0-dev libwebkit2gtk-4.1-dev pkg-config
+            libsoup-3.0-dev libwebkit2gtk-4.1-dev librsvg2-dev libssl-dev \
+            pkg-config
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

@@ -5,6 +5,10 @@ Written 2026-11-15 (item 54a). It is the gate before the Iced crate is deleted
 first section is what a read of the code found, the rest is what the earlier
 items left for this item.
 
+This gated the Iced to Slint cut-over. The later Slint to Tauri cut-over has
+its own record, slice by slice, in `docs/tauri-port-plan.md` and under "The
+Tauri port" in `docs/history.md`.
+
 ## 1. Differences found by reading the code
 
 Method: every Fluent message id in `crates/zendo-shell/i18n/en.ftl` (996) was

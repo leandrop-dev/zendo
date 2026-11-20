@@ -1,3 +1,6 @@
+//! Tauri's build step: it reads `tauri.conf.json`, generates the permissions
+//! schemas in `gen/schemas` and embeds the window's icons.
+
 fn main() {
-    slint_build::compile("ui/main.slint").expect("the Slint files compile");
+    tauri_build::build();
 }

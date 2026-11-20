@@ -6,16 +6,16 @@ where it stands. It is short, and it is the only file to read up front.
 The rest is read on demand, never all at once:
 
 - `docs/backlog.md`: what is next, what is on hold, the list of what to try
-  in the Slint window, and a table of the built items 27 to 54. Read it when
+  in the window, and a table of the built items 27 to 65. Read it when
   starting new work.
 - `docs/design.md`: the redesign (omakade's ideas, no code). Read it before
   working on the window's look or pages.
 - `docs/history.md`: what was built, when, and what was checked. Read it when
   you need to know why something is the way it is, or before changing an area
   whose history matters.
-- `docs/tauri-port-plan.md`: the port of the window to Tauri 2 and SvelteKit,
-  in slices. Read it before working on `crates/zendo-tauri` or the window's
-  replacement.
+- `docs/tauri-port-plan.md`: the window's port to Tauri 2 and SvelteKit, in
+  slices, and where each page's commands, sheets and events live. Read it
+  before working on the window.
 - `docs/reference.md`: verified facts about the stores, the engines and their
   files. Read it before driving an engine, reading a launcher's files or
   calling a store's API.
@@ -40,8 +40,9 @@ On Hyprland (CachyOS), checked 2026-11-16:
 - A still: `grim FILE` (or `grim -o <output> FILE`).
 - Finding and driving the window: `hyprctl clients -j`, whose `class` is
   `zendo`, with `pid`, `title`, `at` and `size`; focus and fullscreen through
-  `hyprctl dispatch`. Zendo closes and reopens its window to hide to and
-  restore from the tray, so a restore is a new window id.
+  `hyprctl dispatch` (`hl.dsp.focus({window: "address:0x…"})` since it speaks
+  Lua; the old `focuswindow address:…` is gone). Hiding to the tray hides the
+  window and the tray shows the same one again.
 - Keys and the mouse: `wtype` types and `ydotool` drives the mouse; both are
   installed. `ydotoold` needs the `uinput` module loaded
   (`sudo modprobe uinput`; the `uaccess` tag in `60-steam-input.rules` then
@@ -52,9 +53,7 @@ On Hyprland (CachyOS), checked 2026-11-16:
   (negative is down; one event moves a fixed step), `click 0xC0` is a left
   click, and a drag is `click 0x40` (down), move, `click 0x80` (up). Stop the
   daemon and remove the socket afterwards; kill it by PID, not with `pkill
-  -f` on a pattern that contains the shell's own command line. Under
-  Hyprland the blur is a rule of its own
-  (`windowrulev2 = blur, class:^(zendo)$`).
+  -f` on a pattern that contains the shell's own command line.
 
 On KDE Plasma (Fedora), checked 2026-11-12:
 
@@ -80,7 +79,10 @@ coordinates and refuses anything else: a malformed call (zsh does not split
 After a layout change, click every new control once in the app. A control
 can be drawn outside the area that receives clicks.
 
-The Tauri window is checked its own way: `ui/node_modules/.bin/tauri build
---debug` and then the binary (a plain `cargo build` opens it on the dev URL and
-shows "Could not connect to localhost"), in a throwaway home as above. Its
-commands, events and dev loop are in `crates/zendo-tauri/README.md`.
+The window is a web view, so it is built with `crates/zendo/ui/node_modules/.bin/tauri
+build --debug` and then the binary (a plain `cargo build` opens it on the dev
+URL and shows "Could not connect to localhost", unless `ui/build` is current),
+in a throwaway home as above. The page can be driven from the hook a check
+adds to `platform.rs` (`window.eval`): a synthetic `KeyboardEvent` reaches the
+pages' handlers, and `window.__TAURI__.core.invoke` calls the commands. Its
+commands, events and dev loop are in `crates/zendo/README.md`.

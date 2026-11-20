@@ -17,12 +17,18 @@ trap 'rm -rf "$root"' EXIT
 
 curl -fsSL "$url" -o "$root/zendo-$version.tar.gz"
 tar xzf "$root/zendo-$version.tar.gz" -C "$root"
+# The frontend's built files travel with the sources: a build machine has no
+# network for npm. Needs Node and npm.
+(cd "$root/zendo-$version/crates/zendo/ui" \
+    && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
+tar -C "$root/zendo-$version/crates/zendo/ui" -czf "$root/zendo-$version-ui.tar.gz" build
 (cd "$root/zendo-$version" && cargo vendor --locked "$root/vendor" >/dev/null)
 mkdir "$root/vendor-tar"
 mv "$root/vendor" "$root/vendor-tar/vendor"
 tar czf "$root/zendo-$version-vendor.tar.gz" -C "$root/vendor-tar" .
 
-cp "$root/zendo-$version.tar.gz" "$root/zendo-$version-vendor.tar.gz" "$out/"
+cp "$root/zendo-$version.tar.gz" "$root/zendo-$version-vendor.tar.gz" \
+    "$root/zendo-$version-ui.tar.gz" "$out/"
 # The SRPM keeps the spec unexpanded, and COPR rebuilds from it without our
 # --define values, so write them into a copy of the spec instead.
 sed -e "s/^%{!?zendover:.*/%global zendover $rpmversion/" \

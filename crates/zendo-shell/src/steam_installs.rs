@@ -5,7 +5,7 @@
 //! the same way. What Steam does by itself is followed too (its own
 //! downloads, updates and uninstalls); pausing and cancelling stay in Steam.
 //!
-//! The state and its transitions are here, with no toolkit (the window is Slint).
+//! The state and its transitions are here, with no toolkit.
 //! Each method says what the window must do
 //! about what happened: a line to say and whether the library is read again.
 

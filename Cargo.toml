@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/zendo", "crates/zendo-core", "crates/zendo-shell", "crates/zendo-tauri"]
+members = ["crates/zendo", "crates/zendo-core", "crates/zendo-shell"]
 
 [workspace.package]
 version = "1.0.1"
@@ -37,13 +37,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.2.0"
 shlex = "2.0.1"
-# The window in Slint, under the GPLv3;
-# the winit hook is for the window's class and fullscreen.
-slint = { version = "1.18", features = ["unstable-winit-030"] }
-slint-build = "1.18"
-# The window in Tauri 2, beside the Slint one until the port's parity
-# checklist passes. Its own wry and webkit2gtk requirements are the ones the
-# sign-in window already pins, so both shells share the same builds.
+# The window in Tauri 2: the web view's own wry and webkit2gtk requirements
+# are the ones the sign-in window already pins, so both share the same builds.
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-build = "2"
 sys-locale = "0.3.2"

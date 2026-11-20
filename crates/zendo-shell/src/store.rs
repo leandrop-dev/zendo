@@ -1,7 +1,7 @@
 //! The Store page's state, with no toolkit in it: the games the signed-in
 //! stores say the user owns, what the chips and the search let through, the
 //! cursor, the stores being asked, and what a card or the empty page says.
-//! `store_ui` carries it to the Slint window; the tests here need no window.
+//! The window's Store page carries it; the tests here need no window.
 //!
 //! Every change answers with the Library's [`Outcome`] (rows to draw again,
 //! whether to scroll); the Store writes nothing to `state.json`.

@@ -1,7 +1,7 @@
 //! The Library page's state, with no toolkit in it: what the filters let
 //! through, the cursor, the marked games, the chips with their counts, what
-//! a card says and what the page says when there is no grid. Both windows
-//! carry it, the Slint one and the Tauri one; the tests here need no window.
+//! a card says and what the page says when there is no grid. The window
+//! carries it; the tests here need no window.
 //!
 //! Every change answers with an [`Outcome`]: what to write to `state.json`,
 //! which rows to draw again and whether the grid should scroll.
@@ -80,7 +80,7 @@ pub struct Chips {
 #[derive(Debug, Clone, PartialEq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is one thing the card draws, as the Slint struct has them"
+    reason = "each flag is one thing the card draws, as the page draws them"
 )]
 pub struct CardData {
     pub id: String,

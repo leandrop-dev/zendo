@@ -3,15 +3,13 @@
 The work left. Items 1 to 20, 27 to 38, 41 to 54 are built; the detail of each is in
 `docs/history.md` under its item number, and the look in `docs/design.md`.
 
-The work next is the port from Slint to Tauri 2 and SvelteKit, on branch
-`f/ui-revamp` and in slices, in `docs/tauri-port-plan.md` (slice 0, the
-scaffold; slice 1, the shell; slice 2, the Library; slices 3a, 3b, 3c and 3d,
-the game page's header, sessions, details, local games and store cards, all
-built 2026-11-18; slice 3e, the game page's last cards, built 2026-11-18 and
-2026-11-19: the Wine prefix card with its tools, GOG's changelog, the cloud
-saves row and the Mods card); slice 4a, Settings' General, Library and
-Diagnostics, built 2026-11-19.
-The items below stay as the reference for what the port has to reach.
+The port from Slint to Tauri 2 and SvelteKit is done: on branch `f/ui-revamp`,
+slice by slice (`docs/tauri-port-plan.md`), and the cut-over (slice 8) was on
+2026-11-20. A package from the new build is the first thing to try; the
+port's on-screen checks still owed are in `.mallet/notes/port-checks.md`.
+The items below stay as the reference for what the window has to reach; where
+one names a Slint file or module, that code is in git history before the
+cut-over, not in the tree.
 
 ## The port from Iced to Slint (built 2026-11-14 to 2026-11-15)
 
@@ -134,8 +132,8 @@ items 28 and 29. Not looked at on screen: a light KDE colour scheme (item
 31), pt-PT for item 38, the Store grid, signed-in Accounts, mods and Nexus
 (item 33), and a real controller (item 34).
 
-**For the user to try, the Slint window's items 49a to 49c** (checked by Claude only
-in a throwaway home; what was not checked is in `docs/history.md`). Run
+**For the user to try, items 49a to 49c** (checked by Claude only in a
+throwaway home; what was not checked is in `docs/history.md`). Run
 `cargo run -p zendo` with your real library and tick off:
 
 - Game page: Play and Stop on a real game, the running badge, a status chip,
@@ -269,15 +267,17 @@ used there (`makepkg -si`, README). The COPR build stays for Fedora.
 
 ## From the user's testing of 2026-11-16
 
-The user ran the Slint window against their real library and stores and sent a
+The user ran the window against their real library and stores and sent a
 list of bugs, improvements and new sources. The order is their choice [firm]:
 the bugs first, then the improvements, then the new sources. Numbers 55 to 59,
 so they never collide with items 1 to 54.
 
 ### Bugs (55a to 55c)
 
-55a to 55c are built; 56a to 56c are built; 57a and 57b are built; 58a to
-58c are built; 59 is built; 60a to 60e are built; 61 and 62 are next.
+55a to 55c are built; 56a to 56c are built; 57a and 57b are built (Battle.net
+was taken out on 2026-11-17); 58a to 58c are built; 59 is built; 60a to 60e
+are built; 61 was withdrawn with Battle.net; 62 is built. What is left of
+this list is in `PLAN.md` and the port's own notes.
 
 - **55a built 2026-11-16, the layout fixes** (five, all small, all in the
   Slint window):

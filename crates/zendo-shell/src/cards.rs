@@ -1,8 +1,8 @@
 //! What a game's page draws from what the stores and the sites say:
 //! `ProtonDB`'s pill, Steam's store page (its about line and the facts only
 //! Steam has), the system requirements and the achievements' rows. The words
-//! and the choices are one, so both windows agree; asking the network and
-//! keeping the answers stay with each window.
+//! and the choices are here, so the page draws one set of lines; asking the
+//! network and keeping the answers belong to the window.
 
 use std::path::PathBuf;
 

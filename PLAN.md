@@ -2,7 +2,7 @@
 
 A game launcher for Linux: every game in one library, in a normal window with
 a full-screen mode for the couch, launched with the right tools, and mods
-later. Source files MIT, the binary GPLv3 (Slint). Developed on CachyOS
+later. Source files MIT, and so is the binary. Developed on CachyOS
 (Arch) with Hyprland and on Fedora with KDE Plasma, next to
 [plasmonk-kde](../plasmonk-kde); it began as a sister project of hyprmonk.
 
@@ -13,7 +13,7 @@ Read this file first. The rest is read on demand, not up front.
 | File | Holds | Read it when |
 |---|---|---|
 | `PLAN.md` | the direction, the stack, the current state | always, first |
-| `docs/backlog.md` | what is next, what is on hold, and a table of the built items 27 to 54 | starting new work |
+| `docs/backlog.md` | what is next, what is on hold, and a table of the built items 27 to 65 | starting new work |
 | `docs/design.md` | the redesign, from the omakade analysis | working on the window's look or pages |
 | `docs/history.md` | what was built, when, and what was checked, by item | you need why, or are changing an area whose history matters |
 | `docs/reference.md` | verified facts about the stores, the engines and their files | you drive an engine, read a launcher's files or call a store's API |
@@ -62,36 +62,41 @@ slice 5 (the Store page, the queue and the Downloads page, Install and
 Import, Steam's installs, the updates, the close question, the Store's lists
 following the accounts, and the installed game page's Update, job line, More
 row and DLC card) and slice 6 (the Stats page and Game Mode) are built, and
-the Slint window stays in place and releasable until the port's parity
-checklist passes (`docs/tauri-port-plan.md`). Left there: the FOMOD
-installer (the last part of slice 7) and the cut-over (slice 8).
+slice 7 (the sheets: the screenshot lightbox, the launch options, the art
+picker, Nexus's links, downloads and search, and the FOMOD installer with a
+mod's Options…) and slice 8, the cut-over, were done on 2026-11-20: the Slint
+crate is deleted, the Tauri crate at `crates/zendo` builds the `zendo`
+binary, and the packaging, the licence and the docs follow it
+(`docs/tauri-port-plan.md`).
 
-- **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
-  (item 54)]. It replaced the Iced window after a spike (item 45) that found
-  translucency, blur (by window class), a bundled font, SVG icons, the KDE
-  scheme through `zendo-core`, arrow keys and a real DualSense through gilrs
-  all working. On 2,700 distinct covers it scrolls at 61 to 75 fps where Iced
-  held 3 to 9 (`docs/history.md`, item 48). Licence: Slint under **GPLv3**,
-  because COPR forbids sources under a licence outside Fedora's allowed list
-  and Slint's Royalty-free licence is on neither list (item 46): the binary is
-  GPLv3, the source files stay MIT. The Iced crate is gone; it is in git
-  history before the cut-over commit.
-- Crates: `crates/zendo` (the binary and the Slint window), `crates/zendo-shell`
+- **The window is Tauri 2 with SvelteKit** [firm, cut over 2026-11-20
+  (slice 8)]. It replaced the Slint window, which had replaced Iced after the
+  item 45 spike; both are in git history. The port's parity checklist is
+  `docs/tauri-port-plan.md`, slice by slice, and what the new window says
+  differently is in `docs/history.md` under "The Tauri port, slice 8". The
+  bundled JetBrains Mono is still the type, and the KDE scheme still comes
+  through `zendo-core`. Licence: **MIT** for the source and the binary; the
+  GPLv3 of the Slint build went with Slint (item 46), and the font stays under
+  the OFL.
+- Crates: `crates/zendo` (the binary and the Tauri window, with the SvelteKit
+  app in `ui/`), `crates/zendo-shell`
   (toolkit-free: words, tray, controller, links, the sign-in window, the file
   dialog, the command line, and the state of each page's sheets and jobs) and
   `crates/zendo-core` (everything else: library scan, launching, state,
   stores, mods). Keep logic in `zendo-core` or `zendo-shell`.
 - Tray: hiding closes to the tray and the tray brings the window back.
-- The parity checklist that gated the cut-over is `docs/parity-checklist.md`
-  (signed off by the user 2026-11-15).
+- The checklist that gated the Iced to Slint cut-over is
+  `docs/parity-checklist.md` (signed off by the user 2026-11-15).
 - Releases are built from a `v*` tag by `.github/workflows/release.yml`: a
   GitHub Release (source tarball, checksums, Arch package, Fedora SRPM), a
   pacman repository on GitHub Pages, and a COPR build (ADR 0003). The first
   stable tag was `v1.0.0`; `v1.0.1` is the current release.
 - The Fedora RPM builds on COPR `leandrop/zendo`; the spec's licence is now
-  `MIT AND OFL-1.1 AND GPL-3.0-only` and its run-time libraries are Slint's
-  (EGL, GL, fontconfig, Wayland, xkbcommon, X11), not Vulkan. The user
-  has built it on COPR (build 11332151, 2026-11-15, commit `90da88a`).
+  `MIT AND OFL-1.1` and its run-time libraries are WebKitGTK's (GTK 3,
+  libsoup 3, fontconfig), not Slint's. The frontend is built beside the
+  sources for COPR, which has no network. The user
+  has built the Slint release on COPR (build 11332151, 2026-11-15, commit
+  `90da88a`); the Tauri package has not been built there yet.
 - The user closed the "not yet tried" checklist on 2026-11-17: the app has
   been used through development and works, so items 28, 29, 33 to 36 and 41
   to 44 are taken as seen rather than retested one by one.
@@ -100,7 +105,7 @@ installer (the last part of slice 7) and the cut-over (slice 8).
   the owner's alone, HTTP is HTTPS only, the deletion guard refuses `..`, the
   GOG playtime queue is no longer deleted on a parse error, covers no longer
   recount the chips, Stop leaves the event loop, settings writes are ordered,
-  and the Slint grid, Stats and Accounts fixes. The three crates now share one
+  and the grid, Stats and Accounts fixes. The three crates share one
   version from `[workspace.package]`.
 
 ## Next
@@ -108,9 +113,9 @@ installer (the last part of slice 7) and the cut-over (slice 8).
 Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
 the user chooses from `docs/backlog.md` (what is on hold is there, and the
-review's deferred items are listed after it). On `f/ui-revamp`, the port
-continues with the FOMOD installer, the last part of slice 7, then slice 8
-(the cut-over).
+review's deferred items are listed after it). The window is Tauri now: a
+package from the new build should be made and tried, and the port's on-screen
+checks listed in `.mallet/notes/port-checks.md` are still owed.
 
 ## Direction [firm]
 
@@ -143,9 +148,9 @@ docs/backlog.md]:
 - The theme follows the active KDE colour scheme (`~/.config/kdeglobals`),
   which plasmonk sets. Zendo keeps its own colours elsewhere.
 - A complete redesign in the style of
-  [omakade](https://github.com/btsouth/omakade), first built in Iced, now in Slint: a top bar
-  with tabs instead of the sidebar, a translucent window, monospace type,
-  Home and a controller-first Game Mode. omakade is GPL-3.0-or-later, so
+  [omakade](https://github.com/btsouth/omakade), first built in Iced, then
+  Slint, now Tauri: a top bar with tabs instead of the sidebar, monospace
+  type, Home and a controller-first Game Mode. omakade is GPL-3.0-or-later, so
   its ideas and look only, no code and no assets (`docs/design.md`). Qt/QML
   stays rejected.
 - The store engines (legendary, gogdl, nile, comet) and umu-launcher are
@@ -169,11 +174,13 @@ docs/backlog.md]:
 
 ## Stack
 
-Rust, one `zendo` binary with a [Slint](https://slint.dev) window [firm, since
-2026-11-15; Iced before that]. A Tauri 2 + SvelteKit window is being built
-beside it on `f/ui-revamp` (`docs/tauri-port-plan.md`); Slint ships until the
-port's parity checklist passes. Slint was chosen after the item 45 spike over
-staying on Iced (3 to 9 fps on 2,700 covers against Slint's 61 to 75). Also
+Rust, one `zendo` binary with a [Tauri 2](https://tauri.app) window around a
+SvelteKit app in `ui/` [firm, cut over 2026-11-20]. Slint held the window from
+2026-11-15 to 2026-11-20, and Iced before it; both are in git history. The
+port, slice by slice, is `docs/tauri-port-plan.md`. What led to it: on 2,700
+covers the Slint window scrolled at 61 to 75 fps (item 48), but its look and
+the port's were drifting apart, and the SvelteKit app gave the pages real
+layout, text flow and component reuse the toolkit's widgets could not. Also
 rejected:
 
 - Quickshell: a toolkit for desktop shells, not apps. Users would need it
@@ -183,23 +190,26 @@ rejected:
   and input would all be ours to write.
 - Qt/QML through cxx-qt: a heavier build and a Qt dependency.
 
-Controller input through the `gilrs` crate; the KDE colour scheme, read by
-`zendo-core`, becomes the window's colours. Slint 1.18, with its
-`unstable-winit-030` feature for the window's class and full-screen. The
-window's words are Fluent, handed to Slint through a `Tr` global.
+The frontend is SvelteKit 3 in SPA mode (`adapter-static`, `ssr = false`),
+Svelte 5 runes, TypeScript and Tailwind CSS 4, with shadcn-svelte's copies
+where they help. Controller input is the `gilrs` crate; the KDE colour
+scheme, read by `zendo-core`, becomes the window's colours. The window's
+words stay Fluent in `zendo-shell`, sent to the frontend at start and asked
+for by id after that. The window is opaque: the translucency and blur the
+Slint window had are not ported.
 
 Layout: `crates/zendo-core` (library scan, launching, state, config, covers,
 stores, mods), `crates/zendo-shell` (what needs no toolkit: words, tray,
 controller, links, the helper windows, the command line, and the state and
-words of each page's sheets and jobs), `crates/zendo` (the Slint window,
-and the binary, whose `list`, `launch`, `hide`, `unhide`, `covers` and other
-commands serve keybinds and scripts) and `crates/zendo-tauri` (the Tauri shell
-and its SvelteKit `ui/`, on `f/ui-revamp`).
+words of each page's sheets and jobs) and `crates/zendo` (the Tauri shell,
+its commands and events, and the binary, whose `list`, `launch`, `hide`,
+`unhide`, `covers` and other commands serve keybinds and scripts; the
+SvelteKit app is in its `ui/`).
 
-Slint's `ListView` is vertical and virtual only, so the Library's grid is rows
-of fixed-size cards, and the arrow keys know the column count from
-`zendo_core::browse`. The selection is Zendo's own, not the toolkit's focus, so
-keyboard and controller move the same cursor.
+The Library's grid is virtualized by `zendo_shell::browse`'s arithmetic: rows
+of fixed-size cards, and the arrow keys know the column count. The selection
+is Zendo's own, not the browser's focus, so keyboard and controller move the
+same cursor.
 
 Call the tools that already exist instead of writing them again:
 `steam` (`steam://rungameid/ID`), Heroic's engines legendary (Epic), gogdl
@@ -227,14 +237,13 @@ Nothing is required. Zendo detects each tool and shows what is missing.
 ## On the desktop's side
 
 - KDE Plasma: Zendo follows the KDE colour scheme plasmonk writes (item 28,
-  built); nothing is needed there. For the blur, Zendo's window class `zendo`
-  goes in plasmonk's `themes/mystical/better-blur-classes.txt` (and in the
-  user's own Better Blur DX `WindowClasses`); under Better Blur DX only listed
-  classes blur, and without it Zendo is translucent but sharp (docs/history.md,
-  item 31's spike).
-- Hyprland: the class is also `zendo`; blur is Hyprland's own rule
-  (`windowrulev2 = blur, class:^(zendo)$`), and the colour scheme falls back to
-  Zendo's own when there is no `kdeglobals`.
+  built); nothing is needed there.
+- Hyprland: the window's class is `zendo` and floats, and the colour scheme
+  falls back to Zendo's own when there is no `kdeglobals`.
+- The window is opaque since the Tauri port, so the blur rules the Slint
+  window needed (`windowrulev2 = blur, class:^(zendo)$` under Hyprland, and
+  the class in plasmonk's `themes/mystical/better-blur-classes.txt` for KDE)
+  no longer draw anything; a user who keeps them loses nothing.
 
 ## Conventions
 

@@ -1,21 +1,17 @@
 %{!?zendover:%global zendover 1.0.0}
 %{!?tagversion:%global tagversion %{zendover}}
 
-# The window's Slint code is generated as one large unit: with Fedora's
-# defaults (-Cdebuginfo=2, one codegen unit) rustc used about 17 GB building
-# the window's tests in %%check and was killed (mock, 2026-11-15).
-%global rustflags_debuginfo 1
-%global rustflags_codegen_units 16
-
 Name:           zendo
 Version:        %{zendover}
 Release:        1%{?dist}
 Summary:        Every game in one library: Steam, Epic, GOG, Amazon and your own
-License:        MIT AND OFL-1.1 AND GPL-3.0-only
+License:        MIT AND OFL-1.1
 URL:            https://github.com/leandrop-dev/zendo
 Source0:        zendo-%{tagversion}.tar.gz
 # cargo vendor --locked, made by packaging/fedora/make-srpm.sh
 Source1:        zendo-%{tagversion}-vendor.tar.gz
+# The frontend's built files, made from the same tree (COPR has no network)
+Source2:        zendo-%{tagversion}-ui.tar.gz
 
 ExclusiveArch:  x86_64
 
@@ -34,17 +30,12 @@ BuildRequires:  bsdtar
 BuildRequires:  7zip
 BuildRequires:  coreutils
 
-# Loaded at run time by the window (Slint, on winit and EGL), so rpm cannot see them
-Requires:       libglvnd-egl
-Requires:       libglvnd-glx
+# The window is a WebKitGTK 4.1 web view on GTK 3. WebKitGTK loads GL, Wayland,
+# X11 and fontconfig for itself, so rpm cannot see them from the binary.
+Requires:       webkit2gtk4.1
+Requires:       gtk3
+Requires:       libsoup3
 Requires:       fontconfig
-Requires:       libxkbcommon
-Requires:       libxkbcommon-x11
-Requires:       libX11
-Requires:       libXcursor
-Requires:       libXi
-Requires:       libwayland-client
-Requires:       libwayland-egl
 Requires:       hicolor-icon-theme
 # Settings -> Engines downloads and unpacks the engines and Protons
 Requires:       python3
@@ -68,6 +59,7 @@ the Protons are downloaded from Settings, not packaged here.
 
 %prep
 %autosetup -n zendo-%{tagversion} -a1
+tar xzf %{SOURCE2} -C crates/zendo/ui
 %cargo_prep -v vendor
 
 %build
@@ -93,7 +85,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/zendo.desktop
 %license LICENSE
 %license LICENSE.dependencies
 %license cargo-vendor.txt
-%license crates/zendo/fonts/OFL.txt
+%license crates/zendo/ui/static/fonts/OFL.txt
 %doc README.md
 %{_bindir}/zendo
 %{_datadir}/applications/zendo.desktop

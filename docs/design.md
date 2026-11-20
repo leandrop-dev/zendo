@@ -4,13 +4,17 @@ Zendo's new look is modelled on [omakade](https://github.com/btsouth/omakade)
 (a Qt/QML and C++ game library for Omarchy, GPL-3.0-or-later). Ideas and look
 only, no code and no assets, as with Quiver. Written 2026-11-12 from omakade's
 README, `docs/GUIDE.md`, `docs/GAME-MODE.md`, its library and game page
-screenshots and both demo videos. Built first in Iced (backlog items 31 to 34), now in Slint (items 45 to 54).
+screenshots and both demo videos. Built first in Iced (backlog items 31 to
+34), then in Slint (items 45 to 54), and since 2026-11-20 in Tauri 2 with
+SvelteKit (`docs/tauri-port-plan.md`).
 
 ## Look
 
 - A translucent window over the wallpaper with a thin accent border; the
   fallback, if Iced's transparency does not blur on KWin, is an opaque
-  themed window (decided by the spike in item 31).
+  themed window (decided by the spike in item 31). The Tauri window is
+  **opaque**: the translucency and the blur rules went with the Slint
+  window, and the design reads the same without them.
 - Monospace type throughout (JetBrains Mono, OFL-1.1, bundled), small
   uppercase letter-spaced labels, flat rectangular chips with 1px borders,
   the selection shown as an accent outline.

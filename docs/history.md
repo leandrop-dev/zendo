@@ -7286,12 +7286,149 @@ Premium: a mod's files listed, a file downloaded with Premium, Get on Nexus
 and the Nexus window taking a link or a file, and More (all would need the
 sheet scrolled past the first page).
 
-## The Tauri port: checks left for when it is whole (2026-11-19)
+## The Tauri port, slice 7e: the FOMOD installer (2026-11-20)
+
+An archive with a FOMOD installer no longer stops at a line saying the sheet is
+not here: its installer's sheet opens over whatever page is up, its steps one
+at a time, each group's options as radios (a group that takes one) or boxes,
+the option last touched described with its picture and its words, and Back,
+Next and, on the last step, Install, which builds the mod through the Mods
+card's own `Work::Install`. A mod built by an installer now says Options… on
+its row, which runs the installer again with the options chosen last time. A
+mod whose installer comes while one is open, or while mods are being changed,
+waits its turn and opens when the sheet closes or the change ends.
+
+The sheet and its rules are `zendo_shell::installer`'s, shared with the Slint
+window since item 52c3: nothing of the FOMOD reading, the group rules, the
+option states or the words was written again. `crates/zendo-tauri/src/installer.rs`
+keeps it while it is open, answers Escape, Cancel, Back, Next, Enter and the
+arrow keys, turns `View` into the page's groups, and builds the mod; the
+Mods card's jobs' `After::OpenInstaller` and `After::NextInstaller` are what
+open it, so a Nexus download that ends on an archive with an installer brings
+it up too (the line that said the sheet was missing is gone from the words in
+both languages). The picture of the option described lives inside the mod's
+unpacked folder, which the asset protocol does not reach, so it is copied to
+`$CACHE/zendo/installer-pictures` as it is described, one file at a time, under
+a new name each time so the page never draws the last one from its cache.
+`ui/src/lib/installer.svelte.ts` and
+`ui/src/lib/components/installer-sheet.svelte` draw it, mounted in the layout
+because the sheet is over every page, and each page's keys stay quiet while it
+is open. `installer_changed` opens it, `installer_said` says its two lines at
+the window's foot, and a language change asks for its Rust-built lines again.
+
+Checked: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --
+-D warnings`, `cargo test --workspace` (616 passed, 32 ignored),
+`npm run check`, `npm run lint`, `npm test` (5). Seen on screen in a throwaway
+home with an Epic game and a mod the seeded installer had built: Options… on
+the row opened the sheet with Strong chosen from last time, `Step 1 of 2 ·
+Choose a body`, Slim marked recommended, Broken dim and not usable, the mod's
+own picture beside the description, the foot saying `Choose the options of
+Fancy Follower`; `Down` moved the cursor to Strong and described it, `Enter`
+took the radio off Slim and put it on Strong, `Right` went to `Step 2 of 2 ·
+Extras` with its box and `Install`, `Left` came back, and `Escape` closed the
+sheet, said `Fancy Follower was not installed` and left the mod as it was. A
+second run pressed through to Install: the sheet closed, the mod's folder held
+just the chosen `Strong.esp` instead of the file seeded there, and `mods.toml`
+recorded `chosen = ["Choose a body/Choose a body/Strong"]`. Not run: an
+installer that comes while one is open (the shared state's tests cover the
+queue), a cancel that drops a new archive's unpacked files (likewise), and the
+add-archive path from the file dialog.
+
+## The Tauri port, slice 8: the cut-over (2026-11-20)
+
+The Slint window is gone. `crates/zendo` is now the Tauri crate (it was
+`crates/zendo-tauri`) and builds the `zendo` binary; the Slint crate, its
+`.slint` files, its twenty `*_ui.rs` files and its build script are deleted
+(about 15,000 lines, in git history before this commit). `slint` and
+`slint-build` left `[workspace.dependencies]`; nothing else did, since the
+Tauri crate already used the same GTK, WebKitGTK, wry and `image` builds.
+`Cargo.lock` follows. The bundled JetBrains Mono moved from the Slint crate's
+`fonts/` to `crates/zendo/ui/static/fonts/` as real files (the frontend had
+symlinked them), so the font still ships and is still OFL.
+
+**What the cut-over found, and put right.** With the Slint crate gone, the
+i18n check (`every_message_used_exists`) counted the words nothing used any
+more: 131 at first. Some were only invisible to the check, not unused, and the
+check was taught the two forms it could not see: `tr("id", values)` in Rust
+(only `game-ready`) and `tr('id', values)` in the frontend, and the Settings
+groups and top-bar pages now ask for their words by literal id instead of
+handing a bare string to `app.t`. Two lines the new window was missing were
+wired to the words that already existed: a game that leaves the library while
+its page is open says "This game is no longer in the library"
+(`game_get`), and a panic in a card says `panicked-with` and the panic's own
+text instead of a hard-coded sentence. Forty-six words went, and the
+differences they stand for are below.
+
+**Two cards the port had missed.** The Slint game page showed `AreWeAntiCheatYet`'s
+verdict and Valve's Steam Deck review, and the Tauri page did not: the port's
+slices never listed them, though the user's own to-try list in
+`docs/backlog.md` does. Both are ported, their words and rules in the new
+`zendo_shell::compat` (shared, tested: the status words and tones, Valve's
+verdict, Valve's 37 tests' names in words, the newest change's line), the asking in
+`crates/zendo/src/cards.rs` (`Ask` for both, asked once a session when the
+rating names the Steam app, forgotten when the game's app id changes, a
+failure shown with the other failures and asked again by Try again), and the
+page draws the Deck pill beside ProtonDB's and the Anti-cheat card before
+About when online play will not work, else after it.
+
+**Licence.** Slint was the only reason for the GPLv3 (item 46), so the source
+and the binary are MIT now, the font still OFL. About says it in the same
+words as the README; the spec's licence line is `MIT AND OFL-1.1` and the
+PKGBUILD's `('MIT' 'OFL-1.1')`.
+
+**Packaging.** The binary is a web view now, so the frontend has to be built
+before the Rust crate can embed it: the README's build says `npm ci && npm run
+build` in `crates/zendo/ui` first, the Arch PKGBUILD does it in `build()` with
+`npm` among its make dependencies, and Fedora (whose COPR build has no
+network) gets `crates/zendo/ui/build` as a second source tarball, made by
+`make-srpm.sh` and by `.copr/Makefile` beside the vendor tarball and unpacked
+into the tree in `%prep`. The run-time libraries in both specs and the
+PKGBUILD are WebKitGTK's now (gtk3, webkit2gtk-4.1, libsoup3, fontconfig),
+not Slint's; the CI's system libraries follow.
+
+**What the new window says differently.** These Slint lines have no
+counterpart and went with the crate: the pages' key-hint footers (`hints-*`,
+`library-sort-keys`, `library-organize`, `gm-menu-hint`), the details card's
+launch command, played-on, last-two-weeks and Zendo-id rows (`fact-*`), the
+Settings cover lines (`images-*`) and the footer's unreadable-file count
+(`footer-unreadable`), the local game's added/saved/removed notes and the
+move and close notes (`local-*`, `downloads-moving-wait`), the sign-in lines
+the Accounts page words differently (`accounts-closed`, `accounts-signed-in-to`,
+`accounts-signed-out-of`), the sign-in status in the top bar
+(`top-bar-signed-in`), Game Mode's screen label (`gm-screen`), Steam's family
+row and the game page's Steam labels (`steam-family`, `game-manage-steam`,
+`game-edit-categories`, `steam-app-set`, `game-status`), the Store's asking
+lines and search placeholder (`store-asking`, `store-asking-stores`,
+`store-go-accounts`, `store-search`), the sheet headings the new sheets word
+their own way (`nexus-choose-title`, `nexus-downloads-title`,
+`collections-none`), the run lines (`run-starting-game`, `run-wine-prefix`,
+`run-last-log`), the store game that leaves its list (`owned-gone`), and
+`theme-opaque` (the switch for a feature the window no longer has: the window
+is opaque). Those 46 messages are gone from both `.ftl` files.
+
+**Checked**: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, `cargo test --workspace` (475 passed, 32 ignored: 316 core,
+141 shell, 18 the window; the Slint crate's 145 went with it),
+`npm run check`, `npm run lint`, `npm test` (5) and `tauri build --debug`,
+which builds `target/debug/zendo`. Seen on screen in the throwaway home: the
+renamed binary's window (class `zendo`, title `Zendo`), the Library's grid, a
+game's page with `PROTONDB PLATINUM` and Valve's real `DECK VERIFIED` pill
+beside it (and, with the app id changed to Rust's 252490, `PROTONDB SILVER`
+and `DECK UNSUPPORTED`), the Anti-cheat card with a real `DENIED` verdict for
+Easy Anti-Cheat and VAC, its latest change as a link and Open
+AreWeAntiCheatYet, and the About page's new licence line and "Built on Tauri
+2, SvelteKit, Svelte and Tailwind". Not run: the packages (the Arch PKGBUILD
+with npm, the Fedora SRPM with the built frontend, a COPR build), and the
+checks still listed under "The Tauri port: checks left for when it is whole".
+
+## The Tauri port: checks left (written 2026-11-19, the port whole 2026-11-20)
 
 The user asked to finish the port first and run the on-screen checks at the
-end. The virtual pointer stopped moving in two sessions (stuck at (0,0); see the
-continuation note), so nothing below is a build or type failure: every
-automated check above passes.
+end, and the port was whole with slice 8 on 2026-11-20. The virtual pointer
+stopped moving in two sessions (stuck at (0,0); see the continuation note),
+and `wtype` failed with Hyprland's "Keyboard layout error", so nothing below
+is a build or type failure: every automated check in the sections above
+passes. These are what is still owed on screen.
 
 - **Not seen on screen**: 4c's Accounts page (the three stores' cards, Steam's
   card, Nexus Launcher's) and the Collections sheet; 5a's Store page and a

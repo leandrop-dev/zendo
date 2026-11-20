@@ -1,0 +1,1859 @@
+// The typed boundary to Rust: each function wraps one command, and the
+// types match the structs the commands return.
+
+import { invoke } from '@tauri-apps/api/core';
+
+// A language the window speaks.
+export type Language = { tag: string; name: string };
+
+// The window's colours, as CSS colours (the Rust side sends hex).
+export type Palette = {
+	background: string;
+	sidebar: string;
+	surface: string;
+	raised: string;
+	line: string;
+	foreground: string;
+	dim: string;
+	accent: string;
+	good: string;
+	bad: string;
+	/// Text drawn on the accent colour.
+	on_accent: string;
+	light: boolean;
+};
+
+// What the shell starts with.
+export type Bootstrap = {
+	version: string;
+	// "Version 1.0.1", in the window's words.
+	version_line: string;
+	// Where the source is, for About's buttons.
+	repository: string;
+	language: string;
+	languages: Language[];
+	/// The current language's messages that take no values, by id.
+	messages: Record<string, string>;
+	palette: Palette;
+	fullscreen: boolean;
+	/// Whether closing the window hides it to the tray.
+	tray: boolean;
+	// The FPS harness is on (ZENDO_FPS in the environment).
+	fps: boolean;
+};
+
+// True inside the Tauri window. In a plain browser (`vite dev` on its own)
+// the IPC is not there, so the pages say so and use Zendo's own colours.
+export function inTauri(): boolean {
+	return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+// The words, the colours and the window's state, once at start.
+export async function bootstrap(): Promise<Bootstrap> {
+	return invoke<Bootstrap>('bootstrap');
+}
+
+// A message with values: `tr('count-games', { count: 3 })`.
+export async function tr(id: string, args: Record<string, string | number> = {}): Promise<string> {
+	return invoke<string>('tr', { id, args });
+}
+
+// Full screen on or off, and which it is now.
+export async function toggleFullscreen(): Promise<boolean> {
+	return invoke<boolean>('window_fullscreen_toggle');
+}
+
+// A game's card, as the grid draws it.
+export type Card = {
+	id: string;
+	title: string;
+	caption: string;
+	caption_accent: boolean;
+	faded: boolean;
+	badge: string | null;
+	badge_running: boolean;
+	// The share of achievements, 0 to 1; null when the game has none.
+	progress: number | null;
+	marked: boolean;
+	// The cover's path in the cache.
+	cover: string | null;
+};
+
+// A library chip: the view, a source, an order, or an organize action.
+export type Chip = {
+	key: string;
+	label: string;
+	count: number | null;
+	chosen: boolean;
+};
+
+export type Chips = {
+	views: Chip[];
+	sources: Chip[];
+	sorts: Chip[];
+	organize: Chip[];
+	// The bulk chips, while games are marked.
+	bulk: Chip[];
+	// "3 marked", while any are.
+	marked: string | null;
+};
+
+// What the page says in place of the grid.
+export type Empty = { title: string; about: string | null };
+
+// The Library: every game's card once, and the ones the filter shows.
+export type LibraryList = {
+	ready: boolean;
+	cards: Card[];
+	shown: string[];
+	chips: Chips;
+	cursor: number;
+	empty: Empty | null;
+	status: string | null;
+	search: string;
+	marked: string[];
+};
+
+// The Library after a filter, a sort, a search or a cursor move.
+export type LibraryFiltered = Omit<LibraryList, 'cards'>;
+
+// The Library.
+
+export async function libraryList(): Promise<LibraryList> {
+	return invoke<LibraryList>('library_list');
+}
+
+export async function libraryPick(key: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_pick', { key });
+}
+
+export async function librarySearch(text: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_search', { text });
+}
+
+export async function libraryCycleSort(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_cycle_sort');
+}
+
+export async function libraryClick(id: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_click', { id });
+}
+
+// left, right, up, down, page-up, page-down, first or last.
+export async function libraryStep(step: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_step', { step });
+}
+
+// The grid's columns and height, so paging and the cursor know the grid.
+export async function libraryFit(columns: number, height: number): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_fit', { columns, height });
+}
+
+export async function libraryBack(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_back');
+}
+
+export async function libraryShowHidden(): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_show_hidden');
+}
+
+// Marks a game, or leaves it; nothing is the card under the cursor.
+export async function libraryToggleMark(id?: string): Promise<LibraryFiltered> {
+	return invoke<LibraryFiltered>('library_toggle_mark', { id: id ?? null });
+}
+
+// A game's page: the header, the tiles, the statuses and how it is running.
+export type GamePage = {
+	id: string;
+	title: string;
+	source_line: string;
+	cover: string | null;
+	hero: string | null;
+	pinned: boolean;
+	hidden: boolean;
+	status: string | null;
+	// 0 idle (Play), 1 starting, 2 running (Stop), 3 stopping.
+	run_state: number;
+	line: string;
+	tiles: { label: string; value: string }[];
+	statuses: { key: string; label: string; chosen: boolean }[];
+	// A game added by hand: its page edits and removes it.
+	local: boolean;
+	// The Launch options button: for the games Zendo starts itself.
+	launch_options: boolean;
+	details: (Fact & { tone: number })[];
+	// The session counts and lengths, empty until the game has one.
+	sessions: (Fact & { tone: number })[];
+	// The latest sessions, by date.
+	recent: (Fact & { tone: number })[];
+	// The DLC card: the store's list of what the player owns, and its buttons.
+	dlc: {
+		count: string;
+		rows: {
+			id: string;
+			title: string;
+			about: string;
+			// The button's words; empty where there is no button.
+			label: string;
+			danger: boolean;
+			enabled: boolean;
+			// "Installed" or "Not installed", where there is no button.
+			status: string;
+			status_tone: number;
+		}[];
+		all: string;
+		all_on: boolean;
+		note: string;
+	};
+	// Update in the action bar; the label is empty when none was found.
+	update: { label: string; badge: string; on: boolean };
+	// The More row and a Steam game's Verify and Uninstall.
+	manage: {
+		has_more: boolean;
+		more_open: boolean;
+		managed: boolean;
+		store_managed: boolean;
+		job_free: boolean;
+		check_on: boolean;
+		move_on: boolean;
+		uninstall_again: boolean;
+		// Repair and Uninstall, as the action's own words.
+		repair_label: string;
+		queue_uninstall_label: string;
+		verify_label: string;
+		verify_on: boolean;
+		uninstall_label: string;
+	};
+	// What the queue is doing with the game.
+	job: { shown: boolean; line: string };
+	// The Wine prefix card, for a Windows game Zendo starts.
+	prefix: {
+		folder: string | null;
+		fixes: string[];
+		gog: boolean;
+		// No tool runs in the prefix and the game does not.
+		free: boolean;
+		// The components typed last.
+		components: string;
+		// What runs, or how the last tool went.
+		status: { text: string; tone: number } | null;
+	} | null;
+};
+
+// A line of a card: a label and its value.
+export type Fact = { label: string; value: string; path: boolean };
+
+// A badge on the header: ProtonDB's rating.
+export type Pill = {
+	label: string;
+	// 0 takes `tint`; 1, 2 and 3 take the theme's good, bad and dim.
+	tone: number;
+	tint: string | null;
+	tip: string;
+	url: string;
+};
+
+// A line of a card, and the link its value opens.
+export type Row = { label: string; value: string; url: string | null };
+
+// What the stores and the sites say about a game, as its page's cards.
+export type GameCards = {
+	// While ProtonDB is asked, and once its rating is known.
+	pill: Pill | null;
+	// Valve's review of it on the Steam Deck, once asked.
+	deck: Pill | null;
+	// AreWeAntiCheatYet's say on its anti-cheat.
+	anti_cheat: {
+		label: string;
+		about: string;
+		// The anti-cheats it ships, as the list names them.
+		makers: string;
+		// 1 good, 2 bad, 3 dim.
+		tone: number;
+		url: string;
+		// Drawn before About: online play will not work here, or is not known to.
+		warns: boolean;
+		// What the list says, each with the link it opens or an empty one.
+		notes: { text: string; url: string }[];
+	} | null;
+	// Steam's about line, empty when its store has no page.
+	about: string;
+	// No Steam game was found for this one.
+	no_match: string | null;
+	shots: { thumb: string; full: string }[];
+	// What only Steam says, for the details card.
+	steam: Row[];
+	requirements: {
+		source: string;
+		both: boolean;
+		rows: { label: string; minimum: string; recommended: string }[];
+	};
+	achievements: {
+		summary: string;
+		// The share of them unlocked, 0 to 1; null when it cannot be said.
+		share: number | null;
+		rows: {
+			icon: string | null;
+			name: string;
+			description: string;
+			side: string;
+			unlocked: boolean;
+		}[];
+		more: string | null;
+	};
+	// GOG's notes for each update: 0 a title, 1 a heading, 2 a paragraph,
+	// 3 a list item, 4 a gap.
+	changelog: { lines: { kind: number; text: string }[]; more: string | null };
+	// The cards that could not be asked, with why.
+	failures: Row[];
+	// The Technical card's Steam app id row.
+	steam_app: { line: string; input: string; clearable: boolean };
+};
+
+export async function cardsGet(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_get', { id });
+}
+
+export async function cardsRetry(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_retry', { id });
+}
+
+export async function cardsMoreAchievements(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_more_achievements', { id });
+}
+
+export async function cardsMoreChangelog(id: string): Promise<GameCards> {
+	return invoke<GameCards>('cards_more_changelog', { id });
+}
+
+// Gives the game a Steam app id, or takes it back with null and answers the
+// line the page shows.
+export async function steamAppSet(id: string, app: string | null): Promise<string> {
+	return invoke<string>('steam_app_set', { id, app });
+}
+
+// Opens a link with the desktop's browser.
+export async function openLink(url: string): Promise<void> {
+	return invoke<void>('open_link', { url });
+}
+
+export async function gameGet(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_get', { id });
+}
+
+// The page opened on a game: the More row and the DLC's questions start over.
+export async function gameOpen(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_open', { id });
+}
+
+// Update, Repair and Check for updates, through the downloads queue.
+export async function gameUpdate(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_update', { id });
+}
+
+export async function gameRepair(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_repair', { id });
+}
+
+export async function gameCheckUpdates(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_check_updates', { id });
+}
+
+// Uninstall: the first press asks, the second queues it.
+export async function gameUninstall(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_uninstall', { id });
+}
+
+// Move…: the folder dialog, then the move is queued.
+export async function gameMove(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_move', { id });
+}
+
+export async function gameToggleMore(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_toggle_more', { id });
+}
+
+// A DLC's button: Install, or Uninstall, which asks once more first.
+export async function gameDlc(id: string, dlc: string): Promise<GamePage> {
+	return invoke<GamePage>('game_dlc', { id, dlc });
+}
+
+export async function gameDlcAll(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_dlc_all', { id });
+}
+
+// Verify and Uninstall with Steam, asked of Steam itself.
+export async function steamVerifyGame(id: string): Promise<GamePage> {
+	return invoke<GamePage>('steam_verify_game', { id });
+}
+
+export async function steamUninstallGame(id: string): Promise<GamePage> {
+	return invoke<GamePage>('steam_uninstall_game', { id });
+}
+
+export async function gameLaunch(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_launch', { id });
+}
+
+export async function gameStop(id: string): Promise<GamePage> {
+	return invoke<GamePage>('game_stop', { id });
+}
+
+export async function gameSetPinned(id: string, pinned: boolean): Promise<GamePage> {
+	return invoke<GamePage>('game_set_pinned', { id, pinned });
+}
+
+export async function gameSetHidden(id: string, hidden: boolean): Promise<GamePage> {
+	return invoke<GamePage>('game_set_hidden', { id, hidden });
+}
+
+export async function gameSetStatus(id: string, status: string | null): Promise<GamePage> {
+	return invoke<GamePage>('game_set_status', { id, status });
+}
+
+// A game added by hand: what the form holds.
+export type LocalDraft = {
+	id: string | null;
+	title: string;
+	program: string;
+	arguments: string;
+};
+
+export async function localGet(id: string): Promise<LocalDraft> {
+	return invoke<LocalDraft>('local_get', { id });
+}
+
+// What the form says under the program field: a Linux program or a Windows
+// one, which runs through Proton.
+export async function localAbout(program: string): Promise<string> {
+	return invoke<string>('local_about', { program });
+}
+
+// The Choose button; null when the dialog was closed.
+export async function localPickProgram(): Promise<string | null> {
+	return invoke<string | null>('local_pick_program');
+}
+
+// Adds the game, or saves it, and answers its id.
+export async function localSave(draft: LocalDraft): Promise<string> {
+	return invoke<string>('local_save', { draft });
+}
+
+export async function localRemove(id: string): Promise<void> {
+	return invoke<void>('local_remove', { id });
+}
+
+// Opens the Wine prefix's folder with the desktop's file manager.
+export async function prefixOpen(path: string): Promise<void> {
+	return invoke<void>('prefix_open', { path });
+}
+
+// Runs a tool in the game's prefix: wine-settings, winetricks, gog-setup or
+// known-fixes.
+export async function prefixRun(id: string, tool: string): Promise<void> {
+	return invoke<void>('prefix_run', { id, tool });
+}
+
+// Installs the winetricks components typed.
+export async function prefixInstall(id: string, typed: string): Promise<void> {
+	return invoke<void>('prefix_install', { id, typed });
+}
+
+// Run a program…: the file dialog, then the program in the prefix.
+export async function prefixPickProgram(id: string): Promise<void> {
+	return invoke<void>('prefix_pick_program', { id });
+}
+
+// Asks for the known fixes' list when it is a day old, then says the card
+// may be read again.
+export async function prefixWant(id: string): Promise<void> {
+	return invoke<void>('prefix_want', { id });
+}
+
+// The Mods card: the mods Zendo keeps for a game, the profile in use, a
+// Bethesda game's plugins, the folder they go in, and Apply.
+export type ModsCard = {
+	// The card is drawn: the mods are here, or the read failed with why.
+	show: boolean;
+	// 1 the read failed, 2 the mods are here.
+	body_kind: number;
+	message: string;
+	// What is happening to the game's mods now; empty when nothing is.
+	busy: string;
+	// No change is in flight, so the controls take presses.
+	free: boolean;
+	// The game is on Nexus Mods.
+	nexus: boolean;
+	// The line the last change left.
+	note: string | null;
+	profiles: { label: string; chosen: boolean }[];
+	delete_profile_label: string;
+	delete_profile_asking: boolean;
+	delete_profile_on: boolean;
+	naming: { placeholder: string; name: string; ok: boolean } | null;
+	place: string;
+	target: string;
+	mods: {
+		id: string;
+		name: string;
+		facts: string;
+		enabled: boolean;
+		up: boolean;
+		down: boolean;
+		delete_label: string;
+		asking: boolean;
+		// "Update" or "Update to 2" when Nexus has a newer file.
+		update: string;
+		// "Options…" when an installer built it, to choose again; else empty.
+		options: string;
+	}[];
+	plugins: {
+		note: string;
+		note_bad: boolean;
+		file: string | null;
+		rows: {
+			name: string;
+			facts: string;
+			problems: string;
+			enabled: boolean;
+			locked: boolean;
+			up: boolean;
+			down: boolean;
+		}[];
+	} | null;
+	overwrite: string | null;
+	overwrite_label: string;
+	overwrite_asking: boolean;
+	folder: string;
+	folder_editable: boolean;
+	folder_save: boolean;
+	folder_known: boolean;
+	state: string;
+	state_tone: number;
+	can_apply: boolean;
+	can_restore: boolean;
+};
+
+export async function modsGet(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_get', { id });
+}
+
+// The page opened: reads the game's mods again.
+export async function modsBegin(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_begin', { id });
+}
+
+export async function modsToggleMod(id: string, modId: string, on: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_toggle_mod', { id, modId, on });
+}
+
+export async function modsMoveMod(id: string, modId: string, up: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_move_mod', { id, modId, up });
+}
+
+export async function modsTogglePlugin(id: string, name: string, on: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_toggle_plugin', { id, name, on });
+}
+
+export async function modsMovePlugin(id: string, name: string, up: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_move_plugin', { id, name, up });
+}
+
+export async function modsRemove(id: string, modId: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_remove', { id, modId });
+}
+
+export async function modsClearOverwrite(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_clear_overwrite', { id });
+}
+
+export async function modsFolderSave(id: string, text: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_folder_save', { id, text });
+}
+
+// Back to where the game is known to take its mods.
+export async function modsFolderKnown(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_folder_known', { id });
+}
+
+export async function modsProfileSwitch(id: string, name: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_switch', { id, name });
+}
+
+// New… (renaming false) or Rename… (true): the name field opens.
+export async function modsProfileNaming(id: string, renaming: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_naming', { id, renaming });
+}
+
+export async function modsProfileSave(id: string, name: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_save', { id, name });
+}
+
+export async function modsProfileCancel(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_cancel', { id });
+}
+
+export async function modsProfileDelete(id: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_profile_delete', { id });
+}
+
+// Apply, or back to vanilla with false; never while the game runs.
+export async function modsApply(id: string, apply: boolean): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_apply', { id, apply });
+}
+
+// Add mod…: the file dialog, then the archive's unpacking on a thread.
+export async function modsAdd(id: string): Promise<void> {
+	return invoke<void>('mods_add', { id });
+}
+
+// Opens the game's page on Nexus Mods in the browser.
+export async function modsFindNexus(id: string): Promise<void> {
+	return invoke<void>('mods_find_nexus', { id });
+}
+
+// Options… on a mod an installer built: its installer runs again, and its
+// sheet opens when it is read.
+export async function modsReinstall(id: string, modId: string): Promise<ModsCard> {
+	return invoke<ModsCard>('mods_reinstall', { id, modId });
+}
+
+// A line of a Settings list: a source, or the report's answer.
+export type SettingsRow = { label: string; value: string; tone: number };
+
+// An API key's field: the value, the buttons and what it last said.
+export type SettingsKey = {
+	value: string;
+	shown: boolean;
+	checking: boolean;
+	// The field holds another key than the one saved.
+	changed: boolean;
+	note: SettingsRow | null;
+	kept: string;
+	kept_bad: boolean;
+};
+
+// The Nexus key's field, with whose key it is and what opens links.
+export type SettingsNexusKey = SettingsKey & {
+	handler_line: string;
+	handler_good: boolean;
+	handler_can: boolean;
+};
+
+// A thing Settings lists with buttons: a launcher, an engine, a Proton.
+export type SettingsSetRow = {
+	title: string;
+	sub: string;
+	path: string;
+	note: string;
+	note_tone: number;
+	action: string;
+	action_on: boolean;
+	remove: string;
+	remove_on: boolean;
+	remove_danger: boolean;
+	status: string;
+	status_tone: number;
+};
+
+// A download in progress: its name, the bytes so far and how far it is.
+export type SettingsBar = {
+	active: boolean;
+	name: string;
+	size: string;
+	percent: number;
+	stopping: boolean;
+};
+
+// The EOS overlay's card: its state and its Install/Remove buttons.
+export type SettingsOverlay = {
+	status: string;
+	install: string;
+	install_on: boolean;
+	remove: string;
+	remove_on: boolean;
+	note: SettingsRow | null;
+};
+
+// The Proton group: the default, the ones found, and the releases on offer.
+export type SettingsProtons = {
+	defaults: { name: string | null; label: string; chosen: boolean }[];
+	installed: SettingsSetRow[];
+	installed_none: string;
+	builds: { label: string; chosen: boolean }[];
+	releases_title: string;
+	releases: SettingsSetRow[];
+	refresh_on: boolean;
+	line: SettingsRow | null;
+	older: boolean;
+	bar: SettingsBar;
+	note: SettingsRow | null;
+};
+
+// One store's card on the Accounts page.
+export type AccountCard = {
+	badge: string;
+	title: string;
+	status: string;
+	status_tone: number;
+	engine: string;
+	engine_ok: boolean;
+	action: string;
+	// 0 Sign in, 1 Sign out.
+	action_kind: number;
+	action_on: boolean;
+	gog: boolean;
+	// 0 none, 1 in Zendo's window, 2 in the browser.
+	flow: number;
+	line: string;
+	note: string;
+	retry: boolean;
+	browser_on: boolean;
+	step_one: string;
+	step_two: string;
+	step_three: string;
+	open_label: string;
+	open_on: boolean;
+	finish_label: string;
+	finish_on: boolean;
+};
+
+export type SteamCard = {
+	// 0 signed out, 1 signing in, 2 signed in.
+	state: number;
+	status: string;
+	about: string;
+	family: string;
+	note: string;
+	note_good: boolean;
+	family_note: string;
+	kept: string;
+	kept_bad: boolean;
+};
+
+export type LauncherCard = {
+	badge: string;
+	title: string;
+	about: string;
+	status: string;
+	status_tone: number;
+	path: string;
+	line: string;
+	action: string;
+	action_on: boolean;
+	note: string;
+	note_tone: number;
+};
+
+// The Accounts page: Steam's card, the stores, and Nexus Launcher's.
+export type AccountsPage = {
+	steam: SteamCard;
+	cards: AccountCard[];
+	xbox: LauncherCard;
+	gog_playtime: boolean;
+	gog_galaxy: boolean;
+	code: string;
+};
+
+// One collection in the sheet: hand-picked or a saved view.
+export type CollRow = {
+	name: string;
+	sub: string;
+	count: string;
+	view: boolean;
+	checked: boolean;
+	checkable: boolean;
+	renaming: boolean;
+	confirm: boolean;
+};
+
+// The Collections sheet.
+export type CollectionsPage = {
+	open: boolean;
+	count: string;
+	empty: string;
+	now: string;
+	draft: string;
+	rename_draft: string;
+	note: SettingsRow | null;
+	rows: CollRow[];
+};
+
+// The Settings page: General, Library and Diagnostics.
+export type SettingsPage = {
+	languages: { tag: string | null; label: string; chosen: boolean }[];
+	themes: { tag: string; label: string; chosen: boolean }[];
+	theme_about: string;
+	theme_note: SettingsRow | null;
+	theme_problems: string[];
+	tray: boolean;
+	discord: boolean;
+	steamgriddb: SettingsKey;
+	nexus: SettingsNexusKey;
+	covers: boolean;
+	// Downloads can start now: the setting is on and nothing runs.
+	covers_now: boolean;
+	auto_update: boolean;
+	workers: { count: number | null; label: string; chosen: boolean }[];
+	sources: SettingsRow[];
+	launchers: SettingsSetRow[];
+	launchers_bar: SettingsBar;
+	path_first: boolean;
+	engines: SettingsSetRow[];
+	engines_bar: SettingsBar;
+	engines_note: SettingsRow | null;
+	runtimes: SettingsSetRow[];
+	runtimes_note: SettingsRow | null;
+	overlay: SettingsOverlay;
+	proton: SettingsProtons;
+	files: { label: string; value: string; open: string | null }[];
+	report_busy: boolean;
+	report_note: SettingsRow | null;
+	logs: string | null;
+};
+
+export async function settingsGet(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_get');
+}
+
+// null follows the desktop's language.
+export async function settingsSetLanguage(tag: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_language', { language: tag });
+}
+
+// A theme file's id, or "system" for the KDE scheme.
+export async function settingsSetTheme(tag: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_theme', { theme: tag });
+}
+
+export async function settingsSetTray(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_tray', { on });
+}
+
+export async function settingsSetDiscord(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_discord', { on });
+}
+
+export async function settingsSetCovers(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_covers', { on });
+}
+
+export async function settingsSetAutoUpdate(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_auto_update', { on });
+}
+
+// null is the engine's own choice.
+export async function settingsSetWorkers(count: number | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_workers', { workers: count });
+}
+
+// Gathers the report and copies it, on a thread.
+// Fetches the covers the library is missing.
+export async function settingsDownloadCovers(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_download_covers');
+}
+
+export async function settingsCopyReport(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_copy_report');
+}
+
+export async function settingsOpen(path: string): Promise<void> {
+	return invoke<void>('settings_open', { path });
+}
+
+// The SteamGridDB key's field.
+export async function settingsKeyEdited(text: string): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_edited', { text });
+}
+
+export async function settingsKeyToggleShown(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_toggle_shown');
+}
+
+export async function settingsKeyCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_check');
+}
+
+export async function settingsKeySave(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_key_save');
+}
+
+export async function settingsKeyGet(): Promise<void> {
+	return invoke<void>('settings_key_get');
+}
+
+// The Nexus key's field, and the handler that opens its links.
+export async function settingsNexusKeyEdited(text: string): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_edited', { text });
+}
+
+export async function settingsNexusKeyToggleShown(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_toggle_shown');
+}
+
+export async function settingsNexusKeyCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_check');
+}
+
+export async function settingsNexusKeySave(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_key_save');
+}
+
+export async function settingsNexusKeyGet(): Promise<void> {
+	return invoke<void>('settings_nexus_key_get');
+}
+
+export async function settingsNexusBecomeHandler(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_nexus_become_handler');
+}
+
+// The Launchers group: a launcher's one button, and Stop on the download.
+export async function settingsLauncherAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_launcher_act', { index });
+}
+
+export async function settingsLaunchersStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_launchers_stop');
+}
+
+// The Engines group: the engines, the runtimes and the EOS overlay.
+export async function settingsSetPathFirst(on: boolean): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_set_path_first', { on });
+}
+
+export async function settingsEnginesCheck(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engines_check');
+}
+
+export async function settingsEngineAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engine_act', { index });
+}
+
+export async function settingsEngineRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engine_remove', { index });
+}
+
+export async function settingsEnginesStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_engines_stop');
+}
+
+export async function settingsRuntimeAct(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_runtime_act', { index });
+}
+
+export async function settingsRuntimeRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_runtime_remove', { index });
+}
+
+export async function settingsOverlayDoInstall(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_overlay_do_install');
+}
+
+export async function settingsOverlayDoRemove(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_overlay_do_remove');
+}
+
+// The Proton group.
+export async function settingsDefaultChosen(name: string | null): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_default_chosen', { name });
+}
+
+export async function settingsProtonRemove(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_remove', { index });
+}
+
+export async function settingsBuildChosen(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_build_chosen', { index });
+}
+
+export async function settingsProtonRefresh(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_refresh');
+}
+
+export async function settingsProtonShowOlder(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_show_older');
+}
+
+export async function settingsReleaseDownload(index: number): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_release_download', { index });
+}
+
+export async function settingsProtonStop(): Promise<SettingsPage> {
+	return invoke<SettingsPage>('settings_proton_stop');
+}
+
+// The Accounts page.
+export async function accountsGet(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_get');
+}
+
+export async function accountsCheck(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_check');
+}
+
+export async function accountsStart(index: number): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_start', { index });
+}
+
+export async function accountsSignOut(index: number): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_sign_out', { index });
+}
+
+export async function accountsCancel(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_cancel');
+}
+
+export async function accountsUseBrowser(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_use_browser');
+}
+
+export async function accountsCodeEdited(text: string): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_code_edited', { text });
+}
+
+export async function accountsFinish(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_finish');
+}
+
+export async function accountsSteamSignIn(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_sign_in');
+}
+
+export async function accountsSteamCancel(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_cancel');
+}
+
+export async function accountsSteamSignOut(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_steam_sign_out');
+}
+
+export async function accountsXboxOpen(): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_xbox_open');
+}
+
+export async function accountsSetGogPlaytime(on: boolean): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_set_gog_playtime', { on });
+}
+
+export async function accountsSetGogGalaxy(on: boolean): Promise<AccountsPage> {
+	return invoke<AccountsPage>('accounts_set_gog_galaxy', { on });
+}
+
+// The Collections sheet.
+export async function collectionsOpen(marked: boolean): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_open', { marked });
+}
+
+export async function collectionsClose(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_close');
+}
+
+export async function collectionsGet(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_get');
+}
+
+export async function collectionsDraft(text: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_draft', { text });
+}
+
+export async function collectionsRenameDraft(text: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename_draft', { text });
+}
+
+export async function collectionsCreate(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_create');
+}
+
+export async function collectionsSaveView(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_save_view');
+}
+
+export async function collectionsRename(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename', { name });
+}
+
+export async function collectionsRenameDone(): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_rename_done');
+}
+
+export async function collectionsSetMember(
+	name: string,
+	member: boolean
+): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_set_member', { name, member });
+}
+
+export async function collectionsDelete(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_delete', { name });
+}
+
+export async function collectionsApply(name: string): Promise<CollectionsPage> {
+	return invoke<CollectionsPage>('collections_apply', { name });
+}
+
+// Game Mode: one game large over a row of covers, and its Start menu.
+export type GmChip = { label: string; count: string; chosen: boolean };
+export type GmTile = { title: string; cover: string | null; current: boolean };
+export type GameModePage = {
+	on: boolean;
+	// The Library's own grid is showing, not the screen.
+	browsing: boolean;
+	// The shelf shown has no game.
+	empty: boolean;
+	width: number;
+	shelves: GmChip[];
+	tiles: GmTile[];
+	hero: {
+		id: string;
+		title: string;
+		meta: string;
+		description: string;
+		cover: string | null;
+	} | null;
+	menu_open: boolean;
+	menu: GmChip[];
+};
+
+export async function gameModeGet(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_get');
+}
+
+// The window's width, so the carousel knows how many tiles fit.
+export async function gameModeSized(width: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_sized', { width });
+}
+
+// F11 and Select: Game Mode on or off.
+export async function gameModeToggle(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_toggle');
+}
+
+// Zendo started with --game-mode.
+export async function gameModeStart(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_start');
+}
+
+export async function gameModeShelf(at: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_shelf', { at });
+}
+
+export async function gameModePick(at: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_pick', { at });
+}
+
+// One tile along the carousel; negative is back.
+export async function gameModeStep(by: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_step', { by });
+}
+
+// The next shelf with games.
+export async function gameModeCycleShelf(by: number): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_cycle_shelf', { by });
+}
+
+export async function gameModeOpenMenu(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_open_menu');
+}
+
+export async function gameModeCloseMenu(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_close_menu');
+}
+
+// Escape on the screen: the Start menu opens, or closes.
+export async function gameModeBack(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_back');
+}
+
+// left, right, up, down, page-up, page-down, first or last.
+export async function gameModeMenuStep(step: string): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_menu_step', { step });
+}
+
+export async function gameModeChoose(at: number): Promise<{ page: GameModePage; leave: boolean }> {
+	return invoke<{ page: GameModePage; leave: boolean }>('game_mode_choose', { at });
+}
+
+export async function gameModePlay(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_play');
+}
+
+// The game in the hero, for its own page.
+export async function gameModeDetails(): Promise<string | null> {
+	return invoke<string | null>('game_mode_details');
+}
+
+// The Library's own grid again, and the screen after it.
+export async function gameModeBrowse(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_browse');
+}
+
+export async function gameModeShow(): Promise<GameModePage> {
+	return invoke<GameModePage>('game_mode_show');
+}
+
+// The Stats page: what the play sessions add up to, for a year or all of them.
+export type StatBar = { label: string; value: string; share: number };
+export type StatsPage = {
+	empty: boolean;
+	none_period: boolean;
+	periods: { label: string; chosen: boolean }[];
+	chosen: number;
+	tiles: { label: string; value: string }[];
+	top: StatBar[];
+	months: StatBar[];
+	weekdays: StatBar[];
+	facts: { label: string; value: string }[];
+	statuses: { label: string; value: string }[];
+};
+
+export async function statsGet(): Promise<StatsPage> {
+	return invoke<StatsPage>('stats_get');
+}
+
+// A period chip, by its place among them.
+export async function statsPeriod(at: number): Promise<StatsPage> {
+	return invoke<StatsPage>('stats_period', { at });
+}
+
+// The Store page: the games the signed-in stores say the user owns.
+export type StoreChip = { key: string; label: string; count: number | null; chosen: boolean };
+export type StorePage = {
+	ready: boolean;
+	cards: Card[];
+	chips: { sources: StoreChip[]; sorts: StoreChip[] };
+	cursor: number;
+	empty: { title: string; accounts: boolean } | null;
+	search: string;
+	status: string | null;
+};
+
+// A store game's page.
+export type OwnedPage = {
+	id: string;
+	title: string;
+	source_line: string;
+	cover: string | null;
+	installed: boolean;
+	details: [string, string][];
+	// 0 installed (Open in library), 1 Install and Import, 2 queued,
+	// 3 running, 4 paused.
+	job: number;
+	// What the running button says, such as "Installing…".
+	job_label: string;
+	// How far the install is, 0 to 100; -1 for no bar.
+	progress: number;
+	// "Also install its DLC (n)", empty when there is none to give.
+	dlc: string;
+	dlc_on: boolean;
+	// What installing it would do, or why it cannot be.
+	note: string;
+};
+
+export async function storeGet(): Promise<StorePage> {
+	return invoke<StorePage>('store_get');
+}
+
+export async function storePick(key: string): Promise<StorePage> {
+	return invoke<StorePage>('store_pick', { key });
+}
+
+export async function storeSearch(text: string): Promise<StorePage> {
+	return invoke<StorePage>('store_search', { text });
+}
+
+export async function storeCycleSort(): Promise<StorePage> {
+	return invoke<StorePage>('store_cycle_sort');
+}
+
+export async function storeClick(id: string): Promise<StorePage> {
+	return invoke<StorePage>('store_click', { id });
+}
+
+export async function storeStep(step: string): Promise<StorePage> {
+	return invoke<StorePage>('store_step', { step });
+}
+
+export async function storeFit(columns: number, height: number): Promise<StorePage> {
+	return invoke<StorePage>('store_fit', { columns, height });
+}
+
+export async function storeBack(): Promise<StorePage> {
+	return invoke<StorePage>('store_back');
+}
+
+export async function storeRefresh(): Promise<StorePage> {
+	return invoke<StorePage>('store_refresh');
+}
+
+// A store was signed in or out: the lists are what the accounts say now.
+export async function storeAccountsChanged(): Promise<StorePage> {
+	return invoke<StorePage>('store_accounts_changed');
+}
+
+export async function ownedGet(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_get', { id });
+}
+
+// Install: queues the game where Settings says, with the DLC unless the box
+// was unticked.
+export async function ownedInstall(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_install', { id });
+}
+
+// Import: the folder dialog, then the game is taken from the folder chosen.
+export async function ownedImport(id: string): Promise<void> {
+	return invoke<void>('owned_import', { id });
+}
+
+export async function ownedResume(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_resume', { id });
+}
+
+export async function ownedToggleDlc(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_toggle_dlc', { id });
+}
+
+// Stop waiting for Steam to start a Steam game's install.
+export async function ownedForget(id: string): Promise<OwnedPage> {
+	return invoke<OwnedPage>('owned_forget', { id });
+}
+
+// A job in the Downloads page's lists. Every text is Rust's; an empty one
+// is not drawn.
+export type JobRow = {
+	id: string;
+	title: string;
+	// "Install · Epic".
+	line: string;
+	// A dim line: "Waits until the game is closed".
+	note: string;
+	// Why it failed, in red.
+	error: string;
+	// How a finished job ended.
+	verdict: string;
+	verdict_bad: boolean;
+	// The first button (Pause, Resume, Try again), Cancel and Open; an empty
+	// label is no button.
+	first: string;
+	first_primary: boolean;
+	cancel: string;
+	open: string;
+};
+
+// The Downloads page: what the queue is doing, waiting and has finished.
+export type DownloadsPage = {
+	// Nothing queued and nothing finished: no tiles.
+	empty: boolean;
+	// Nothing at all going on: the page invites to the Store.
+	invite: boolean;
+	// How many jobs wait, the running one included.
+	count: number;
+	counts: { up_next: string; paused: string; finished: string };
+	// Closing was asked for while a job runs.
+	asking: boolean;
+	running: {
+		id: string;
+		title: string;
+		line: string;
+		// How far, 0 to 100, or -1 when the engine did not say.
+		percent: number;
+		progress_line: string;
+		pause_label: string;
+		cancel_label: string;
+		pause_on: boolean;
+		cancel_on: boolean;
+	} | null;
+	up_next: JobRow[];
+	paused: JobRow[];
+	finished: JobRow[];
+	// What the queue last said.
+	message: string | null;
+	// The running job's line, or how many jobs wait paused.
+	summary: string | null;
+	// Steam has something going: its card, with Open Steam's downloads.
+	steam_show: boolean;
+	steam_rows: SteamRow[];
+};
+
+// A line of the Steam card: an install, an uninstall or a verify asked of
+// Steam, or what Steam is downloading.
+export type SteamRow = {
+	app: string;
+	title: string;
+	line: string;
+	// How far, 0 to 100, or -1 for no bar.
+	percent: number;
+	// Stop waiting, for an install Steam has not started; empty is no button.
+	forget: string;
+};
+
+export async function downloadsGet(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_get');
+}
+
+export async function downloadsPause(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_pause', { id });
+}
+
+export async function downloadsResume(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_resume', { id });
+}
+
+export async function downloadsCancel(id: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_cancel', { id });
+}
+
+export async function downloadsClear(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_clear');
+}
+
+// Where a finished job's game is to open: its page in the library, or in the
+// Store when the scan has it not.
+export type OpenAt = { kind: 'game' | 'store'; id: string };
+
+export async function downloadsOpen(id: string): Promise<OpenAt | null> {
+	return invoke<OpenAt | null>('downloads_open', { id });
+}
+
+// Close anyway: the engine stops, the queue is held for next time, and the
+// window goes once it has.
+export async function downloadsCloseAnyway(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_close_anyway');
+}
+
+// Keep downloading, from the question about closing.
+export async function downloadsStayOpen(): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('downloads_stay_open');
+}
+
+// Stop waiting for Steam to start an install it was asked for.
+export async function steamStopWaiting(app: string): Promise<DownloadsPage> {
+	return invoke<DownloadsPage>('steam_stop_waiting', { app });
+}
+
+// Opens Steam's own downloads page.
+export async function steamOpenDownloads(): Promise<void> {
+	return invoke<void>('steam_open_downloads');
+}
+
+// The Launch options sheet: the form over a game's page, for the games Zendo
+// starts itself. `zendo_shell::launch_options::Sheet` holds it, shared with
+// the window.
+export type OptionsSwitch = {
+	id: number;
+	label: string;
+	about: string;
+	on: boolean;
+	// False for a switch that cannot be used here, unless it is already on.
+	enabled: boolean;
+};
+
+export type OptionsChip = { id: number; label: string; chosen: boolean };
+
+export type OptionsSheet = {
+	open: boolean;
+	title: string;
+	// "{title} · Launch options".
+	heading: string;
+	windows: boolean;
+	native: boolean;
+	// 0 no store, 1 GOG, 2 Epic.
+	store: number;
+	has_tasks: boolean;
+	gamescope_on: boolean;
+	fsr_on: boolean;
+	sharpens: boolean;
+	confirm_close: boolean;
+	picking: boolean;
+	error: string;
+	arguments_error: string;
+	environment_error: string;
+	gamescope_error: string;
+	start_switches: OptionsSwitch[];
+	saves_switch: OptionsSwitch[];
+	tool_switches: OptionsSwitch[];
+	offload_switch: OptionsSwitch[];
+	proton_a: OptionsSwitch[];
+	proton_b: OptionsSwitch[];
+	proton_c: OptionsSwitch[];
+	protons: OptionsChip[];
+	tasks: OptionsChip[];
+	runtimes: OptionsChip[];
+	fsr_sharpening: OptionsChip[];
+	windows_kinds: OptionsChip[];
+	scalers: OptionsChip[];
+	filters: OptionsChip[];
+	sharpness: OptionsChip[];
+	sync_labels: string[];
+	syncing: boolean;
+	saves_note: string;
+	saves_note_good: boolean;
+	executable: string;
+	language: string;
+	width: string;
+	height: string;
+	frame_cap: string;
+	game_width: string;
+	game_height: string;
+	fps: string;
+	more: string;
+	arguments: string;
+	environment: string;
+	before: string;
+	after: string;
+};
+
+export async function optionsGet(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_get');
+}
+
+// The Launch options button, for a game Zendo starts itself.
+export async function optionsOpen(id: string): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_open', { id });
+}
+
+// Escape, Cancel and a click outside: closes it, or asks first.
+export async function optionsClose(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_close');
+}
+
+export async function optionsDiscard(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_discard');
+}
+
+export async function optionsKeepEditing(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_keep_editing');
+}
+
+export async function optionsSave(): Promise<{
+	sheet: OptionsSheet;
+	saved: boolean;
+	title: string;
+}> {
+	return invoke<{ sheet: OptionsSheet; saved: boolean; title: string }>('options_save');
+}
+
+export async function optionsToggle(id: number, on: boolean): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_toggle', { id, on });
+}
+
+// A chip: the list (0 Proton, 1 task, 2 runtime, 3 FSR sharpening, 4 window,
+// 5 scaler, 6 filter, 7 sharpness) and the chip's id.
+export async function optionsChoose(list: number, index: number): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_choose', { list, index });
+}
+
+// A field was typed in; `echo` is what a digits-only field kept of the typing.
+export async function optionsEdit(
+	field: number,
+	text: string
+): Promise<{ sheet: OptionsSheet; echo: string | null }> {
+	return invoke<{ sheet: OptionsSheet; echo: string | null }>('options_edit', { field, text });
+}
+
+export async function optionsSync(which: number): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_sync', { which });
+}
+
+// Browse for the program the store's engine runs instead of the game's.
+export async function optionsBrowse(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_browse');
+}
+
+// The art picker over a game's page: `SteamGridDB` searched for the title and
+// the covers or wide images of the game chosen. The picker is
+// `zendo_shell::artwork`'s, kept in `zendo-shell`.
+export type ArtChip = { id: number; label: string; chosen: boolean };
+
+export type ArtThumb = {
+	// The image's id, as SteamGridDB numbers it; what choosing sends back.
+	image: number;
+	// The thumbnail's file in the cache, once downloaded.
+	path: string | null;
+	// Its size, style and author.
+	about: string;
+};
+
+export type ArtSheet = {
+	open: boolean;
+	title: string;
+	heading: string;
+	// 0 covers, 1 wide images.
+	kind: number;
+	query: string;
+	tabs: ArtChip[];
+	games: ArtChip[];
+	thumbs: ArtThumb[];
+	// Another page of images can be asked for.
+	more: boolean;
+	busy: boolean;
+	// What it is: "Searching…", "Looking for images…", "Saving…".
+	status: string;
+	note: string;
+	// The note asks for a key: Settings is offered.
+	needs_key: boolean;
+	automatic_label: string;
+};
+
+export async function artGet(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_get');
+}
+
+// Change cover (0) or Change backdrop (1) for a game.
+export async function artOpen(id: string, kind: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_open', { id, kind });
+}
+
+// The search field's words, kept for Enter and the Search button.
+export async function artQuery(text: string): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_query', { text });
+}
+
+export async function artSearch(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_search');
+}
+
+export async function artKind(kind: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_kind', { kind });
+}
+
+// A game of those found, by its place among the first ones shown.
+export async function artGame(at: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_game', { at });
+}
+
+// The image's own id: it is downloaded and kept as the game's.
+export async function artChoose(image: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_choose', { image });
+}
+
+export async function artMore(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_more');
+}
+
+// "Use the automatic one": the choice by hand is forgotten.
+export async function artAutomatic(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_automatic');
+}
+
+export async function artClose(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_close');
+}
+
+// Nexus Mods: a link's game and one game's mods coming in. The rules are
+// `zendo_shell::nexus`'s, kept in `zendo-shell`.
+export type NexusDownload = {
+	id: number;
+	name: string;
+	// How far it got, in words.
+	words: string;
+	// 0 to 1, or 0 when the size is not known.
+	fraction: number;
+	stopping: boolean;
+};
+
+export type NexusPage = {
+	// The sheet that asks which game a link's mod is for.
+	choosing: boolean;
+	choose_about: string;
+	choices: string[];
+	// One game's downloads, or every game's when none was named.
+	downloads: NexusDownload[];
+};
+
+export async function nexusGet(game: string | null): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_get', { game });
+}
+
+export async function nexusChoose(at: number): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_choose', { at });
+}
+
+export async function nexusCancel(): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_cancel');
+}
+
+export async function nexusStop(id: number, game: string | null): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_stop', { id, game });
+}
+
+// Update on a mod, by its place among the game's mods.
+export async function nexusUpdate(id: string, at: number): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_update', { id, at });
+}
+
+// An `nxm://` link, as the command line takes it.
+export async function nexusLink(text: string): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_link', { text });
+}
+
+// The last line Nexus said, taken once: it can come before the page listens.
+export async function nexusNotice(): Promise<string | null> {
+	return invoke<string | null>('nexus_notice');
+}
+
+// Search Nexus: the sheet over a game's page that searches its mods, lists
+// them a page at a time with their pictures, and takes a file into the mods.
+// The state is `zendo_shell::nexus_search`'s, kept in `zendo-shell`.
+export type SearchChip = { id: number; label: string; chosen: boolean };
+
+export type SearchRow = {
+	// 0 a mod, 1 one of its files, 2 a line about its files.
+	kind: number;
+	name: string;
+	version: string;
+	byline: string;
+	summary: string;
+	numbers: string;
+	have: string;
+	adult: string;
+	thumb: string | null;
+	files_label: string;
+	page_label: string;
+	file_facts: string;
+	file_action: string;
+	file_have: string;
+	bad: boolean;
+	mod_id: number;
+	file_id: number;
+};
+
+export type SearchSheet = {
+	open: boolean;
+	title: string;
+	words: string;
+	adult: boolean;
+	orders: SearchChip[];
+	// Why searching is limited (no key, no Premium); empty when it is not.
+	limit: string;
+	rows: SearchRow[];
+	more: boolean;
+	asking: boolean;
+	footer: string;
+	footer_bad: boolean;
+};
+
+export async function searchGet(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_get');
+}
+
+// Search Nexus, from the Mods card.
+export async function searchOpen(id: string): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_open', { id });
+}
+
+// The field's words, kept for Enter and the Search button.
+export async function searchWords(text: string): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_words', { text });
+}
+
+// From the start, or the next page after the results shown.
+export async function searchRun(more: boolean): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_run', { more });
+}
+
+export async function searchOrder(at: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_order', { at });
+}
+
+export async function searchAdult(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_adult');
+}
+
+// Files on a mod: Nexus is asked, or they are hidden again.
+export async function searchFiles(mod: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_files', { modId: mod });
+}
+
+// Nexus's window on a mod's page, or one file's Mod manager download.
+export async function searchPage(mod: number, file: number | null): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_page', { modId: mod, file });
+}
+
+export async function searchDownload(mod: number, file: number): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_download', { modId: mod, file });
+}
+
+export async function searchClose(): Promise<SearchSheet> {
+	return invoke<SearchSheet>('search_close');
+}
+
+// A mod's FOMOD installer: its steps one at a time, the options of each group
+// as radios or boxes, and the option described. `zendo_shell::installer` holds
+// it, kept in `zendo-shell`.
+export type InstallerOption = {
+	group: number;
+	option: number;
+	label: string;
+	// A radio; else a box.
+	single: boolean;
+	on: boolean;
+	// A click changes it.
+	enabled: boolean;
+	// Plain dim text: the mod says it cannot be used.
+	dim: boolean;
+	// The option last touched, or under the cursor.
+	focused: boolean;
+};
+
+export type InstallerGroup = {
+	// The group's name and its rule: "Name · choose one".
+	title: string;
+	options: InstallerOption[];
+};
+
+export type InstallerSheet = {
+	open: boolean;
+	title: string;
+	// "Step 1 of 2 · Name".
+	step_line: string;
+	// The mod says it needs files that were not found.
+	needs: boolean;
+	groups: InstallerGroup[];
+	// The picture of the option described, once it is in the cache.
+	picture: string | null;
+	about_name: string;
+	about_text: string;
+	back_enabled: boolean;
+	final_step: boolean;
+	// Install on the last step, else Next.
+	primary_label: string;
+};
+
+export async function installerGet(): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_get');
+}
+
+// An option pressed: its group and place, and on or off. A radio asks to be
+// on; a box its opposite.
+export async function installerPick(
+	group: number,
+	option: number,
+	on: boolean
+): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_pick', { group, option, on });
+}
+
+// The cursor moved by this many options in the step, round the ends.
+export async function installerFocus(delta: number): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_focus', { delta });
+}
+
+// On to the next step, or Install on the last one.
+export async function installerNext(): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_next');
+}
+
+export async function installerBack(): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_back');
+}
+
+// Enter: the focused option on or off, or on when none is.
+export async function installerActivate(): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_activate');
+}
+
+// Escape and Cancel: the mod is dropped, without installing.
+export async function installerCancel(): Promise<InstallerSheet> {
+	return invoke<InstallerSheet>('installer_cancel');
+}

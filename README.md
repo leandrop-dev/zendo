@@ -5,10 +5,11 @@
 A game launcher for Linux: every game in one library, started with the
 right tools.
 
-[![License: MIT and GPLv3](https://img.shields.io/badge/license-MIT%20%2B%20GPLv3-f25623?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-f25623?style=flat-square)](LICENSE)
 [![CI](https://github.com/leandrop-dev/zendo/actions/workflows/ci.yml/badge.svg)](https://github.com/leandrop-dev/zendo/actions/workflows/ci.yml)
 ![Linux](https://img.shields.io/badge/Linux-171717?style=flat-square&logo=linux&logoColor=ccd0cf)
-![Rust](https://img.shields.io/badge/Rust-Slint-171717?style=flat-square&logo=rust&logoColor=ccd0cf)
+![Rust](https://img.shields.io/badge/Rust-Tauri-171717?style=flat-square&logo=rust&logoColor=ccd0cf)
+![Svelte](https://img.shields.io/badge/Svelte-SvelteKit-171717?style=flat-square&logo=svelte&logoColor=ff3e00)
 
 </div>
 
@@ -17,7 +18,7 @@ Heroic installed from Epic, GOG and Amazon, and the ones with a `.desktop`
 file. A top bar leads to the Library, Store, Downloads and Stats, with
 Settings, Accounts and About behind a button; each game has a page with its
 art, Play, and what its store records about the install. It opens in a
-normal translucent window and has a Game Mode for the couch, and it is
+normal window and has a Game Mode for the couch, and it is
 driven as well by a controller as by the keyboard.
 
 It is developed on CachyOS (Arch) with Hyprland and on Fedora with KDE
@@ -355,9 +356,16 @@ a distribution's toolchain at 1.98 or newer works as it is:
 ```bash
 git clone https://github.com/leandrop-dev/zendo.git
 cd zendo
+# The window is a web view: its frontend is built into the binary first.
+(cd crates/zendo/ui && npm ci && npm run build)
 cargo build --release
 ./target/release/zendo
 ```
+
+Node 26 and npm 12 build the frontend (its `package-lock.json` pins what it
+needs). The packages do the same: the Arch PKGBUILD with npm, and the Fedora
+spec from a copy of `crates/zendo/ui/build` built beside the sources, since
+COPR has no network. `cargo build` alone reuses the build that is there.
 
 To run it from a build folder with a menu entry, copy `data/zendo.desktop`
 to `~/.local/share/applications/` and each `data/icons/zendo-<size>.png` to
@@ -586,12 +594,12 @@ count their own.
 |------|------|
 | `crates/zendo-core/` | The library: `steam.rs`, `heroic.rs`, `desktop.rs` find games, `local.rs` keeps the ones added by hand, `mods.rs` and `mods/` keep mods and apply them, `fomod.rs` reads FOMOD installers, `plugins.rs` reads Bethesda plugins and writes their order, `nexus.rs` asks Nexus Mods (`nexus_search.rs` searches it), `launch.rs` starts them (with `windows.rs` to ask their windows to close, `proton.rs` and `umu.rs` for Windows games, `launch_options.rs` for each game's options, `store_tasks.rs` for the other ways a store lists to start a game, `steam_runtime.rs` for Steam's Linux runtimes, `eos_overlay.rs` for Epic's overlay, `cloud_saves.rs` for Epic's and GOG's cloud saves, `gog_playtime.rs` for the time played sent to GOG and its total, `prefix_tools.rs` for the tools run in a game's Wine prefix, `gog_setup.rs` for GOG's setup of a game's prefix, `known_fixes.rs` for Heroic's known fixes, `galaxy.rs` for GOG Galaxy through comet) and stops them, `protondb.rs` asks ProtonDB, `ge_proton.rs` downloads GE-Proton, `runtimes.rs` the anti-cheat runtimes, `http.rs` makes the web requests and downloads, `secrets.rs` keeps the API keys in the keyring, `report.rs` makes the diagnostics report, `covers.rs` downloads covers and keeps the ones picked, `steamgriddb.rs` asks SteamGridDB, `theme.rs` reads theme files, `kde.rs` reads the KDE colour scheme (`ini.rs` reads the groups of its file and of `.desktop` ones), `state.rs` and `config.rs` are Zendo's own files, `stores.rs` signs in through the store engines, `owned.rs` lists the games they own (Steam's through its Web API, with the sign-in from `steam_web.rs`, which also lists the family's), `info.rs` asks their sizes, updates and the DLC owned, and `downloads.rs` installs them and their DLC |
 | `crates/zendo-core/tests/fixtures/` | Sample launcher files the tests read |
-| `crates/zendo/` | The `zendo` binary, with the window in Slint. `main.rs` passes the window to `zendo-shell`'s command line. `ui/` holds the `.slint` files: `style.slint` (the colours, spacing and the `Tr` words), `components.slint`, `top_bar.slint`, `main.slint`, then a file for each page or sheet. `src/` is the Rust side: `window.rs` (the window, tray and size), `theme.rs` (the colours from a theme file or the KDE scheme; the built-in themes are in `themes/`), `tr.rs` (Fluent for `Tr`), `library.rs`, `store.rs` and `covers.rs` (the grids' models), and a `*_ui.rs` file for each page or sheet. `fonts/` and `icons/` are the window's. Slint is used under the GPLv3 |
+| `crates/zendo/` | The `zendo` binary: the window in Tauri 2. `main.rs` passes the window to `zendo-shell`'s command line. `src/` holds the commands, one file per page or sheet (`library.rs`, `game.rs`, `cards.rs`, `mods.rs`, `installer.rs` and the rest), the events, the tray and the controller (`platform.rs`), and `ui/` is the frontend: SvelteKit in SPA mode, Svelte 5 runes, TypeScript and Tailwind 4, with the pages in `ui/src/routes/` and their stores and components in `ui/src/lib/`. `ui/static/fonts` holds JetBrains Mono |
 | `crates/zendo-shell/` | What the window needs that is not the toolkit's: the command line (`cli.rs`: `list`, `launch`, `report` and the rest, and the helper windows), its words (`i18n.rs`, with `i18n/en.ftl` and `i18n/pt-PT.ftl`), the tray (`tray.rs`), the controller (`gamepad.rs`), Discord's presence (`presence.rs`), the file dialog (`file_dialog.rs`: programs, mods and installers), `nxm://` links handed to the open window (`links.rs`) and the sign-in window (`sign_in_window.rs`, Steam's too, and its hidden renewal). Each source of events hands them to a closure on a thread of its own, so any toolkit can use it |
 | `data/` | The menu entry (`zendo.desktop`) and the icon (`icons/zendo-<size>.png`) |
 | `packaging/arch/zendo-git/` | The AUR package: `PKGBUILD` and `.SRCINFO` |
 | `PLAN.md` | What Zendo is for, the direction, the stack and where it stands |
-| `docs/backlog.md` | What is next, what is on hold, and the built items 27 to 38 |
+| `docs/backlog.md` | What is next, what is on hold, and the built items 27 to 65 |
 | `docs/history.md` | What was built, when, and what was checked |
 | `docs/reference.md` | Verified facts about the stores, the engines and their files |
 
@@ -619,7 +627,7 @@ count their own.
    profiles, FOMOD installers and Bethesda plugin order.
 8. **Redesign** (built, 2026-11-12 to 13): a machine on CachyOS with
    Hyprland and on Fedora with KDE Plasma, the KDE colour scheme as a theme,
-   a top bar and translucent window, Game Mode, play status, saved filters,
+   a top bar, Game Mode, play status, saved filters,
    play sessions with a Stats tab, Steam's descriptions and facts, engine
    downloads from Settings, and packages for Fedora (COPR) and Arch
    (PKGBUILD). On hold: emulation, list and details views, OptiScaler,
@@ -646,7 +654,9 @@ Ideas, no code, from:
   Mode, Organize, play sessions and stats). Ideas and look only; no code or
   assets are used (`docs/design.md`).
 
-Built on [Slint](https://slint.dev) (GPL-3.0), [gilrs](https://gitlab.com/gilrs-project/gilrs)
+Built on [Tauri 2](https://tauri.app) (MIT or Apache-2.0), [SvelteKit](https://svelte.dev)
+(MIT), [Svelte](https://svelte.dev) (MIT), [Tailwind CSS](https://tailwindcss.com) (MIT),
+[gilrs](https://gitlab.com/gilrs-project/gilrs)
 (MIT or Apache-2.0), [keyvalues-parser](https://codeberg.org/CosmicHarper/vdf-rs)
 (MIT or Apache-2.0), [ureq](https://github.com/algesten/ureq) (MIT or
 Apache-2.0), [toml](https://github.com/toml-rs/toml) (MIT or Apache-2.0),
@@ -658,4 +668,6 @@ Covers of games no store has art for come from
 
 ## License
 
-Zendo's own source files are MIT, see [LICENSE](LICENSE). The program is built with Slint under the GPLv3, so the binary as a whole is GPL-3.0-only; JetBrains Mono is under the SIL Open Font License (`crates/zendo/fonts/OFL.txt`).
+Zendo's own source files are MIT, see [LICENSE](LICENSE), and so is the binary.
+JetBrains Mono is under the SIL Open Font License
+(`crates/zendo/ui/static/fonts/OFL.txt`).

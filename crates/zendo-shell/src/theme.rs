@@ -7,8 +7,7 @@
 //! `~/.config/zendo/themes/` (see [`zendo_core::theme`]), and one named as a
 //! built-in replaces it.
 //!
-//! Both windows share this: the Slint crate re-exports it, and the Tauri
-//! shell sends the palette over IPC.
+//! The Tauri shell sends the palette over IPC when the scheme changes.
 
 use std::cell::RefCell;
 use std::path::Path;

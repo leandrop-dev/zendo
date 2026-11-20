@@ -32,8 +32,6 @@ page-downloads = Transferências
 page-accounts = Contas
 page-settings = Definições
 page-about = Sobre
-page-coming = Esta página ainda está por vir
-top-bar-signed-in = { $count } de { $stores }
 
 ## Origens e ordens
 
@@ -56,8 +54,6 @@ library-no-recent = Nada jogado nos últimos 30 dias
 library-no-hidden = Nenhum jogo oculto
 library-favorites = Favoritos
 library-recent = Recentes
-library-organize = Organizar
-library-sort-keys = Ordenar · Tab
 library-scanning = A procurar…
 library-refresh = Atualizar
 library-search = Pesquisar na biblioteca
@@ -73,7 +69,6 @@ played-never = Ainda não jogado
 played-when = Jogado { $when }
 played-time = { $time } jogados
 
-collections-none = Nenhuma
 
 ## Coleções
 
@@ -113,8 +108,8 @@ about-version = Versão { $version }
 about-intro = Todos os jogos deste computador numa só biblioteca: Steam, Epic, GOG, Amazon e os restantes, cada um iniciado como o seu próprio lançador o faria.
 about-licence = Licença
 about-built-on = Feito com
-about-built-slint = Slint (sob a GPLv3), a janela e tudo o que nela está
-about-licence-text-slint = Os ficheiros do próprio Zendo são MIT. O programa é feito com o Slint sob a GPLv3, pelo que, no seu todo, é GPLv3. O Zendo lê os ficheiros dos lançadores e nunca escreve neles.
+about-built-tauri = Tauri 2, SvelteKit, Svelte e Tailwind, a janela e tudo o que nela está
+about-licence-text = Os ficheiros do próprio Zendo são MIT, e o programa também. O Zendo lê os ficheiros dos lançadores e nunca escreve neles.
 about-built-gilrs = gilrs, para os comandos
 about-built-keyvalues = keyvalues-parser, para os ficheiros do Steam
 about-built-ureq = ureq, serde e toml
@@ -125,18 +120,9 @@ about-built-font = JetBrains Mono (SIL Open Font License), para o tipo de letra
 ## A janela
 
 game-gone = Este jogo já não está na biblioteca
-owned-gone = Este jogo já não está nas listas das suas lojas
 images-failed = { $count ->
     [one] Não foi possível transferir { $count } imagem; `zendo covers` diz porquê
    *[other] Não foi possível transferir { $count } imagens; `zendo covers` diz porquê
-}
-images-downloading = { $count ->
-    [one] A transferir imagens, falta 1
-   *[other] A transferir imagens, faltam { $count }
-}
-footer-unreadable = { $count ->
-    [one] Não foi possível ler { $count } ficheiro; as Definições indicam qual
-   *[other] Não foi possível ler { $count } ficheiros; as Definições indicam quais
 }
 status-hid = { $title } ocultado · Ctrl+H mostra os jogos ocultos
 status-unhid = { $title } voltou à biblioteca
@@ -144,21 +130,11 @@ status-pinned = { $title } é um favorito: aparece primeiro na biblioteca
 status-unpinned = { $title } deixou de ser um favorito
 hints-library = Enter abrir · Tab ordenar · Ctrl+P favorito · Ctrl+Space marcar · Del ocultar · Ctrl+H ocultos · F11 Modo de Jogo
 hints-selection = Enter abre · Esc limpa as marcas · F11 Modo de Jogo
-hints-sheet = Enter guardar · Esc cancelar
-hints-art = Enter pesquisar · Esc fechar
-hints-game = Enter jogar · Esc voltar · Ctrl+P favorito · Del ocultar · F11 Modo de Jogo
-hints-store = Enter abrir · escreva para pesquisar · Esc limpar · F11 Modo de Jogo
-hints-owned = Enter instalar ou abrir · Esc voltar · F11 Modo de Jogo
-hints-closing = Enter fechar mesmo assim · Esc continuar a transferir
-hints-other = Esc voltar · F11 Modo de Jogo
-hints-game-mode = Enter / A jogar · Esquerda Direita mover · Tab / LB RB prateleira · Esc / B menu · F11 / Select sair
 gm-all-games = Todos os jogos
 gm-menu = Menu
 gm-resume = Voltar ao Modo de Jogo
 gm-to-library = Biblioteca
 gm-leave = Sair do Modo de Jogo
-gm-screen = Modo de Jogo
-gm-menu-hint = Cima Baixo escolher · Enter / A confirmar · Esc / B fechar
 gm-empty = Ainda sem jogos. Saia do Modo de Jogo e adicione alguns.
 gm-no-description = Ainda sem descrição.
 shelf-continue = Continuar a jogar
@@ -206,11 +182,6 @@ report-copy = Copiar relatório
 report-open-logs = Abrir registos de lançamento
 report-no-clipboard = Nenhuma ferramenta de área de transferência encontrada (instale wl-clipboard ou xclip); `zendo report` imprime o relatório.
 report-gathered = Relatório reunido: { $count } linhas. A cópia para a área de transferência é uma tentativa; `zendo report` imprime-o.
-images-none = Não há imagens para transferir
-images-left = { $count ->
-    [one] falta 1
-   *[other] faltam { $count }
-}
 covers-title = Capas
 covers-about = As do Steam vêm da sua própria cache. A Epic, a GOG e a Amazon publicam as suas; as restantes vêm do SteamGridDB. Um jogo sem nenhuma em lado nenhum volta a ser procurado ao fim de uma semana.
 covers-download = Transferir as capas e imagens largas em falta
@@ -302,7 +273,6 @@ nexus-download-name = { $title } · ficheiro #{ $file }
 nexus-downloading = A transferir um mod para { $title } do Nexus…
 nexus-download-stopped = Transferência parada
 nexus-download-failed = Não foi possível transferir o mod: { $error }
-nexus-downloads-title = Mods do Nexus
 nexus-paste = Cole a sua chave pessoal da API do Nexus Mods
 nexus-get-key = Obtenha a sua chave pessoal da API em API Access no Nexus Mods
 steam-sign-in-about = Inicie sessão na própria página do Steam, com a palavra-passe e o Steam Guard ou o código QR da aplicação Steam; o Zendo nunca vê a palavra-passe. A Loja passa a listar os jogos que tem e os que a sua família Steam partilha, e instala-os através do Steam. O Zendo guarda a sessão no porta-chaves do sistema e a página do Steam lembra-se dela.
@@ -312,10 +282,6 @@ steam-signed-in = Sessão iniciada: a Loja está a pedir os seus jogos ao Steam
 steam-signed-in-about = A Loja lista os jogos desta conta e os que a sua família Steam partilha.
 steam-signed-out = Sessão do Steam terminada
 steam-sign-in-again = A sessão do Steam terminou: inicie sessão de novo
-steam-family = Família Steam: { $name } · { $count ->
-    [one] { $count } membro
-   *[other] { $count } membros
-}
 steam-family-failed = Não foi possível listar os jogos da sua família: { $error }
 store-shared = Partilhado pela sua família
 steam-asked = Pedido ao Steam para instalar { $title }: escolha onde na janela do Steam
@@ -353,7 +319,6 @@ nexus-stopping = A parar…
 nexus-stop = Parar
 nexus-needs-key = Um mod veio do Nexus: defina a sua chave do Nexus nas Definições e volte a premir o botão no Nexus
 nexus-press-mod-manager = No Nexus, prima Mod manager download para o novo ficheiro; o Zendo coloca-o no lugar do antigo
-nexus-choose-title = Para que jogo é este mod?
 nexus-choose-none = O Nexus diz que este mod é para { $name }, e nenhum jogo instalado tem esse nome. Escolha o jogo a que se destina; o Zendo lembra-se disso para os próximos mods deste jogo.
 nexus-choose-several = O Nexus diz que este mod é para { $name }, e há mais de um jogo instalado que corresponde.
 nexus-updated-to = { $name } atualizado para { $version }
@@ -449,7 +414,6 @@ mods-loses = { $count ->
    *[other] { $count } substituídos por { $other }
 }
 mods-options = Opções…
-mods-installer-later = Este arquivo tem o seu próprio instalador com opções, e essa janela ainda não está aqui. Nada foi adicionado.
 mods-update-to = Atualizar para { $version }
 mods-update = Atualizar
 mods-profile = Perfil
@@ -514,10 +478,8 @@ game-back = ← Biblioteca
 game-ready = Pronto quando quiser
 game-favorite = Favorito
 game-unfavorite = Tirar dos favoritos
-game-manage-steam = Gerir no Steam
 game-change-cover = Mudar capa
 game-change-backdrop = Mudar fundo
-game-edit-categories = Editar coleções
 stat-completion = Conclusão
 game-hide = Ocultar
 game-unhide = Mostrar
@@ -557,21 +519,16 @@ fact-never = Nunca
 fact-play-time = Tempo de jogo
 fact-status = Estado
 fact-owner = De quem é
-fact-recent-time = Últimas duas semanas
-fact-played-on = Jogado em
 system-linux = Linux
 system-windows = Windows
 system-mac = macOS
 system-deck = Steam Deck
 fact-not-installed = Não instalado
 fact-started-from-zendo = Iniciado a partir do Zendo
-fact-launch-command = Comando de lançamento
-fact-zendo-id = Id no Zendo
 
 ## Jogos a correr
 
 run-its-launcher = o seu lançador
-run-starting-game = A iniciar { $title }…
 run-handed = { $title } entregue a { $launcher }
 run-running = { $title } está a correr
 run-waiting = À espera que { $launcher } inicie { $title }…
@@ -596,8 +553,6 @@ run-state-running = A correr
 run-state-starting = A iniciar…
 run-stop = Parar
 run-force-stop = Forçar paragem
-run-wine-prefix = Prefixo Wine
-run-last-log = Registo do último lançamento
 
 ## ProtonDB
 
@@ -626,9 +581,6 @@ choosing = A escolher…
 
 local-no-record = O Zendo não tem registo deste jogo
 local-choose-program = Escolha o programa do jogo
-local-added = { $title } adicionado
-local-saved = { $title } guardado
-local-removed = { $title } removido da biblioteca; os ficheiros ficam onde estavam
 local-edit-game = Editar jogo
 local-add-game = Adicionar um jogo
 local-about-empty = Um jogo que instalou por si: o .exe de um jogo de Windows, que corre através do Proton num prefixo próprio, ou o programa de um jogo de Linux.
@@ -864,9 +816,6 @@ art-by = { $about }, de { $author }
 
 ## Contas
 
-accounts-signed-in-to = Sessão iniciada em { $store } como { $name }
-accounts-signed-out-of = Sessão terminada em { $store }
-accounts-closed = Início de sessão em { $store } fechado
 accounts-no-web-view = { $error }. Inicie sessão no navegador.
 accounts-no-code-epic = Não há código aí: cole a página inteira que a Epic mostrou
 accounts-no-code-address = Não há código aí: cole o endereço em que a página terminou
@@ -906,11 +855,7 @@ badge-installed = INSTALADO
 badge-unsupported = SEM APOIO
 fact-platforms = Plataformas
 fact-developer = Programador
-store-asking-stores = A perguntar a { $stores } pelos seus jogos…
-store-search = Pesquisar os seus jogos
-store-asking = A perguntar…
 store-sign-in-first = Inicie sessão numa loja em Contas para ver os jogos que tem
-store-go-accounts = Ir para Contas
 store-asking-all = A perguntar às lojas pelos seus jogos…
 store-nothing = Nada aqui
 store-not-installed-only = Só os não instalados
@@ -1021,7 +966,6 @@ downloads-copied = { $done } de { $total } copiados
 downloads-move = Mover…
 downloads-move-to = Mover { $title } para…
 downloads-move-running = { $title } está aberto; feche-o e depois mova-o
-downloads-moving-wait = { $title } está a ser movido; espere que termine
 downloads-waits-running = Espera que o jogo seja fechado
 downloads-import = Importar de uma pasta…
 downloads-import-where = Onde está { $title }?
@@ -1044,7 +988,6 @@ sign-in-popup-title = Iniciar sessão · Zendo
 theme-title = Tema
 theme-about = As cores da janela: as do próprio Zendo, um tema seu (um ficheiro em { $folder }, lido quando as Definições abrem) ou o esquema de cores do KDE em uso, que o Zendo segue quando muda.
 theme-system = Sistema
-theme-opaque = Janela opaca (sem transparência nem desfoque por trás)
 theme-gone = Já não há nenhum tema chamado “{ $theme }”, por isso aparecem as cores do próprio Zendo.
 theme-not-read = Não é um tema: { $problem }
 theme-missing = Não foi encontrado nenhum esquema de cores do KDE, por isso aparecem as cores do próprio Zendo.
@@ -1164,7 +1107,6 @@ play-backlog = Por jogar
 play-playing = A jogar
 play-completed = Terminado
 play-abandoned = Abandonado
-game-status = Estado
 status-is = { $title } está agora: { $status }
 status-cleared = { $title } ficou sem estado
 library-bulk-pin = Favorito
@@ -1196,7 +1138,6 @@ collections-updated = Vista { $name } atualizada
 ## Estatísticas
 
 page-stats = Estatísticas
-hints-stats = ← → período · Esc voltar · F11 Modo de Jogo
 stats-none = Ainda não há sessões de jogo
 stats-none-about = O Zendo regista os jogos que inicia e acompanha até terminarem. Jogue um durante um minuto ou mais e aparece aqui.
 stats-none-period = Sem sessões neste período
@@ -1256,6 +1197,5 @@ steam-app-invalid = Isso não é um ID de app Steam
 steam-app-saved = { $title } passa a usar a app Steam { $app }
 steam-app-cleared = { $title } deixou de ter um ID Steam próprio
 steam-app-no-match = Não foi encontrado nenhum jogo Steam para este. Indique o ID da app Steam para obter descrição e dados.
-steam-app-set = Indicar ID da app Steam
 
 fact-features-more = , +{ $count } mais

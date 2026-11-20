@@ -1,10 +1,11 @@
 # Zendo: the port from Slint to Tauri
 
 The plan for replacing the Slint window with a Tauri 2 shell and a SvelteKit
-frontend. Work happens on the branch `f/ui-revamp`; `main` stays releasable and
-the Slint window stays in place until the parity checklist is signed off.
+frontend. It was carried out on the branch `f/ui-revamp`, slice by slice, and
+the cut-over (slice 8) was done on 2026-11-20: `crates/zendo` is the Tauri
+crate, it builds the `zendo` binary, and the Slint window is in git history.
 
-## Decision [tentative until the slices are signed off]
+## Decision [firm, carried out 2026-11-20]
 
 - The UI moves to **Tauri 2 + SvelteKit (SPA) + Svelte 5 + Tailwind CSS 4 +
   shadcn-svelte**, with `zendo-core` as the Rust backend.
@@ -13,8 +14,8 @@ the Slint window stays in place until the parity checklist is signed off.
 - The binary licence simplifies: Slint's GPLv3 requirement goes away, and
   Tauri (MIT/Apache) with the system WebKitGTK (LGPL) allows an MIT/Apache
   binary, subject to the same font and asset checks as today.
-- The Slint window (`crates/zendo`) is not deleted until the parity checklist
-  passes, as with the Iced to Slint cut-over (items 47 to 54).
+- The Slint window stayed until the port was whole, as the Iced to Slint
+  cut-over did (items 47 to 54), and was deleted on 2026-11-20.
 
 ## Why Tauri, with the spike's evidence (2026-11-18)
 
@@ -37,9 +38,11 @@ its native renderer is too young. Tauri won on stability, speed and tooling.
 
 - `zendo-core` (unchanged): scan, launch, stores, mods, state, settings,
   covers, sessions. This becomes the Tauri backend.
-- `crates/zendo-tauri` (new workspace member): the Tauri shell, the commands,
-  the events, the tray, the controller, the keyring, the window.
-- `crates/zendo-tauri/ui` (new): the SvelteKit frontend.
+- `crates/zendo` (a new workspace member at the time, `crates/zendo-tauri`
+  until the cut-over): the Tauri shell, the commands, the events, the tray,
+  the controller, the keyring, the window.
+- `crates/zendo/ui` (new, `crates/zendo-tauri/ui` until the cut-over): the
+  SvelteKit frontend.
 - `zendo-shell`: keeps the parts that need no toolkit and are not UI state:
   tray (`ksni`), controller (`gilrs`), links, the command line, and file
   helpers. The page words and the per-page sheet/job state move to the
@@ -67,11 +70,10 @@ its native renderer is too young. Tauri won on stability, speed and tooling.
 ```
 crates/zendo-core/          backend, unchanged
 crates/zendo-shell/         tray, controller, links, command line, file helpers
-crates/zendo/               Slint window, kept until parity
-crates/zendo-tauri/         new: Tauri shell (Cargo crate, workspace member)
-crates/zendo-tauri/ui/      new: SvelteKit frontend
-crates/zendo-tauri/tauri.conf.json
-crates/zendo-tauri/capabilities/
+crates/zendo/               the Tauri shell and the binary (was crates/zendo-tauri)
+crates/zendo/ui/            the SvelteKit frontend
+crates/zendo/tauri.conf.json
+crates/zendo/capabilities/
 ```
 
 `tauri.conf.json`:
@@ -138,7 +140,7 @@ and removed once already).
    games: the add/edit sheet, the file dialog, and Remove). **3d** built
    2026-11-18: ProtonDB's pill, Steam's About, facts and screenshots, the
    requirements, the achievements and the Technical card's Steam app id, all
-   over `zendo_shell::cards` (the words both windows use). The installed DLC
+   over `zendo_shell::cards` (the page's words). The installed DLC
    is listed read-only: the store's list and Install/Uninstall are slice 5's,
    and the screenshot lightbox is slice 7's. **3e** the Wine prefix card (built 2026-11-18 as its read-only first part: the folder, Open folder and
    the known fixes' lines) with its tools (built 2026-11-19 as **3e-2**: Wine
@@ -177,12 +179,14 @@ and removed once already).
    Nexus search, the screenshot lightbox. Built 2026-11-20: **7a**, the
    screenshot lightbox, **7b**, the launch options sheet over the shared
    `zendo_shell::launch_options`, **7c**, the art picker over
-   `zendo_shell::artwork`, and **7d-1**, Nexus links, the link chooser,
-   downloads and mod updates, over `zendo_shell::nexus`, and **7d-2**, Search
-   Nexus over `zendo_shell::nexus_search`; 7e is next.
+   `zendo_shell::artwork`, **7d-1**, Nexus links, the link chooser,
+   downloads and mod updates, over `zendo_shell::nexus`, **7d-2**, Search
+   Nexus over `zendo_shell::nexus_search`, and **7e**, the FOMOD installer over
+   `zendo_shell::installer`, with a mod's Options… running its installer
+   again. The slice is whole.
 8. **Parity and cut-over**: the parity checklist signed off, the Slint crate
    deleted, `cargo` and packaging updated, the licence and spec checked, the
-   README and docs updated.
+   README and docs updated. Done 2026-11-20.
 
 ## Tooling
 
@@ -253,65 +257,44 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
   over IPC. The frontend does not reimplement the translations, so the two
   `.ftl` files stay the single source of words.
 - **Tray stays `ksni`**, in `zendo-shell`.
-- **Controller and tray stay in `zendo-shell`**, not in `zendo-tauri`.
+- **Controller and tray stay in `zendo-shell`**, not in the Tauri crate.
 - Branch: `f/ui-revamp`. The plan is its first commit; the port started with
   slice 0 on 2026-11-18, and slice 1 the same day.
 
 ## First steps
 
-1. Scaffold `crates/zendo-tauri` and `crates/zendo-tauri/ui` (SvelteKit,
-   Tailwind, shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
+1. Scaffold the Tauri crate and its `ui/` (SvelteKit, Tailwind,
+   shadcn-svelte, Tauri dev loop). Slice 0, built 2026-11-18.
 2. Port the shell: words, colours, tray, controller, keyboard, full screen and
    the command line. Slice 1, built 2026-11-18.
 3. Port the Library: the grid, chips, search, sort, cursor, marks, bulk
    edits, cover downloads and the file watch. Slice 2, built 2026-11-18 (2a
    and 2b); the Collections sheet is slice 4's.
-4. The FPS harness is in (`ZENDO_FPS`); add the parity checklist and proceed
-   slice by slice. Slice 3 is built whole: 3a, 3b, 3c, 3d and 3e (3e-1 to
-   3e-4). Slice 4 is whole: 4a (Settings' General, Library and Diagnostics),
-   4b (Keys, Launchers, Engines, Proton and Discord's presence) and 4c
-   (Accounts, About, the Collections sheet). Slice 5 is 5a (the Store page),
-   5b-1 (the queue, the Downloads page, Install and Import), 5b-2 (Steam's
-   installs), 5b-3 (updates, the close question, the Store's accounts), 5c
-   (the game page's jobs) and 6 (Stats and Game Mode). Slice 7 (the sheets) is
-   next.
-5. Keep the Slint window until the checklist is signed off.
+4. The FPS harness is in (`ZENDO_FPS`); go slice by slice, with a parity
+   check per slice. Slice 3 is whole: 3a, 3b, 3c, 3d and 3e (3e-1 to 3e-4).
+   Slice 4 is whole: 4a (Settings' General, Library and Diagnostics), 4b
+   (Keys, Launchers, Engines, Proton and Discord's presence) and 4c (Accounts,
+   About, the Collections sheet). Slice 5 is whole: 5a (the Store page), 5b-1
+   (the queue, the Downloads page, Install and Import), 5b-2 (Steam's
+   installs), 5b-3 (updates, the close question, the Store's accounts) and 5c
+   (the game page's jobs); slice 6 is Stats and Game Mode, and slice 7 the
+   sheets (7a to 7e).
+5. Keep the Slint window until the checklist was signed off; it was deleted
+   in slice 8.
 
-## Handoff for the next session
+## After the cut-over (2026-11-20)
 
-- Branch `f/ui-revamp`. Slices 0, 1, 2 and 3 are in place: the crate, the
-  SvelteKit app, the dev loop, the shell, the Library, and the whole game page
-  (its header and actions, sessions, details, local games, the store cards,
-  the Wine prefix card with its tools, GOG's changelog, the cloud saves row
-  and the Mods card). Slice 4 is whole, and slice 5 is 5a (the Store page) and
-  5b-1 (the queue and the Downloads page). Its commands and checks are in
-  `crates/zendo-tauri/README.md`.
-- The two spikes are outside the repo and can be deleted now that the port has
-  started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
-  `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 7's last part, 7e the FOMOD installer, then slice 8 (the
-  cut-over). The prefix's tools, the Mods card's presses and Settings'
-  presses are built and some are unrun: they start umu, a real window, an
-  installer, a change to a game's files or a write to `config.toml`.
-- This session's `ydotool` and `wtype` reached nothing at all (the pointer
-  would not move; `hyprctl cursorpos` stayed put), so the on-screen checks
-  used a temporary `ZENDO_PAGE` hook in `platform.rs`. It opened a Library
-  card and the Settings route; a synthetic click on Settings' own buttons did
-  not reach their handlers, so only the first group was seen.
-  The account-dependent cards are checkable now that the user has a
-  Steam game and an Epic game installed: an Epic game's achievements and
-  requirements, and a Steam profile whose game details are public (the
-  unlocks, the tiles' count and the achievements' share bar). The Library's
-  Collections chip waits for slice 4's sheet; the DLC card's store list and
-  its buttons wait for slice 5; the screenshot lightbox is slice 7's.
-- The FPS harness is `ZENDO_FPS=1`, with the seeder at
-  `crates/zendo-tauri/scripts/seed-library.py` for a large throwaway library;
-  it measured 62 fps on 2,700 games in a debug build. `history.md` has the
-  runs.
-- Input works from a session on Hyprland: `ydotoold` on a short socket path
-  (`/run/user/1000/ydt.sock`), then `ydotool mousemove`/`click` and `wtype`;
-  slice 3d's check clicked the Steam app id's field, typed, pressed Enter and
-  clicked Save and Clear. A plain `cargo build` opens the window on
-  `devUrl` and shows "Could not connect to localhost"; the check needs
-  `ui/node_modules/.bin/tauri build --debug` and then the binary.
-- The decisions above are firm; do not reopen them without the user.
+- The branch `f/ui-revamp` holds the port; merging it is the user's call.
+- The window is `crates/zendo`, the Tauri shell and the `zendo` binary, with
+  the SvelteKit app in `ui/`. Read its `README.md` for where each command,
+  event and page lives; the crate's own tests and `npm run check`/`lint`/`test`
+  are the automated checks.
+- The parity difference and what was left unrun are in `docs/history.md`
+  ("The Tauri port, slice 8") and in the continuation note in
+  `.mallet/notes/port-checks.md`.
+- Input: `wtype` and `ydotool` were unreliable through the port (a
+  `KeyboardEvent` dispatched from a `window.eval` hook, and
+  `window.__TAURI__.core.invoke`, were the dependable way). The FPS harness
+  is `ZENDO_FPS=1`, with the seeder at
+  `crates/zendo/scripts/seed-library.py`; it measured 62 fps on 2,700 games in
+  a debug build.

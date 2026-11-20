@@ -33,8 +33,6 @@ page-downloads = Downloads
 page-accounts = Accounts
 page-settings = Settings
 page-about = About
-page-coming = This page is still to come
-top-bar-signed-in = { $count } of { $stores }
 
 ## Sources and orders
 
@@ -57,8 +55,6 @@ library-no-recent = Nothing played in the last 30 days
 library-no-hidden = No hidden games
 library-favorites = Favorites
 library-recent = Recent
-library-organize = Organize
-library-sort-keys = Sort · Tab
 library-scanning = Scanning…
 library-refresh = Refresh
 library-search = Search your library
@@ -74,7 +70,6 @@ played-never = Not played yet
 played-when = Played { $when }
 played-time = { $time } played
 
-collections-none = None
 
 ## Collections
 
@@ -114,8 +109,8 @@ about-version = Version { $version }
 about-intro = Every game on this machine in one library: Steam, Epic, GOG, Amazon and the rest, each started the way its own launcher would.
 about-licence = Licence
 about-built-on = Built on
-about-built-slint = Slint (under the GPLv3), the window and everything in it
-about-licence-text-slint = Zendo's own files are MIT. The program is built with Slint under the GPLv3, so as a whole it is GPLv3. Zendo reads the launchers' files and never writes to them.
+about-built-tauri = Tauri 2, SvelteKit, Svelte and Tailwind, the window and everything in it
+about-licence-text = Zendo's own files are MIT, and so is the program. Zendo reads the launchers' files and never writes to them.
 about-built-gilrs = gilrs, for controllers
 about-built-keyvalues = keyvalues-parser, for Steam's files
 about-built-ureq = ureq, serde and toml
@@ -126,15 +121,9 @@ about-built-font = JetBrains Mono (SIL Open Font License), for the type
 ## The window
 
 game-gone = This game is no longer in the library
-owned-gone = This game is no longer in your stores' lists
 images-failed = { $count ->
     [one] { $count } image could not be downloaded; `zendo covers` says why
    *[other] { $count } images could not be downloaded; `zendo covers` says why
-}
-images-downloading = Downloading images, { $count } left
-footer-unreadable = { $count ->
-    [one] { $count } file could not be read; Settings names it
-   *[other] { $count } files could not be read; Settings names them
 }
 status-hid = Hid { $title } · Ctrl+H shows hidden games
 status-unhid = { $title } is back in the library
@@ -142,21 +131,11 @@ status-pinned = { $title } is a favorite: it leads the library
 status-unpinned = { $title } is no longer a favorite
 hints-library = Enter open · Tab sort · Ctrl+P favorite · Ctrl+Space mark · Del hide · Ctrl+H hidden · F11 Game Mode
 hints-selection = Enter open · Esc clear the marks · F11 Game Mode
-hints-sheet = Enter save · Esc cancel
-hints-art = Enter search · Esc close
-hints-game = Enter play · Esc back · Ctrl+P favorite · Del hide · F11 Game Mode
-hints-store = Enter open · type to search · Esc clear · F11 Game Mode
-hints-owned = Enter install or open · Esc back · F11 Game Mode
-hints-closing = Enter close anyway · Esc keep downloading
-hints-other = Esc back · F11 Game Mode
-hints-game-mode = Enter / A play · Left Right move · Tab / LB RB shelf · Esc / B menu · F11 / Select leave
 gm-all-games = All games
 gm-menu = Menu
 gm-resume = Back to Game Mode
 gm-to-library = Library
 gm-leave = Leave Game Mode
-gm-screen = Game Mode
-gm-menu-hint = Up Down choose · Enter / A confirm · Esc / B close
 gm-empty = No games yet. Leave Game Mode and add some.
 gm-no-description = No description yet.
 shelf-continue = Continue playing
@@ -204,8 +183,6 @@ report-copy = Copy report
 report-open-logs = Open launch logs
 report-no-clipboard = No clipboard tool found (install wl-clipboard or xclip); `zendo report` prints the report.
 report-gathered = Report gathered: { $count } lines. The clipboard write is best effort; `zendo report` prints it.
-images-none = No images to download
-images-left = { $count } left
 covers-title = Covers
 covers-about = Steam's come from its own cache. Epic, GOG and Amazon publish theirs; the rest come from SteamGridDB. A game with none anywhere is asked about again after a week.
 covers-download = Download missing covers and wide images
@@ -297,7 +274,6 @@ nexus-download-name = { $title } · file #{ $file }
 nexus-downloading = Downloading a mod for { $title } from Nexus…
 nexus-download-stopped = Download stopped
 nexus-download-failed = Could not download the mod: { $error }
-nexus-downloads-title = Mods from Nexus
 nexus-paste = Paste your Nexus Mods personal API key
 nexus-get-key = Get your personal API key from API Access on Nexus Mods
 steam-sign-in-about = Sign in on Steam's own page, with your password and Steam Guard or the Steam app's QR code; Zendo never sees your password. The Store then lists the games you own and those your Steam family shares, and installs them through Steam. Zendo keeps the sign-in in the system keyring and Steam's page remembers it.
@@ -307,10 +283,6 @@ steam-signed-in = Signed in: the Store is asking Steam for your games
 steam-signed-in-about = The Store lists the games this account owns and those its Steam family shares.
 steam-signed-out = Signed out of Steam
 steam-sign-in-again = Steam's sign-in has ended: sign in again
-steam-family = Steam family: { $name } · { $count ->
-    [one] { $count } member
-   *[other] { $count } members
-}
 steam-family-failed = Your family's games could not be listed: { $error }
 store-shared = Shared by your family
 steam-asked = Asked Steam to install { $title }: choose where in Steam's dialog
@@ -348,7 +320,6 @@ nexus-stopping = Stopping…
 nexus-stop = Stop
 nexus-needs-key = A mod came from Nexus: set your Nexus key in Settings, then press the button on Nexus again
 nexus-press-mod-manager = On Nexus, press Mod manager download for the new file; Zendo puts it in place of the old one
-nexus-choose-title = Which game is this mod for?
 nexus-choose-none = Nexus says this mod is for { $name }, and no installed game goes by that name. Choose the game it is for; Zendo remembers it for this game's next mods.
 nexus-choose-several = Nexus says this mod is for { $name }, and more than one installed game matches.
 nexus-updated-to = Updated { $name } to { $version }
@@ -441,7 +412,6 @@ mods-from-nexus = from Nexus
 mods-wins = replaces { $count } of { $other }
 mods-loses = { $count } replaced by { $other }
 mods-options = Options…
-mods-installer-later = This archive has its own installer with options, and that sheet is not here yet. Nothing was added.
 mods-update-to = Update to { $version }
 mods-update = Update
 mods-profile = Profile
@@ -506,10 +476,8 @@ game-back = ← Library
 game-ready = Ready when you are
 game-favorite = Favorite
 game-unfavorite = Unfavorite
-game-manage-steam = Manage in Steam
 game-change-cover = Change cover
 game-change-backdrop = Change backdrop
-game-edit-categories = Edit collections
 stat-completion = Completion
 game-hide = Hide
 game-unhide = Unhide
@@ -549,21 +517,16 @@ fact-never = Never
 fact-play-time = Play time
 fact-status = Status
 fact-owner = Owned by
-fact-recent-time = Last two weeks
-fact-played-on = Played on
 system-linux = Linux
 system-windows = Windows
 system-mac = macOS
 system-deck = Steam Deck
 fact-not-installed = Not installed
 fact-started-from-zendo = Started from Zendo
-fact-launch-command = Launch command
-fact-zendo-id = Zendo id
 
 ## Running games
 
 run-its-launcher = its launcher
-run-starting-game = Starting { $title }…
 run-handed = Handed { $title } to { $launcher }
 run-running = { $title } is running
 run-waiting = Waiting for { $launcher } to start { $title }…
@@ -588,8 +551,6 @@ run-state-running = Running
 run-state-starting = Starting…
 run-stop = Stop
 run-force-stop = Force stop
-run-wine-prefix = Wine prefix
-run-last-log = Last launch's log
 
 ## ProtonDB
 
@@ -618,9 +579,6 @@ choosing = Choosing…
 
 local-no-record = Zendo has no record of this game
 local-choose-program = Choose the game's program
-local-added = Added { $title }
-local-saved = Saved { $title }
-local-removed = Removed { $title } from the library; its files are where they were
 local-edit-game = Edit game
 local-add-game = Add a game
 local-about-empty = A game you installed yourself: its .exe for a Windows game, which runs through Proton in a prefix of its own, or the program for a Linux one.
@@ -856,9 +814,6 @@ art-by = { $about }, by { $author }
 
 ## Accounts
 
-accounts-signed-in-to = Signed in to { $store } as { $name }
-accounts-signed-out-of = Signed out of { $store }
-accounts-closed = Closed the { $store } sign-in
 accounts-no-web-view = { $error }. Sign in in your browser instead.
 accounts-no-code-epic = No code there: paste the whole page Epic showed
 accounts-no-code-address = No code there: paste the address the page ended on
@@ -898,11 +853,7 @@ badge-installed = INSTALLED
 badge-unsupported = UNSUPPORTED
 fact-platforms = Platforms
 fact-developer = Developer
-store-asking-stores = Asking { $stores } for your games…
-store-search = Search your games
-store-asking = Asking…
 store-sign-in-first = Sign in to a store in Accounts to see the games you own
-store-go-accounts = Go to Accounts
 store-asking-all = Asking the stores for your games…
 store-nothing = Nothing here
 store-not-installed-only = Not installed only
@@ -1013,7 +964,6 @@ downloads-copied = { $done } of { $total } copied
 downloads-move = Move…
 downloads-move-to = Move { $title } to…
 downloads-move-running = { $title } is running; close it, then move it
-downloads-moving-wait = { $title } is moving; wait for it to finish
 downloads-waits-running = Waits until the game is closed
 downloads-import = Import from a folder…
 downloads-import-where = Where is { $title }?
@@ -1036,7 +986,6 @@ sign-in-popup-title = Sign in · Zendo
 theme-title = Theme
 theme-about = The window's colours: Zendo's own, a theme of your own (a file in { $folder }, read when Settings opens), or the KDE colour scheme in use, which Zendo follows as it changes.
 theme-system = System
-theme-opaque = Opaque window (no translucency or blur behind it)
 theme-gone = No theme called “{ $theme }” is left, so Zendo's own colours show.
 theme-not-read = Not a theme: { $problem }
 theme-missing = No KDE colour scheme was found, so Zendo's own colours show.
@@ -1156,7 +1105,6 @@ play-backlog = Backlog
 play-playing = Playing
 play-completed = Completed
 play-abandoned = Abandoned
-game-status = Status
 status-is = { $title } is now { $status }
 status-cleared = { $title } has no status
 library-bulk-pin = Favorite
@@ -1188,7 +1136,6 @@ collections-updated = Updated view { $name }
 ## Stats
 
 page-stats = Stats
-hints-stats = ← → period · Esc back · F11 Game Mode
 stats-none = No play sessions yet
 stats-none-about = Zendo records the games it starts and watches until they end. Play one for a minute or more and it shows here.
 stats-none-period = No sessions in this period
@@ -1248,6 +1195,5 @@ steam-app-invalid = That is not a Steam app id
 steam-app-saved = { $title } now uses Steam app { $app }
 steam-app-cleared = { $title } no longer has a Steam app id of its own
 steam-app-no-match = No Steam game was found for this one. Give its Steam app id to get a description and facts.
-steam-app-set = Set Steam app id
 
 fact-features-more = , +{ $count } more

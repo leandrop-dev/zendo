@@ -1,4 +1,4 @@
-//! What the Collections sheet lists, the same in both windows: the
+//! What the Collections sheet lists, so the window draws one sheet: the
 //! hand-picked collections and the saved views as one list by name, which
 //! collections a set of games is in, and a saved view in a few words.
 

@@ -10,7 +10,7 @@
 
 srpm:
 	@test -n "$(outdir)" || { echo "outdir is required" >&2; exit 2; }
-	if [ "$$(id -u)" = 0 ]; then dnf -y install git cargo rpm-build; fi
+	if [ "$$(id -u)" = 0 ]; then dnf -y install git cargo rpm-build npm; fi
 	$(MAKE) -f $(abspath $(lastword $(MAKEFILE_LIST))) build outdir=$(outdir)
 
 ifneq ($(filter build,$(MAKECMDGOALS)),)
@@ -26,6 +26,8 @@ build:
 	mkdir -p $(WORK)/sources $(WORK)/vendor-src
 	git -C $(ROOT) archive --prefix=zendo-$(COMMIT)/ -o $(WORK)/sources/zendo-$(SHORT).tar.gz $(COMMIT)
 	git -C $(ROOT) archive --prefix=zendo-$(COMMIT)/ $(COMMIT) | tar -x -C $(WORK)/vendor-src
+	cd $(WORK)/vendor-src/zendo-$(COMMIT)/crates/zendo/ui && npm ci --ignore-scripts --no-audit --no-fund && npm run build
+	tar -C $(WORK)/vendor-src/zendo-$(COMMIT)/crates/zendo/ui -czf $(WORK)/sources/zendo-$(SHORT)-ui.tar.gz build
 	cd $(WORK)/vendor-src/zendo-$(COMMIT) && cargo vendor --locked vendor >/dev/null
 	tar -C $(WORK)/vendor-src/zendo-$(COMMIT) -czf $(WORK)/sources/zendo-$(SHORT)-vendor.tar.gz vendor
 	mkdir -p $(outdir)

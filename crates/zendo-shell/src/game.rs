@@ -1,6 +1,6 @@
 //! What a game's page says without a toolkit: the line under its title and
-//! its four tiles. Both windows use these; the cards and the rest of the
-//! page stay with each window.
+//! its four tiles. The window draws these; the cards and the rest of the
+//! page stay in its own crate.
 
 use zendo_core::Game;
 use zendo_core::sessions::{self, Session};
