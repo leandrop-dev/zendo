@@ -486,6 +486,8 @@ export type ModsCard = {
 		down: boolean;
 		delete_label: string;
 		asking: boolean;
+		// "Update" or "Update to 2" when Nexus has a newer file.
+		update: string;
 	}[];
 	plugins: {
 		note: string;
@@ -1612,4 +1614,56 @@ export async function artAutomatic(): Promise<ArtSheet> {
 
 export async function artClose(): Promise<ArtSheet> {
 	return invoke<ArtSheet>('art_close');
+}
+
+// Nexus Mods: a link's game and one game's mods coming in. The rules are
+// `zendo_shell::nexus`'s, shared with the Slint window.
+export type NexusDownload = {
+	id: number;
+	name: string;
+	// How far it got, in words.
+	words: string;
+	// 0 to 1, or 0 when the size is not known.
+	fraction: number;
+	stopping: boolean;
+};
+
+export type NexusPage = {
+	// The sheet that asks which game a link's mod is for.
+	choosing: boolean;
+	choose_about: string;
+	choices: string[];
+	// One game's downloads, or every game's when none was named.
+	downloads: NexusDownload[];
+};
+
+export async function nexusGet(game: string | null): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_get', { game });
+}
+
+export async function nexusChoose(at: number): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_choose', { at });
+}
+
+export async function nexusCancel(): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_cancel');
+}
+
+export async function nexusStop(id: number, game: string | null): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_stop', { id, game });
+}
+
+// Update on a mod, by its place among the game's mods.
+export async function nexusUpdate(id: string, at: number): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_update', { id, at });
+}
+
+// An `nxm://` link, as the command line takes it.
+export async function nexusLink(text: string): Promise<NexusPage> {
+	return invoke<NexusPage>('nexus_link', { text });
+}
+
+// The last line Nexus said, taken once: it can come before the page listens.
+export async function nexusNotice(): Promise<string | null> {
+	return invoke<string | null>('nexus_notice');
 }

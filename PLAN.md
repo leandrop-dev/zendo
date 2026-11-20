@@ -64,7 +64,7 @@ following the accounts, and the installed game page's Update, job line, More
 row and DLC card) and slice 6 (the Stats page and Game Mode) are built, and
 the Slint window stays in place and releasable until the port's parity
 checklist passes (`docs/tauri-port-plan.md`). Left there: the rest of the
-sheets (slice 7: Nexus and its search, the FOMOD installer) and the cut-over
+sheets (slice 7: Search Nexus and the FOMOD installer) and the cut-over
 (slice 8).
 
 - **The window is Slint** [firm, decided 2026-11-14, cut over 2026-11-15
@@ -110,8 +110,8 @@ Installing the 1.0.1 packages from the new repositories on the family's
 machines (Arch: the `[zendo]` pacman repository; Fedora: COPR), then whatever
 the user chooses from `docs/backlog.md` (what is on hold is there, and the
 review's deferred items are listed after it). On `f/ui-revamp`, the port
-continues with slice 7 (Nexus and its search, the FOMOD installer), then
-slice 8 (the cut-over).
+continues with slice 7 (Search Nexus, the FOMOD installer), then slice 8 (the
+cut-over).
 
 ## Direction [firm]
 

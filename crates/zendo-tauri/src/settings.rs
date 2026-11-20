@@ -205,7 +205,7 @@ impl SettingsState {
         self.key().note = note;
     }
 
-    fn nexus(&self) -> MutexGuard<'_, NexusState> {
+    pub(crate) fn nexus(&self) -> MutexGuard<'_, NexusState> {
         self.nexus.lock().unwrap_or_else(PoisonError::into_inner)
     }
 

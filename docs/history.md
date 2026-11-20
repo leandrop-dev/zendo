@@ -7216,6 +7216,41 @@ field idle again. Not seen, as they need a working key and the network: the
 games found, the thumbnails, choosing one, Show more and Use the automatic
 one.
 
+## The Tauri port, slice 7d-1: Nexus links, the chooser and downloads (2026-11-21)
+
+An `nxm://` link now reaches the Tauri window: from the command line at start,
+or from a browser while it runs (the socket `zendo_shell::links` listens on).
+The key is read on the work's thread (the keyring may prompt) once the library
+is read; without one the window says so at its foot. A link no single game
+matches, or one for a game that is not installed, opens the chooser: Nexus's
+name for the game, the installed games to pick from, and Cancel. Picking one
+starts the download into that game's mods and remembers the game for the site
+next time.
+
+The game's Mods card draws a mod coming in from Nexus with its line, a bar and
+Stop, and a mod Nexus has a newer file for gets its Update button ("Update to
+2"); Premium downloads it, otherwise its page opens for the site's button to
+send it back. Nexus is asked once a session for the mods' newer files as the
+mods are read. The downloads' end reloads the card.
+
+The rules are `zendo_shell::nexus`'s, shared with the Slint window; the state
+is the one Settings already keeps (`SettingsState`'s `NexusState`).
+`crates/zendo-tauri/src/nexus.rs` runs the work, `ui/src/lib/nexus.svelte.ts`
+keeps the chooser and the foot's line, and `ui/src/lib/components/
+nexus-chooser.svelte` draws the chooser. A line said before the page listens
+is kept for it (`nexus_notice`) and shown once; `nexus_changed` and
+`nexus_said` carry the rest.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored). Seen on screen in a throwaway home with
+one installed Epic game: a link with no key says so at the foot; with a fake
+key it opened the chooser ("Nexus says this mod is for stardewvalley…") with
+the game; picking it began the download (`begin Some(1)` in the app's log) and
+it ended with Nexus's refusal at the foot. Not seen, as they need a working
+key (and Premium): a file actually downloaded, the card's line and bar for a
+running download, and a mod's Update.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

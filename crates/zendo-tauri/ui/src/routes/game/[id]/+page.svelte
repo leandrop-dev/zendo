@@ -45,6 +45,9 @@
 		modsRemove,
 		modsToggleMod,
 		modsTogglePlugin,
+		nexusGet,
+		nexusStop,
+		nexusUpdate,
 		openLink,
 		prefixInstall,
 		prefixOpen,
@@ -57,6 +60,7 @@
 		type GameCards,
 		type GamePage,
 		type ModsCard,
+		type NexusDownload,
 		type Pill
 	} from '#lib/api.js';
 	import ArtSheet from '#lib/components/art-sheet.svelte';
@@ -85,6 +89,8 @@
 	let prefixNote = $state<string | null>(null);
 	// The screenshot lightbox: the one open, if any.
 	let shot = $state<number | null>(null);
+	// The mods coming in from Nexus for this game.
+	let downloads = $state<NexusDownload[]>([]);
 	// The Mods card, the folder and profile name being typed, and a change
 	// that could not start.
 	let mods = $state<ModsCard | null>(null);
@@ -235,12 +241,31 @@
 		}
 		try {
 			mods = open ? await modsBegin(id) : await modsGet(id);
+			downloads = (await nexusGet(id)).downloads;
 			if (mods.folder) {
 				folderInput = mods.folder;
 			}
 			if (mods.naming) {
 				profileName = mods.naming.name;
 			}
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
+	/// A Nexus press: the card and the downloads follow through
+	/// `nexus_changed`.
+	async function nexusAct(action: () => Promise<unknown>): Promise<void> {
+		try {
+			await action();
+		} catch (err) {
+			modsNote = String(err);
+		}
+	}
+
+	async function stopDownload(at: number): Promise<void> {
+		try {
+			downloads = (await nexusStop(at, id)).downloads;
 		} catch (err) {
 			modsNote = String(err);
 		}
@@ -374,6 +399,8 @@
 		// buttons follow.
 		const queued = listen('downloads_changed', () => void load());
 		const steamed = listen('steam_changed', () => void load());
+		// A mod from Nexus started, moved on or ended, or Update was pressed.
+		const nexusMods = listen('nexus_changed', () => void loadMods(false));
 		return () => {
 			window.removeEventListener('keydown', key);
 			void runs.then((stop) => stop());
@@ -383,6 +410,7 @@
 			void loaded.then((stop) => stop());
 			void queued.then((stop) => stop());
 			void steamed.then((stop) => stop());
+			void nexusMods.then((stop) => stop());
 		};
 	});
 </script>
@@ -1016,6 +1044,34 @@
 						</p>
 					{:else}
 						<div class="flex flex-col gap-3">
+							{#if downloads.length > 0}
+								<div class="flex flex-col gap-3 border-b border-line pb-3">
+									{#each downloads as download (download.id)}
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-3">
+												<div class="min-w-0 flex-1">
+													<p class="truncate text-[14px]">{download.name}</p>
+													<p class="truncate text-[12px] text-dim">{download.words}</p>
+												</div>
+												<button
+													type="button"
+													disabled={download.stopping}
+													onclick={() => void stopDownload(download.id)}
+													class="border border-line px-2 py-0.5 text-[12px] uppercase hover:bg-raised disabled:opacity-50"
+												>
+													{download.stopping ? app.t('nexus-stopping') : app.t('nexus-stop')}
+												</button>
+											</div>
+											<div class="h-1 bg-raised">
+												<div
+													class="h-full bg-accent-mark"
+													style="width: {download.fraction * 100}%"
+												></div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
 							{#if mods.naming}
 								<div class="flex flex-wrap items-center gap-2">
 									<span class="w-[90px] shrink-0 text-[13px] text-dim">
@@ -1103,7 +1159,7 @@
 								<p class="text-[14px] text-dim">{app.t('mods-none')}</p>
 							{:else}
 								<ul class="flex flex-col gap-2">
-									{#each mods.mods as mod (mod.id)}
+									{#each mods.mods as mod, at (mod.id)}
 										<li class="flex flex-col gap-0.5">
 											<div class="flex flex-wrap items-center gap-2">
 												<input
@@ -1116,6 +1172,16 @@
 														)}
 												/>
 												<span class="min-w-0 flex-1 truncate text-[14px]">{mod.name}</span>
+												{#if mod.update}
+													<button
+														type="button"
+														disabled={!mods.free}
+														onclick={() => void nexusAct(() => nexusUpdate(id, at))}
+														class="border border-accent-mark px-2 text-[13px] text-accent-mark uppercase hover:bg-raised disabled:opacity-60"
+													>
+														{mod.update}
+													</button>
+												{/if}
 												<button
 													type="button"
 													disabled={!mods.free || !mod.up}

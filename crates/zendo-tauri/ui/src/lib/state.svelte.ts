@@ -12,6 +12,8 @@ class App {
 	data = $state<Bootstrap | null>(null);
 	/// Why the shell could not start, if it could not.
 	error = $state<string | null>(null);
+	/// A line said at the foot for a moment: a Nexus download, a key.
+	notice = $state('');
 
 	/// A message in the window's language: the bundle from Rust, or the id
 	/// itself while there is none (a browser preview).

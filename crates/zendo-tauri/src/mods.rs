@@ -38,7 +38,7 @@ pub struct ModsHandle {
 }
 
 impl ModsHandle {
-    fn lock(&self) -> MutexGuard<'_, ModsState> {
+    pub(crate) fn lock(&self) -> MutexGuard<'_, ModsState> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -80,6 +80,8 @@ pub struct ModRowDto {
     /// "Delete", or "Really delete" once pressed.
     delete_label: String,
     asking: bool,
+    /// "Update" or "Update to 2" when Nexus has a newer file; else empty.
+    pub(crate) update: String,
 }
 
 /// A Bethesda game's plugin in load order.
@@ -143,7 +145,7 @@ pub struct ModsDto {
     naming: Option<NamingDto>,
     place: String,
     target: String,
-    mods: Vec<ModRowDto>,
+    pub(crate) mods: Vec<ModRowDto>,
     plugins: Option<PluginsDto>,
     /// "N files in overwrite", when there are any.
     overwrite: Option<String>,
@@ -171,7 +173,9 @@ pub fn mods_get(
         .ok_or_else(|| format!("no game with the id {id:?}"))?;
     let mods = app.state::<ModsHandle>();
     let running = library.running().is_running(&id);
-    Ok(dto(&mods, &game, running))
+    let mut card = dto(&mods, &game, running);
+    crate::nexus::write_updates(&app, &id, &mut card);
+    Ok(card)
 }
 
 /// The page just opened: reads the game's mods again, on a thread.
@@ -480,8 +484,10 @@ fn run_job(app: &AppHandle, library: &LibraryState, job: Job) {
         mods.say(done.status);
         for after in done.after {
             match after {
-                // Nexus's updates and the installer sheets are slice 7's.
-                After::CheckUpdates(_) | After::NextInstaller => {}
+                // Nexus is asked once a session for newer files of the mods.
+                After::CheckUpdates(game) => crate::nexus::want_updates(&handle, &game),
+                // The installer sheets arrive with the next slice.
+                After::NextInstaller => {}
                 After::OpenInstaller(_, _) => mods.say(Some(t!("mods-installer-later"))),
             }
         }
@@ -606,6 +612,7 @@ fn ready(
                     state.asking(id, &Confirm::Remove(info.id.clone())),
                 ),
                 asking: state.asking(id, &Confirm::Remove(info.id.clone())),
+                update: String::new(),
             })
             .collect(),
         plugins: overview

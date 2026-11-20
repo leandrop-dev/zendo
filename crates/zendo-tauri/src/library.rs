@@ -203,6 +203,11 @@ impl LibraryState {
     }
 
     /// Every game as the last scan read them.
+    /// The library was read at least once.
+    pub(crate) fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Relaxed)
+    }
+
     pub(crate) fn games(&self) -> Vec<Game> {
         let browser = self
             .browser

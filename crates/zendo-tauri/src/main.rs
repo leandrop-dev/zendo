@@ -26,6 +26,7 @@ mod launchers;
 mod library;
 mod local;
 mod mods;
+mod nexus;
 mod options;
 mod platform;
 mod prefix;
@@ -49,17 +50,10 @@ fn main() -> ExitCode {
 /// Opens the window: `fullscreen` is Game Mode's start (slice 6), and `link`
 /// the `nxm://` link it was started for (slice 7).
 #[expect(
-    clippy::needless_pass_by_value,
-    reason = "zendo_shell::cli::RunWindow fixes the signature"
-)]
-#[expect(
     clippy::too_many_lines,
     reason = "the command list is the one place every command is registered"
 )]
 fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
-    // Nexus links arrive with the Nexus pages.
-    let _ = link;
-
     zendo_shell::i18n::set_from_settings();
     // The settings alone, without the keyring: starting the window must not
     // ask the desktop for its keys.
@@ -95,6 +89,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(game_mode::GameModeState::default())
         .manage(options::OptionsState::default())
         .manage(artwork::ArtState::default())
+        .manage(nexus::NexusFeed::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -288,6 +283,13 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             artwork::art_more,
             artwork::art_automatic,
             artwork::art_close,
+            nexus::nexus_get,
+            nexus::nexus_choose,
+            nexus::nexus_cancel,
+            nexus::nexus_stop,
+            nexus::nexus_update,
+            nexus::nexus_link,
+            nexus::nexus_notice,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,
@@ -300,6 +302,15 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             }
             library::start(app.handle().clone());
             downloads::start(app.handle().clone());
+            // `nxm://` links, from the browser or the command line.
+            let links = app.handle().clone();
+            zendo_shell::links::listen(move |text| {
+                nexus::link(&links, text);
+                true
+            });
+            if let Some(link) = link.clone() {
+                nexus::link(app.handle(), link);
+            }
             steam::start(app.handle().clone());
             Ok(())
         })

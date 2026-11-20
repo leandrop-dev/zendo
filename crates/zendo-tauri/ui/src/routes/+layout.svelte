@@ -7,11 +7,13 @@
 	import { onMount } from 'svelte';
 	import type { LayoutProps } from './$types';
 	import GameMode from '#lib/components/game-mode.svelte';
+	import NexusChooser from '#lib/components/nexus-chooser.svelte';
 	import TopBar from '#lib/components/top-bar.svelte';
 	import { artwork } from '#lib/artwork.svelte.js';
 	import { downloads } from '#lib/downloads.svelte.js';
 	import { gameMode } from '#lib/game_mode.svelte.js';
 	import { library } from '#lib/library.svelte.js';
+	import { nexus } from '#lib/nexus.svelte.js';
 	import { options } from '#lib/options.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -22,7 +24,7 @@
 	// the Library's search.
 	function key(event: KeyboardEvent) {
 		// The sheets keep their own keys while they are open.
-		if (options.open || artwork.open) {
+		if (options.open || artwork.open || nexus.choosing) {
 			return;
 		}
 		if (gameMode.key(event)) {
@@ -48,6 +50,7 @@
 		void app.start().then(() => gameMode.start());
 		void options.start();
 		void artwork.start();
+		void nexus.start();
 		void library.start();
 		void downloads.start();
 		window.addEventListener('keydown', key);
@@ -71,8 +74,12 @@
 	{#if page.route.id === '/'}
 		<GameMode />
 	{/if}
+	<NexusChooser />
 	{#if elsewhere && downloads.summary}
 		<p class="border-t border-line px-6 py-2 text-sm text-dim">{downloads.summary}</p>
+	{/if}
+	{#if app.notice}
+		<p class="border-t border-line px-6 py-2 text-sm text-dim">{app.notice}</p>
 	{/if}
 	{#if app.error}
 		<p class="border-t border-line px-6 py-2 text-sm text-bad">{app.error}</p>

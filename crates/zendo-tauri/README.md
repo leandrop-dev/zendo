@@ -59,6 +59,12 @@ follow.
   threads of their own; the thumbnails are kept in `$CACHE/zendo/art-thumbs`
   for the asset protocol. Use the automatic one puts the stores' copy back and
   scans the library again.
+- `src/nexus.rs`: Nexus Mods over `zendo_shell::nexus`, whose state Settings
+  already keeps: `nxm://` links from the command line and the socket
+  (`links::listen`), the chooser (`nexus_get`, `nexus_choose`, `nexus_cancel`),
+  a game's downloads (`nexus_stop`) and Update on a mod (`nexus_update`). The
+  key is read on the work's thread; the last line said is kept for the page
+  (`nexus_notice`). The Mods card shows the downloads and the update labels.
 - The page's screenshot lightbox is the page's own (the full-size files come
   with the cards): Previous, Next, the count and Close, with Escape and the
   arrows.
@@ -183,6 +189,9 @@ follow.
   for itself again.
 - `art_thumb`: a thumbnail was downloaded and kept, with the image's id and its
   file; the sheet fills that row in.
+- `nexus_changed`: a link opened the chooser, a download started, moved on or
+  ended, or an update was pressed; the chooser and the Mods card ask again.
+- `nexus_said`: a line from Nexus for the window's foot.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the
