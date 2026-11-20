@@ -59,8 +59,10 @@
 		type ModsCard,
 		type Pill
 	} from '#lib/api.js';
+	import ArtSheet from '#lib/components/art-sheet.svelte';
 	import LocalForm from '#lib/components/local-form.svelte';
 	import OptionsSheet from '#lib/components/options-sheet.svelte';
+	import { artwork } from '#lib/artwork.svelte.js';
 	import { options } from '#lib/options.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
@@ -284,8 +286,8 @@
 	}
 
 	function key(event: KeyboardEvent): void {
-		// The sheet keeps its own keys while it is open.
-		if (options.open) {
+		// The sheets keep their own keys while they are open.
+		if (options.open || artwork.open) {
 			return;
 		}
 		if (shot !== null) {
@@ -325,8 +327,11 @@
 		}
 	}
 
-	// Leaving the page puts the sheet away.
-	onDestroy(() => options.dismiss());
+	// Leaving the page puts the sheets away.
+	onDestroy(() => {
+		options.dismiss();
+		artwork.dismiss();
+	});
 
 	onMount(() => {
 		void load(true);
@@ -362,6 +367,9 @@
 				void loadMods(false);
 			}
 		});
+		// The library was scanned again (the automatic image back): the
+		// page's own copy follows.
+		const loaded = listen('library_loaded', () => void load());
 		// A job queued, paused or done, or Steam's own work: the line and the
 		// buttons follow.
 		const queued = listen('downloads_changed', () => void load());
@@ -372,6 +380,7 @@
 			void lines.then((stop) => stop());
 			void arrived.then((stop) => stop());
 			void changed.then((stop) => stop());
+			void loaded.then((stop) => stop());
 			void queued.then((stop) => stop());
 			void steamed.then((stop) => stop());
 		};
@@ -443,14 +452,30 @@
 			</button>
 
 			<div class="flex gap-6">
-				<div class="relative h-[270px] w-[180px] shrink-0 overflow-hidden rounded-[2px] bg-surface">
-					{#if cover}
-						<img src={cover} alt="" class="h-full w-full object-cover" />
-					{:else}
-						<span class="flex h-full w-full items-center justify-center p-3 text-center text-lg">
-							{game.title}
-						</span>
-					{/if}
+				<div class="flex shrink-0 flex-col gap-2">
+					<div class="relative h-[270px] w-[180px] overflow-hidden rounded-[2px] bg-surface">
+						{#if cover}
+							<img src={cover} alt="" class="h-full w-full object-cover" />
+						{:else}
+							<span class="flex h-full w-full items-center justify-center p-3 text-center text-lg">
+								{game.title}
+							</span>
+						{/if}
+					</div>
+					<button
+						type="button"
+						onclick={() => void artwork.openFor(id, 0)}
+						class="border border-line px-2 py-1 text-[12px] uppercase hover:bg-raised"
+					>
+						{app.t('game-change-cover')}
+					</button>
+					<button
+						type="button"
+						onclick={() => void artwork.openFor(id, 1)}
+						class="border border-line px-2 py-1 text-[12px] uppercase hover:bg-raised"
+					>
+						{app.t('game-change-backdrop')}
+					</button>
 				</div>
 
 				<div class="flex min-w-0 flex-col gap-3">
@@ -1442,5 +1467,9 @@
 
 	{#if options.open}
 		<OptionsSheet />
+	{/if}
+
+	{#if artwork.open}
+		<ArtSheet />
 	{/if}
 {/if}

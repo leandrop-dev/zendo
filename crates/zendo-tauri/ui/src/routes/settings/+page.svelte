@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { listen } from '@tauri-apps/api/event';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import {
 		inTauri,
@@ -62,7 +63,9 @@
 		{ key: 'diagnostics', label: 'settings-group-diagnostics' }
 	] as const;
 
-	let group = $state<(typeof GROUPS)[number]['key']>('general');
+	// The art picker opens Settings on Keys; anything else starts on General.
+	const asked = GROUPS.find((one) => one.key === page.url.searchParams.get('group'));
+	let group = $state<(typeof GROUPS)[number]['key']>(asked?.key ?? 'general');
 	let settings = $state<SettingsPage | null>(null);
 	let error = $state<string | null>(null);
 	// The key fields show what is typed; an answer from a check or a save

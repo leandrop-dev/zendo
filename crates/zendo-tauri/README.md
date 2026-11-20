@@ -51,6 +51,14 @@ follow.
   file dialog), `options_save`, `options_close`, `options_discard` and
   `options_keep_editing`. The form stays in Rust while it is open and is reset
   when the page opens on another game.
+- `src/artwork.rs`: the art picker over `zendo_shell::artwork`, opened by the
+  page's Change cover and Change backdrop: `art_open` (the key is read on its
+  thread, since it may be in the keyring), `art_get`, `art_query`, `art_search`,
+  `art_kind` (the cover or wide image tab), `art_game`, `art_choose`, `art_more`,
+  `art_automatic` and `art_close`. Its effects search, list and download on
+  threads of their own; the thumbnails are kept in `$CACHE/zendo/art-thumbs`
+  for the asset protocol. Use the automatic one puts the stores' copy back and
+  scans the library again.
 - The page's screenshot lightbox is the page's own (the full-size files come
   with the cards): Previous, Next, the count and Close, with Escape and the
   arrows.
@@ -171,6 +179,10 @@ follow.
   frontend asks for the screen again.
 - `options_changed`: a cloud saves sync ended or the program was picked; an
   open Launch options sheet asks for itself again.
+- `art_changed`: the art picker opened, or an answer came in; the sheet asks
+  for itself again.
+- `art_thumb`: a thumbnail was downloaded and kept, with the image's id and its
+  file; the sheet fills that row in.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

@@ -12,6 +12,7 @@ use anyhow::Context;
 use tauri::Manager;
 
 mod accounts;
+mod artwork;
 mod cards;
 mod cloud;
 mod collections;
@@ -93,6 +94,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(stats::StatsState::default())
         .manage(game_mode::GameModeState::default())
         .manage(options::OptionsState::default())
+        .manage(artwork::ArtState::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -276,6 +278,16 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             options::options_edit,
             options::options_sync,
             options::options_browse,
+            artwork::art_get,
+            artwork::art_open,
+            artwork::art_query,
+            artwork::art_search,
+            artwork::art_kind,
+            artwork::art_game,
+            artwork::art_choose,
+            artwork::art_more,
+            artwork::art_automatic,
+            artwork::art_close,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

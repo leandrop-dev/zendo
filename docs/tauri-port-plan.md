@@ -175,8 +175,9 @@ and removed once already).
    the pad while it shows.
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
    Nexus search, the screenshot lightbox. Built 2026-11-20: **7a**, the
-   screenshot lightbox, and **7b**, the launch options sheet over the shared
-   `zendo_shell::launch_options`; 7c to 7e are next.
+   screenshot lightbox, **7b**, the launch options sheet over the shared
+   `zendo_shell::launch_options`, and **7c**, the art picker over
+   `zendo_shell::artwork`; 7d and 7e are next.
 8. **Parity and cut-over**: the parity checklist signed off, the Slint crate
    deleted, `cargo` and packaging updated, the licence and spec checked, the
    README and docs updated.
@@ -286,8 +287,8 @@ On Fedora, for the package build: `webkit2gtk4.1-devel`,
 - The two spikes are outside the repo and can be deleted now that the port has
   started: `/home/leandrop-dev/Projects/zendo-dioxus-spike` and
   `/home/leandrop-dev/Projects/zendo-tauri-spike`.
-- Next: slice 7 (7c the artwork chooser, 7d Nexus and its search, 7e the
-  FOMOD installer), then slice 8 (the cut-over). The prefix's tools, the Mods card's presses and Settings'
+- Next: slice 7 (7d Nexus and its search, 7e the FOMOD installer), then
+  slice 8 (the cut-over). The prefix's tools, the Mods card's presses and Settings'
   presses are built and some are unrun: they start umu, a real window, an
   installer, a change to a game's files or a write to `config.toml`.
 - This session's `ydotool` and `wtype` reached nothing at all (the pointer

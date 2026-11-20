@@ -93,6 +93,13 @@ pub struct Art {
     pub persist: bool,
 }
 
+/// Where a window that keeps the thumbnails as files puts them: beside the
+/// covers in Zendo's cache, which the Tauri window's image protocol serves.
+#[must_use]
+pub fn thumb_dir() -> Option<PathBuf> {
+    covers::dir().map(|dir| dir.with_file_name("art-thumbs"))
+}
+
 /// The kind, as the messages choose their words by: `cover` or `hero`.
 #[must_use]
 pub fn kind_name(kind: Kind) -> &'static str {

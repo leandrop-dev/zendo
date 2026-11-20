@@ -7182,6 +7182,40 @@ Escape closed a clean sheet; Save wrote `epic:Beta`'s frame cap 60 and
 Download (a real engine), Browse (the file dialog), and the sheets of 7c to
 7e.
 
+## The Tauri port, slice 7c: the art picker (2026-11-21)
+
+A game's page has Change cover and Change backdrop under the cover again. The
+sheet searches `SteamGridDB` for the title (a Steam game's own entry first),
+lists the games found as chips, and shows a page of the chosen game's covers or
+wide images as thumbnails, with their size, style and author under the pointer,
+Show more for the next page, and Use the automatic one when the game has an
+image chosen by hand. A thumbnail pressed is downloaded and kept as the game's
+own: the library's copy changes, the stores' copy follows, and the page shows
+the new art.
+
+The picker is `zendo_shell::artwork`'s, shared with the Slint window:
+`crates/zendo-tauri/src/artwork.rs` keeps it and runs its effects on threads,
+downloading the thumbnails to `$CACHE/zendo/art-thumbs` (a new
+`artwork::thumb_dir`, with `covers::image_extension` now public) for the page's
+asset protocol. `ui/src/lib/artwork.svelte.ts` and
+`ui/src/lib/components/art-sheet.svelte` draw it; answers arrive as
+`art_changed` and each thumbnail as `art_thumb`. The key is read on the
+picker's own thread (`Config::load` may ask the keyring, which the window must
+not do at start); with none the sheet says so and offers Open Settings, which
+opens the Settings page on its Keys group (the page now reads `?group=`). Use
+the automatic one forgets the choice, gives the stores back the one found by
+itself, and scans the library again for its copy.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored). Seen on screen in a throwaway home with
+an Epic game: the page's two buttons and the sheet without a key (the note and
+Open Settings), the Wide image tab, Open Settings landing on Settings with Keys
+chosen, and a fake key's search coming back as "http status: 401" with the
+field idle again. Not seen, as they need a working key and the network: the
+games found, the thumbnails, choosing one, Show more and Use the automatic
+one.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

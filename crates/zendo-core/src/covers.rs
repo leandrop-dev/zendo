@@ -463,8 +463,10 @@ fn remove_chosen(folder: &Path, id: &str, keep: Option<&Path>) -> anyhow::Result
     Ok(())
 }
 
-/// The file extension for an image's bytes, read from its signature.
-fn image_extension(bytes: &[u8]) -> Option<&'static str> {
+/// The file extension for an image's bytes, read from its signature: for a
+/// window that keeps a downloaded thumbnail as a file.
+#[must_use]
+pub fn image_extension(bytes: &[u8]) -> Option<&'static str> {
     match bytes {
         [0xff, 0xd8, 0xff, ..] => Some("jpg"),
         [0x89, b'P', b'N', b'G', ..] => Some("png"),

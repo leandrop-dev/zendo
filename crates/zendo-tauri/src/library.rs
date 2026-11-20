@@ -271,9 +271,9 @@ impl LibraryState {
 
 /// What a new cover tells the page.
 #[derive(Debug, Clone, Serialize)]
-struct CoverChanged {
-    id: String,
-    path: String,
+pub(crate) struct CoverChanged {
+    pub(crate) id: String,
+    pub(crate) path: String,
 }
 
 /// Fetches the covers on demand, as Settings' Download now asks.

@@ -1533,3 +1533,83 @@ export async function optionsSync(which: number): Promise<OptionsSheet> {
 export async function optionsBrowse(): Promise<OptionsSheet> {
 	return invoke<OptionsSheet>('options_browse');
 }
+
+// The art picker over a game's page: `SteamGridDB` searched for the title and
+// the covers or wide images of the game chosen. The picker is
+// `zendo_shell::artwork`'s, shared with the Slint window.
+export type ArtChip = { id: number; label: string; chosen: boolean };
+
+export type ArtThumb = {
+	// The image's id, as SteamGridDB numbers it; what choosing sends back.
+	image: number;
+	// The thumbnail's file in the cache, once downloaded.
+	path: string | null;
+	// Its size, style and author.
+	about: string;
+};
+
+export type ArtSheet = {
+	open: boolean;
+	title: string;
+	heading: string;
+	// 0 covers, 1 wide images.
+	kind: number;
+	query: string;
+	tabs: ArtChip[];
+	games: ArtChip[];
+	thumbs: ArtThumb[];
+	// Another page of images can be asked for.
+	more: boolean;
+	busy: boolean;
+	// What it is: "Searching…", "Looking for images…", "Saving…".
+	status: string;
+	note: string;
+	// The note asks for a key: Settings is offered.
+	needs_key: boolean;
+	automatic_label: string;
+};
+
+export async function artGet(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_get');
+}
+
+// Change cover (0) or Change backdrop (1) for a game.
+export async function artOpen(id: string, kind: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_open', { id, kind });
+}
+
+// The search field's words, kept for Enter and the Search button.
+export async function artQuery(text: string): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_query', { text });
+}
+
+export async function artSearch(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_search');
+}
+
+export async function artKind(kind: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_kind', { kind });
+}
+
+// A game of those found, by its place among the first ones shown.
+export async function artGame(at: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_game', { at });
+}
+
+// The image's own id: it is downloaded and kept as the game's.
+export async function artChoose(image: number): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_choose', { image });
+}
+
+export async function artMore(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_more');
+}
+
+// "Use the automatic one": the choice by hand is forgotten.
+export async function artAutomatic(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_automatic');
+}
+
+export async function artClose(): Promise<ArtSheet> {
+	return invoke<ArtSheet>('art_close');
+}

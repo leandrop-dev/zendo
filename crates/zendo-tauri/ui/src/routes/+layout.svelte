@@ -8,6 +8,7 @@
 	import type { LayoutProps } from './$types';
 	import GameMode from '#lib/components/game-mode.svelte';
 	import TopBar from '#lib/components/top-bar.svelte';
+	import { artwork } from '#lib/artwork.svelte.js';
 	import { downloads } from '#lib/downloads.svelte.js';
 	import { gameMode } from '#lib/game_mode.svelte.js';
 	import { library } from '#lib/library.svelte.js';
@@ -20,8 +21,8 @@
 	// keys while it shows (the arrows, Enter, Escape and Tab); Ctrl+F goes to
 	// the Library's search.
 	function key(event: KeyboardEvent) {
-		// The Launch options sheet keeps its own keys while it is open.
-		if (options.open) {
+		// The sheets keep their own keys while they are open.
+		if (options.open || artwork.open) {
 			return;
 		}
 		if (gameMode.key(event)) {
@@ -46,6 +47,7 @@
 	onMount(() => {
 		void app.start().then(() => gameMode.start());
 		void options.start();
+		void artwork.start();
 		void library.start();
 		void downloads.start();
 		window.addEventListener('keydown', key);
