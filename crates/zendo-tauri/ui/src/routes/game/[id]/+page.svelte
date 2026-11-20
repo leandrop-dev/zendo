@@ -79,6 +79,8 @@
 	// The winetricks components typed, and a tool that could not start.
 	let prefixInput = $state('');
 	let prefixNote = $state<string | null>(null);
+	// The screenshot lightbox: the one open, if any.
+	let shot = $state<number | null>(null);
 	// The Mods card, the folder and profile name being typed, and a change
 	// that could not start.
 	let mods = $state<ModsCard | null>(null);
@@ -272,7 +274,27 @@
 		}
 	}
 
+	function stepShot(by: number): void {
+		if (shot !== null && cards && cards.shots.length > 0) {
+			const count = cards.shots.length;
+			shot = (((shot + by) % count) + count) % count;
+		}
+	}
+
 	function key(event: KeyboardEvent): void {
+		if (shot !== null) {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				shot = null;
+			} else if (event.key === 'ArrowLeft') {
+				event.preventDefault();
+				stepShot(-1);
+			} else if (event.key === 'ArrowRight') {
+				event.preventDefault();
+				stepShot(1);
+			}
+			return;
+		}
 		if (event.key === 'Escape' && !editing) {
 			event.preventDefault();
 			back();
@@ -350,6 +372,43 @@
 <svelte:head>
 	<title>{game ? `${game.title} · Zendo` : 'Zendo'}</title>
 </svelte:head>
+
+{#if shot !== null && cards && cards.shots[shot]}
+	<div class="fixed inset-0 z-50 flex flex-col gap-4 bg-background/95 p-6">
+		<button
+			type="button"
+			onclick={() => (shot = null)}
+			class="min-h-0 flex-1"
+			aria-label={app.t('close')}
+		>
+			<img src={asset(cards.shots[shot].full)} alt="" class="h-full w-full object-contain" />
+		</button>
+		<div class="flex items-center justify-center gap-3">
+			<button
+				type="button"
+				onclick={() => stepShot(-1)}
+				class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+			>
+				{app.t('shots-previous')}
+			</button>
+			<p class="text-sm text-dim">{shot + 1} / {cards.shots.length}</p>
+			<button
+				type="button"
+				onclick={() => stepShot(1)}
+				class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+			>
+				{app.t('shots-next')}
+			</button>
+			<button
+				type="button"
+				onclick={() => (shot = null)}
+				class="border border-line px-3 py-1 text-[13px] uppercase hover:bg-raised"
+			>
+				{app.t('close')}
+			</button>
+		</div>
+	</div>
+{/if}
 
 {#if error}
 	<p class="p-8 text-sm text-bad">{error}</p>
@@ -633,13 +692,20 @@
 				<section class="border border-line bg-surface p-4">
 					<h2 class="mb-3 text-[11px] text-dim uppercase">{app.t('screenshots-title')}</h2>
 					<div class="flex gap-3 overflow-x-auto">
-						{#each cards.shots as shot (shot.thumb)}
-							<img
-								src={asset(shot.thumb)}
-								alt=""
-								loading="lazy"
-								class="h-[150px] shrink-0 rounded-[2px] object-cover"
-							/>
+						{#each cards.shots as picture, at (picture.thumb)}
+							<button
+								type="button"
+								onclick={() => (shot = at)}
+								class="shrink-0"
+								aria-label={app.t('screenshots-title')}
+							>
+								<img
+									src={asset(picture.thumb)}
+									alt=""
+									loading="lazy"
+									class="h-[150px] rounded-[2px] object-cover"
+								/>
+							</button>
 						{/each}
 					</div>
 				</section>

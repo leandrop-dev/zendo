@@ -43,6 +43,9 @@ follow.
   `game_dlc` and `game_dlc_all`, and Steam's `steam_verify_game` and
   `steam_uninstall_game`. The page's DTO carries `update`, `manage`, `job` and
   the DLC card.
+- The page's screenshot lightbox is the page's own (the full-size files come
+  with the cards): Previous, Next, the count and Close, with Escape and the
+  arrows.
 - `src/cards.rs`: the page's store cards, asked once a session:
   `cards_get`, `cards_retry` (for a card that failed), `cards_more_achievements`,
   `cards_more_changelog` and `steam_app_set`. ProtonDB's rating, Steam's

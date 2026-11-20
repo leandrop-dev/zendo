@@ -7124,6 +7124,22 @@ Escape, Leave Game Mode back to the windowed Library, and `--game-mode`
 starting in it. Not seen: the pad on the screen (no controller here), a hero
 with a cover or a Steam summary, and a game played from it.
 
+## The Tauri port, slice 7a: the screenshot lightbox (2026-11-20)
+
+A screenshot on a game's page now opens in the window instead of the browser
+(or, in the Tauri window, nowhere): the full-size picture over the page, with
+Previous and Next (wrapping), a count ("2 / 8") and Close; Escape closes it,
+the arrows step, and a press on the picture closes it too. The full-size files
+are already downloaded with the card (`steam_facts::shots_of` writes both sizes
+into the cache), so this part is the page's own (`ui/src/routes/game/[id]/
++page.svelte`).
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored). Seen on screen in a throwaway home with
+Portal 2 as an installed Steam game: the lightbox on its first of eight
+screenshots, `Right` to the second, `Escape` back to the page.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

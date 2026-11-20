@@ -174,7 +174,8 @@ and removed once already).
    `zendo_shell::game_mode`, full screen with F11 and Select, the screen taking
    the pad while it shows.
 7. **Sheets**: launch options, artwork chooser, FOMOD installer, Nexus and
-   Nexus search, the screenshot lightbox.
+   Nexus search, the screenshot lightbox. Built 2026-11-20 as **7a**, the
+   screenshot lightbox; the rest is next.
 8. **Parity and cut-over**: the parity checklist signed off, the Slint crate
    deleted, `cargo` and packaging updated, the licence and spec checked, the
    README and docs updated.
