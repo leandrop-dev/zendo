@@ -43,6 +43,14 @@ follow.
   `game_dlc` and `game_dlc_all`, and Steam's `steam_verify_game` and
   `steam_uninstall_game`. The page's DTO carries `update`, `manage`, `job` and
   the DLC card.
+- `src/options.rs`: the Launch options sheet over
+  `zendo_shell::launch_options::Sheet`: `options_open` (the button),
+  `options_get`, `options_toggle`, `options_choose` (a chip of a list),
+  `options_edit` (a typed field, with the digits a number field kept),
+  `options_sync` (Sync now, Upload, Download), `options_browse` (the program's
+  file dialog), `options_save`, `options_close`, `options_discard` and
+  `options_keep_editing`. The form stays in Rust while it is open and is reset
+  when the page opens on another game.
 - The page's screenshot lightbox is the page's own (the full-size files come
   with the cards): Previous, Next, the count and Close, with Escape and the
   arrows.
@@ -161,6 +169,8 @@ follow.
   the game's id, and the page asks for its game again.
 - `game_mode_changed`: Game Mode was entered, left or changed its shelf; the
   frontend asks for the screen again.
+- `options_changed`: a cloud saves sync ended or the program was picked; an
+  open Launch options sheet asks for itself again.
 - `pad`: a controller move (`left`, `right`, `up`, `down`, `activate`, `back`,
   `sort`, `hide`, `show-hidden`, `toggle-game-mode`, `prev-shelf`,
   `next-shelf`). The frontend decides what each does: the grid moves the

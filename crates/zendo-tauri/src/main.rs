@@ -25,6 +25,7 @@ mod launchers;
 mod library;
 mod local;
 mod mods;
+mod options;
 mod platform;
 mod prefix;
 mod presence;
@@ -91,6 +92,7 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
         .manage(jobs::JobsState::default())
         .manage(stats::StatsState::default())
         .manage(game_mode::GameModeState::default())
+        .manage(options::OptionsState::default())
         .manage(steam::SteamState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -263,6 +265,17 @@ fn run_window(fullscreen: bool, link: Option<String>) -> anyhow::Result<()> {
             game_mode::game_mode_details,
             game_mode::game_mode_browse,
             game_mode::game_mode_show,
+            options::options_get,
+            options::options_open,
+            options::options_close,
+            options::options_discard,
+            options::options_keep_editing,
+            options::options_save,
+            options::options_toggle,
+            options::options_choose,
+            options::options_edit,
+            options::options_sync,
+            options::options_browse,
             cards::cards_get,
             cards::cards_retry,
             cards::cards_more_achievements,

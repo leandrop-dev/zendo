@@ -21,6 +21,10 @@ use crate::platform;
 use crate::prefix::{PrefixDto, PrefixState, prefix_of};
 
 /// A game's page: the header, the tiles, the statuses and how it is running.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is one fact the page is drawn by"
+)]
 #[derive(Debug, Serialize)]
 pub struct GameDto {
     id: String,
@@ -52,6 +56,8 @@ pub struct GameDto {
     update: UpdateDto,
     /// The More row and the Steam buttons.
     manage: ManageDto,
+    /// The Launch options button: for the games Zendo starts itself.
+    launch_options: bool,
     /// What the queue is doing with the game.
     job: JobLineDto,
 }
@@ -324,6 +330,7 @@ fn dto(
         prefix: prefix_of(game, running, prefix),
         update: jobs::update(app, game),
         manage: jobs::manage(app, game),
+        launch_options: zendo_shell::launch_options::applies(game),
         job: jobs::job_line(app, game),
     }
 }

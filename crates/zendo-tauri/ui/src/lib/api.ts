@@ -179,6 +179,8 @@ export type GamePage = {
 	statuses: { key: string; label: string; chosen: boolean }[];
 	// A game added by hand: its page edits and removes it.
 	local: boolean;
+	// The Launch options button: for the games Zendo starts itself.
+	launch_options: boolean;
 	details: (Fact & { tone: number })[];
 	// The session counts and lengths, empty until the game has one.
 	sessions: (Fact & { tone: number })[];
@@ -1406,4 +1408,128 @@ export async function steamStopWaiting(app: string): Promise<DownloadsPage> {
 // Opens Steam's own downloads page.
 export async function steamOpenDownloads(): Promise<void> {
 	return invoke<void>('steam_open_downloads');
+}
+
+// The Launch options sheet: the form over a game's page, for the games Zendo
+// starts itself. `zendo_shell::launch_options::Sheet` holds it, shared with
+// the Slint window.
+export type OptionsSwitch = {
+	id: number;
+	label: string;
+	about: string;
+	on: boolean;
+	// False for a switch that cannot be used here, unless it is already on.
+	enabled: boolean;
+};
+
+export type OptionsChip = { id: number; label: string; chosen: boolean };
+
+export type OptionsSheet = {
+	open: boolean;
+	title: string;
+	// "{title} · Launch options".
+	heading: string;
+	windows: boolean;
+	native: boolean;
+	// 0 no store, 1 GOG, 2 Epic.
+	store: number;
+	has_tasks: boolean;
+	gamescope_on: boolean;
+	fsr_on: boolean;
+	sharpens: boolean;
+	confirm_close: boolean;
+	picking: boolean;
+	error: string;
+	arguments_error: string;
+	environment_error: string;
+	gamescope_error: string;
+	start_switches: OptionsSwitch[];
+	saves_switch: OptionsSwitch[];
+	tool_switches: OptionsSwitch[];
+	offload_switch: OptionsSwitch[];
+	proton_a: OptionsSwitch[];
+	proton_b: OptionsSwitch[];
+	proton_c: OptionsSwitch[];
+	protons: OptionsChip[];
+	tasks: OptionsChip[];
+	runtimes: OptionsChip[];
+	fsr_sharpening: OptionsChip[];
+	windows_kinds: OptionsChip[];
+	scalers: OptionsChip[];
+	filters: OptionsChip[];
+	sharpness: OptionsChip[];
+	sync_labels: string[];
+	syncing: boolean;
+	saves_note: string;
+	saves_note_good: boolean;
+	executable: string;
+	language: string;
+	width: string;
+	height: string;
+	frame_cap: string;
+	game_width: string;
+	game_height: string;
+	fps: string;
+	more: string;
+	arguments: string;
+	environment: string;
+	before: string;
+	after: string;
+};
+
+export async function optionsGet(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_get');
+}
+
+// The Launch options button, for a game Zendo starts itself.
+export async function optionsOpen(id: string): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_open', { id });
+}
+
+// Escape, Cancel and a click outside: closes it, or asks first.
+export async function optionsClose(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_close');
+}
+
+export async function optionsDiscard(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_discard');
+}
+
+export async function optionsKeepEditing(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_keep_editing');
+}
+
+export async function optionsSave(): Promise<{
+	sheet: OptionsSheet;
+	saved: boolean;
+	title: string;
+}> {
+	return invoke<{ sheet: OptionsSheet; saved: boolean; title: string }>('options_save');
+}
+
+export async function optionsToggle(id: number, on: boolean): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_toggle', { id, on });
+}
+
+// A chip: the list (0 Proton, 1 task, 2 runtime, 3 FSR sharpening, 4 window,
+// 5 scaler, 6 filter, 7 sharpness) and the chip's id.
+export async function optionsChoose(list: number, index: number): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_choose', { list, index });
+}
+
+// A field was typed in; `echo` is what a digits-only field kept of the typing.
+export async function optionsEdit(
+	field: number,
+	text: string
+): Promise<{ sheet: OptionsSheet; echo: string | null }> {
+	return invoke<{ sheet: OptionsSheet; echo: string | null }>('options_edit', { field, text });
+}
+
+export async function optionsSync(which: number): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_sync', { which });
+}
+
+// Browse for the program the store's engine runs instead of the game's.
+export async function optionsBrowse(): Promise<OptionsSheet> {
+	return invoke<OptionsSheet>('options_browse');
 }

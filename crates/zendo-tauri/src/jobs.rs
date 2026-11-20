@@ -58,6 +58,7 @@ pub fn reset(app: &AppHandle) {
     }
     let downloads = app.state::<DownloadsState>();
     downloads::lock(&downloads).confirm_uninstall = None;
+    crate::options::reset(app);
 }
 
 /// The page opened on a game: everything starts folded and unasked.

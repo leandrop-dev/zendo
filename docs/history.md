@@ -7140,6 +7140,48 @@ Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
 Portal 2 as an installed Steam game: the lightbox on its first of eight
 screenshots, `Right` to the second, `Escape` back to the page.
 
+## The Tauri port, slice 7b: the Launch options sheet (2026-11-20)
+
+The Launch options button on a game's page now opens the sheet in the window:
+the Proton it runs with, the store's way to start it and the program run
+instead (for Epic and GOG), Epic's language, offline and update switches, the
+cloud saves and their Sync now, Upload and Download (the last two ask once
+more before replacing a side), MangoHud, GameMode, gamescope and its window
+kind, sizes, scaler, filter, sharpening and frames a second, NVIDIA offload,
+the Steam Linux Runtime for native games, Proton's switches (controllers as
+Xbox pads, Wayland, HDR, FSR, the frame counter, WoW64, no esync/fsync, Epic's
+overlay, without umu) with what the chosen build ignores said under them, the
+frame cap, the arguments and the environment, and the scripts before and
+after the game.
+
+The form is `zendo_shell::launch_options::Sheet`'s, shared with the Slint
+window: `crates/zendo-tauri/src/options.rs` keeps it while it is open and
+turns it into the rows, and `ui/src/lib/components/options-sheet.svelte`
+draws them through the `options` store (`ui/src/lib/options.svelte.ts`). Save
+writes `games.toml` and closes; Cancel, Escape and a press outside close,
+asking first when the form would build to other options ("Keep editing" goes
+back, "Discard" drops them). The fields that take digits keep them (the frame
+cap typed "6x0" became "60") and Enter in a field saves. A sync ending or the
+program picked comes back as `options_changed`; the page's cloud saves row
+follows a save through `game_changed`. The sheet is reset when the page opens
+on another game or is left.
+
+Checked: `npm run check`, `npm run lint`, `npm test` (5), `cargo fmt --all
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
+--workspace` (612 passed, 32 ignored). Seen on screen in a throwaway home with
+an Epic Windows game: the sheet with the Proton list, the store's way to
+start, Program and Browse, Epic's language and switches, cloud saves, and the
+switches under them; the form scrolled to its foot (Proton's switches, the
+notes on what the build ignores, Arguments, Environment, the scripts); the
+gamescope section with its window kinds, both sizes, scaler, filter and, after
+picking FSR (AMD), the sharpening list; and a native game's sheet with the
+Steam Linux Runtime and no Proton part. A switch pressed and Cancel asked;
+Keep editing kept it; Discard dropped it and left the saved file untouched;
+Escape closed a clean sheet; Save wrote `epic:Beta`'s frame cap 60 and
+`-windowed -novid`, and reopening showed them. Not run: Sync now, Upload and
+Download (a real engine), Browse (the file dialog), and the sheets of 7c to
+7e.
+
 ## The Tauri port: checks left for when it is whole (2026-11-19)
 
 The user asked to finish the port first and run the on-screen checks at the

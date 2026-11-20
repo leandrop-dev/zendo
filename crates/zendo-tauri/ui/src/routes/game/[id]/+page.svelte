@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { listen } from '@tauri-apps/api/event';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		cardsGet,
 		cardsMoreAchievements,
@@ -60,6 +60,8 @@
 		type Pill
 	} from '#lib/api.js';
 	import LocalForm from '#lib/components/local-form.svelte';
+	import OptionsSheet from '#lib/components/options-sheet.svelte';
+	import { options } from '#lib/options.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 
 	// A game's page: the wide art faint behind the header, the cover, the
@@ -282,6 +284,10 @@
 	}
 
 	function key(event: KeyboardEvent): void {
+		// The sheet keeps its own keys while it is open.
+		if (options.open) {
+			return;
+		}
 		if (shot !== null) {
 			if (event.key === 'Escape') {
 				event.preventDefault();
@@ -318,6 +324,9 @@
 				return 'border border-line text-dim';
 		}
 	}
+
+	// Leaving the page puts the sheet away.
+	onDestroy(() => options.dismiss());
 
 	onMount(() => {
 		void load(true);
@@ -535,6 +544,15 @@
 								class="border border-accent-mark px-4 py-2 text-[13px] text-accent-mark uppercase hover:bg-raised disabled:opacity-50"
 							>
 								{game.update.label}
+							</button>
+						{/if}
+						{#if game.launch_options}
+							<button
+								type="button"
+								onclick={() => void options.openFor(id)}
+								class="border border-line px-4 py-2 text-[13px] text-foreground uppercase hover:bg-raised"
+							>
+								{app.t('game-launch-options')}
 							</button>
 						{/if}
 						{#if game.local}
@@ -1420,5 +1438,9 @@
 				void load();
 			}}
 		/>
+	{/if}
+
+	{#if options.open}
+		<OptionsSheet />
 	{/if}
 {/if}
